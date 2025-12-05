@@ -2,7 +2,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Incremented for batches store
 
 // Sync status enum
 export const SYNC_STATUS = {
@@ -91,6 +91,15 @@ class OfflineDatabase {
         // Settings store
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+
+        // Batches store (for fast offline batch selection)
+        if (!db.objectStoreNames.contains('batches')) {
+          const batchStore = db.createObjectStore('batches', { keyPath: 'batch_id' });
+          batchStore.createIndex('product_id', 'product_id');  // Fast lookup by product
+          batchStore.createIndex('batch_number', 'batch_number');
+          batchStore.createIndex('expiry_date', 'expiry_date');
+          batchStore.createIndex('updated_at', 'updated_at');
         }
 
         // Preallocated Numbers store
@@ -394,13 +403,85 @@ class OfflineDatabase {
   // Clear all offline data
   async clearAll() {
     const db = await this.init();
-    const storeNames = ['customers', 'products', 'invoices', 'sales_orders', 'payments', 'sync_queue'];
+    const storeNames = ['customers', 'products', 'invoices', 'sales_orders', 'payments', 'sync_queue', 'batches'];
     
     for (const storeName of storeNames) {
       const tx = db.transaction(storeName, 'readwrite');
       await tx.objectStore(storeName).clear();
       await tx.complete;
     }
+  }
+
+  // ====== BATCH OPERATIONS (for offline-first batch selection) ======
+  
+  /**
+   * Get batches for a specific product (fast IndexedDB lookup)
+   * @param {string|number} productId - Product ID
+   * @returns {Promise<Array>} Array of batches
+   */
+  async getBatchesByProduct(productId) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readonly');
+    const index = tx.objectStore('batches').index('product_id');
+    
+    // Get all batches for this product
+    const batches = await index.getAll(String(productId));
+    
+    return batches || [];
+  }
+
+  /**
+   * Store batches in IndexedDB for offline use
+   * @param {Array} batches - Array of batch objects
+   */
+  async storeBatches(batches) {
+    if (!Array.isArray(batches) || batches.length === 0) return;
+    
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    const store = tx.objectStore('batches');
+    
+    const timestamp = new Date().toISOString();
+    
+    for (const batch of batches) {
+      await store.put({
+        ...batch,
+        updated_at: timestamp  // Track when cached
+      });
+    }
+    
+    await tx.done;
+  }
+
+  /**
+   * Clear batches for a specific product (cache invalidation)
+   * @param {string|number} productId - Product ID
+   */
+  async clearBatchesForProduct(productId) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    const index = tx.objectStore('batches').index('product_id');
+    const store = tx.objectStore('batches');
+    
+    // Get all batches for this product
+    const batches = await index.getAll(String(productId));
+    
+    // Delete each batch
+    for (const batch of batches) {
+      await store.delete(batch.batch_id);
+    }
+    
+    await tx.done;
+  }
+
+  /**
+   * Clear all cached batches
+   */
+  async clearAllBatches() {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    await tx.objectStore('batches').clear();
+    await tx.done;
   }
 
   // Get sync statistics

@@ -10,6 +10,7 @@ import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import { APP_CONFIG } from '../../../config/app.config';
 import { componentStyles as styles, cx } from '../../invoice/styles/invoiceStyles';
+import offlineDB from '../../../services/offline/offlineDatabase';
 
 /**
  * Global Batch Selector Component
@@ -77,26 +78,36 @@ const BatchSelector = ({
   const loadBatches = async () => {
     if (!product) return;
 
-    // Check cache first for instant loading
-    const cacheKey = `batches_${product.product_id}`;
-    const cachedBatches = searchCache.get('batches', { product_id: product.product_id });
-    if (cachedBatches) {
-      processBatches(cachedBatches);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     
     try {
-      const response = await batchAPI.getByProduct(product.product_id);
-      const batchesData = response.data?.batches || response.data || [];
+      // STEP 1: Try IndexedDB first (instant, works offline)
+      const cachedBatches = await offlineDB.getBatchesByProduct(product.product_id);
       
-      // Cache the results
-      searchCache.set('batches', { product_id: product.product_id }, batchesData);
-      processBatches(batchesData);
+      if (cachedBatches && cachedBatches.length > 0) {
+        // Check if cache is fresh (< 24 hours)
+        const lastUpdate = new Date(cachedBatches[0].updated_at);
+        const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+        
+        if (hoursSinceUpdate < 24) {
+          // Use cached data immediately (INSTANT!)
+          processBatches(cachedBatches);
+          setLoading(false);
+          
+          // Background refresh if stale (> 1 hour)
+          if (hoursSinceUpdate > 1 && navigator.onLine) {
+            fetchAndStoreBatches(product.product_id, false); // silent refresh
+          }
+          return;
+        }
+      }
+      
+      // STEP 2: Cache miss or stale → fetch from API
+      await fetchAndStoreBatches(product.product_id, true);
       
     } catch (error) {
+      console.error('Failed to load batches:', error);
       setError('Failed to load batches. Please try again.');
       
       // Create a fallback batch if allowed
@@ -106,6 +117,29 @@ const BatchSelector = ({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch batches from API and store in IndexedDB
+  const fetchAndStoreBatches = async (productId, showLoadingState = true) => {
+    try {
+      const response = await batchAPI.getByProduct(productId);
+      const batchesData = response.data?.batches || response.data || [];
+      
+      // Store in IndexedDB for offline use
+      await offlineDB.storeBatches(batchesData);
+      
+      // Also keep in memory cache for fast access
+      searchCache.set('batches', { product_id: productId }, batchesData);
+      
+      if (showLoadingState) {
+        processBatches(batchesData);
+      }
+      
+      return batchesData;
+    } catch (error) {
+      console.error('Failed to fetch batches:', error);
+      throw error;
     }
   };
 
