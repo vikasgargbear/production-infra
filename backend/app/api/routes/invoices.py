@@ -151,6 +151,38 @@ async def create_invoice(
         final_amount = round(amount_before_round)  # Round to nearest integer
         round_off_amount = final_amount - amount_before_round
         
+        # CRITICAL FIX: Use invoice_date from frontend (for offline sync)
+        # This preserves the actual invoice creation date, not the sync date
+        invoice_date_str = invoice_data.get("invoice_date")
+        if invoice_date_str:
+            try:
+                # Parse ISO format date string from frontend
+                if 'T' in invoice_date_str:
+                    # Full timestamp format
+                    invoice_date = datetime.fromisoformat(invoice_date_str.replace('Z', '+00:00')).date()
+                else:
+                    # Date only format (YYYY-MM-DD)
+                    invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
+                logger.info(f"Using invoice_date from frontend: {invoice_date}")
+            except Exception as e:
+                logger.warning(f"Failed to parse invoice_date '{invoice_date_str}': {e}. Using today.")
+                invoice_date = date.today()
+        else:
+            invoice_date = date.today()
+            logger.info(f"No invoice_date provided, using today: {invoice_date}")
+        
+        # CRITICAL FIX: Use created_at from frontend if provided (for offline sync)
+        created_at_str = invoice_data.get("created_at")
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                logger.info(f"Using created_at from frontend: {created_at}")
+            except Exception as e:
+                logger.warning(f"Failed to parse created_at '{created_at_str}': {e}. Using CURRENT_TIMESTAMP.")
+                created_at = None  # Will use CURRENT_TIMESTAMP
+        else:
+            created_at = None  # Will use CURRENT_TIMESTAMP
+        
         # Step 4: Create order (using ONLY columns that exist)
         order_create = db.execute(text("""
             INSERT INTO sales.orders (
@@ -162,13 +194,13 @@ async def create_invoice(
                 :org_id, :branch_id, :order_number, :order_date, 'sales',
                 :customer_id, :subtotal, :discount, :taxable,
                 :cgst, :sgst, :tax, :final,
-                :created_by, CURRENT_TIMESTAMP
+                :created_by, COALESCE(:created_at, CURRENT_TIMESTAMP)
             ) RETURNING order_id
         """), {
             "org_id": context.org_id,
             "branch_id": branch_id,
             "order_number": order_number,
-            "order_date": date.today(),
+            "order_date": invoice_date,  # ✅ Use actual invoice date, not today!
             "customer_id": customer_id,
             "subtotal": subtotal,
             "discount": total_discount,  # Sum of item-level discounts
@@ -177,7 +209,8 @@ async def create_invoice(
             "sgst": total_sgst,
             "tax": tax_amount,
             "final": final_amount,
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": created_at  # ✅ Use original timestamp if provided
         })
         order_id = order_create.scalar()
         
