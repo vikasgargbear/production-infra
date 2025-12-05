@@ -175,7 +175,7 @@ class DataTransformer {
       manufacturing_date: batch.manufacturing_date || '',
       quantity_available: parseInt(batch.quantity_available || 0),
       quantity_returned: parseInt(batch.quantity_returned || 0),
-      quantity_reserved: parseInt(batch.quantity_reserved || batch.quantity_allocated || 0),
+      quantity_reserved: parseInt(batch.quantity_reserved ||  0),
       // IMPORTANT: Backend sends mrp_per_unit, sale_price_per_unit, cost_per_unit
       mrp: parseFloat(batch.mrp_per_unit || batch.mrp || 0),
       sale_price: parseFloat(batch.sale_price_per_unit || batch.sale_price || 0),
@@ -195,20 +195,20 @@ class DataTransformer {
     // If product context provided, enrich batch with product information
     if (product) {
       base.product_id = product.product_id || batch.product_id;
-      base.product_name = product.product_name || batch.product_name || '';
-      base.manufacturer = product.manufacturer || batch.manufacturer || '';
-      base.hsn_code = product.hsn_code || batch.hsn_code || '';
+      base.product_name = product.product_name || '';
+      base.manufacturer = product.manufacturer ||  '';
+      base.hsn_code = product.hsn_code || '';
       // Inherit GST from product if batch doesn't have it
-      base.gst_percent = parseFloat(batch.gst_percent || batch.gst_rate || product.gst_percent || product.gst_rate || 0);
+      base.gst_percent = parseFloat(product.gst_percent || 0);
       // Display string for dropdown: "Product Name | Batch# | Exp: Date | ₹Price"
       base.display_name = `${base.product_name} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
     } else {
-      // Fallback: use batch's own product info if available
+      // Fallback: use batch's own product info from backend (backend sends these via subquery)
       base.product_id = batch.product_id;
-      base.product_name = batch.product_name || '';
-      base.hsn_code = batch.hsn_code || '';
-      base.gst_percent = parseFloat(batch.gst_percent || batch.gst_rate || 0);
-      base.display_name = `${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
+      base.product_name = batch.product_name;
+      base.hsn_code = batch.hsn_code;
+      base.gst_percent = parseFloat(batch.gst_rate || 0);
+      base.display_name = `${batch.product_name || ''} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
     }
 
     return base;
