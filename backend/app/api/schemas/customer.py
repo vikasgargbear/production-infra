@@ -96,22 +96,80 @@ class CustomerUpdate(BaseModel):
 
 
 class CustomerResponse(CustomerBase):
-    """Schema for customer response with additional computed fields"""
+    """Schema for customer response with ALL database fields (enterprise standard)"""
     customer_id: int
     org_id: UUID
     customer_code: str
     
-    # Computed fields (optional for fast search)
-    outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"))
-    advance_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Unallocated payment amount (customer credit)")
-    net_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Outstanding - Advance (positive = customer owes)")
-    total_business: Optional[Decimal] = Field(default=Decimal("0.00"))
-    total_orders: Optional[int] = Field(default=0)
-    last_order_date: Optional[date] = None
+    # CORE FIELDS (from CustomerBase)
+    # Inherited: customer_name, customer_type, business_type, primary_phone, etc.
     
-    # Timestamps
+    # ADDITIONAL CONTACT FIELDS (not in base)
+    whatsapp_number: Optional[str] = None
+    
+    # COMPLIANCE FIELDS (additional to base)
+    fssai_number: Optional[str] = None
+    kyc_status: Optional[str] = Field(default="pending", description="pending/verified/rejected")
+    kyc_verified_date: Optional[date] = None
+    kyc_documents: Optional[dict] = None
+    
+    # CREDIT MANAGEMENT (additional)
+    current_outstanding: Decimal = Field(default=Decimal("0.00"), description="Current dues")
+    security_deposit: Decimal = Field(default=Decimal("0.00"))
+    overdue_interest_rate: Optional[Decimal] = None
+    preferred_payment_mode: Optional[str] = None
+    
+    # SALES ASSIGNMENT
+    territory_id: Optional[int] = None
+    route_id: Optional[int] = None
+    assigned_salesperson_id: Optional[int] = None
+    price_list_id: Optional[int] = None
+    discount_group_id: Optional[int] = None
+    
+    # COMMUNICATION PREFERENCES
+    prefer_sms: bool = Field(default=False)
+    prefer_email: bool = Field(default=False)
+    prefer_whatsapp: bool = Field(default=False)
+    preferred_delivery_time: Optional[str] = None
+    
+    # ANALYTICS (transaction history)
+    first_transaction_date: Optional[date] = None
+    last_transaction_date: Optional[date] = None
+    total_business_amount: Decimal = Field(default=Decimal("0.00"))
+    total_transactions: int = Field(default=0)
+    average_order_value: Decimal = Field(default=Decimal("0.00"))
+    
+    # LOYALTY PROGRAM
+    loyalty_points: Decimal = Field(default=Decimal("0.00"))
+    loyalty_tier: Optional[str] = Field(default="bronze", description="bronze/silver/gold/platinum")
+    
+    # STATUS FLAGS
+    blacklisted: bool = Field(default=False)
+    blacklist_reason: Optional[str] = None
+    blacklist_date: Optional[date] = None
+    
+    # LEGACY COMPUTED FIELDS (kept for backward compatibility)
+    outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"), description="Alias for current_outstanding")
+    advance_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Unallocated payment amount")
+    net_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Outstanding - Advance")
+    total_business: Optional[Decimal] = Field(default=Decimal("0.00"), description="Alias for total_business_amount")
+    total_orders: Optional[int] = Field(default=0, description="Alias for total_transactions")
+    last_order_date: Optional[date] = Field(default=None, description="Alias for last_transaction_date")
+    
+    # ADDRESSES (from JOIN)
+    addresses: Optional[List[dict]] = Field(default_factory=list)
+    
+    # METADATA
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[int] = None
+    updated_by: Optional[int] = None
+    
+    # BACKWARD COMPATIBILITY: Keep old field names temporarily
+    # These will be populated from the correct database fields
+    email: Optional[str] = Field(default=None, description="Alias for primary_email")
+    gstin: Optional[str] = Field(default=None, description="Alias for gst_number (via parent)")
+    contact_person: Optional[str] = Field(default=None, description="Alias for contact_person_name")
     
     class Config:
         from_attributes = True

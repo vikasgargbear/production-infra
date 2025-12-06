@@ -302,26 +302,40 @@ async def list_customers(
         for row in customer_rows:
             customer_dict = dict(row._mapping)
             
-            # Map database columns to schema fields
-            customer_dict["primary_phone"] = customer_dict.get("primary_phone", None)
-            customer_dict["email"] = customer_dict.pop("primary_email", None)
-            customer_dict["secondary_phone"] = customer_dict.get("secondary_phone", None)
-            customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
-            customer_dict["gstin"] = customer_dict.pop("gst_number", None)
-            customer_dict["notes"] = customer_dict.pop("internal_notes", None)
+            # ✅ ENTERPRISE STANDARD: Use database field names directly
+            # All fields from SELECT are already in customer_dict
+            
+            # ✅ BACKWARD COMPATIBILITY: Populate alias fields
+            customer_dict["email"] = customer_dict.get("primary_email")
+            customer_dict["gstin"] = customer_dict.get("gst_number")
+            customer_dict["contact_person"] = customer_dict.get("contact_person_name")
+            customer_dict["notes"] = customer_dict.get("internal_notes")
             
             # Add statistics from batch lookup or default values
             if include_stats:
                 customer_stats = stats_by_customer.get(row.customer_id, {})
+                # Populate both old and new field names for compatibility
                 customer_dict.update({
+                    # New field names (database standard)
+                    "total_transactions": customer_stats.get("total_orders", 0),
+                    "total_business_amount": customer_stats.get("total_business", 0),
+                    "last_transaction_date": customer_stats.get("last_order_date"),
+                    "current_outstanding": customer_stats.get("outstanding_amount", 0),
+                    # Old field names (aliases for backward compatibility)
                     "total_orders": customer_stats.get("total_orders", 0),
                     "total_business": customer_stats.get("total_business", 0),
                     "last_order_date": customer_stats.get("last_order_date"),
                     "outstanding_amount": customer_stats.get("outstanding_amount", 0)
                 })
             else:
-                # Set default values for statistics
+                # Set default values for both old and new field names
                 customer_dict.update({
+                    # New field names
+                    "total_transactions": 0,
+                    "total_business_amount": 0,
+                    "last_transaction_date": None,
+                    "current_outstanding": 0,
+                    # Old field names (aliases)
                     "total_orders": 0,
                     "total_business": 0,
                     "last_order_date": None,
@@ -396,21 +410,32 @@ async def get_customer(
         
         customer_dict = dict(customer._mapping)
         
-        # Map database columns to schema fields
-        customer_dict["primary_phone"] = customer_dict.get("primary_phone", None)
-        customer_dict["email"] = customer_dict.pop("primary_email", None)
-        customer_dict["secondary_phone"] = customer_dict.get("secondary_phone", None)
-        customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
-        customer_dict["gstin"] = customer_dict.pop("gst_number", None)
-        customer_dict["notes"] = customer_dict.pop("internal_notes", None)
+        # ✅ ENTERPRISE STANDARD: Use database field names directly (no aliasing!)
+        # All fields from SELECT c.* are already in customer_dict
         
         # Parse addresses JSON
         import json
         addresses = customer_dict.get("addresses", "[]")
         if isinstance(addresses, str):
             customer_dict["addresses"] = json.loads(addresses)
+        elif addresses is None:
+            customer_dict["addresses"] = []
         
+        # Add computed statistics from service
         customer_dict.update(stats)
+        
+        # ✅ BACKWARD COMPATIBILITY: Populate alias fields from correct database fields
+        # This allows old frontend code to keep working while we migrate
+        customer_dict["email"] = customer_dict.get("primary_email")  # Alias
+        customer_dict["gstin"] = customer_dict.get("gst_number")     # Alias
+        customer_dict["contact_person"] = customer_dict.get("contact_person_name")  # Alias
+        customer_dict["notes"] = customer_dict.get("internal_notes")  # Alias
+        
+        # Map stats to both old and new field names (backward compatibility)
+        customer_dict["outstanding_amount"] = customer_dict.get("current_outstanding", stats.get("outstanding_amount", 0))
+        customer_dict["total_business"] = customer_dict.get("total_business_amount", stats.get("total_business", 0))
+        customer_dict["total_orders"] = customer_dict.get("total_transactions", stats.get("total_orders", 0))
+        customer_dict["last_order_date"] = customer_dict.get("last_transaction_date", stats.get("last_order_date"))
         
         return CustomerResponse(**customer_dict)
         
