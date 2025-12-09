@@ -1,25 +1,79 @@
 """
-Simple Organization Context - minimal version
+Organization Context with Branch-Aware Filtering
+
+Enterprise multi-tenant context supporting:
+- org_id: Hard security boundary (always filtered)
+- branch_id: Operational boundary (filtered based on user's branch_scope)
+
+Branch Scope Types:
+- SINGLE: User sees only their assigned branch (Store Manager, Staff)
+- MULTI: User sees specific assigned branches (Regional Manager)
+- ALL: User sees all branches in org (CEO, Owner, Admin)
 """
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
-from jose import JWTError, jwt
+from enum import Enum
+from jose import JWTError
 import logging
 
-from .jwt_auth import SECRET_KEY, ALGORITHM
+from .jwt_auth import decode_jwt  # Single source of truth
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
+class BranchScope(str, Enum):
+    """
+    Branch access scope - determines what branch data a user can access.
+    
+    Used by BranchAwareTenantSession to automatically inject branch filters.
+    """
+    SINGLE = "single"   # One branch only (store staff, store manager)
+    MULTI = "multi"     # Multiple specific branches (regional manager)
+    ALL = "all"         # All branches in org (CEO, owner, admin)
+
+
 class OrgContext:
-    """Simple organization context"""
-    def __init__(self, org_id: UUID, user_id: Optional[any] = None):
+    """
+    Enhanced organization context with branch-level access control.
+    
+    Attributes:
+        org_id: Organization UUID (always required, always filtered)
+        user_id: User identifier (int or UUID)
+        branch_scope: Level of branch access (SINGLE, MULTI, ALL)
+        branch_ids: List of accessible branch UUIDs
+        permissions: User's permission set
+    """
+    def __init__(
+        self, 
+        org_id: UUID, 
+        user_id: Optional[any] = None,
+        branch_scope: BranchScope = BranchScope.ALL,
+        branch_ids: Optional[List[UUID]] = None
+    ):
         self.org_id = org_id
-        self.user_id = user_id  # Can be int, UUID, or str depending on system
+        self.user_id = user_id
+        self.branch_scope = branch_scope
+        self.branch_ids = branch_ids or []
         self.permissions = []
+    
+    @property
+    def primary_branch_id(self) -> Optional[UUID]:
+        """Get user's primary branch (first in list)"""
+        return self.branch_ids[0] if self.branch_ids else None
+    
+    @property
+    def has_all_branch_access(self) -> bool:
+        """Check if user can see all branches"""
+        return self.branch_scope == BranchScope.ALL
+    
+    def can_access_branch(self, branch_id: UUID) -> bool:
+        """Check if user can access a specific branch"""
+        if self.branch_scope == BranchScope.ALL:
+            return True
+        return branch_id in self.branch_ids
     
     def has_permission(self, permission: str) -> bool:
         return permission in self.permissions
@@ -45,11 +99,10 @@ async def get_org_context(
     try:
         token = credentials.credentials
         
-        # Decode JWT with better error handling
+        # Use central decode function (single source of truth)
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        except Exception as decode_error:
-            # Log specific decode error but don't expose internals
+            payload = decode_jwt(token)
+        except JWTError as decode_error:
             logger.error(f"JWT decode error: {decode_error}")
             raise HTTPException(
                 status_code=401,
@@ -79,7 +132,37 @@ async def get_org_context(
                 except ValueError:
                     user_id = user_id_value  # Keep as string if not valid UUID
         
-        return OrgContext(org_id, user_id)
+        # Extract branch scope from token - REQUIRED field
+        branch_scope_str = payload.get("branch_scope")
+        if not branch_scope_str:
+            # Old token without branch_scope - treat as ALL for safety
+            # New tokens will always have branch_scope set from data_access_level
+            branch_scope = BranchScope.ALL
+        else:
+            try:
+                branch_scope = BranchScope(branch_scope_str)
+            except ValueError:
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Invalid branch_scope in token: {branch_scope_str}"
+                )
+        
+        # Extract branch_ids from token
+        branch_ids_raw = payload.get("branch_ids", [])
+        branch_ids = []
+        for bid in branch_ids_raw:
+            if bid:
+                try:
+                    branch_ids.append(UUID(bid) if isinstance(bid, str) else bid)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid branch_id in token: {bid}")
+        
+        return OrgContext(
+            org_id=org_id, 
+            user_id=user_id,
+            branch_scope=branch_scope,
+            branch_ids=branch_ids
+        )
         
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is

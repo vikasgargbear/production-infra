@@ -1,22 +1,25 @@
 """
-Enterprise Delivery Challan API Router
-Uses actual challan tables for proper challan management
+Delivery Challan API Router (Modernized)
+Manages delivery challans with proper security and multi-tenancy
+
+PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
+from ...core.org_context import get_org_context, OrgContext  
+from ...core.permissions import PermissionChecker
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["enterprise-delivery-challan"])
+router = APIRouter(tags=["challan"])
 
 # =============================================
 # PYDANTIC MODELS
@@ -88,10 +91,12 @@ class ChallanTrackingRequest(BaseModel):
 # CHALLAN SERVICE CLASS
 # =============================================
 
-class EnterpriseChallanService:
-    def __init__(self, db: Session, org_id: str):
+class ChallanService:
+    """Service class for challan operations"""
+    def __init__(self, db: TenantAwareSession, org_id: str, created_by: int):
         self.db = db
         self.org_id = org_id
+        self.created_by = created_by
         
     def _generate_challan_number(self) -> str:
         """Generate unique challan number"""
@@ -113,18 +118,18 @@ class EnterpriseChallanService:
         
         return f"DC{date_part}{next_seq:04d}"
     
-    def _get_created_by_user(self) -> int:
-        """Get created_by user - same approach as invoices API"""
+    def _get_branch_id(self) -> Optional[int]:
+        """Get branch_id from org_branches or return None"""
         try:
-            user_result = self.db.execute(
-                text("SELECT user_id FROM master.org_users WHERE org_id = :org_id LIMIT 1"),
+            branch_result = self.db.execute(
+                text("SELECT branch_id FROM master.org_branches WHERE org_id = :org_id LIMIT 1"),
                 {"org_id": self.org_id}
             )
-            user = user_result.fetchone()
-            return user[0] if user else 1
+            branch = branch_result.fetchone()
+            return branch[0] if branch else None
         except Exception as e:
-            logger.warning(f"Could not get user for created_by: {e}")
-            return 1
+            logger.debug(f"No branch found for org {self.org_id}: {e}")
+            return None
     
     def create_challan(self, request: ChallanCreationRequest) -> Dict[str, Any]:
         """Create new delivery challan - supports both order-based and direct creation"""
@@ -140,21 +145,8 @@ class EnterpriseChallanService:
             freight = Decimal(str(request.freight_charges)) if request.freight_charges else Decimal("0")
             logger.info(f"Freight charges from request: {request.freight_charges} -> {freight}")
             
-            # Get created_by user - same approach as invoices
-            created_by_user = self._get_created_by_user()
-            
-            # Try to get branch_id from org_branches (but allow NULL if not found)
-            try:
-                branch_result = self.db.execute(
-                    text("SELECT branch_id FROM master.org_branches WHERE org_id = :org_id LIMIT 1"),
-                    {"org_id": self.org_id}
-                )
-                branch = branch_result.fetchone()
-                if branch:
-                    branch_id = branch[0]
-            except Exception as e:
-                logger.info(f"No branch found for org {self.org_id}, using NULL")
-                branch_id = None
+            # Get branch_id
+            branch_id = self._get_branch_id()
             
             # If order_id is provided, validate and get order details
             if request.order_id:
@@ -280,7 +272,7 @@ class EnterpriseChallanService:
                     "gst_amount": gst_amount,
                     "delivery_status": "pending",
                     "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
-                    "created_by": created_by_user
+                    "created_by": self.created_by
                 }
             )
             challan_id = challan_result.scalar()
@@ -443,16 +435,19 @@ class EnterpriseChallanService:
 # =============================================
 
 @router.post("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def create_delivery_challan(
     request: ChallanCreationRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Create new delivery challan"""
-    service = EnterpriseChallanService(db, org_id)
+    service = ChallanService(db, context.org_id, context.user_id)
     return service.create_challan(request)
 
 @router.get("/")
+@with_tenant_context
 async def list_delivery_challans(
     skip: int = 0,
     limit: int = 100,
@@ -460,8 +455,9 @@ async def list_delivery_challans(
     status: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """List delivery challans with filters"""
     try:
@@ -489,7 +485,7 @@ async def list_delivery_challans(
             JOIN parties.customers cust ON c.customer_id = cust.customer_id
             WHERE c.org_id = :org_id
         """
-        params = {"org_id": org_id}
+        params = {"org_id": context.org_id}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"
@@ -520,10 +516,12 @@ async def list_delivery_challans(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{challan_id}")
+@with_tenant_context
 async def get_challan_details(
     challan_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get detailed challan information"""
     try:
@@ -570,11 +568,13 @@ async def get_challan_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{challan_id}/dispatch")
+@with_tenant_context
 async def dispatch_challan(
     challan_id: int,
     dispatch_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Mark challan as dispatched"""
     try:
@@ -596,7 +596,7 @@ async def dispatch_challan(
             """),
             {
                 "challan_id": challan_id,
-                "org_id": org_id,
+                "org_id": context.org_id,
                 "dispatch_date": dispatch_data.get("dispatch_date", date.today()),
                 "dispatch_time": datetime.now(),
                 "vehicle_number": dispatch_data.get("vehicle_number"),
@@ -635,11 +635,13 @@ async def dispatch_challan(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{challan_id}/deliver")
+@with_tenant_context
 async def deliver_challan(
     challan_id: int,
     delivery_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Mark challan as delivered"""
     try:
@@ -656,7 +658,7 @@ async def deliver_challan(
             """),
             {
                 "challan_id": challan_id,
-                "org_id": org_id,
+                "org_id": context.org_id,
                 "delivery_time": datetime.now()
             }
         )
@@ -695,11 +697,13 @@ async def deliver_challan(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{challan_id}/tracking")
+@with_tenant_context
 async def add_tracking_update(
     challan_id: int,
     tracking: ChallanTrackingRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Add tracking update to challan"""
     try:
@@ -710,7 +714,7 @@ async def add_tracking_update(
                 WHERE challan_id = :challan_id
                 AND org_id = :org_id
             """),
-            {"challan_id": challan_id, "org_id": org_id}
+            {"challan_id": challan_id, "org_id": context.org_id}
         )
         if not check_result.first():
             raise HTTPException(status_code=404, detail="Challan not found")
@@ -729,11 +733,13 @@ async def add_tracking_update(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/analytics/summary")
+@with_tenant_context
 async def get_challan_analytics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("reports", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get delivery challan analytics"""
     try:
@@ -793,15 +799,3 @@ async def get_challan_analytics(
     except Exception as e:
         logger.error(f"Error fetching challan analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# Backwards compatibility endpoint
-@router.get("/legacy")
-async def get_legacy_delivery_challans(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
-):
-    """Legacy endpoint for backward compatibility"""
-    # Redirect to main challan list endpoint
-    return await list_delivery_challans(skip, limit, None, None, None, None, db)

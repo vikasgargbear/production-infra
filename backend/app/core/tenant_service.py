@@ -1,7 +1,11 @@
 """
-Enterprise Multi-Tenant Service Layer
-Automatic org_id filtering without RLS performance overhead
+Enterprise Multi-Tenant Service Layer with Branch-Aware Filtering
+Automatic org_id + branch_id filtering without RLS performance overhead
 Used by Salesforce, Microsoft, AWS-style SaaS products
+
+Security Model:
+- org_id: Hard boundary (always filtered) - CEO of Org A can't see Org B data
+- branch_id: Operational boundary (filtered by scope) - Store staff can't see other branches
 """
 from typing import Dict, Any, List, Optional, Union
 from sqlalchemy.orm import Session, Query
@@ -14,6 +18,9 @@ from functools import wraps
 from fastapi import Depends
 import contextvars
 
+# Import BranchScope from org_context
+from .org_context import BranchScope
+
 logger = logging.getLogger(__name__)
 
 # Thread-safe context variables for async environments
@@ -21,21 +28,44 @@ _org_id_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar
 _user_id_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar('user_id', default=None)
 _bypass_filter_context: contextvars.ContextVar[bool] = contextvars.ContextVar('bypass_filter', default=False)
 
+# Branch-aware context variables
+_branch_scope_context: contextvars.ContextVar[BranchScope] = contextvars.ContextVar('branch_scope', default=BranchScope.ALL)
+_branch_ids_context: contextvars.ContextVar[List[UUID]] = contextvars.ContextVar('branch_ids', default=[])
+
 
 class TenantContext:
     """
-    THREAD-SAFE tenant context for current request
-    Uses contextvars to ensure isolation between concurrent requests
-    Fixed: Previously used class variables which could leak between requests
+    THREAD-SAFE tenant context for current request with branch-aware filtering.
+    Uses contextvars to ensure isolation between concurrent requests.
+    
+    Security Levels:
+    - org_id: Always filtered (hard boundary)
+    - branch_id: Filtered based on user's branch_scope
+    
+    Branch Scope:
+    - SINGLE: User sees only their assigned branch
+    - MULTI: User sees specific assigned branches
+    - ALL: User sees all branches in org (admins, owners)
     """
     
     @classmethod
-    def set_context(cls, org_id: UUID, user_id: Optional[UUID] = None):
-        """Set tenant context for current request (thread-safe)"""
+    def set_context(
+        cls, 
+        org_id: UUID, 
+        user_id: Optional[UUID] = None,
+        branch_scope: BranchScope = BranchScope.ALL,
+        branch_ids: Optional[List[UUID]] = None
+    ):
+        """Set tenant + branch context for current request (thread-safe)"""
         _org_id_context.set(org_id)
         _user_id_context.set(user_id)
         _bypass_filter_context.set(False)
-        logger.debug(f"[SECURITY] Tenant context set: org_id={org_id}, user_id={user_id}")
+        _branch_scope_context.set(branch_scope)
+        _branch_ids_context.set(branch_ids or [])
+        logger.debug(
+            f"[SECURITY] Context set: org_id={org_id}, user_id={user_id}, "
+            f"branch_scope={branch_scope.value}, branches={len(branch_ids or [])}"
+        )
         
     @classmethod
     def get_org_id(cls) -> UUID:
@@ -51,11 +81,29 @@ class TenantContext:
         return _user_id_context.get()
     
     @classmethod
+    def get_branch_scope(cls) -> BranchScope:
+        """Get current branch access scope (thread-safe)"""
+        return _branch_scope_context.get()
+    
+    @classmethod
+    def get_branch_ids(cls) -> List[UUID]:
+        """Get list of accessible branch IDs (thread-safe)"""
+        return _branch_ids_context.get()
+    
+    @classmethod
+    def should_filter_by_branch(cls) -> bool:
+        """Check if branch filtering should be applied"""
+        scope = cls.get_branch_scope()
+        return scope != BranchScope.ALL
+    
+    @classmethod
     def clear_context(cls):
-        """Clear tenant context (thread-safe)"""
+        """Clear tenant and branch context (thread-safe)"""
         _org_id_context.set(None)
         _user_id_context.set(None)
         _bypass_filter_context.set(False)
+        _branch_scope_context.set(BranchScope.ALL)
+        _branch_ids_context.set([])
     
     @classmethod
     def bypass_tenant_filter(cls, enabled: bool = True):
@@ -77,30 +125,47 @@ class SecurityError(Exception):
 
 class TenantQueryBuilder:
     """
-    Automatically injects org_id filters into all queries
+    Automatically injects org_id + branch_id filters into all queries
     Enterprise-grade performance without RLS overhead
+    
+    Filter Logic:
+    - org_id: Always injected for TENANT_TABLES
+    - branch_id: Injected for BRANCH_TABLES if user's branch_scope != ALL
     """
     
-    # Tables that need tenant filtering
+    # Tables that need tenant (org_id) filtering
     TENANT_TABLES = {
         'customers', 'suppliers', 'products', 'invoices', 'orders',
         'payments', 'inventory', 'sales', 'purchase_orders', 
         'delivery_challans', 'credit_notes', 'debit_notes',
-        'stock_movements', 'journal_entries', 'expense_claims'
+        'stock_movements', 'journal_entries', 'expense_claims',
+        'batches', 'inventory_batches'
+    }
+    
+    # Tables that ALSO need branch filtering (subset of TENANT_TABLES)
+    # These are operational tables where branch isolation matters
+    BRANCH_TABLES = {
+        'invoices', 'orders', 'payments', 'sales', 'purchase_orders',
+        'delivery_challans', 'stock_movements', 'inventory',
+        'credit_notes', 'debit_notes', 'journal_entries'
     }
     
     # Tables that are global (no tenant filtering)
     GLOBAL_TABLES = {
         'organizations', 'users', 'roles', 'permissions', 
-        'system_config', 'audit_logs'
+        'system_config', 'audit_logs', 'branches'
     }
     
     @classmethod
     def build_safe_query(cls, base_query: str, params: Dict = None) -> tuple:
         """
-        Automatically inject org_id filters into SQL queries
+        Automatically inject org_id and branch_id filters into SQL queries
         
         Returns: (modified_query, updated_params)
+        
+        Filter behavior:
+        - org_id: Always applied to TENANT_TABLES
+        - branch_id: Applied to BRANCH_TABLES if branch_scope is SINGLE or MULTI
         """
         if TenantContext.is_bypass_enabled():
             logger.warning("SECURITY: Tenant filter bypassed - admin operation")
@@ -114,22 +179,34 @@ class TenantQueryBuilder:
         
         # Skip if already has org_id filter in WHERE clause (not just column selection)
         # Check for patterns like "WHERE org_id =" or "WHERE ... AND org_id ="
-        if re.search(r'\bWHERE\b.*\bORG_ID\s*=', query_upper, re.DOTALL) or \
-           re.search(r'\bAND\b.*\bORG_ID\s*=', query_upper, re.DOTALL):
-            return base_query, params
+        already_has_org_filter = (
+            re.search(r'\bWHERE\b.*\bORG_ID\s*=', query_upper, re.DOTALL) or
+            re.search(r'\bAND\b.*\bORG_ID\s*=', query_upper, re.DOTALL)
+        )
             
         # Check if query accesses tenant tables
-        needs_filtering = any(
+        needs_org_filtering = not already_has_org_filter and any(
             table.upper() in query_upper 
             for table in cls.TENANT_TABLES
         )
         
-        if not needs_filtering:
-            return base_query, params
-            
-        # Inject org_id filter
-        modified_query = cls._inject_org_filter(base_query, org_id)
-        params['_tenant_org_id'] = str(org_id)
+        # Check if query accesses branch tables
+        needs_branch_filtering = (
+            TenantContext.should_filter_by_branch() and
+            any(table.upper() in query_upper for table in cls.BRANCH_TABLES) and
+            not re.search(r'\bBRANCH_ID\s*(=|IN)', query_upper, re.DOTALL)  # Not already filtered
+        )
+        
+        modified_query = base_query
+        
+        # Inject org_id filter if needed
+        if needs_org_filtering:
+            modified_query = cls._inject_org_filter(modified_query, org_id)
+            params['_tenant_org_id'] = str(org_id)
+        
+        # Inject branch_id filter if needed
+        if needs_branch_filtering:
+            modified_query = cls._inject_branch_filter(modified_query, params)
         
         return modified_query, params
     
@@ -208,6 +285,78 @@ class TenantQueryBuilder:
     def _inject_delete_filter(cls, query: str) -> str:
         """Inject WHERE org_id filter into DELETE queries"""
         return cls._inject_update_filter(query)  # Same logic
+    
+    @classmethod
+    def _inject_branch_filter(cls, query: str, params: Dict) -> str:
+        """
+        Inject branch_id filter based on user's branch scope.
+        
+        Filter Types:
+        - SINGLE: WHERE branch_id = :_tenant_branch_id
+        - MULTI: WHERE branch_id IN (:_tenant_branch_ids)
+        - ALL: No filter (should not reach this method)
+        """
+        branch_scope = TenantContext.get_branch_scope()
+        branch_ids = TenantContext.get_branch_ids()
+        
+        if branch_scope == BranchScope.ALL:
+            # No branch filter needed
+            return query
+        
+        if not branch_ids:
+            # User has no branches assigned - this is a security issue
+            logger.error("[SECURITY] User has non-ALL scope but no branch_ids assigned!")
+            # For safety, filter to impossible condition
+            params['_tenant_branch_id'] = '00000000-0000-0000-0000-000000000000'
+            return cls._add_branch_condition(query, 'branch_id = :_tenant_branch_id')
+        
+        if branch_scope == BranchScope.SINGLE:
+            # Single branch filter
+            params['_tenant_branch_id'] = str(branch_ids[0])
+            return cls._add_branch_condition(query, 'branch_id = :_tenant_branch_id')
+        
+        elif branch_scope == BranchScope.MULTI:
+            # Multiple branches filter - use IN clause
+            # Convert UUIDs to string for SQL
+            branch_id_strs = [str(bid) for bid in branch_ids]
+            params['_tenant_branch_ids'] = tuple(branch_id_strs)
+            return cls._add_branch_condition(query, 'branch_id IN :_tenant_branch_ids')
+        
+        return query
+    
+    @classmethod
+    def _add_branch_condition(cls, query: str, condition: str) -> str:
+        """Add branch condition to query's WHERE clause"""
+        query_upper = query.upper()
+        
+        # Check if WHERE clause exists
+        if re.search(r'\bWHERE\b', query_upper, re.IGNORECASE):
+            # Add to existing WHERE with AND
+            # Find position after WHERE and any existing conditions
+            return re.sub(
+                r'\bWHERE\b',
+                f'WHERE {condition} AND',
+                query,
+                count=1,
+                flags=re.IGNORECASE
+            )
+        else:
+            # Add new WHERE clause before GROUP BY, ORDER BY, etc.
+            keywords = ['GROUP BY', 'ORDER BY', 'LIMIT', 'OFFSET', 'HAVING']
+            
+            for keyword in keywords:
+                pattern = f'\\b{keyword}\\b'
+                if re.search(pattern, query, re.IGNORECASE):
+                    return re.sub(
+                        pattern,
+                        f'WHERE {condition} {keyword}',
+                        query,
+                        count=1,
+                        flags=re.IGNORECASE
+                    )
+            
+            # No keywords found, add WHERE at end
+            return f"{query.rstrip()} WHERE {condition}"
 
 
 class TenantAwareSession:
@@ -312,7 +461,13 @@ def get_tenant_aware_db():
 # Decorator for automatic tenant context
 def with_tenant_context(func):
     """
-    Decorator that automatically sets tenant context from OrgContext
+    Decorator that automatically sets tenant + branch context from OrgContext.
+    
+    Security Flow:
+    1. Extracts OrgContext from function arguments
+    2. Sets TenantContext with org_id, user_id, branch_scope, branch_ids
+    3. All queries via TenantAwareSession are automatically filtered
+    4. Context is cleared after request completes
     
     Usage:
     @router.get("/customers")
@@ -321,7 +476,9 @@ def with_tenant_context(func):
         context: OrgContext = Depends(get_org_context),
         db: TenantAwareSession = Depends(get_tenant_aware_db)
     ):
-        # Tenant context automatically set
+        # Tenant + branch context automatically set
+        # Store staff only sees their branch data
+        # CEO sees all branch data
         result = db.execute("SELECT * FROM customers")
         return result.fetchall()
     """
@@ -330,12 +487,23 @@ def with_tenant_context(func):
         # Extract OrgContext from function arguments
         context = None
         for arg in list(args) + list(kwargs.values()):
-            if hasattr(arg, 'org_id') and hasattr(arg, 'user_id'):
+            # Look for OrgContext (has org_id, user_id, and now branch_scope)
+            if hasattr(arg, 'org_id') and hasattr(arg, 'branch_scope'):
+                context = arg
+                break
+            # Fallback for old-style context without branch info
+            elif hasattr(arg, 'org_id') and hasattr(arg, 'user_id'):
                 context = arg
                 break
         
         if context:
-            TenantContext.set_context(context.org_id, context.user_id)
+            # Set full tenant + branch context
+            TenantContext.set_context(
+                org_id=context.org_id, 
+                user_id=context.user_id,
+                branch_scope=getattr(context, 'branch_scope', BranchScope.ALL),
+                branch_ids=getattr(context, 'branch_ids', [])
+            )
             try:
                 result = await func(*args, **kwargs)
                 return result

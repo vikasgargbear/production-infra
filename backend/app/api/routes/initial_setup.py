@@ -13,7 +13,7 @@ import logging
 
 from ...core.database import get_db
 from ...core.supabase_auth import supabase_auth
-from ...core.auth_utils import get_optional_org_id
+from ...core.role_management import RoleManager
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +232,25 @@ async def initialize_organization(
                 "type": type_
             })
         
+        # Create default roles for the organization
+        role_manager = RoleManager(db)
+        role_results = role_manager.setup_default_roles(org_id)
+        logger.info(f"Created default roles: {role_results}")
+        
+        # Assign admin role to the admin user
+        admin_role = db.execute(text("""
+            SELECT role_id FROM master.roles 
+            WHERE org_id = :org_id AND role_code = 'admin'
+        """), {"org_id": org_id}).fetchone()
+        
+        if admin_role:
+            db.execute(text("""
+                UPDATE master.org_users 
+                SET role_id = :role_id
+                WHERE org_id = :org_id AND is_admin = true
+            """), {"org_id": org_id, "role_id": admin_role.role_id})
+            logger.info(f"Assigned admin role (id={admin_role.role_id}) to admin user")
+        
         db.commit()
         
         return {
@@ -241,7 +260,8 @@ async def initialize_organization(
                 "org_id": org_id,
                 "org_name": setup_data["org_name"],
                 "admin_email": setup_data.get("admin_email")
-            }
+            },
+            "roles_created": role_results.get("created", [])
         }
         
     except HTTPException:

@@ -6,12 +6,12 @@ from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, Depends, status, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import jwt
+from jose import JWTError
 import json
 import logging
 
 from .database import get_db
-from .config import settings
+from .jwt_auth import decode_jwt  # Single source of truth
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +63,8 @@ class PermissionChecker:
         token = authorization.replace("Bearer ", "")
         
         try:
-            # Decode JWT token - use same secret as jwt_auth module
-            import os
-            jwt_secret = os.getenv("JWT_SECRET_KEY", settings.SECRET_KEY)
-            payload = jwt.decode(token, jwt_secret, algorithms=[settings.ALGORITHM])
+            # Use central decode function (single source of truth)
+            payload = decode_jwt(token)
             user_id = payload.get("user_id")
             org_id = payload.get("org_id")
             
@@ -146,15 +144,10 @@ class PermissionChecker:
             
             return user_dict
             
-        except jwt.ExpiredSignatureError:
+        except JWTError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired"
-            )
-        except jwt.InvalidTokenError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+                detail="Token expired or invalid"
             )
         except HTTPException:
             raise
@@ -167,41 +160,27 @@ class PermissionChecker:
     
     def _check_permission(self, user: Dict, module: str, permission: str) -> bool:
         """
-        Check if user has specific permission for a module
-        """
-        # Merge role and user permissions
-        role_perms = user.get('role_permissions') or {}
-        user_perms = user.get('user_permissions') or {}
+        Check if user has specific permission for a module.
         
-        # User permissions override role permissions
-        if isinstance(user_perms, str):
-            try:
-                user_perms = json.loads(user_perms)
-            except:
-                user_perms = {}
+        ROLE-FIRST RBAC: Permissions come ONLY from roles.
+        User-level permission overrides have been removed (Dec 2025).
+        """
+        # Get role permissions only (single source of truth)
+        role_perms = user.get('role_permissions') or {}
         
         if isinstance(role_perms, str):
             try:
                 role_perms = json.loads(role_perms)
-            except:
+            except json.JSONDecodeError:
                 role_perms = {}
         
-        # Check for "all" permission
-        if user_perms.get('all') or role_perms.get('all'):
+        # Check for "all" permission (admin role)
+        if role_perms.get('all'):
             return True
         
         # Check module-specific permissions
         module_lower = module.lower() if module else None
         perm_lower = permission.lower() if permission else None
-        
-        # Check user permissions first (they override role permissions)
-        if module_lower in user_perms:
-            module_perms = user_perms[module_lower]
-            if isinstance(module_perms, dict):
-                if module_perms.get('all') or module_perms.get(perm_lower):
-                    return True
-            elif isinstance(module_perms, list) and perm_lower in module_perms:
-                return True
         
         # Check role permissions
         if module_lower in role_perms:

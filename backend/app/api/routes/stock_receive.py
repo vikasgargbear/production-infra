@@ -13,7 +13,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...dependencies import get_current_org
 
 # Default org ID for now

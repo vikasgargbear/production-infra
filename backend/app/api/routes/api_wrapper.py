@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 import json
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 
 router = APIRouter()
 

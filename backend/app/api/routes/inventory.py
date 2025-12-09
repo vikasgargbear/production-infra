@@ -1,18 +1,18 @@
 """
 Inventory management endpoints for enterprise pharma system
 Handles batch tracking, stock movements, and expiry management
+
+PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
 from typing import Optional, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...core.database import get_db
-# Removed: get_org_id_from_header - using tenant service instead
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
+from ...core.api_utils import handle_error
 from ..schemas.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
@@ -49,12 +49,7 @@ async def get_inventory_overview(
             "total_quantity": result.total_quantity if result else 0
         }
     except Exception as e:
-        logger.error(f"Error getting inventory overview: {str(e)}")
-        return {
-            "total_products": 0,
-            "products_in_stock": 0,
-            "total_quantity": 0
-        }
+        raise handle_error(e, "get inventory overview")
 
 @router.post("/batches", response_model=BatchResponse)
 @with_tenant_context
@@ -76,8 +71,7 @@ async def create_batch(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error creating batch: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create batch: {str(e)}")
+        raise handle_error(e, "create batch")
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
 @with_tenant_context
@@ -92,8 +86,7 @@ async def get_batch(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting batch: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get batch: {str(e)}")
+        raise handle_error(e, "get batch", batch_id)
 
 @router.get("/batches")
 @with_tenant_context
@@ -163,8 +156,7 @@ async def list_batches(
         }
         
     except Exception as e:
-        logger.error(f"Error listing batches: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list batches: {str(e)}")
+        raise handle_error(e, "list batches")
 
 @router.get("/stock/current/{product_id}", response_model=CurrentStock)
 @with_tenant_context
@@ -179,8 +171,7 @@ async def get_current_stock(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error getting stock: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get stock: {str(e)}")
+        raise handle_error(e, "get current stock", product_id)
 
 @router.get("/stock/current")
 @with_tenant_context
@@ -267,8 +258,7 @@ async def list_current_stock(
         }
         
     except Exception as e:
-        logger.error(f"Error listing stock: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list stock: {str(e)}")
+        raise handle_error(e, "list current stock")
 
 @router.post("/movements", response_model=StockMovementResponse)
 @with_tenant_context
@@ -289,8 +279,7 @@ async def record_stock_movement(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error recording movement: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to record movement: {str(e)}")
+        raise handle_error(e, "record stock movement")
 
 @router.get("/movements")
 @with_tenant_context
@@ -387,8 +376,7 @@ async def list_stock_movements(
         }
         
     except Exception as e:
-        logger.error(f"Error listing movements: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list movements: {str(e)}")
+        raise handle_error(e, "list stock movements")
 
 @router.post("/stock/adjustment", response_model=StockMovementResponse)
 @with_tenant_context
@@ -409,8 +397,7 @@ async def adjust_stock(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error adjusting stock: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to adjust stock: {str(e)}")
+        raise handle_error(e, "adjust stock")
 
 @router.get("/expiry/alerts", response_model=List[ExpiryAlert])
 @with_tenant_context
@@ -436,8 +423,7 @@ async def get_expiry_alerts(
         return alerts
         
     except Exception as e:
-        logger.error(f"Error getting expiry alerts: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get expiry alerts: {str(e)}")
+        raise handle_error(e, "get expiry alerts")
 
 @router.get("/valuation", response_model=StockValuation)
 @with_tenant_context
@@ -457,8 +443,7 @@ async def get_stock_valuation(
     try:
         return InventoryService.get_stock_valuation(db, context.org_id, as_of_date)
     except Exception as e:
-        logger.error(f"Error getting valuation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get valuation: {str(e)}")
+        raise handle_error(e, "get stock valuation")
 
 @router.get("/dashboard", response_model=InventoryDashboard)
 @with_tenant_context
@@ -477,5 +462,4 @@ async def get_inventory_dashboard(
     try:
         return InventoryService.get_inventory_dashboard(db, context.org_id)
     except Exception as e:
-        logger.error(f"Error getting dashboard: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
+        raise handle_error(e, "get inventory dashboard")

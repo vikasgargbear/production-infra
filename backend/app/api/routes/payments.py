@@ -11,10 +11,11 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ...core.database import get_db
+# Removed: get_db - using TenantAwareSession instead
 # Removed: get_org_id_from_header - using tenant service instead
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker  # RBAC
 from ..services.payment_service import PaymentService
 from ..services.document_number_service import DocumentNumberService
 
@@ -26,6 +27,7 @@ router = APIRouter(tags=["payments"])
 @router.get("/")
 @with_tenant_context
 async def get_payments_overview(
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -57,10 +59,202 @@ async def get_payments_overview(
             "payments_count": 0
         }
 
+
+# ========================================
+# MISSING ENDPOINTS (Frontend expects these)
+# ========================================
+
+@router.get("/search")
+@with_tenant_context
+async def search_payments(
+    q: Optional[str] = Query(None, description="Search query"),
+    party_id: Optional[int] = None,
+    party_type: Optional[str] = None,
+    payment_mode: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    limit: int = Query(50, le=100),
+    offset: int = 0,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Search payments with filters"""
+    try:
+        query = """
+            SELECT p.*, 
+                COALESCE(c.customer_name, s.supplier_name) as party_name
+            FROM financial.payments p
+            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
+            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            WHERE p.payment_status != 'cancelled'
+        """
+        params = {}
+        
+        if q:
+            query += """ AND (
+                p.payment_number ILIKE :q 
+                OR p.transaction_reference ILIKE :q
+                OR c.customer_name ILIKE :q
+                OR s.supplier_name ILIKE :q
+            )"""
+            params["q"] = f"%{q}%"
+        
+        if party_id and party_type == "customer":
+            query += " AND p.customer_id = :party_id"
+            params["party_id"] = party_id
+        elif party_id and party_type == "supplier":
+            query += " AND p.supplier_id = :party_id"
+            params["party_id"] = party_id
+            
+        if payment_mode:
+            query += " AND p.payment_mode = :payment_mode"
+            params["payment_mode"] = payment_mode
+            
+        if date_from:
+            query += " AND p.payment_date >= :date_from"
+            params["date_from"] = date_from
+        if date_to:
+            query += " AND p.payment_date <= :date_to"
+            params["date_to"] = date_to
+            
+        query += " ORDER BY p.payment_date DESC LIMIT :limit OFFSET :offset"
+        params["limit"] = limit
+        params["offset"] = offset
+        
+        result = db.execute(text(query), params)
+        payments = [dict(row._mapping) for row in result]
+        
+        # Get total count
+        count_query = query.replace("SELECT p.*", "SELECT COUNT(*)")
+        count_query = count_query.split("ORDER BY")[0]
+        count_result = db.execute(text(count_query), {k: v for k, v in params.items() if k not in ["limit", "offset"]})
+        total = count_result.scalar() or 0
+        
+        return {"payments": payments, "total": total}
+    except Exception as e:
+        logger.error(f"Error searching payments: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to search payments")
+
+
+@router.get("/pending")
+@with_tenant_context
+async def get_pending_payments(
+    party_type: Optional[str] = Query(None, description="customer or supplier"),
+    party_id: Optional[int] = None,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get pending/uncleared payments"""
+    try:
+        query = """
+            SELECT p.*, 
+                COALESCE(c.customer_name, s.supplier_name) as party_name
+            FROM financial.payments p
+            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
+            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            WHERE p.payment_status = 'pending'
+                OR (p.payment_mode = 'cheque' AND p.cleared_date IS NULL)
+        """
+        params = {}
+        
+        if party_type == "customer" and party_id:
+            query += " AND p.customer_id = :party_id"
+            params["party_id"] = party_id
+        elif party_type == "supplier" and party_id:
+            query += " AND p.supplier_id = :party_id"
+            params["party_id"] = party_id
+            
+        query += " ORDER BY p.payment_date DESC"
+        
+        result = db.execute(text(query), params)
+        payments = [dict(row._mapping) for row in result]
+        
+        return {"payments": payments, "total": len(payments)}
+    except Exception as e:
+        logger.error(f"Error getting pending payments: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get pending payments")
+
+
+@router.get("/methods")
+@with_tenant_context
+async def get_payment_methods(
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get available payment methods"""
+    try:
+        result = db.execute(text("""
+            SELECT payment_method_id, method_name, method_type, is_active
+            FROM financial.payment_methods
+            WHERE is_active = true
+            ORDER BY method_name
+        """))
+        methods = [dict(row._mapping) for row in result]
+        
+        # Fallback if no methods in DB
+        if not methods:
+            methods = [
+                {"method_type": "cash", "method_name": "Cash"},
+                {"method_type": "cheque", "method_name": "Cheque"},
+                {"method_type": "upi", "method_name": "UPI"},
+                {"method_type": "neft", "method_name": "NEFT/RTGS"},
+                {"method_type": "card", "method_name": "Card"},
+                {"method_type": "online", "method_name": "Online Transfer"}
+            ]
+        
+        return {"methods": methods}
+    except Exception as e:
+        logger.error(f"Error getting payment methods: {str(e)}")
+        # Return default methods on error
+        return {"methods": [
+            {"method_type": "cash", "method_name": "Cash"},
+            {"method_type": "cheque", "method_name": "Cheque"},
+            {"method_type": "upi", "method_name": "UPI"},
+            {"method_type": "neft", "method_name": "NEFT/RTGS"}
+        ]}
+
+
+@router.get("/{payment_id}")
+@with_tenant_context
+async def get_payment_by_id(
+    payment_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get single payment by ID"""
+    try:
+        result = db.execute(text("""
+            SELECT p.*, 
+                c.customer_name,
+                s.supplier_name,
+                i.invoice_number
+            FROM financial.payments p
+            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
+            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN sales.invoices i ON p.invoice_id = i.invoice_id
+            WHERE p.payment_id = :payment_id
+        """), {"payment_id": payment_id})
+        
+        payment = result.first()
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+            
+        return dict(payment._mapping)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting payment {payment_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get payment")
+
 @router.get("/generate-receipt-number")
 @with_tenant_context
 async def generate_receipt_number(
     payment_type: str = Query("receipt", description="Type: receipt or payment"),
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -180,6 +374,7 @@ class PaymentSummaryResponse(BaseModel):
 @with_tenant_context
 async def create_payment(
     payment: GeneralPaymentCreate,
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -213,40 +408,9 @@ async def create_payment(
             ).first()
             party_name = party_result.supplier_name if party_result else f"Supplier {payment.supplier_id}"
         
-        # Get or create system user for API operations
+        # SECURITY FIX: Use authenticated user from JWT context
         if not payment.created_by:
-            # Try to get or create a system user
-            user_result = db.execute(
-                text("""
-                    SELECT user_id FROM master.org_users 
-                    WHERE 1=1 AND is_active = true
-                    ORDER BY user_id
-                    LIMIT 1
-                """),
-                {}
-            ).first()
-            
-            if user_result:
-                payment.created_by = user_result.user_id
-            else:
-                # Create system user
-                try:
-                    create_user = db.execute(
-                        text("""
-                            INSERT INTO master.org_users (
-                                org_id, employee_code, username, email, password_hash,
-                                first_name, last_name, roles, is_active
-                            ) VALUES (
-                                :org_id, 'SYSTEM', 'system', 'system@api.local', 'no-login',
-                                'System', 'API', ARRAY['api_user'], true
-                            ) RETURNING user_id
-                        """),
-                        {}
-                    ).first()
-                    payment.created_by = create_user.user_id if create_user else None
-                except:
-                    # If user creation fails, we need to handle it
-                    pass
+            payment.created_by = context.user_id
         
         # Get or create payment method ID for the payment mode
         payment_method_id = 1  # Default to cash
@@ -289,7 +453,7 @@ async def create_payment(
         # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
             'org_id': org_id,
-            'branch_id': payment.branch_id or 1,
+            'branch_id': payment.branch_id or context.primary_branch_id or 1,  # Use JWT branch, fallback only if none assigned
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
             'payment_type': 'payment' if payment.supplier_id else 'receipt',
@@ -340,6 +504,7 @@ async def create_payment(
 @with_tenant_context
 async def record_payment(
     payment: PaymentCreate,
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -365,6 +530,7 @@ async def record_payment(
 @with_tenant_context
 async def get_invoice_payments(
     invoice_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -381,6 +547,7 @@ async def get_invoice_payments(
 async def get_payment_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -400,11 +567,12 @@ async def get_payment_summary(
         logger.error(f"Error getting payment summary: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get payment summary")
 
-@router.put("/{payment_id}/cancel")
+@router.post("/{payment_id}/cancel")  # Changed from PUT to POST to match frontend
 @with_tenant_context
 async def cancel_payment(
     payment_id: int,
     reason: str = Query(..., description="Cancellation reason"),
+    _: dict = Depends(PermissionChecker("sales", "delete")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -430,6 +598,7 @@ async def cancel_payment(
 @with_tenant_context
 async def create_customer_receipt(
     receipt_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -510,6 +679,7 @@ async def create_customer_receipt(
 async def get_outstanding_invoices(
     customer_id: Optional[int] = None,
     overdue_only: bool = False,
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -575,6 +745,7 @@ async def get_outstanding_invoices(
 @with_tenant_context
 async def create_bank_reconciliation(
     reconciliation_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -609,7 +780,7 @@ async def create_bank_reconciliation(
             "statement_date": statement_date,
             "opening_balance": opening_balance,
             "closing_balance": closing_balance,
-            "reconciled_by": 1  # Default user
+            "reconciled_by": context.user_id  # SECURITY FIX: Use authenticated user
         })
         
         reconciliation_id = result.scalar()
@@ -691,6 +862,7 @@ async def create_bank_reconciliation(
 @with_tenant_context
 async def allocate_payment(
     allocation_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
@@ -758,7 +930,7 @@ async def allocate_payment(
                     "payment_id": payment_id,
                     "invoice_id": invoice_id,
                     "allocated_amount": actual_allocation,
-                    "created_by": 1
+                    "created_by": context.user_id  # SECURITY FIX: Use authenticated user
                 })
                 
                 # Update invoice paid amount

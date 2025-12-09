@@ -9,7 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...models import OrderItem
 from ...core.crud_base import create_crud
 

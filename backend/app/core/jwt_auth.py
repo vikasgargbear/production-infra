@@ -2,6 +2,7 @@
 JWT Authentication utilities
 """
 import os
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -9,8 +10,14 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 
+from .token_blacklist import is_token_blacklisted, blacklist_token
+
 # Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
+    import warnings
+    warnings.warn("JWT_SECRET_KEY not set! Using insecure default - DO NOT USE IN PRODUCTION")
+    SECRET_KEY = "your-secret-key-here-INSECURE-DEFAULT"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
 
@@ -42,43 +49,165 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create a JWT access token"""
+    """
+    Create a JWT access token with jti for blacklist support.
+    
+    The jti (JWT ID) is a unique identifier that allows us to:
+    - Blacklist specific tokens on logout
+    - Track token usage
+    """
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    
+    # Add jti (JWT ID) for blacklist support
+    jti = str(uuid.uuid4())
+    to_encode.update({
+        "exp": expire,
+        "jti": jti,
+        "iat": datetime.utcnow()
+    })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user_and_org(
-    token: Optional[str] = Depends(oauth2_scheme),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id")
-):
-    """Get current user and organization from token or header (for backward compatibility)"""
+
+def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
+    """
+    SINGLE SOURCE OF TRUTH: Decode and validate a JWT token.
     
-    # If no token provided, check for X-Org-Id header (backward compatibility)
-    if not token:
-        if x_org_id:
-            # Return minimal user context for header-based auth
-            return {
-                "user_id": None,
-                "email": None,
-                "username": None,
-                "org_id": x_org_id,
-                "branch_id": None,  # Will need to be looked up
-                "role": None,
-                "full_name": None,
-                "org_name": None
-            }
-        else:
-            # No authentication provided
+    This is the ONLY function that should decode JWT tokens.
+    All other modules should import and use this function.
+    
+    Args:
+        token: JWT token string
+        check_blacklist: Whether to check if token is blacklisted (default: True)
+        
+    Returns:
+        dict: Decoded payload
+        
+    Raises:
+        JWTError: If token is invalid, expired, or blacklisted
+    """
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    
+    # Check if token is blacklisted (for logout support)
+    if check_blacklist:
+        jti = payload.get("jti")
+        if jti and is_token_blacklisted(jti):
+            raise JWTError("Token has been revoked")
+    
+    return payload
+
+
+# ==============================================================================
+# FASTAPI DEPENDENCIES - For use in route handlers
+# ==============================================================================
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from uuid import UUID
+
+# Bearer token scheme
+_security = HTTPBearer(auto_error=False)
+
+
+def get_org_id_string(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security)
+) -> str:
+    """
+    FastAPI dependency to get org_id as string from JWT token.
+    
+    This replaces secure_auth.get_org_id_string() as single source of truth.
+    
+    Usage:
+        @router.get("/items")
+        def get_items(org_id: str = Depends(get_org_id_string)):
+            ...
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Provide Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    try:
+        payload = decode_jwt(credentials.credentials)
+        org_id = payload.get("org_id")
+        
+        if not org_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
-                headers={"WWW-Authenticate": "Bearer"},
+                detail="org_id not found in token. Please login again."
             )
+        return str(org_id)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+
+def get_user_context_secure(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security)
+) -> dict:
+    """
+    FastAPI dependency to get full user context from JWT token.
+    
+    This replaces secure_auth.get_user_context_secure() as single source of truth.
+    
+    Returns:
+        dict with user_id, org_id (as UUID), role, email, full_name
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    try:
+        payload = decode_jwt(credentials.credentials)
+        org_id_str = payload.get("org_id")
+        
+        if not org_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="org_id missing from token"
+            )
+        
+        return {
+            "user_id": payload.get("user_id"),
+            "org_id": UUID(org_id_str) if isinstance(org_id_str, str) else org_id_str,
+            "role": payload.get("role"),
+            "email": payload.get("email"),
+            "full_name": payload.get("full_name")
+        }
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+async def get_current_user_and_org(
+    token: Optional[str] = Depends(oauth2_scheme)
+):
+    """
+    Get current user and organization from JWT token.
+    
+    SECURITY: X-Org-Id header fallback REMOVED (Nov 30, 2025)
+    JWT token is now REQUIRED - prevents client from bypassing auth.
+    """
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Provide Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Token provided - decode it
     credentials_exception = HTTPException(
@@ -100,9 +229,13 @@ async def get_current_user_and_org(
         
         role = payload.get("role")
         
+        # org_id MUST be in token - no fallback
         if not org_id:
-            # Try to get from header as fallback
-            org_id = x_org_id
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="org_id missing from token. Please login again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
             
         if not user_id and not email:
             raise credentials_exception

@@ -1,30 +1,33 @@
 """
-Fixed Invoice API - Only uses columns that actually exist in database
+Invoice API - Sales invoice management
+
+PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from datetime import date, datetime
-from uuid import UUID
+from datetime import date, datetime, timedelta
 import logging
 import time
 from typing import Optional
 
-from ...core.database import get_db
-from ...core.secure_auth import get_org_id_secure  # SECURE: Token-based auth
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
+from ...core.api_utils import handle_error
+from ...core.permissions import PermissionChecker  # RBAC
 from ..services.document_number_service import DocumentNumberService
 from ..services.document_number_service_v2 import DocumentNumberServiceV2
+from .enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
+from ...services.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
-# org_id should come from authentication, not hardcoded
 
 @router.get("/generate-number")
 @with_tenant_context
 async def generate_invoice_number(
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
@@ -50,6 +53,7 @@ async def generate_invoice_number(
 @with_tenant_context
 async def create_invoice(
     invoice_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
@@ -68,8 +72,7 @@ async def create_invoice(
         # Get org_id from context
         org_id = str(context.org_id)
         
-        # Start fresh - clear any failed transaction state
-        db.rollback()  # Clear any failed transaction state
+        # REMOVED: db.rollback() - unnecessary, creates issues with transaction state
         
         # Extract customer_id early for use throughout the function
         customer_id = invoice_data.get("customer_id")
@@ -81,20 +84,20 @@ async def create_invoice(
         
         logger.info(f"Creating invoice for customer {customer_id} in org {org_id}")
         
-        # Step 1: Get valid branch_id and created_by
-        branch_result = db.execute(text("""
-            SELECT branch_id FROM master.org_branches 
-            WHERE org_id = :org_id LIMIT 1
-        """), {"org_id": org_id})
-        branch = branch_result.fetchone()
-        branch_id = branch[0] if branch else None  # Use NULL if no branch found
+        # SECURITY FIX: Get branch_id and created_by from authenticated context
+        # Previously: Random first user/branch from DB - now uses JWT-verified values
+        branch_id = context.primary_branch_id  # User's assigned branch from JWT
+        created_by = context.user_id  # Authenticated user from JWT
         
-        user_result = db.execute(text("""
-            SELECT user_id FROM master.org_users 
-            WHERE org_id = :org_id LIMIT 1
-        """), {"org_id": org_id})
-        user = user_result.fetchone()
-        created_by = user[0] if user else None  # Use NULL if no user found
+        # Fallback if user doesn't have branch assigned (legacy data)
+        if not branch_id:
+            branch_result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                WHERE org_id = :org_id LIMIT 1
+            """), {"org_id": org_id})
+            branch = branch_result.fetchone()
+            branch_id = branch[0] if branch else None
+            logger.warning(f"User {created_by} has no branch assigned - using default")
         
         # Step 2: Generate order number
         order_result = db.execute(text("""
@@ -105,50 +108,50 @@ async def create_invoice(
         order_num = order_result.scalar() or 1
         order_number = f"ORD-{order_num:06d}"
         
-        # Step 3: Calculate totals from items
+        # Step 3: Calculate totals from items using shared helper (DRY)
         items = invoice_data.get("items", [])
+        gst_type = invoice_data.get("gst_type", "CGST/SGST")  # Support IGST for inter-state
+        
+        # Initialize accumulators
         subtotal = 0
         total_discount = 0
         total_cgst = 0
         total_sgst = 0
+        total_igst = 0
+        total_tax = 0
         
         for item in items:
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 0))  # Single source of truth
+            gst_percent = float(item.get("gst_percent", 0))
             
-            # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
-            if "base_quantity" in item:
-                base_quantity = float(item["base_quantity"])
-            else:
-                base_quantity = float(quantity)  # fallback only if not provided
+            # Use base_quantity for billing (free items not billed)
+            base_quantity = float(item.get("base_quantity", quantity))
             
-            line_total = base_quantity * unit_price
-            # Apply discount to get taxable amount
-            discount_amount = line_total * discount_percent / 100
-            taxable_line_total = line_total - discount_amount
+            # Use shared helper for consistent calculations
+            calc = calculate_line_item(base_quantity, unit_price, discount_percent, gst_percent, gst_type)
             
-            # Calculate GST on discounted amount
-            cgst = taxable_line_total * (gst_percent / 2) / 100
-            sgst = taxable_line_total * (gst_percent / 2) / 100
-            
-            subtotal += line_total  # Subtotal is before discount
-            total_discount += discount_amount
-            total_cgst += cgst
-            total_sgst += sgst
+            subtotal += calc["subtotal"]
+            total_discount += calc["discount_amount"]
+            total_cgst += calc["cgst_amount"]
+            total_sgst += calc["sgst_amount"]
+            total_igst += calc["igst_amount"]
+            total_tax += calc["total_tax"]
         
-        # Get additional charges from invoice data
-        freight_charges = float(invoice_data.get("freight_charges", 0) or invoice_data.get("delivery_charges", 0))
+        # Get additional charges and OVERALL discount
+        freight_charges = float(invoice_data.get("freight_charges", 0))
         insurance_charges = float(invoice_data.get("insurance_charges", 0))
         other_charges = float(invoice_data.get("other_charges", 0))
+        invoice_discount = float(invoice_data.get("discount_amount", 0))  # OVERALL invoice discount
         
-        # Taxable amount is subtotal minus discounts
+        # Calculate final amounts
+        # Note: Two types of discounts:
+        # 1. Item-level (total_discount) - already reduced from taxable amounts per line
+        # 2. Invoice-level (invoice_discount) - subtracted from final total
         taxable_amount = subtotal - total_discount
-        tax_amount = total_cgst + total_sgst
-        # Include freight charges in final amount calculation
-        amount_before_round = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
-        final_amount = round(amount_before_round)  # Round to nearest integer
+        amount_before_round = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges - invoice_discount
+        final_amount = round(amount_before_round)
         round_off_amount = final_amount - amount_before_round
         
         # CRITICAL FIX: Use invoice_date from frontend (for offline sync)
@@ -255,9 +258,7 @@ async def create_invoice(
         shipping_addr = shipping_addr_result.fetchone()
         shipping_address_id = shipping_addr[0] if shipping_addr else None
         
-        # Calculate due date based on payment terms
-        from datetime import timedelta
-        payment_terms = invoice_data.get("payment_terms", "cash")
+        # Calculate due date based on payment terms\n        payment_terms = invoice_data.get(\"payment_terms\", \"cash\")
         invoice_date = date.today()
         if payment_terms == "credit":
             due_date = invoice_date + timedelta(days=30)  # 30 days credit
@@ -372,12 +373,7 @@ async def create_invoice(
         except Exception as e:
             logger.warning(f"Could not update payment status: {e}")
         
-        # Step 8: Create invoice items 
-        # Disable triggers temporarily to avoid column name mismatch issue
-        try:
-            db.execute(text("SET session_replication_role = replica"))
-        except:
-            pass  # Ignore if not allowed
+        # Note: Triggers handle data correctly now - no need to disable them
         
         items_created = 0
         for item in items:
@@ -641,11 +637,7 @@ async def create_invoice(
             
             items_created += 1
         
-        # Re-enable triggers
-        try:
-            db.execute(text("SET session_replication_role = DEFAULT"))
-        except:
-            pass  # Ignore if not allowed
+        # Triggers are enabled and work correctly
         
         # Calculate total quantity
         total_qty = sum(float(item.get("quantity", 0)) for item in invoice_data.get("items", []))
@@ -1028,8 +1020,7 @@ async def create_invoice(
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Invoice creation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise handle_error(e, "create invoice")
 
 @router.get("/")
 @with_tenant_context
@@ -1039,10 +1030,14 @@ async def get_invoices(
     customer_id: Optional[int] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    payment_status: Optional[str] = None,   # NEW: paid, partial, pending
+    invoice_status: Optional[str] = None,   # NEW: draft, posted, cancelled
+    search: Optional[str] = None,           # NEW: search invoice_number, customer_name
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
-    """Get list of invoices with pagination"""
+    """Get list of invoices with pagination and filters"""
     try:
         query = """
             SELECT
@@ -1068,6 +1063,7 @@ async def get_invoices(
         
         params = {"limit": limit, "offset": offset}
 
+
         if customer_id:
             query += " AND i.customer_id = :customer_id"
             params["customer_id"] = customer_id
@@ -1079,6 +1075,23 @@ async def get_invoices(
         if date_to:
             query += " AND i.invoice_date <= :date_to"
             params["date_to"] = date_to
+        
+        # NEW: Status filters
+        if payment_status:
+            query += " AND i.payment_status = :payment_status"
+            params["payment_status"] = payment_status
+        
+        if invoice_status:
+            query += " AND i.invoice_status = :invoice_status"
+            params["invoice_status"] = invoice_status
+        
+        # NEW: Search filter
+        if search:
+            query += """ AND (
+                i.invoice_number ILIKE :search 
+                OR i.customer_name ILIKE :search
+            )"""
+            params["search"] = f"%{search}%"
 
         query += " ORDER BY i.invoice_date DESC, i.created_at DESC LIMIT :limit OFFSET :offset"
         
@@ -1111,13 +1124,13 @@ async def get_invoices(
         }
         
     except Exception as e:
-        logger.error(f"Error fetching invoices: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise handle_error(e, "list invoices")
 
 @router.get("/{invoice_id}")
 @with_tenant_context
 async def get_invoice(
     invoice_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
@@ -1161,10 +1174,180 @@ async def get_invoice(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting invoice: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise handle_error(e, "get invoice", invoice_id)
 
 # Removed duplicate /list endpoint - use GET / instead
+
+
+@router.put("/{invoice_id}")
+@with_tenant_context
+async def update_invoice(
+    invoice_id: int,
+    invoice_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Update invoice - ONLY for draft invoices
+    
+    Posted invoices cannot be edited, must be cancelled and re-created.
+    """
+    try:
+        org_id = str(context.org_id)
+        
+        # Check invoice exists and is in draft status
+        check_result = db.execute(text("""
+            SELECT invoice_status, payment_status FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        
+        invoice = check_result.fetchone()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        
+        if invoice[0] != 'draft':
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot edit invoice in '{invoice[0]}' status. Only draft invoices can be updated."
+            )
+        
+        # Build update query from provided fields
+        update_fields = []
+        params = {"invoice_id": invoice_id, "org_id": org_id}
+        
+        editable_fields = [
+            "notes", "payment_terms", "due_date", 
+            "freight_charges", "insurance_charges", "other_charges"
+        ]
+        
+        for field in editable_fields:
+            if field in invoice_data:
+                update_fields.append(f"{field} = :{field}")
+                params[field] = invoice_data[field]
+        
+        if not update_fields:
+            return {"message": "No fields to update", "invoice_id": invoice_id}
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        db.execute(text(f"""
+            UPDATE sales.invoices
+            SET {', '.join(update_fields)}
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), params)
+        
+        db.commit()
+        
+        return {"success": True, "message": "Invoice updated", "invoice_id": invoice_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise handle_error(e, "update invoice", invoice_id)
+
+
+@router.post("/{invoice_id}/cancel")
+@with_tenant_context
+async def cancel_invoice(
+    invoice_id: int,
+    reason: str = None,
+    _: dict = Depends(PermissionChecker("sales", "delete")),  # RBAC
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Cancel/void an invoice
+    
+    - For draft invoices: Simply marks as cancelled
+    - For posted invoices: Creates reversal entries
+    - Cannot cancel invoices with payments (must reverse payments first)
+    """
+    try:
+        org_id = str(context.org_id)
+        
+        # Check invoice exists and get its status
+        check_result = db.execute(text("""
+            SELECT invoice_status, payment_status, paid_amount, final_amount
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        
+        invoice = check_result.fetchone()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        
+        invoice_status, payment_status, paid_amount, final_amount = invoice
+        
+        if invoice_status == 'cancelled':
+            raise HTTPException(status_code=400, detail="Invoice is already cancelled")
+        
+        # Cannot cancel if there are payments
+        if paid_amount and float(paid_amount) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel invoice with payments. ₹{paid_amount} has been paid. Reverse payments first."
+            )
+        
+        # Mark invoice as cancelled
+        db.execute(text("""
+            UPDATE sales.invoices
+            SET invoice_status = 'cancelled',
+                cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by = :cancelled_by,
+                cancellation_reason = :reason,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {
+            "invoice_id": invoice_id,
+            "org_id": org_id,
+            "cancelled_by": context.user_id,
+            "reason": reason or "Cancelled by user"
+        })
+        
+        # If it was a posted invoice, we may need to reverse inventory
+        if invoice_status == 'posted':
+            # Get invoice items to reverse inventory
+            items_result = db.execute(text("""
+                SELECT product_id, batch_id, quantity
+                FROM sales.invoice_items
+                WHERE invoice_id = :invoice_id
+            """), {"invoice_id": invoice_id})
+            
+            for item in items_result:
+                if item[1]:  # Has batch_id
+                    try:
+                        # Reverse inventory deduction
+                        db.execute(text("""
+                            UPDATE inventory.batches
+                            SET quantity_available = quantity_available + :quantity,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE batch_id = :batch_id AND org_id = :org_id
+                        """), {
+                            "batch_id": item[1],
+                            "quantity": item[2],
+                            "org_id": org_id
+                        })
+                        logger.info(f"Reversed inventory for batch {item[1]}: +{item[2]}")
+                    except Exception as inv_err:
+                        logger.warning(f"Could not reverse inventory for batch {item[1]}: {inv_err}")
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Invoice cancelled successfully",
+            "invoice_id": invoice_id,
+            "previous_status": invoice_status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise handle_error(e, "cancel invoice", invoice_id)
+
 
 # REMOVED: /drop-problematic-triggers endpoint - moved to admin scripts
 # Use: backend/scripts/maintenance/drop_problematic_triggers.sql

@@ -1,6 +1,8 @@
 """
 Goods Receipt Notes (GRN) API Router
 Manages goods receipt against purchase orders
+
+MODERNIZED: Uses TenantAwareSession + PermissionChecker
 """
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,9 +12,10 @@ import logging
 from datetime import date, datetime
 from uuid import UUID
 
-from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
-from ...dependencies import get_current_org_id, get_current_user_id
+# Modern imports
+from ...core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
+from ...core.org_context import OrgContext, get_org_context
+from ...core.permissions import PermissionChecker
 from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -20,14 +23,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["goods-receipt-notes"])
 
 @router.get("/generate-number")
+@with_tenant_context
 def generate_grn_number(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),  # RBAC
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Generate next GRN number using unified service"""
     try:
         # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "grn", org_id)
+        new_number = DocumentNumberService.generate_number(db, "grn", context.org_id)
         return {"grn_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate GRN number: {e}")
@@ -38,23 +43,24 @@ def generate_grn_number(
         return {"grn_number": fallback_number}
 
 @router.post("")
+@with_tenant_context
 async def create_grn(
     grn_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_id: Optional[int] = Depends(get_current_user_id)
+    _: dict = Depends(PermissionChecker("inventory", "create")),  # RBAC
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new Goods Receipt Note"""
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
+        # Use context for org_id, user_id, branch_id
+        org_id = context.org_id
+        user_id = context.user_id
+        branch_id = grn_data.get("branch_id") or context.primary_branch_id or 1
         
         # Extract main GRN data
         main_data = {
             "org_id": org_id,
-            "branch_id": grn_data.get("branch_id", 1),
+            "branch_id": branch_id,
             "grn_number": grn_data.get("grn_no") or grn_data.get("grn_number"),
             "grn_date": grn_data.get("grn_date"),
             "grn_type": grn_data.get("grn_type", "regular"),
@@ -226,8 +232,8 @@ def get_grns(
     supplier_id: Optional[int] = Query(None, description="Filter by supplier"),
     date_from: Optional[date] = Query(None, description="Filter from date"),
     date_to: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
@@ -317,8 +323,8 @@ def get_grns(
 @router.get("/{grn_id}")
 def get_grn_details(
     grn_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get detailed GRN information"""
     try:
@@ -377,9 +383,9 @@ def get_grn_details(
 def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_id: Optional[int] = Depends(get_current_user_id)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+    
 ):
     """Update GRN details"""
     try:
@@ -421,9 +427,9 @@ def update_grn(
 def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_id: Optional[int] = Depends(get_current_user_id)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+    
 ):
     """Approve GRN and update stock if not already done"""
     try:

@@ -12,7 +12,7 @@ import logging
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 
 router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)

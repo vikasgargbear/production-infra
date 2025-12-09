@@ -143,17 +143,45 @@ async def login(
 @router.post("/logout")
 async def logout(
     req: Request,
-    # token: str = Depends(get_current_token)  # TODO: Add token validation
 ) -> Dict[str, str]:
     """
-    Logout user and invalidate session
+    Logout user and invalidate session by blacklisting the token.
     
-    **Offline Mode**: Frontend should clear local storage/IndexedDB
+    The token is extracted from Authorization header and added to blacklist.
+    **Offline Mode**: Frontend should also clear local storage/IndexedDB
     """
-    # TODO: Add token to blacklist
-    # TODO: Invalidate session in database
+    from ...core.jwt_auth import decode_jwt
+    from ...core.token_blacklist import blacklist_token
     
-    logger.info(f"Logout request from IP: {req.client.host}")
+    # Extract token from Authorization header
+    auth_header = req.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    else:
+        # No token provided - just return success (already logged out)
+        return {
+            "message": "Logged out successfully",
+            "action": "clear_local_storage"
+        }
+    
+    try:
+        # Decode token (without blacklist check since we're logging out)
+        payload = decode_jwt(token, check_blacklist=False)
+        
+        # Get jti and expiry for blacklist
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        
+        if jti and exp:
+            # Add to blacklist until token expires naturally
+            blacklist_token(jti, exp)
+            logger.info(f"Logout: Token blacklisted - IP: {req.client.host}")
+        else:
+            logger.warning(f"Logout: Token without jti - IP: {req.client.host}")
+        
+    except Exception as e:
+        # Token invalid or expired - that's fine, user is effectively logged out
+        logger.info(f"Logout: Token already invalid - IP: {req.client.host}")
     
     return {
         "message": "Logged out successfully",
@@ -163,19 +191,59 @@ async def logout(
 
 @router.get("/verify-token")
 async def verify_token(
-    # token: str = Depends(get_current_token),
+    req: Request,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Verify if current token is valid
+    Verify if current token is valid (not expired, not blacklisted).
     
     **Use Case**: Check authentication status before sensitive operations
+    
+    Returns:
+        - valid: True if token is valid
+        - user_id: The user's ID
+        - org_id: The organization ID
+        - exp: Token expiry timestamp
     """
-    # TODO: Implement token verification
-    return {
-        "valid": True,
-        "user_id": 123  # Placeholder
-    }
+    from ...core.jwt_auth import decode_jwt
+    from jose import JWTError
+    
+    # Extract token from Authorization header
+    auth_header = req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header"
+        )
+    
+    token = auth_header[7:]
+    
+    try:
+        # Decode and validate token (includes blacklist check)
+        payload = decode_jwt(token, check_blacklist=True)
+        
+        return {
+            "valid": True,
+            "user_id": payload.get("user_id") or payload.get("sub"),
+            "org_id": payload.get("org_id"),
+            "role": payload.get("role"),
+            "exp": payload.get("exp"),
+            "jti": payload.get("jti")
+        }
+        
+    except JWTError as e:
+        error_msg = str(e)
+        if "revoked" in error_msg.lower():
+            detail = "Token has been revoked (logged out)"
+        elif "expired" in error_msg.lower():
+            detail = "Token has expired"
+        else:
+            detail = "Invalid token"
+            
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=detail
+        )
 
 
 @router.get("/health")

@@ -1,45 +1,54 @@
 """
 Suppliers API Router
 Manages pharmaceutical suppliers and vendors
+
+PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text, or_
+from sqlalchemy import text
 import logging
+import json
 
-from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
-from ...models import Supplier
-from ...core.crud_base import create_crud
-from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
+# Core utilities - shared across all APIs
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ...core.state_utils import get_state_name_and_code
-from uuid import UUID
+from ...core.api_utils import handle_error
+from ...core.permissions import PermissionChecker  # RBAC
+
+# Supplier-specific imports
+from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["suppliers"])
 
-# Create CRUD instance
-supplier_crud = create_crud(Supplier)
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
 
 @router.get("/search")
-def search_suppliers(
+@with_tenant_context
+async def search_suppliers(
     search_term: Optional[str] = Query(None, description="Search name, code, GST, phone"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Search suppliers by name, code, GSTIN, phone, or email
-    This endpoint must be defined BEFORE /{supplier_id} to avoid route conflicts
+    Returns database field names directly (no aliases)
     """
     try:
+        # TenantAwareSession auto-injects org_id filter
         query = """
             SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gst_number,
                    s.primary_phone, s.primary_email, s.supplier_type, s.is_active,
-                   a.city, a.state_name as state, a.address_line1 as address, a.pincode
+                   a.city, a.state_name, a.address_line1, a.pincode
             FROM parties.suppliers s
             LEFT JOIN master.addresses a ON (
                 a.entity_type = 'supplier'
@@ -48,12 +57,10 @@ def search_suppliers(
                 AND a.is_default = true
             )
             WHERE s.is_active = true
-            AND s.org_id = :org_id
         """
-        params = {"org_id": org_id}
+        params = {}
         
         if search_term:
-            # Clean the search term
             clean_term = search_term.strip()
             query += """ 
                 AND (
@@ -65,7 +72,7 @@ def search_suppliers(
                 )
             """
             params["search"] = f"%{clean_term}%"
-            params["exact"] = clean_term  # For GST exact match
+            params["exact"] = clean_term
             params["phone"] = f"%{clean_term.replace(' ', '').replace('-', '')}%"
         
         query += " ORDER BY s.supplier_name LIMIT :limit OFFSET :offset"
@@ -73,56 +80,43 @@ def search_suppliers(
         params["offset"] = offset
         
         result = db.execute(text(query), params)
-        suppliers = []
         
-        for row in result:
-            supplier_dict = {
-                "supplier_id": row.supplier_id,
-                "supplier_name": row.supplier_name,
-                "supplier_code": row.supplier_code,
-                "gstin": row.gst_number,  # Map gst_number to gstin for frontend compatibility
-                "gst_number": row.gst_number,
-                "phone": row.primary_phone,
-                "mobile": row.primary_phone,  # Add mobile field for compatibility
-                "primary_phone": row.primary_phone,
-                "email": row.primary_email,
-                "primary_email": row.primary_email,
-                "supplier_type": row.supplier_type,
-                "is_active": row.is_active,
-                "city": row.city,
-                "state": row.state,
-                "address": row.address,
-                "pincode": row.pincode
-            }
-            suppliers.append(supplier_dict)
-        
+        # Return database field names directly - NO ALIASES
+        suppliers = [dict(row._mapping) for row in result]
         return suppliers
         
     except Exception as e:
-        logger.error(f"Error searching suppliers: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise handle_error(e, "search suppliers")
 
 @router.get("/")
-def get_suppliers(
+@with_tenant_context
+async def get_suppliers(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by supplier name"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """Get suppliers with optional search"""
+    """Get suppliers with optional search. Returns database field names directly."""
     try:
+        # TenantAwareSession auto-injects org_id filter
         query = """
             SELECT s.*,
-                   a.city,
-                   a.state_name as state,
-                   a.address_line1 as address,
-                   a.pincode
+                   a.city as default_city,
+                   a.state_name as default_state,
+                   a.address_line1 as default_address,
+                   a.pincode as default_pincode
             FROM parties.suppliers s
-            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.org_id = s.org_id AND a.is_default = true)
-            WHERE s.org_id = :org_id
+            LEFT JOIN master.addresses a ON (
+                a.entity_type = 'supplier' 
+                AND a.entity_id = s.supplier_id 
+                AND a.org_id = s.org_id 
+                AND a.is_default = true
+            )
+            WHERE 1=1
         """
-        params = {"org_id": org_id}
+        params = {}
         
         if search:
             query += " AND LOWER(s.supplier_name) LIKE LOWER(:search)"
@@ -132,43 +126,25 @@ def get_suppliers(
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
-        suppliers = []
         
-        for row in result:
-            suppliers.append({
-                "id": row.supplier_id,
-                "supplier_id": row.supplier_id,
-                "name": row.supplier_name,
-                "supplier_name": row.supplier_name,
-                "code": row.supplier_code,
-                "gst_number": row.gst_number,
-                "pan_number": row.pan_number,
-                "phone": row.primary_phone,
-                "primary_phone": row.primary_phone,
-                "email": row.primary_email,
-                "primary_email": row.primary_email,
-                "contact_person": row.contact_person_name,
-                "contact_person_name": row.contact_person_name,
-                "contact_person_phone": row.contact_person_phone,
-                "city": row.city,
-                "state": row.state,
-                "address": row.address,
-                "pincode": row.pincode,
-                "created_at": row.created_at,
-                "updated_at": row.updated_at
-            })
-        
+        # Return database field names directly - NO ALIASES
+        suppliers = [dict(row._mapping) for row in result]
         return suppliers
         
     except Exception as e:
-        logger.error(f"Error fetching suppliers: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get suppliers: {str(e)}")
+        raise handle_error(e, "list suppliers")
 
 @router.get("/{supplier_id}")
-def get_supplier(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
-    """Get a single supplier by ID with addresses"""
+@with_tenant_context
+async def get_supplier(
+    supplier_id: int,
+    _: dict = Depends(PermissionChecker("master", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get supplier by ID with addresses. Returns database field names directly."""
     try:
+        # TenantAwareSession auto-injects org_id filter
         result = db.execute(text("""
             SELECT s.*,
                    COALESCE(
@@ -178,17 +154,12 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db),
                                'address_type', a.address_type,
                                'address_line1', a.address_line1,
                                'address_line2', a.address_line2,
-                               'landmark', a.landmark,
                                'city', a.city,
                                'state_code', a.state_code,
                                'state_name', a.state_name,
-                               'country', a.country,
                                'pincode', a.pincode,
-                               'contact_person', a.contact_person,
-                               'contact_number', a.contact_number,
-                               'is_default', a.is_default,
-                               'is_active', a.is_active
-                           ) ORDER BY a.is_default DESC, a.address_type
+                               'is_default', a.is_default
+                           ) ORDER BY a.is_default DESC
                        ) FILTER (WHERE a.address_id IS NOT NULL),
                        '[]'::json
                    ) as addresses
@@ -199,328 +170,266 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db),
                 AND a.org_id = s.org_id
                 AND a.is_active = true
             )
-            WHERE s.supplier_id = :supplier_id AND s.org_id = :org_id
+            WHERE s.supplier_id = :supplier_id
             GROUP BY s.supplier_id
-        """), {"supplier_id": supplier_id, "org_id": org_id})
+        """), {"supplier_id": supplier_id})
         
         supplier = result.fetchone()
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        # Parse addresses JSON
-        import json
-        addresses = supplier.addresses if hasattr(supplier, 'addresses') else "[]"
+        # Build response with database field names - NO ALIASES
+        supplier_dict = dict(supplier._mapping)
+        
+        # Parse addresses JSON (json imported at top of file)
+        addresses = supplier_dict.get("addresses", "[]")
         if isinstance(addresses, str):
-            addresses = json.loads(addresses)
+            supplier_dict["addresses"] = json.loads(addresses)
+        elif addresses is None:
+            supplier_dict["addresses"] = []
         
-        # Get default address for backward compatibility
-        default_address = next((a for a in addresses if a.get('is_default')), addresses[0] if addresses else {})
+        return supplier_dict
         
-        # Map database columns to response schema
-        return {
-            "id": supplier.supplier_id,
-            "supplier_id": supplier.supplier_id,
-            "name": supplier.supplier_name,
-            "supplier_name": supplier.supplier_name,
-            "code": supplier.supplier_code,
-            "gst_number": supplier.gst_number,
-            "pan_number": supplier.pan_number,
-            "phone": supplier.primary_phone,
-            "primary_phone": supplier.primary_phone,
-            "email": supplier.primary_email,
-            "primary_email": supplier.primary_email,
-            "contact_person": supplier.contact_person_name,
-            "contact_person_name": supplier.contact_person_name,
-            "contact_person_phone": supplier.contact_person_phone,
-            "supplier_type": supplier.supplier_type,
-            "is_active": supplier.is_active,
-            # Flat fields for backward compatibility
-            "city": default_address.get('city'),
-            "state": default_address.get('state_name'),
-            "address": default_address.get('address_line1'),
-            "pincode": default_address.get('pincode'),
-            # Full addresses array
-            "addresses": addresses,
-            "created_at": supplier.created_at,
-            "updated_at": supplier.updated_at
-        }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching supplier {supplier_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get supplier: {str(e)}")
+        raise handle_error(e, "get supplier", supplier_id)
 
 @router.post("/")
-def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
-    """Create a new supplier"""
+@with_tenant_context
+async def create_supplier(
+    supplier_data: SupplierCreate,
+    _: dict = Depends(PermissionChecker("master", "create")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Create a new supplier.
+    Uses database field names: supplier_name, supplier_code, primary_phone, etc.
+    """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
+        org_id = str(context.org_id)
         
-        # Generate supplier code if not provided
-        supplier_code = supplier_data.code
+        # Generate supplier_code if not provided
+        supplier_code = supplier_data.supplier_code
         if not supplier_code:
             count_result = db.execute(text("""
-                SELECT COUNT(*) FROM parties.suppliers 
-                WHERE org_id = :org_id
+                SELECT COUNT(*) FROM parties.suppliers WHERE org_id = :org_id
             """), {"org_id": org_id}).scalar()
             supplier_code = f"SUP-{count_result + 1:04d}"
         
-        # Create supplier using SQL
+        # Insert supplier - using exact database field names
         result = db.execute(text("""
             INSERT INTO parties.suppliers (
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
-                primary_phone, secondary_phone, primary_email, contact_person_name,
-                contact_person_phone, bank_name, account_number, ifsc_code, account_holder_name,
+                primary_phone, secondary_phone, primary_email, 
+                contact_person_name, contact_person_phone,
+                bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, quality_rating, delivery_rating, compliance_rating,
-                internal_notes, is_active,
-                created_at, updated_at
+                internal_notes, is_active, created_at, updated_at
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
-                :phone, :secondary_phone, :email, :contact_person,
-                :whatsapp_number, :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :primary_phone, :secondary_phone, :primary_email,
+                :contact_person_name, :contact_person_phone,
+                :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :quality_rating, :delivery_rating, :compliance_rating,
-                :internal_notes, :is_active,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            ) RETURNING supplier_id, created_at
+                :internal_notes, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING supplier_id, supplier_code, supplier_name, created_at
         """), {
             "org_id": org_id,
             "supplier_code": supplier_code,
-            "supplier_name": supplier_data.name,
-            "supplier_type": supplier_data.supplier_type or "distributor",
+            "supplier_name": supplier_data.supplier_name,
+            "supplier_type": supplier_data.supplier_type,
             "gst_number": supplier_data.gst_number,
             "pan_number": supplier_data.pan_number,
             "drug_license_number": supplier_data.drug_license_number,
             "drug_license_validity": supplier_data.drug_license_validity,
-            "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
+            "primary_phone": supplier_data.primary_phone,
             "secondary_phone": supplier_data.secondary_phone,
-            "whatsapp_number": supplier_data.contact_person_phone or supplier_data.whatsapp_number or supplier_data.phone,  # Contact phone for WhatsApp
-            "email": supplier_data.email,
-            "contact_person": supplier_data.contact_person,
+            "primary_email": supplier_data.primary_email,
+            "contact_person_name": supplier_data.contact_person_name,
+            "contact_person_phone": supplier_data.contact_person_phone,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,
             "account_holder_name": supplier_data.account_holder_name,
-            "payment_days": supplier_data.payment_days or supplier_data.payment_terms or 30,
-            "quality_rating": supplier_data.quality_rating or 4.0,
-            "delivery_rating": supplier_data.delivery_rating or 4.0,
-            "compliance_rating": supplier_data.compliance_rating or 'good',
-            "internal_notes": supplier_data.notes or supplier_data.internal_notes,
-            "is_active": True
+            "payment_days": supplier_data.payment_days,
+            "quality_rating": supplier_data.quality_rating,
+            "delivery_rating": supplier_data.delivery_rating,
+            "compliance_rating": supplier_data.compliance_rating,
+            "internal_notes": supplier_data.internal_notes
         })
         
         row = result.fetchone()
         supplier_id = row.supplier_id
         
-        # Create address record if complete address information provided
-        # Only create address if we have city, state AND pincode (all required fields)
-        if supplier_data.city and supplier_data.state and supplier_data.pincode:
-            # Automatically map state name to GST state code
-            state_name, state_code = get_state_name_and_code(supplier_data.state)
+        # Create address if provided
+        if supplier_data.city and supplier_data.state_name:
+            state_name, state_code = get_state_name_and_code(supplier_data.state_name)
             
             db.execute(text("""
                 INSERT INTO master.addresses (
                     org_id, entity_type, entity_id, address_type,
                     address_line1, address_line2, city, state_code, state_name, pincode,
-                    country, is_default, is_active,
-                    created_at
+                    country, is_default, is_active, created_at
                 ) VALUES (
                     :org_id, 'supplier', :entity_id, 'registered',
                     :address_line1, :address_line2, :city, :state_code, :state_name, :pincode,
-                    :country, true, true,
-                    CURRENT_TIMESTAMP
+                    'India', true, true, CURRENT_TIMESTAMP
                 )
             """), {
                 "org_id": org_id,
                 "entity_id": supplier_id,
-                "address_line1": supplier_data.address or "",
-                "address_line2": getattr(supplier_data, 'address_line2', None),
+                "address_line1": supplier_data.address_line1 or "",
+                "address_line2": supplier_data.address_line2,
                 "city": supplier_data.city,
                 "state_code": state_code,
                 "state_name": state_name,
-                "pincode": supplier_data.pincode,
-                "country": "India"
-            })
-        elif supplier_data.city and supplier_data.state:
-            # If we have city and state but no pincode, use a default pincode
-            # This ensures address can be saved even without pincode
-            state_name, state_code = get_state_name_and_code(supplier_data.state)
-            
-            db.execute(text("""
-                INSERT INTO master.addresses (
-                    org_id, entity_type, entity_id, address_type,
-                    address_line1, address_line2, city, state_code, state_name, pincode,
-                    country, is_default, is_active,
-                    created_at
-                ) VALUES (
-                    :org_id, 'supplier', :entity_id, 'registered',
-                    :address_line1, :address_line2, :city, :state_code, :state_name, :pincode,
-                    :country, true, true,
-                    CURRENT_TIMESTAMP
-                )
-            """), {
-                "org_id": org_id,
-                "entity_id": supplier_id,
-                "address_line1": supplier_data.address or "",
-                "address_line2": getattr(supplier_data, 'address_line2', None),
-                "city": supplier_data.city,
-                "state_code": state_code,
-                "state_name": state_name,
-                "pincode": supplier_data.pincode or "000000",  # Default pincode if not provided
-                "country": "India"
+                "pincode": supplier_data.pincode or ""
             })
         
         db.commit()
         
+        # Return database field names - NO ALIASES
         return {
-            "id": supplier_id,
-            "name": supplier_data.name,
-            "code": supplier_code,
+            "supplier_id": supplier_id,
+            "supplier_code": row.supplier_code,
+            "supplier_name": row.supplier_name,
             "gst_number": supplier_data.gst_number,
-            "pan_number": supplier_data.pan_number,
-            "phone": supplier_data.phone,
-            "email": supplier_data.email,
-            "contact_person": supplier_data.contact_person,
+            "primary_phone": supplier_data.primary_phone,
+            "primary_email": supplier_data.primary_email,
             "created_at": row.created_at,
             "message": "Supplier created successfully"
         }
+        
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating supplier: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create supplier: {str(e)}")
+        raise handle_error(e, "create supplier")
 
 @router.put("/{supplier_id}")
-def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
-    """Update a supplier"""
+@with_tenant_context
+async def update_supplier(
+    supplier_id: int,
+    supplier_data: SupplierUpdate,
+    _: dict = Depends(PermissionChecker("master", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Update a supplier. Uses TenantAwareSession for auto org_id filtering."""
     try:
-        # Check if supplier exists
+        # Check if supplier exists (org_id auto-filtered)
         exists = db.execute(text("""
-            SELECT 1 FROM parties.suppliers
-            WHERE supplier_id = :supplier_id AND org_id = :org_id
-        """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
+            SELECT 1 FROM parties.suppliers WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id}).scalar()
         
         if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        # Build update query
+        # Build update from provided fields - use database field names directly
         update_fields = []
         params = {"supplier_id": supplier_id}
         
-        # Map schema fields to database columns
-        field_mapping = {
-            "name": "supplier_name",
-            "gst_number": "gst_number",
-            "pan_number": "pan_number",
-            "address": "address",
-            "city": "city",
-            "state": "state",
-            "pincode": "pincode",
-            "phone": "primary_phone",
-            "email": "primary_email",
-            "contact_person": "contact_person_name"
-        }
-        
         for field, value in supplier_data.dict(exclude_unset=True).items():
             if value is not None:
-                db_field = field_mapping.get(field, field)
-                update_fields.append(f"{db_field} = :{field}")
+                update_fields.append(f"{field} = :{field}")
                 params[field] = value
         
         if update_fields:
             update_fields.append("updated_at = CURRENT_TIMESTAMP")
-            params["org_id"] = org_id
             query = f"""
                 UPDATE parties.suppliers
                 SET {', '.join(update_fields)}
-                WHERE supplier_id = :supplier_id AND org_id = :org_id
+                WHERE supplier_id = :supplier_id
             """
-
             db.execute(text(query), params)
             db.commit()
         
         # Return updated supplier
-        return get_supplier(supplier_id, db)
+        return await get_supplier(supplier_id, context, db)
+        
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating supplier {supplier_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to update supplier: {str(e)}")
+        raise handle_error(e, "update supplier", supplier_id)
 
 @router.delete("/{supplier_id}")
-def delete_supplier(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
-    """Delete a supplier"""
+@with_tenant_context
+async def delete_supplier(
+    supplier_id: int,
+    _: dict = Depends(PermissionChecker("master", "delete")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Soft delete a supplier (marks as inactive)"""
     try:
-        # Check if supplier exists
+        # Check if supplier exists (TenantAwareSession auto-filters by org_id)
         exists = db.execute(text("""
-            SELECT 1 FROM parties.suppliers
-            WHERE supplier_id = :supplier_id AND org_id = :org_id
-        """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
+            SELECT 1 FROM parties.suppliers WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id}).scalar()
 
         if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
 
-        # Delete supplier
+        # Soft delete - mark as inactive
         db.execute(text("""
-            DELETE FROM parties.suppliers
-            WHERE supplier_id = :supplier_id AND org_id = :org_id
-        """), {"supplier_id": supplier_id, "org_id": org_id})
+            UPDATE parties.suppliers
+            SET is_active = false, updated_at = CURRENT_TIMESTAMP
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id})
         
         db.commit()
-        return {"message": "Supplier deleted successfully"}
+        return {"message": "Supplier deactivated successfully", "supplier_id": supplier_id}
+        
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting supplier {supplier_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete supplier: {str(e)}")
+        raise handle_error(e, "delete supplier", supplier_id)
 
 @router.get("/{supplier_id}/products")
-def get_supplier_products(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_supplier_products(
+    supplier_id: int,
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
     """Get products from a specific supplier"""
     try:
-        result = db.execute(
-            text("""
-                SELECT p.* FROM inventory.products p
-                JOIN purchases pur ON p.product_id = pur.product_id AND p.org_id = pur.org_id
-                WHERE pur.supplier_id = :supplier_id
-                AND p.org_id = :org_id
-                GROUP BY p.product_id
-                ORDER BY p.product_name
-            """),
-            {"supplier_id": supplier_id, "org_id": org_id}
-        )
-        products = [dict(row._mapping) for row in result]
-        return products
+        result = db.execute(text("""
+            SELECT p.* FROM inventory.products p
+            JOIN purchases pur ON p.product_id = pur.product_id AND p.org_id = pur.org_id
+            WHERE pur.supplier_id = :supplier_id
+            GROUP BY p.product_id
+            ORDER BY p.product_name
+        """), {"supplier_id": supplier_id})
+        
+        return [dict(row._mapping) for row in result]
+        
     except Exception as e:
-        logger.error(f"Error fetching products for supplier {supplier_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get supplier products: {str(e)}")
+        raise handle_error(e, "get supplier products", supplier_id)
 
 @router.get("/{supplier_id}/purchases")
-def get_supplier_purchases(supplier_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_supplier_purchases(
+    supplier_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
     """Get purchase history for a supplier"""
     try:
-        result = db.execute(
-            text("""
-                SELECT * FROM purchases
-                WHERE supplier_id = :supplier_id
-                AND org_id = :org_id
-                ORDER BY purchase_date DESC
-                LIMIT :limit OFFSET :skip
-            """),
-            {"supplier_id": supplier_id, "org_id": org_id, "limit": limit, "skip": skip}
-        )
-        purchases = [dict(row._mapping) for row in result]
-        return purchases
+        result = db.execute(text("""
+            SELECT * FROM purchases
+            WHERE supplier_id = :supplier_id
+            ORDER BY purchase_date DESC
+            LIMIT :limit OFFSET :skip
+        """), {"supplier_id": supplier_id, "limit": limit, "skip": skip})
+        
+        return [dict(row._mapping) for row in result]
+        
     except Exception as e:
-        logger.error(f"Error fetching purchases for supplier {supplier_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get supplier purchases: {str(e)}")
+        raise handle_error(e, "get supplier purchases", supplier_id)

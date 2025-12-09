@@ -11,7 +11,7 @@ from decimal import Decimal
 import json
 import logging
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/erp", tags=["Enterprise ERP"])

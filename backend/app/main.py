@@ -8,14 +8,14 @@ import os
 
 # Import routers
 from .api.routes import (
-    customers, products_consolidated, sales, inventory, 
+    customers, products, sales, inventory, 
     payments, dashboard, billing, api_wrapper
 )
 
 # Import additional routers that are actually available
 from .api.routes import (
     customers_router, orders_router, inventory_router, billing_router, 
-    payments_router, invoices_router, order_items_router, users_router, 
+    payments_router, invoices_router, order_items_router,
     suppliers_router, purchases_router,  # Removed delivery_challan_router
     dashboard_router, stock_adjustments_router, tax_entries_router,
     purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
@@ -31,25 +31,24 @@ from .api.routes.departments import router as departments_router
 from .api.routes.branches import router as branches_router
 
 # Import additional routers not in __init__.py
-from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims, settings
+from .api.routes import stock_receive, challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims
+from .api.routes.settings import router as settings_router  # New consolidated settings
 # Import enhanced purchase returns and supplier invoices
 from .api.routes import purchase_returns_enhanced, supplier_invoices
-# Import org users APIs
-from .api.routes import org_users, org_users_secure, role_management
+# Import user management and role APIs
+from .api.routes import users, role_management
 # Import new APIs
-from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata, master_data_crud
+from .api.routes import schemes_discounts, loyalty_points, compliance, metadata
 # Import comprehensive enterprise API
 from .api.routes import enterprise_api_complete
 # Import GST API
 from .api.routes import gst
 # Import enterprise calculation service
-from .api.routes import invoice_calculation, enterprise_calculations
+from .api.routes import enterprise_calculations
 # Import simple company API (no database dependencies)
 from .api.routes import company_simple
-# Import company API for company profile management
 from .api.routes import company
-# Import master data API
-from .api.routes import master_data
+# Note: master_data.py archived - use /customers, /suppliers, /products APIs directly
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -125,19 +124,18 @@ api = APIRouter(prefix="/api")
 
 # Register routes
 # Enterprise authentication system (email/password + Google OAuth + offline support)
-from .api.routes import auth_enterprise, auth_diagnostics, auth_oauth
+from .api.routes import auth_enterprise, auth_oauth
 api.include_router(auth_enterprise.router, tags=["Authentication"])
-api.include_router(auth_diagnostics.router, tags=["Auth Diagnostics"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])
-api.include_router(products_consolidated.router, prefix="/products", tags=["Products"])
+api.include_router(products.router, prefix="/products", tags=["Products"])
 api.include_router(sales.router, prefix="/sales", tags=["Sales"])
 api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api.include_router(company.router, prefix="/company", tags=["Company"])
-api.include_router(settings.router, prefix="/settings", tags=["Settings"])
+api.include_router(settings_router, prefix="/settings", tags=["Settings"])
 api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
 api.include_router(employees_router, prefix="/employees", tags=["Employees"])
 api.include_router(departments_router, prefix="/departments", tags=["Departments"])
@@ -146,12 +144,13 @@ api.include_router(branches_router, prefix="/branches", tags=["Branches"])
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])
 api.include_router(order_items_router, prefix="/order-items", tags=["Order Items"])
-api.include_router(users_router, prefix="/users", tags=["Users"])
+# Users API (consolidated from org_users_secure)
+api.include_router(users.router, tags=["Users"])
 api.include_router(suppliers_router, prefix="/suppliers", tags=["Suppliers"])
 api.include_router(purchases_router, prefix="/purchases", tags=["Purchases"])
 api.include_router(dashboard_router, tags=["Dashboard API"])
-# Include both - they have different functionality
-api.include_router(delivery_challan.router, prefix="/delivery-challan", tags=["Delivery Challan"])
+# Delivery Challan API (modernized)
+api.include_router(challan.router, prefix="/challan", tags=["Challan"])
 api.include_router(stock_adjustments_router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
 api.include_router(tax_entries_router, prefix="/tax-entries", tags=["Tax Entries"])
 api.include_router(purchase_upload_router, prefix="/purchase-upload", tags=["Purchase Upload"])
@@ -165,11 +164,7 @@ api.include_router(party_ledger_router, prefix="/party-ledger", tags=["Party Led
 api.include_router(credit_debit_notes_router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
 api.include_router(collection_center_router, prefix="/collection-center", tags=["Collection Center"])
 api.include_router(stock_receive.router, prefix="/stock", tags=["Stock Receive"])
-api.include_router(enterprise_delivery_challan.router, prefix="/enterprise-delivery-challan", tags=["Enterprise Delivery Challan"])
-api.include_router(inventory_batches.router, prefix="/inventory/batches", tags=["Inventory Batches"])
-api.include_router(inventory_batches.router, prefix="/stock/batches", tags=["Stock Batches"])
 api.include_router(stock_dashboard.router, prefix="/stock-dashboard", tags=["Stock Dashboard"])
-api.include_router(create_user.router, prefix="/create-user", tags=["Setup"])
 api.include_router(sales_orders.router, tags=["Sales Orders"])
 api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
 api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
@@ -181,29 +176,21 @@ from .api.routes import initial_setup
 api.include_router(initial_setup.router, prefix="/setup", tags=["Setup"])
 
 # Register new APIs
-api.include_router(master_settings.router, prefix="/master-settings", tags=["Master Settings"])
+# master_settings.router removed - consolidated into settings folder
 api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])
 api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
 api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
-api.include_router(master_data_crud.router, tags=["Master Data CRUD"])
+# Note: master_data.py and master_data_crud.py archived - use /customers, /suppliers, /products APIs and /metadata for dropdowns
 
 # Register comprehensive enterprise API
 api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
-
-# Register enterprise calculation service
-api.include_router(invoice_calculation.router, tags=["Invoice Calculations"])
 api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
 
 # Register simple company API
 api.include_router(company_simple.router, tags=["Company"])
 
-# Register master data API
-api.include_router(master_data.router, prefix="/master", tags=["Master Data"])
-
-# Register org users APIs
-api.include_router(org_users.router, tags=["Organization Users"])
-api.include_router(org_users_secure.router, tags=["Secure Organization Users"])
+# Role management API
 api.include_router(role_management.router, tags=["Role Management"])
 
 # Enterprise tenant service handles security automatically
@@ -212,14 +199,19 @@ api.include_router(role_management.router, tags=["Role Management"])
 # from .api.routes import party_ledger_debug
 # api.include_router(party_ledger_debug.router, tags=["Debug"])
 
-# Payment allocation and improved ledger
-from .api.routes import payment_allocation, party_ledger_v2
+# Payment allocation and ledger
+from .api.routes import payment_allocation, ledger
 api.include_router(payment_allocation.router, tags=["Payment Allocation"])
-api.include_router(party_ledger_v2.router, tags=["Party Ledger V2"])
+api.include_router(ledger.router, tags=["Ledger"])
 
 # Customer Outstanding API with net position
 from .api.routes import customer_outstanding
 api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
+
+# Document conversions (SO↔Invoice↔Challan)
+from .api.routes import conversions, stock_writeoff
+api.include_router(conversions.router, tags=["Document Conversions"])
+api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
 
 # All endpoints consolidated - no temporary workarounds
 

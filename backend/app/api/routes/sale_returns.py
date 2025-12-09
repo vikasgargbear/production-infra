@@ -13,7 +13,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.document_number_service import DocumentNumberService
 
 # Pydantic models for request validation

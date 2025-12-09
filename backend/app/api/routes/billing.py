@@ -10,7 +10,7 @@ from datetime import date
 from uuid import UUID
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..schemas.billing import (
     InvoiceCreate, InvoiceResponse,
     PaymentCreate, PaymentResponse,

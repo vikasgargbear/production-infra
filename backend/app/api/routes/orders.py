@@ -1,6 +1,8 @@
 """
 Order management endpoints for enterprise pharma system
 Handles complete order lifecycle from creation to delivery
+
+UPDATED: Modernized to use TenantAwareSession for AI-agent safety
 """
 from typing import Optional
 from datetime import date, datetime
@@ -10,8 +12,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_token
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker  # RBAC
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
@@ -25,11 +28,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 @router.post("/", response_model=OrderResponse)
+@with_tenant_context
 async def create_order(
     order: OrderCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """
     Create a new order with items
     
@@ -40,7 +46,7 @@ async def create_order(
     """
     try:
         # Use org_id from token (never trust client-provided org_id)
-        # org_id parameter comes from Depends(get_org_id_from_token)
+        # org_id parameter comes from Depends(get_org_id_string)
         
         # Validate customer exists and has credit
         credit_check = CustomerService.validate_credit_limit(
@@ -100,7 +106,7 @@ async def create_order(
             "balance_amount": totals["total"],
             "payment_mode": "credit",
             "payment_status": "pending",
-            "created_by": None,  # Will be set to NULL if no user context
+            "created_by": context.user_id,  # SECURITY FIX: Use authenticated user from JWT
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
@@ -113,17 +119,16 @@ async def create_order(
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
             
-        # Get branch_id - use first branch for the org
-        branch_result = db.execute(text("""
-            SELECT branch_id FROM master.org_branches 
-            WHERE org_id = :org_id 
-            LIMIT 1
-        """), {"org_id": order_data["org_id"]}).fetchone()
-        
-        if branch_result:
-            order_data["branch_id"] = branch_result.branch_id
+        # SECURITY FIX: Get branch_id from JWT context first, fallback to DB query
+        if context.primary_branch_id:
+            order_data["branch_id"] = context.primary_branch_id
         else:
-            order_data["branch_id"] = None  # No default branch
+            branch_result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                WHERE org_id = :org_id 
+                LIMIT 1
+            """), {"org_id": order_data["org_id"]}).fetchone()
+            order_data["branch_id"] = branch_result.branch_id if branch_result else None
         
         # Insert order
         result = db.execute(text("""
@@ -242,6 +247,7 @@ async def create_order(
         raise HTTPException(status_code=500, detail=f"Failed to create order: {str(e)}")
 
 @router.get("/", response_model=OrderListResponse)
+@with_tenant_context
 async def list_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -249,9 +255,11 @@ async def list_orders(
     status: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """
     List orders with filters and pagination
     
@@ -353,11 +361,14 @@ async def list_orders(
         raise HTTPException(status_code=500, detail=f"Failed to list orders: {str(e)}")
 
 @router.get("/{order_id}", response_model=OrderResponse)
+@with_tenant_context
 async def get_order(
     order_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Get order details with items"""
     try:
         # Get order with customer details
@@ -407,9 +418,11 @@ async def get_order(
 async def update_order(
     order_id: int,
     order_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Update order details"""
     try:
         # Check if order exists
@@ -472,9 +485,11 @@ async def update_order(
 @router.put("/{order_id}/confirm")
 async def confirm_order(
     order_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Confirm a pending order"""
     try:
         # Check order exists and is pending
@@ -516,9 +531,11 @@ async def confirm_order(
 async def generate_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Generate invoice for an order"""
     try:
         # Check order exists and is confirmed
@@ -577,9 +594,11 @@ async def generate_invoice(
 async def mark_delivered(
     order_id: int,
     delivery: DeliveryUpdate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Mark order as delivered"""
     try:
         # Check order exists and is ready for delivery
@@ -639,9 +658,11 @@ async def mark_delivered(
 async def process_return(
     order_id: int,
     return_request: ReturnRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
+    org_id = str(context.org_id)  # Compatibility alias
     """Process order return"""
     try:
         result = OrderService.process_return(db, order_id, return_request)
@@ -658,8 +679,13 @@ async def process_return(
         raise HTTPException(status_code=500, detail=f"Failed to process return: {str(e)}")
 
 @router.get("/dashboard/stats")
-async def get_order_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)):
+@with_tenant_context
+async def get_order_dashboard(
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    org_id = str(context.org_id)  # Compatibility alias
     """Get order dashboard statistics"""
     try:
         stats = OrderService.get_order_dashboard(db, org_id)

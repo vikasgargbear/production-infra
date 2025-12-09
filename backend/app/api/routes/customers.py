@@ -1,20 +1,25 @@
 """
 Customer management endpoints for enterprise pharma system
 Implements GST-compliant customer management with credit tracking
+
+PRODUCTION-READY: All endpoints use TenantAwareSession for AI-agent safety
 """
 from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
-from functools import lru_cache
+import json
 
-from ...core.database import get_db, SessionLocal
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
-# FIXED: Restored tenant service imports with corrected dependency
-from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
+# Core utilities - shared across all APIs
+from ...core.database import SessionLocal
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession  
 from ...core.org_context import get_org_context, OrgContext
+from ...core.state_utils import get_state_code  # Shared Indian GST state codes
+from ...core.api_utils import handle_error  # Shared error handler
+from ...core.permissions import PermissionChecker  # RBAC
+
+# Customer-specific imports
 from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
@@ -26,42 +31,37 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["master", "customers"])
 
-# Cache the area column check result
-@lru_cache(maxsize=1)
-def check_area_column_exists() -> bool:
-    """Check if area column exists in customers table (cached)"""
-    from ...core.database import SessionLocal
-    db = SessionLocal()
-    try:
-        result = db.execute(text("""
-            SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.columns 
-                WHERE table_name = 'customers' 
-                AND column_name = 'area'
-            )
-        """)).scalar()
-        return result
-    except Exception as e:
-        logger.error(f"Error checking area column: {e}")
-        return False
-    finally:
-        db.close()
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
 
 @router.post("/")
+@with_tenant_context
 async def create_customer(
     customer: CustomerCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "create")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a new customer with GST details and credit limit
     
+    Required fields:
     - **customer_name**: Business name
-    - **primary_phone as phone**: 10-digit mobile number
-    - **gst_number as gstin**: Optional GST number (validated)
-    - **credit_limit**: Maximum credit allowed
-    - **credit_days**: Payment terms in days
+    - **primary_phone**: 10-digit mobile number
+    - **customer_type**: retail, wholesale, hospital, clinic, or pharmacy
+    
+    Optional fields:
+    - **gst_number**: 15-character GST number (validated)
+    - **credit_limit**: Maximum credit allowed (default: 0)
+    - **credit_days**: Payment terms in days (default: 0)
     """
     try:
         # Generate customer code
@@ -71,21 +71,21 @@ async def create_customer(
         customer_data = customer.dict()
         customer_data["customer_code"] = customer_code
         
-        # Map schema fields to database columns
+        # Map schema fields to database columns - NO ALIASING, direct database names
         mapped_data = {
-            "org_id": org_id,  # Use org_id from header, not from request body
+            "org_id": str(context.org_id),
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
             "business_type": customer_data.get("business_type", "retail_pharmacy"),
             "primary_phone": customer_data.get("primary_phone"),
-            "primary_email": customer_data.get("email"),
+            "primary_email": customer_data.get("primary_email"),
             "secondary_phone": customer_data.get("secondary_phone"),
             "whatsapp_number": customer_data.get("whatsapp_number", customer_data.get("secondary_phone")),
-            "contact_person_name": customer_data.get("contact_person"),
+            "contact_person_name": customer_data.get("contact_person_name"),
             "contact_person_phone": customer_data.get("contact_person_phone"),
             "contact_person_email": customer_data.get("contact_person_email"),
-            "gst_number": customer_data.get("gstin"),
+            "gst_number": customer_data.get("gst_number"),
             "pan_number": customer_data.get("pan_number"),
             "drug_license_number": customer_data.get("drug_license_number"),
             "drug_license_validity": customer_data.get("drug_license_validity"),
@@ -93,7 +93,7 @@ async def create_customer(
             "credit_days": customer_data.get("credit_days", 0),
             "credit_rating": customer_data.get("credit_rating", "NEW"),
             "payment_terms": customer_data.get("payment_terms", "CASH"),
-            "internal_notes": customer_data.get("notes"),
+            "internal_notes": customer_data.get("internal_notes"),
             "is_active": customer_data.get("is_active", True)
         }
         
@@ -122,19 +122,11 @@ async def create_customer(
         
         # Create address record if address data is provided
         if any([customer_data.get(f) for f in ['address_line1', 'city', 'state', 'pincode']]):
-            # Map state name to state code (simplified mapping for common states)
-            state_code_map = {
-                'maharashtra': '27', 'rajasthan': '08', 'gujarat': '24',
-                'delhi': '07', 'karnataka': '29', 'tamil nadu': '33',
-                'uttar pradesh': '09', 'west bengal': '19', 'haryana': '06',
-                'punjab': '03', 'kerala': '32', 'telangana': '36'
-            }
-            
             state_name = customer_data.get('state', '')
-            state_code = state_code_map.get(state_name.lower(), '27')  # Default to Maharashtra
+            state_code = get_state_code(state_name)
             
             address_data = {
-                "org_id": org_id,  # Use org_id from header
+                "org_id": str(context.org_id),  # Use org_id from context
                 "entity_type": "customer",
                 "entity_id": customer_id,
                 "address_type": "billing",  # Default billing address
@@ -177,15 +169,15 @@ async def create_customer(
         
         db.commit()
         
-        # Return simplified response
+        # Return response with database field names - NO ALIASES
         return {
             "customer_id": customer_id,
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
             "primary_phone": customer_data.get("primary_phone"),
-            "email": customer_data.get("email"),
-            "gstin": customer_data.get("gstin"),
+            "primary_email": customer_data.get("primary_email"),
+            "gst_number": customer_data.get("gst_number"),
             "credit_limit": customer_data.get("credit_limit", 0),
             "credit_days": customer_data.get("credit_days", 0),
             "is_active": True,
@@ -195,8 +187,7 @@ async def create_customer(
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating customer: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
+        raise handle_error(e, "create customer")
 
 @router.get("/", response_model=CustomerListResponse)
 @with_tenant_context  # FIXED: Automatic tenant filtering
@@ -210,6 +201,7 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
+    _: dict = Depends(PermissionChecker("master", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),  # FIXED: Tenant context
     db: TenantAwareSession = Depends(get_tenant_aware_db)  # FIXED: Tenant-aware DB
 ):
@@ -225,11 +217,12 @@ async def list_customers(
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
-        # Build query with fast search optimization (include required fields for Pydantic)
+        # Build query - optimized for fast search but with essential fields
         if fast_search:
-            # Minimal columns for fast search response + required schema fields
-            query = """SELECT customer_id, customer_name, customer_code, primary_phone, 
-                      customer_type, gst_number, is_active, org_id, created_at, updated_at 
+            # Essential fields for fast search - balance between performance and usefulness
+            query = """SELECT customer_id, customer_name, customer_code, primary_phone, primary_email,
+                      customer_type, business_type, gst_number, credit_limit, credit_days,
+                      is_active, org_id, created_at, updated_at 
                       FROM parties.customers"""
         else:
             # Full query for detailed view
@@ -302,44 +295,23 @@ async def list_customers(
         for row in customer_rows:
             customer_dict = dict(row._mapping)
             
-            # ✅ ENTERPRISE STANDARD: Use database field names directly
-            # All fields from SELECT are already in customer_dict
-            
-            # ✅ BACKWARD COMPATIBILITY: Populate alias fields
-            customer_dict["email"] = customer_dict.get("primary_email")
-            customer_dict["gstin"] = customer_dict.get("gst_number")
-            customer_dict["contact_person"] = customer_dict.get("contact_person_name")
-            customer_dict["notes"] = customer_dict.get("internal_notes")
+            # ✅ CLEAN CODE: Use database field names directly - NO ALIASES
             
             # Add statistics from batch lookup or default values
             if include_stats:
                 customer_stats = stats_by_customer.get(row.customer_id, {})
-                # Populate both old and new field names for compatibility
                 customer_dict.update({
-                    # New field names (database standard)
                     "total_transactions": customer_stats.get("total_orders", 0),
                     "total_business_amount": customer_stats.get("total_business", 0),
                     "last_transaction_date": customer_stats.get("last_order_date"),
                     "current_outstanding": customer_stats.get("outstanding_amount", 0),
-                    # Old field names (aliases for backward compatibility)
-                    "total_orders": customer_stats.get("total_orders", 0),
-                    "total_business": customer_stats.get("total_business", 0),
-                    "last_order_date": customer_stats.get("last_order_date"),
-                    "outstanding_amount": customer_stats.get("outstanding_amount", 0)
                 })
             else:
-                # Set default values for both old and new field names
                 customer_dict.update({
-                    # New field names
                     "total_transactions": 0,
                     "total_business_amount": 0,
                     "last_transaction_date": None,
                     "current_outstanding": 0,
-                    # Old field names (aliases)
-                    "total_orders": 0,
-                    "total_business": 0,
-                    "last_order_date": None,
-                    "outstanding_amount": 0
                 })
             
             customers.append(CustomerResponse(**customer_dict))
@@ -354,15 +326,16 @@ async def list_customers(
         )
         
     except Exception as e:
-        logger.error(f"Error listing customers: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list customers: {str(e)}")
+        raise handle_error(e, "list customers")
     # FIXED: No manual session closing needed - handled by tenant service dependency
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
+@with_tenant_context
 async def get_customer(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get customer details with addresses, outstanding balance and statistics"""
     try:
@@ -413,44 +386,32 @@ async def get_customer(
         # ✅ ENTERPRISE STANDARD: Use database field names directly (no aliasing!)
         # All fields from SELECT c.* are already in customer_dict
         
-        # Parse addresses JSON
-        import json
+        # Parse addresses JSON (json module imported at top of file)
         addresses = customer_dict.get("addresses", "[]")
         if isinstance(addresses, str):
             customer_dict["addresses"] = json.loads(addresses)
         elif addresses is None:
             customer_dict["addresses"] = []
         
+        # ✅ CLEAN CODE: Use database field names directly - NO ALIASES
         # Add computed statistics from service
         customer_dict.update(stats)
-        
-        # ✅ BACKWARD COMPATIBILITY: Populate alias fields from correct database fields
-        # This allows old frontend code to keep working while we migrate
-        customer_dict["email"] = customer_dict.get("primary_email")  # Alias
-        customer_dict["gstin"] = customer_dict.get("gst_number")     # Alias
-        customer_dict["contact_person"] = customer_dict.get("contact_person_name")  # Alias
-        customer_dict["notes"] = customer_dict.get("internal_notes")  # Alias
-        
-        # Map stats to both old and new field names (backward compatibility)
-        customer_dict["outstanding_amount"] = customer_dict.get("current_outstanding", stats.get("outstanding_amount", 0))
-        customer_dict["total_business"] = customer_dict.get("total_business_amount", stats.get("total_business", 0))
-        customer_dict["total_orders"] = customer_dict.get("total_transactions", stats.get("total_orders", 0))
-        customer_dict["last_order_date"] = customer_dict.get("last_transaction_date", stats.get("last_order_date"))
         
         return CustomerResponse(**customer_dict)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting customer: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get customer: {str(e)}")
+        raise handle_error(e, "get customer", customer_id)
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
+@with_tenant_context
 async def update_customer(
     customer_id: int,
     customer_update: CustomerUpdate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "edit")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Update customer details"""
     try:
@@ -462,24 +423,13 @@ async def update_customer(
         if not exists:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
-        # Build update query
+        # Build update query - use database field names directly (NO ALIASING)
         update_fields = []
         params = {"id": customer_id}
         
-        # Map schema fields to database columns
-        field_mapping = {
-            "primary_phone": "primary_phone",
-            "email": "primary_email",
-            "secondary_phone": "secondary_phone",
-            "contact_person": "contact_person_name",
-            "gstin": "gst_number",
-            "notes": "internal_notes"
-        }
-        
         for field, value in customer_update.dict(exclude_unset=True).items():
             if value is not None:
-                db_field = field_mapping.get(field, field)
-                update_fields.append(f"{db_field} = :{field}")
+                update_fields.append(f"{field} = :{field}")
                 params[field] = value
         
         if update_fields:
@@ -494,52 +444,52 @@ async def update_customer(
             db.commit()
         
         # Return updated customer
-        return await get_customer(customer_id, db)
+        return await get_customer(customer_id, context, db)
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating customer: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to update customer: {str(e)}")
+        raise handle_error(e, "update customer", customer_id)
 
 @router.get("/{customer_id}/ledger", response_model=CustomerLedgerResponse)
+@with_tenant_context
 async def get_customer_ledger(
     customer_id: int,
     from_date: Optional[date] = Query(None, description="Start date for ledger"),
     to_date: Optional[date] = Query(None, description="End date for ledger"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get customer transaction history (ledger)"""
     try:
         return CustomerService.get_customer_ledger(db, customer_id, from_date, to_date)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail="Customer not found")
     except Exception as e:
-        logger.error(f"Error getting customer ledger: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get customer ledger: {str(e)}")
+        raise handle_error(e, "get customer ledger", customer_id)
 
 @router.get("/{customer_id}/outstanding", response_model=CustomerOutstandingResponse)
+@with_tenant_context
 async def get_customer_outstanding(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get outstanding invoices for a customer"""
     try:
         return CustomerService.get_outstanding_invoices(db, customer_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail="Customer not found")
     except Exception as e:
-        logger.error(f"Error getting customer outstanding: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get customer outstanding: {str(e)}")
+        raise handle_error(e, "get customer outstanding", customer_id)
 
 @router.get("/{customer_id}/addresses")
+@with_tenant_context
 async def get_customer_addresses(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get all addresses for a customer"""
     try:
@@ -580,61 +530,68 @@ async def get_customer_addresses(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting customer addresses: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get customer addresses: {str(e)}")
+        raise handle_error(e, "get customer addresses", customer_id)
 
 @router.delete("/{customer_id}")
+@with_tenant_context
 async def delete_customer(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("master", "delete")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
-    Delete a customer (soft delete)
+    Soft delete a customer (marks as inactive)
     
-    Note: This will mark the customer as inactive rather than deleting permanently.
-    Related transactions and history will be preserved.
+    - Only deactivates if no outstanding balance
+    - Preserves related transactions and history
     """
     try:
-        # Check if customer exists
-        customer = db.execute(text("""
-            SELECT customer_id, customer_name, is_active
-            FROM parties.customers 
-            WHERE customer_id = :customer_id AND org_id = :org_id
-        """), {"customer_id": customer_id, "org_id": org_id}).fetchone()
+        # OPTIMIZED: Combined query using CTE (was 3 separate queries)
+        # Checks customer exists, is active, and has no outstanding balance in one round trip
+        result = db.execute(text("""
+            WITH customer_check AS (
+                SELECT 
+                    c.customer_id, 
+                    c.customer_name, 
+                    c.is_active,
+                    COALESCE(
+                        (SELECT SUM(final_amount - COALESCE(paid_amount, 0))
+                         FROM sales.invoices i
+                         WHERE i.customer_id = c.customer_id 
+                         AND i.payment_status != 'paid'),
+                        0
+                    ) as outstanding_balance
+                FROM parties.customers c
+                WHERE c.customer_id = :customer_id
+            )
+            SELECT customer_id, customer_name, is_active, outstanding_balance 
+            FROM customer_check
+        """), {"customer_id": customer_id}).fetchone()
         
-        if not customer:
+        if not result:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        if not customer.is_active:
+        if not result.is_active:
             return {"message": "Customer is already inactive"}
         
-        # Check for outstanding balance
-        outstanding = db.execute(text("""
-            SELECT COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as balance
-            FROM sales.invoices
-            WHERE customer_id = :customer_id
-            AND payment_status != 'paid'
-        """), {"customer_id": customer_id}).scalar()
-        
-        if outstanding and outstanding > 0:
+        if result.outstanding_balance and result.outstanding_balance > 0:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot delete customer with outstanding balance of {outstanding}"
+                detail=f"Cannot delete customer with outstanding balance of {result.outstanding_balance}"
             )
         
         # Soft delete - mark as inactive
         db.execute(text("""
             UPDATE parties.customers
-            SET is_active = false,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE customer_id = :customer_id AND org_id = :org_id
-        """), {"customer_id": customer_id, "org_id": org_id})
+            SET is_active = false, updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id
+        """), {"customer_id": customer_id})
         
         db.commit()
         
         return {
-            "message": f"Customer '{customer.customer_name}' has been deactivated",
+            "message": f"Customer '{result.customer_name}' has been deactivated",
             "customer_id": customer_id
         }
         
@@ -642,15 +599,15 @@ async def delete_customer(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting customer {customer_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete customer: {str(e)}")
+        raise handle_error(e, "delete customer", customer_id)
 
 @router.post("/{customer_id}/payment", response_model=PaymentResponse)
+@with_tenant_context
 async def record_customer_payment(
     customer_id: int,
     payment: PaymentRecord,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Record payment from customer
@@ -665,22 +622,23 @@ async def record_customer_payment(
         
         return CustomerService.record_payment(db, payment)
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error recording payment: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to record payment: {str(e)}")
+        raise handle_error(e, "record payment", customer_id)
 
 @router.post("/{customer_id}/check-credit")
+@with_tenant_context
 async def check_credit_limit(
     customer_id: int,
     order_amount: float,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Check if customer has sufficient credit for a new order"""
     try:
         result = CustomerService.validate_credit_limit(db, customer_id, order_amount)
         return result
     except Exception as e:
-        logger.error(f"Error checking credit limit: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to check credit limit: {str(e)}")
+        raise handle_error(e, "check credit limit", customer_id)

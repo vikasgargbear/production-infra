@@ -12,7 +12,6 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_secure  # SECURE: Token-based auth
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
 from ..services.document_number_service import DocumentNumberService
@@ -23,6 +22,7 @@ from ..schemas.order import (
 from ..services.order_service import OrderService
 from ..services.customer_service import CustomerService
 from ..services.invoice_service import InvoiceService
+from ...services.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 
@@ -751,19 +751,24 @@ async def approve_sales_order(
         
         items_dict = [dict(item._mapping) for item in items]
         
-        # NOW validate inventory availability
-        inventory_check = OrderService.validate_inventory(db, items_dict, org_id)
+        # SETTINGS-AWARE: Check if negative stock is allowed
+        billing_settings = await SettingsService.get_billing_settings(db, str(context.org_id))
+        allow_negative_stock = billing_settings.get("allow_negative_stock", False)
         
-        if not inventory_check["valid"]:
-            failed_items = [
-                f"Product {item['product_id']}: {item['message']}" 
-                for item in inventory_check["items"] 
-                if not item["valid"]
-            ]
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Inventory validation failed: {'; '.join(failed_items)}"
-            )
+        # Only validate inventory if negative stock NOT allowed
+        if not allow_negative_stock:
+            inventory_check = OrderService.validate_inventory(db, items_dict, org_id)
+            
+            if not inventory_check["valid"]:
+                failed_items = [
+                    f"Product {item['product_id']}: {item['message']}" 
+                    for item in inventory_check["items"] 
+                    if not item["valid"]
+                ]
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Inventory validation failed: {'; '.join(failed_items)}"
+                )
         
         # Check customer credit limit
         total_amount = db.execute(text("""
