@@ -14,12 +14,12 @@ class CustomerBase(BaseModel):
     """Base customer model with common fields"""
     customer_name: str = Field(..., min_length=1, max_length=200)
     customer_code: Optional[str] = Field(None, max_length=50)
-    contact_person: Optional[str] = Field(None, max_length=100)
+    contact_person_name: Optional[str] = Field(None, max_length=100, description="Contact person name")
     contact_person_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$", description="Contact person phone")
     contact_person_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="Contact person email")
     primary_phone: str = Field(..., pattern=r"^[0-9]{10}$", description="10-digit mobile number")
     secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    primary_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="Primary email address")
     
     # Address fields (optional - stored in separate table)
     address_line1: Optional[str] = Field(None, max_length=200, description="Building/House number and street")
@@ -30,9 +30,9 @@ class CustomerBase(BaseModel):
     pincode: Optional[str] = Field(None, pattern=r"^[0-9]{6}$", description="6-digit pincode")
     
     # GST and Tax details
-    gstin: Optional[str] = Field(None, pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
-    pan_number: Optional[str] = Field(None, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
-    drug_license_number: Optional[str] = Field(None, max_length=50)
+    gst_number: Optional[str] = Field(None, pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$", description="15-character GSTIN")
+    pan_number: Optional[str] = Field(None, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", description="10-character PAN")
+    drug_license_number: Optional[str] = Field(None, max_length=50, description="Drug License number (e.g., 20B-MH-12345)")
     drug_license_validity: Optional[date] = Field(None, description="Drug license expiry date")
     
     # Business details
@@ -46,13 +46,13 @@ class CustomerBase(BaseModel):
     
     # Status
     is_active: bool = Field(default=True)
-    notes: Optional[str] = Field(None, max_length=500)
+    internal_notes: Optional[str] = Field(None, max_length=500, description="Internal notes about customer")
     
-    @validator('gstin')
-    def validate_gstin(cls, v):
+    @validator('gst_number')
+    def validate_gst_number(cls, v):
         """Validate GSTIN format"""
         if v and not re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$", v):
-            raise ValueError('Invalid GSTIN format')
+            raise ValueError('Invalid GSTIN format. Expected: 27XXXXX1234X1ZX')
         return v
     
     @validator('pan_number')
@@ -72,10 +72,10 @@ class CustomerCreate(CustomerBase):
 class CustomerUpdate(BaseModel):
     """Schema for updating customer details"""
     customer_name: Optional[str] = Field(None, min_length=1, max_length=200)
-    contact_person: Optional[str] = Field(None, max_length=100)
+    contact_person_name: Optional[str] = Field(None, max_length=100)
     primary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
     secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    primary_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     
     # Address fields
     address_line1: Optional[str] = Field(None, min_length=1, max_length=200, description="Building/House number and street")
@@ -92,7 +92,7 @@ class CustomerUpdate(BaseModel):
     
     # Status
     is_active: Optional[bool] = None
-    notes: Optional[str] = Field(None, max_length=500)
+    internal_notes: Optional[str] = Field(None, max_length=500)
 
 
 class CustomerResponse(CustomerBase):
@@ -170,6 +170,7 @@ class CustomerResponse(CustomerBase):
     email: Optional[str] = Field(default=None, description="Alias for primary_email")
     gstin: Optional[str] = Field(default=None, description="Alias for gst_number (via parent)")
     contact_person: Optional[str] = Field(default=None, description="Alias for contact_person_name")
+    notes: Optional[str] = Field(default=None, description="Alias for internal_notes")
     
     class Config:
         from_attributes = True
