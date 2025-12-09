@@ -48,14 +48,14 @@ if IS_SUPABASE_POOLER:
 
 # Create engine with connection pooling optimized for Supabase
 if IS_SUPABASE_POOLER:
-    # Transaction pooler mode (port 6543) - very aggressive settings
+    # Transaction pooler mode (port 6543) - increased pool for Railway
     engine = create_engine(
         DATABASE_URL,
-        pool_size=1,              # Minimal pool for transaction pooler
-        max_overflow=2,           # Max 3 total connections
+        pool_size=5,              # Increased from 1 for better concurrency
+        max_overflow=10,          # Increased from 2
         pool_pre_ping=True,       # Always test connections
-        pool_recycle=30,          # Recycle every 30 seconds (aggressive)
-        pool_timeout=5,           # Short timeout
+        pool_recycle=30,          # Recycle every 30 seconds
+        pool_timeout=10,          # Increased timeout
         echo=False,
         connect_args={
             "connect_timeout": 10,
