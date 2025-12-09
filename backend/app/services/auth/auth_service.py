@@ -143,20 +143,40 @@ class AuthService:
     
     @staticmethod
     def _prepare_token_data(user_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare data for JWT token payload"""
-        branch_id = None
-        if user_data.get("branch_ids"):
-            branch_id = user_data["branch_ids"][0]
-        elif user_data.get("default_branch_id"):
-            branch_id = user_data["default_branch_id"]
+        """
+        Prepare data for JWT token payload.
+        
+        Uses data_access_level from roles table as single source of truth.
+        No fallbacks - if data is missing, it should be fixed in the database.
+        """
+        # Branch IDs from user record
+        branch_ids = user_data.get("branch_ids") or []
+        
+        # Map database data_access_level to BranchScope
+        # Single source of truth: roles.data_access_level
+        DATA_ACCESS_TO_SCOPE = {
+            "organization": "all",     # CEO, Admin → all branches
+            "region": "multi",         # Regional Manager → assigned branches
+            "branch": "single",        # Store Manager → single branch
+            "own": "single",           # Staff → their data only
+        }
+        
+        data_access_level = user_data.get("data_access_level", "branch")
+        branch_scope = DATA_ACCESS_TO_SCOPE.get(data_access_level, "single")
+        
+        # Admin flag overrides to ALL (from org_users.is_admin)
+        if user_data.get("is_admin"):
+            branch_scope = "all"
         
         return {
             "user_id": user_data["user_id"],
             "email": user_data["email"],
             "org_id": str(user_data["org_id"]),
             "role_id": user_data.get("role_id"),
-            "branch_id": branch_id,
-            "permissions": user_data.get("permissions", {}),
+            "branch_ids": [str(bid) for bid in branch_ids] if branch_ids else [],
+            "branch_scope": branch_scope,
+            "data_access_level": data_access_level,
+            "is_admin": user_data.get("is_admin", False),
             "full_name": user_data.get("full_name")
         }
     
