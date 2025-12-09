@@ -138,12 +138,23 @@ class DataTransformer {
     const base = {
       customer_id: String(customer.customer_id || ''),
       customer_name: customer.customer_name ||  '',
-      primary_phone: customer.primary_phone || customer.phone || customer.mobile || customer.contact || '',
-      primary_email: customer.primary_email || customer.email || '',
-      gst_number: customer.gst_number || customer.gstin || customer.gstNumber || '',
-      credit_limit: parseFloat(customer.credit_limit || customer.creditLimit || 0),
-      credit_days: parseInt(customer.credit_days || customer.creditDays || 0),
-      customer_type: customer.customer_type || 'retail'
+      primary_phone: customer.primary_phone || '',
+      primary_email: customer.primary_email || '',
+      gst_number: customer.gst_number || '',
+      pan_number: customer.pan_number || '',
+      drug_license_number: customer.drug_license_number || '',
+      fssai_number: customer.fssai_number || '',
+      secondary_phone: customer.secondary_phone || '',
+      credit_limit: parseFloat(customer.credit_limit ||  0),
+      credit_days: parseInt(customer.credit_days || 0),
+      customer_type: customer.customer_type || 'retail',
+      credit_rating: customer.credit_rating || 'A',
+      discount_group_id : customer.discount_group_id || null,
+      loyalty_tier: customer.loyalty_tier || 'bronze',
+      loyalty_points: parseInt(customer.loyalty_points || 0),
+      payment_terms: customer.payment_terms || 'Credit',
+      current_outstanding: parseFloat(customer.current_outstanding || 0),
+      business_type: customer.business_type || ''
     };
 
     // Handle addresses - available in detail view (GET /customers/{id})
@@ -156,10 +167,10 @@ class DataTransformer {
       base.pincode = defaultAddress.pincode || '';
     } else {
       // Fallback for list view or old data without addresses
-      base.address = customer.address || '';
-      base.city = customer.city || '';
-      base.state = customer.state || '';
-      base.pincode = customer.pincode || customer.pin || '';
+      base.address =  '';
+      base.city =  '';
+      base.state =  '';
+      base.pincode = '';
     }
 
     switch (context) {

@@ -4,7 +4,7 @@ import { cleanData } from '../utils/dataUtils';
 /**
  * Challans API Module
  * 
- * Uses the /enterprise-delivery-challan/ endpoint which requires:
+ * Uses the /challan/ endpoint which requires:
  * 1. An existing order_id
  * 2. Delivery details (address, city, state, pincode)
  * 
@@ -13,7 +13,7 @@ import { cleanData } from '../utils/dataUtils';
  * 2. Create challan referencing the order
  */
 
-const CHALLAN_ENDPOINT = '/enterprise-delivery-challan/';
+const CHALLAN_ENDPOINT = '/challan/';
 
 export const challansApi = {
   // Get all challans

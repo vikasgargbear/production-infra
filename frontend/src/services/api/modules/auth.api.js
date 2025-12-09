@@ -7,20 +7,20 @@ export const authApi = {
   // Login
   login: async (credentials) => {
     const response = await apiHelpers.post(ENDPOINTS.LOGIN, credentials);
-    
+
     // Store token if login successful
     if (response.data.token) {
       localStorage.setItem('authToken', response.data.token);
-      
+
       // Store user data if provided
       if (response.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
       }
     }
-    
+
     return response;
   },
-  
+
   // Logout
   logout: async () => {
     try {
@@ -33,52 +33,52 @@ export const authApi = {
       window.location.href = '/login';
     }
   },
-  
+
   // Register
   register: (userData) => {
     return apiHelpers.post(ENDPOINTS.REGISTER, userData);
   },
-  
+
   // Refresh token
   refreshToken: async () => {
     const refreshToken = localStorage.getItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY);
-    
+
     if (!refreshToken) {
       throw new Error('No refresh token available');
     }
-    
+
     const response = await apiHelpers.post(ENDPOINTS.REFRESH, {
       refresh_token: refreshToken
     });
-    
+
     if (response.data.token) {
       localStorage.setItem('authToken', response.data.token);
     }
-    
+
     return response;
   },
-  
+
   // Verify token
   verify: () => {
     return apiHelpers.get(ENDPOINTS.VERIFY);
   },
-  
+
   // Get current user
   getCurrentUser: () => {
     const userStr = localStorage.getItem(API_CONFIG.AUTH.USER_KEY);
     return userStr ? JSON.parse(userStr) : null;
   },
-  
+
   // Update current user
   updateCurrentUser: (userData) => {
     localStorage.setItem(API_CONFIG.AUTH.USER_KEY, JSON.stringify(userData));
   },
-  
+
   // Check if authenticated
   isAuthenticated: () => {
     return !!localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
   },
-  
+
   // Change password
   changePassword: (oldPassword, newPassword) => {
     return apiHelpers.post(`${ENDPOINTS.BASE}/change-password`, {
@@ -86,17 +86,51 @@ export const authApi = {
       new_password: newPassword
     });
   },
-  
+
   // Request password reset
   requestPasswordReset: (email) => {
     return apiHelpers.post(`${ENDPOINTS.BASE}/reset-password`, { email });
   },
-  
+
   // Confirm password reset
   confirmPasswordReset: (token, newPassword) => {
     return apiHelpers.post(`${ENDPOINTS.BASE}/reset-password/confirm`, {
       token,
       new_password: newPassword
     });
+  },
+
+  // ==================== OAuth / Google Login ====================
+
+  // Get Google OAuth URL (redirects user to Google)
+  getGoogleOAuthUrl: async () => {
+    const response = await apiHelpers.get(ENDPOINTS.OAUTH_GOOGLE_URL);
+    return response.data;
+  },
+
+  // Handle Google OAuth callback
+  googleCallback: async (userData) => {
+    const response = await apiHelpers.post(ENDPOINTS.OAUTH_GOOGLE_CALLBACK, userData);
+
+    if (response.data.access_token) {
+      localStorage.setItem('authToken', response.data.access_token);
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+    }
+
+    return response;
+  },
+
+  // Get available OAuth providers
+  getOAuthProviders: async () => {
+    const response = await apiHelpers.get(ENDPOINTS.OAUTH_PROVIDERS);
+    return response.data;
+  },
+
+  // Check OAuth configuration status
+  getOAuthStatus: async () => {
+    const response = await apiHelpers.get(ENDPOINTS.OAUTH_STATUS);
+    return response.data;
   },
 };

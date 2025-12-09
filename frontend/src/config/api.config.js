@@ -10,13 +10,13 @@ const API_BASE_URL = `${getApiBaseUrl()}/api`;
 export const API_CONFIG = {
   BASE_URL: API_BASE_URL,
   TIMEOUT: 30000,
-  
+
   // Storage keys
   AUTH: {
     USER_KEY: 'pharma_user',
     TOKEN_KEY: 'pharma_token'
   },
-  
+
   ENDPOINTS: {
     // Authentication
     AUTH: {
@@ -24,9 +24,14 @@ export const API_CONFIG = {
       LOGOUT: '/auth/logout',
       REFRESH: '/auth/refresh',
       PROFILE: '/auth/profile',
-      CHANGE_PASSWORD: '/auth/change-password'
+      CHANGE_PASSWORD: '/auth/change-password',
+      // OAuth endpoints
+      OAUTH_GOOGLE_URL: '/auth/oauth/google/url',
+      OAUTH_GOOGLE_CALLBACK: '/auth/oauth/google/callback',
+      OAUTH_PROVIDERS: '/auth/oauth/providers',
+      OAUTH_STATUS: '/auth/oauth/status'
     },
-    
+
     // Master Data
     CUSTOMERS: {
       BASE: '/customers',
@@ -38,7 +43,7 @@ export const API_CONFIG = {
       OUTSTANDING: (id) => `/customers/${id}/outstanding`,
       TRANSACTIONS: (id) => `/customers/${id}/transactions`
     },
-    
+
     SUPPLIERS: {
       BASE: '/suppliers',
       SEARCH: '/suppliers/search',
@@ -48,7 +53,7 @@ export const API_CONFIG = {
       DETAILS: (id) => `/suppliers/${id}`,
       OUTSTANDING: (id) => `/suppliers/${id}/outstanding`
     },
-    
+
     PRODUCTS: {
       BASE: '/products',
       SEARCH: '/products/search',
@@ -60,7 +65,7 @@ export const API_CONFIG = {
       STOCK: (id) => `/products/${id}/stock`,
       PRICE_HISTORY: (id) => `/products/${id}/price-history`
     },
-    
+
     // Sales Module
     SALES: {
       BASE: '/sales',
@@ -70,7 +75,7 @@ export const API_CONFIG = {
       PRINT_INVOICE: (id) => `/sales/invoice/${id}/print`,
       CANCEL_INVOICE: (id) => `/sales/invoice/${id}/cancel`
     },
-    
+
     INVOICES: {
       BASE: '/invoices',
       CREATE: '/invoices',
@@ -82,7 +87,7 @@ export const API_CONFIG = {
       CANCEL: (id) => `/invoices/${id}/cancel`,
       HISTORY: '/invoices/history'
     },
-    
+
     ORDERS: {
       BASE: '/orders',
       CREATE: '/orders',
@@ -93,17 +98,17 @@ export const API_CONFIG = {
       CANCEL: (id) => `/orders/${id}/cancel`,
       CONVERT_TO_INVOICE: (id) => `/orders/${id}/convert-to-invoice`
     },
-    
+
     CHALLANS: {
-      BASE: '/enterprise-delivery-challan',
-      CREATE: '/enterprise-delivery-challan',
-      UPDATE: (id) => `/enterprise-delivery-challan/${id}`,
-      DELETE: (id) => `/enterprise-delivery-challan/${id}`,
-      DETAILS: (id) => `/enterprise-delivery-challan/${id}`,
-      PDF: (id) => `/enterprise-delivery-challan/${id}/pdf`,
-      CONVERT_TO_INVOICE: (id) => `/enterprise-delivery-challan/${id}/convert-to-invoice`
+      BASE: '/challan',
+      CREATE: '/challan',
+      UPDATE: (id) => `/challan/${id}`,
+      DELETE: (id) => `/challan/${id}`,
+      DETAILS: (id) => `/challan/${id}`,
+      PDF: (id) => `/challan/${id}/pdf`,
+      CONVERT_TO_INVOICE: (id) => `/challan/${id}/convert-to-invoice`
     },
-    
+
     // Purchase Module
     PURCHASES: {
       BASE: '/purchases/',  // Added trailing slash for proper routing
@@ -128,7 +133,7 @@ export const API_CONFIG = {
       APPROVE: (id) => `/grn/${id}/approve`,
       GENERATE_NUMBER: '/grn/generate-number'
     },
-    
+
     // Stock Management
     STOCK: {
       BASE: '/inventory',
@@ -141,7 +146,7 @@ export const API_CONFIG = {
       TRANSFER: '/stock-transfers',
       RECEIVE: '/stock/receive'
     },
-    
+
     // Financial
     PAYMENTS: {
       BASE: '/payments',
@@ -153,7 +158,7 @@ export const API_CONFIG = {
       OUTSTANDING: '/payments/outstanding',
       LEDGER: '/party-ledger-v2'
     },
-    
+
     // Returns
     RETURNS: {
       BASE: '/returns',
@@ -167,7 +172,7 @@ export const API_CONFIG = {
       REJECT: (id) => `/returns/${id}/reject`,
       RETURNABLE_ITEMS: '/returns/returnable-items'
     },
-    
+
     // Reports
     REPORTS: {
       SALES: '/reports/sales',
@@ -178,7 +183,7 @@ export const API_CONFIG = {
       CUSTOM: '/reports/custom',
       EXPORT: '/reports/export'
     },
-    
+
     // Dashboard
     DASHBOARD: {
       BASE: '/dashboard',
@@ -187,7 +192,7 @@ export const API_CONFIG = {
       FINANCIAL_SUMMARY: '/dashboard/financial-summary',
       NOTIFICATIONS: '/dashboard/notifications'
     },
-    
+
     // Users & Settings
     USERS: {
       BASE: '/users',
@@ -197,7 +202,7 @@ export const API_CONFIG = {
       ROLES: '/users/roles',
       PERMISSIONS: '/users/permissions'
     },
-    
+
     SETTINGS: {
       COMPANY: '/company',
       UPDATE_COMPANY: '/company/update',
@@ -207,7 +212,7 @@ export const API_CONFIG = {
       EMAIL_SETTINGS: '/settings/email'
     }
   },
-  
+
   // HTTP Status codes
   STATUS: {
     OK: 200,
@@ -222,7 +227,7 @@ export const API_CONFIG = {
     INTERNAL_SERVER_ERROR: 500,
     SERVICE_UNAVAILABLE: 503
   },
-  
+
   // Error messages
   ERRORS: {
     NETWORK: 'Network error. Please check your internet connection.',

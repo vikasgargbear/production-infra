@@ -11,35 +11,38 @@ from .jwt_auth import SECRET_KEY, ALGORITHM
 security = HTTPBearer(auto_error=False)
 
 def get_org_id_from_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    x_org_id: Optional[str] = Header(None, alias="X-Org-Id")
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> str:
     """
-    ENTERPRISE: Extract organization ID from JWT token
-    Temporarily allows header fallback to prevent blocking
+    Extract organization ID from JWT token.
+    
+    SECURITY: X-Org-Id header fallback REMOVED (Dec 2025)
+    JWT token is now REQUIRED.
     """
-    # Try JWT token first (preferred)
-    if credentials:
-        try:
-            token = credentials.credentials
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            org_id = payload.get("org_id")
-            
-            if org_id:
-                return org_id
-        except JWTError:
-            pass  # Fall through to header
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Please provide Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
     
-    # Temporary fallback to header to prevent blocking
-    if x_org_id:
-        return x_org_id
-    
-    # If neither available, raise error
-    raise HTTPException(
-        status_code=401,
-        detail="Authentication required. Please provide Bearer token or X-Org-Id header.",
-        headers={"WWW-Authenticate": "Bearer"}
-    )
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        org_id = payload.get("org_id")
+        
+        if not org_id:
+            raise HTTPException(
+                status_code=401,
+                detail="org_id not found in token. Please login again."
+            )
+        return org_id
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
 def get_user_context_from_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)

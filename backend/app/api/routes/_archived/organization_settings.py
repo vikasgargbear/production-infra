@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...core.auth import get_current_org
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])

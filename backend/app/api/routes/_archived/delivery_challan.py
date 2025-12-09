@@ -10,7 +10,7 @@ import logging
 from datetime import date, datetime
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.document_number_service import DocumentNumberService
 from ...utils.branch_utils import get_default_branch_id
 

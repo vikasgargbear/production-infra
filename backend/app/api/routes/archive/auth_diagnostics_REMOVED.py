@@ -1,6 +1,8 @@
 """
-Authentication Diagnostics API (Development/Admin Only)
-Helps debug authentication issues
+Authentication Diagnostics API (Admin Only)
+Protected endpoints for debugging authentication issues
+
+SECURITY: All endpoints require admin authentication
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,6 +12,7 @@ import logging
 
 from ...core.database import get_db
 from ...core.jwt_auth import get_password_hash, verify_password
+from ...core.permissions import PermissionChecker
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +21,12 @@ router = APIRouter(prefix="/auth-diagnostics", tags=["Auth Diagnostics"])
 
 @router.get("/users-without-passwords")
 async def list_users_without_passwords(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ) -> List[Dict[str, Any]]:
     """
     List users who don't have passwords set
-    **Admin only** - Remove in production or add auth
+    **Admin only** - Requires admin authentication
     """
     try:
         result = db.execute(text("""
@@ -59,11 +63,12 @@ async def list_users_without_passwords(
 async def set_user_password(
     email: str,
     password: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ) -> Dict[str, Any]:
     """
     Set password for a user (Admin operation)
-    **WARNING**: Add proper authentication before production use
+    **Admin only** - Requires admin authentication
     """
     try:
         # Check if user exists
@@ -110,11 +115,12 @@ async def set_user_password(
 async def test_password_verification(
     email: str,
     password: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ) -> Dict[str, Any]:
     """
     Test if password verification is working
-    **Admin only** - For debugging authentication issues
+    **Admin only** - Requires admin authentication
     """
     try:
         # Get user with password hash

@@ -22,15 +22,15 @@ const decodeToken = (token) => {
     const actualToken = token.startsWith('Bearer ') ? token.slice(7) : token;
     const parts = actualToken.split('.');
     if (parts.length !== 3) return null;
-    
+
     const payload = JSON.parse(atob(parts[1]));
-    
+
     // Check expiration
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp && payload.exp <= now) {
       return null; // Expired
     }
-    
+
     return payload;
   } catch (error) {
     console.error('Token decode failed:', error);
@@ -53,16 +53,94 @@ export const AuthProvider = ({ children }) => {
    * Initialize auth from stored token on mount
    */
   useEffect(() => {
-    const initAuth = () => {
+    const initAuth = async () => {
+      // Check for OAuth callback (Supabase redirects with tokens in URL hash)
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token')) {
+        try {
+          // Parse tokens from hash (format: #access_token=xxx&refresh_token=xxx&...)
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+
+          if (accessToken) {
+            // Decode the Supabase token to get user email
+            const supabasePayload = decodeToken(accessToken);
+
+            if (supabasePayload && supabasePayload.email) {
+              // Call our backend to exchange Supabase token for our JWT
+              const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/google/callback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  provider: 'google',
+                  access_token: accessToken,
+                  user_email: supabasePayload.email,
+                  user_name: supabasePayload.user_metadata?.full_name || supabasePayload.email
+                })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+
+                if (data.access_token) {
+                  const payload = decodeToken(data.access_token);
+
+                  if (payload) {
+                    const user = {
+                      user_id: payload.user_id,
+                      email: payload.email,
+                      org_id: payload.org_id,
+                      role_id: payload.role_id,
+                      branch_id: payload.branch_id,
+                      permissions: payload.permissions || {},
+                      auth_provider: 'google'
+                    };
+
+                    localStorage.setItem(TOKEN_KEY, data.access_token);
+                    localStorage.setItem(USER_KEY, JSON.stringify(user));
+
+                    // Clear URL hash
+                    window.history.replaceState(null, '', window.location.pathname);
+
+                    setState({
+                      user,
+                      token: data.access_token,
+                      isAuthenticated: true,
+                      isLoading: false
+                    });
+                    return;
+                  }
+                }
+              } else {
+                const errorData = await response.json();
+                console.error('OAuth callback failed:', errorData);
+
+                // Show user-friendly error
+                const errorMessage = errorData?.detail?.message || errorData?.detail || 'Google login failed. Your account may not exist.';
+                alert(errorMessage);
+
+                // Clear URL hash and show login
+                window.history.replaceState(null, '', window.location.pathname);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('OAuth callback processing error:', error);
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+
+      // Normal auth check from localStorage
       const token = localStorage.getItem(TOKEN_KEY);
-      
+
       if (!token) {
         setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
         return;
       }
 
       const payload = decodeToken(token);
-      
+
       if (!payload) {
         // Invalid or expired token - clear everything
         logout();
@@ -164,14 +242,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       const data = await response.json();
-      
+
       if (!data.access_token) {
         throw new Error('No access token received');
       }
 
       // Decode token to get user info
       const payload = decodeToken(data.access_token);
-      
+
       if (!payload) {
         throw new Error('Invalid token received');
       }
@@ -210,6 +288,92 @@ export const AuthProvider = ({ children }) => {
       console.error('Online login failed, trying offline:', error);
       // Fallback to offline
       return loginOffline(email, password);
+    }
+  };
+
+  /**
+   * Login with Google OAuth
+   */
+  const loginWithGoogle = async () => {
+    try {
+      // Get OAuth URL from backend
+      const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/google/url`);
+
+      if (!response.ok) {
+        throw new Error('Failed to get Google OAuth URL');
+      }
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirect to Google OAuth (via Supabase)
+        window.location.href = data.url;
+      } else {
+        throw new Error('No OAuth URL returned');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
+   * Handle OAuth callback (called after Google redirects back)
+   */
+  const handleOAuthCallback = async (accessToken, userEmail, userName) => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/google/callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'google',
+          access_token: accessToken,
+          user_email: userEmail,
+          user_name: userName
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail?.message || 'OAuth callback failed');
+      }
+
+      const data = await response.json();
+
+      if (!data.access_token) {
+        throw new Error('No access token received');
+      }
+
+      const payload = decodeToken(data.access_token);
+
+      if (!payload) {
+        throw new Error('Invalid token received');
+      }
+
+      const user = {
+        user_id: payload.user_id,
+        email: payload.email,
+        org_id: payload.org_id,
+        role_id: payload.role_id,
+        branch_id: payload.branch_id,
+        permissions: payload.permissions || {},
+        auth_provider: 'google'
+      };
+
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+
+      setState({
+        user,
+        token: data.access_token,
+        isAuthenticated: true,
+        isLoading: false
+      });
+
+      return { success: true, user };
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      return { success: false, error: error.message };
     }
   };
 
@@ -271,6 +435,8 @@ export const AuthProvider = ({ children }) => {
   const value = {
     ...state,
     login,
+    loginWithGoogle,
+    handleOAuthCallback,
     logout,
     getOrgId,
     getToken,

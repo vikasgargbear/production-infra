@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  UserCheck, Search, Plus, Edit2, Trash2, 
+import {
+  UserCheck, Search, Plus, Edit2, Trash2,
   Save, X, Shield, Clock, Key,
   Eye, EyeOff, Lock, Unlock, Loader2, AlertCircle, Check
 } from 'lucide-react';
 import { usersApi } from '../../services/api';
-import { 
-  MODULES, 
-  MODULE_INFO, 
-  ROLE_INFO, 
-  getRoleDefaults 
+import {
+  MODULES,
+  MODULE_INFO,
+  ROLE_INFO,
+  getRoleDefaults
 } from '../../config/userRoles.config';
 
 const UserManagement = ({ open, onClose }) => {
@@ -24,7 +24,7 @@ const UserManagement = ({ open, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState(null);
-  
+
   // User data
   const [users, setUsers] = useState([]);
 
@@ -45,7 +45,7 @@ const UserManagement = ({ open, onClose }) => {
         if (tokenParts.length === 3) {
           const payload = JSON.parse(atob(tokenParts[1]));
           setCurrentUserRole(payload.role || payload.role_id);
-          
+
           // Check if user has admin/owner role
           const userRole = payload.role || payload.role_id;
           if (!['admin', 'owner', 'administrator'].includes(userRole?.toLowerCase())) {
@@ -60,17 +60,17 @@ const UserManagement = ({ open, onClose }) => {
   const loadUsers = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       // Check if we have auth token - try both keys for compatibility
       const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
-      
+
       if (!token) {
         setError('You are not logged in. Please login to manage users.');
         setIsLoading(false);
         return;
       }
-      
+
       // Validate token format and expiry
       try {
         const tokenParts = token.split('.');
@@ -78,7 +78,7 @@ const UserManagement = ({ open, onClose }) => {
           const payload = JSON.parse(atob(tokenParts[1]));
           const expiry = payload.exp * 1000;
           const now = Date.now();
-          
+
           // Debug logging
           console.log('UserManagement - Token validation:', {
             hasToken: !!token,
@@ -100,13 +100,13 @@ const UserManagement = ({ open, onClose }) => {
       } catch (e) {
         console.error('Token parsing error:', e);
       }
-      
-      
+
+
       const response = await usersApi.getAll();
-      
+
       // Handle different response formats
       let userData = [];
-      
+
       // The API returns response.data which contains another data field
       if (response?.data?.data) {
         userData = response.data.data;
@@ -119,7 +119,7 @@ const UserManagement = ({ open, onClose }) => {
         setUsers([]);
         return;
       }
-      
+
       // Map API response to component format - works with both users and org_users tables
       const transformedUsers = userData.map(user => ({
         // Handle both table structures
@@ -129,11 +129,11 @@ const UserManagement = ({ open, onClose }) => {
         email: user.email,
         role: user.role || 'billing',
         status: user.is_active !== undefined ? (user.is_active ? 'active' : 'inactive') : 'active',
-        lastLogin: user.last_login_at || user.last_login || user.lastLogin 
-          ? new Date(user.last_login_at || user.last_login || user.lastLogin).toLocaleString() 
-          : 'Never',
-        createdDate: user.created_at || user.createdAt 
-          ? new Date(user.created_at || user.createdAt).toLocaleDateString() 
+        lastLogin: user.last_login_at || user.last_login || user.lastLogin
+          ? new Date(user.last_login_at || user.last_login || user.lastLogin).toLocaleString()
+          : 'Not yet',
+        createdDate: user.created_at || user.createdAt
+          ? new Date(user.created_at || user.createdAt).toLocaleDateString()
           : 'Unknown',
         modules: user.permissions?.modules || user.modules || [],
         permissions: user.permissions || {},
@@ -144,13 +144,13 @@ const UserManagement = ({ open, onClose }) => {
         canApproveDiscounts: user.can_approve_discounts,
         discountLimit: user.discount_limit_percent
       }));
-      
+
       setUsers(transformedUsers);
     } catch (error) {
-      
+
       // Detailed error handling
       if (error.response) {
-        
+
         if (error.response.status === 401) {
           setError('Authentication failed. Your session may have expired. Please login again.');
         } else if (error.response.status === 403) {
@@ -165,9 +165,9 @@ const UserManagement = ({ open, onClose }) => {
       } else {
         setError(`Error: ${error.message}`);
       }
-      
+
       setUsers([]);
-      
+
       // Show user-friendly error message
       setTimeout(() => setError(null), 15000);
     } finally {
@@ -197,7 +197,7 @@ const UserManagement = ({ open, onClose }) => {
     icon: info.icon,
     color: info.color
   }));
-  
+
   const [formData, setFormData] = useState({
     username: '',
     fullName: '',
@@ -207,13 +207,14 @@ const UserManagement = ({ open, onClose }) => {
     role: 'billing',
     status: 'active',
     modules: [],
-    permissions: {}
+    permissions: {},
+    sendInviteEmail: true  // Default to sending invite
   });
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
+      user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = filterRole === 'all' || user.role === filterRole;
     return matchesSearch && matchesRole;
   });
@@ -230,7 +231,7 @@ const UserManagement = ({ open, onClose }) => {
       const newModules = prev.modules.includes(moduleId)
         ? prev.modules.filter(m => m !== moduleId)
         : [...prev.modules, moduleId];
-      
+
       // Initialize permissions for the module if not exists
       if (!prev.permissions[moduleId]) {
         return {
@@ -242,7 +243,7 @@ const UserManagement = ({ open, onClose }) => {
           }
         };
       }
-      
+
       return { ...prev, modules: newModules };
     });
   };
@@ -262,7 +263,7 @@ const UserManagement = ({ open, onClose }) => {
 
   const handleRoleChange = (role) => {
     const roleDefaults = getRoleDefaults(role);
-    
+
     setFormData(prev => ({
       ...prev,
       role,
@@ -273,29 +274,30 @@ const UserManagement = ({ open, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!editingUser && formData.password !== formData.confirmPassword) {
+
+    // Only validate password match if password is provided
+    if (!editingUser && formData.password && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match!');
       setTimeout(() => setError(null), 5000);
       return;
     }
-    
+
     setIsSaving(true);
     setError(null);
-    
+
     try {
       // Prepare data for both table structures
       const userData = {
         // Common fields
         email: formData.email,
         role: formData.role,
-        
+
         // org_users fields
         full_name: formData.fullName,
         is_active: formData.status === 'active',
         // Don't send permissions for now - let backend use defaults
         // permissions: formData.permissions,
-        
+
         // Basic user fields
         username: formData.username,
         employee_id: formData.username, // Use username as employee_id
@@ -306,11 +308,12 @@ const UserManagement = ({ open, onClose }) => {
         can_approve_discounts: formData.role === 'admin',
         discount_limit_percent: formData.role === 'admin' ? 100 : (formData.role === 'manager' ? 20 : 0)
       };
-      
+
       if (!editingUser) {
         userData.password = formData.password;
+        userData.send_invite_email = formData.sendInviteEmail;
       }
-      
+
       if (editingUser) {
         // Update existing user
         await usersApi.update(editingUser.id, userData);
@@ -320,13 +323,13 @@ const UserManagement = ({ open, onClose }) => {
         await usersApi.create(userData);
         setSuccessMessage('User created successfully!');
       }
-      
+
       // Reload users
       await loadUsers();
-      
+
       // Show success message
       setTimeout(() => setSuccessMessage(''), 3000);
-      
+
       handleCloseModal();
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to save user. Please try again.');
@@ -372,14 +375,14 @@ const UserManagement = ({ open, onClose }) => {
   const handleStatusToggle = async (userId) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    
+
     setIsSaving(true);
     setError(null);
     try {
       await usersApi.update(userId, {
         is_active: user.status === 'inactive'
       });
-      
+
       await loadUsers();
       setSuccessMessage('User status updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -420,7 +423,8 @@ const UserManagement = ({ open, onClose }) => {
       role: 'billing',
       status: 'active',
       modules: [],
-      permissions: {}
+      permissions: {},
+      sendInviteEmail: true
     });
     setShowPassword(false);
   };
@@ -535,114 +539,113 @@ const UserManagement = ({ open, onClose }) => {
             </button>
           </div>
         ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modules</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((user) => {
-                  const roleColor = getRoleColor(user.role);
-                  return (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{user.fullName}</p>
-                          <p className="text-xs text-gray-500">@{user.username}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${roleColor}-100 text-${roleColor}-800`}>
-                          <Shield className="w-3 h-3 mr-1" />
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleStatusToggle(user.id)}
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                            user.status === 'active'
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modules</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredUsers.map((user) => {
+                    const roleColor = getRoleColor(user.role);
+                    return (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{user.fullName}</p>
+                            <p className="text-xs text-gray-500">@{user.username}</p>
+                            <p className="text-xs text-gray-500">{user.email}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${roleColor}-100 text-${roleColor}-800`}>
+                            <Shield className="w-3 h-3 mr-1" />
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleStatusToggle(user.id)}
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${user.status === 'active'
                               ? 'bg-green-100 text-green-800 hover:bg-green-200'
                               : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
-                        >
-                          {user.status === 'active' ? (
-                            <>
-                              <Unlock className="w-3 h-3 mr-1" />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="w-3 h-3 mr-1" />
-                              Inactive
-                            </>
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {user.modules.slice(0, 3).map(moduleId => {
-                            const module = modules.find(m => m.id === moduleId);
-                            return module ? (
-                              <span key={moduleId} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                                {module.icon} {module.name}
+                              }`}
+                          >
+                            {user.status === 'active' ? (
+                              <>
+                                <Unlock className="w-3 h-3 mr-1" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3 h-3 mr-1" />
+                                Inactive
+                              </>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {user.modules.slice(0, 3).map(moduleId => {
+                              const module = modules.find(m => m.id === moduleId);
+                              return module ? (
+                                <span key={moduleId} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                  {module.icon} {module.name}
+                                </span>
+                              ) : null;
+                            })}
+                            {user.modules.length > 3 && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                +{user.modules.length - 3} more
                               </span>
-                            ) : null;
-                          })}
-                          {user.modules.length > 3 && (
-                            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                              +{user.modules.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center text-sm text-gray-900">
-                          <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                          {user.lastLogin}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleEdit(user)}
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            title="Edit User"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleResetPassword(user.id)}
-                            className="p-1 text-amber-600 hover:bg-amber-50 rounded"
-                            title="Reset Password"
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(user.id)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            title="Delete User"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center text-sm text-gray-900">
+                            <Clock className="w-3 h-3 mr-1 text-gray-400" />
+                            {user.lastLogin}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button
+                              onClick={() => handleEdit(user)}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              title="Edit User"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleResetPassword(user.id)}
+                              className="p-1 text-amber-600 hover:bg-amber-50 rounded"
+                              title="Reset Password"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(user.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              title="Delete User"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         )}
       </div>
 
@@ -672,7 +675,7 @@ const UserManagement = ({ open, onClose }) => {
                   <span className="text-red-800">{error}</span>
                 </div>
               )}
-              
+
               <div className="space-y-6">
                 {/* Basic Details */}
                 <div>
@@ -691,7 +694,7 @@ const UserManagement = ({ open, onClose }) => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Full Name <span className="text-red-500">*</span>
@@ -704,7 +707,7 @@ const UserManagement = ({ open, onClose }) => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Email <span className="text-red-500">*</span>
@@ -717,7 +720,7 @@ const UserManagement = ({ open, onClose }) => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                       <select
@@ -733,21 +736,38 @@ const UserManagement = ({ open, onClose }) => {
                   </div>
                 </div>
 
-                {/* Password Section (only for new users) */}
+                {/* Password Section (only for new users) - OPTIONAL for Google users */}
                 {!editingUser && (
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Password</h3>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Key className="w-4 h-4 text-gray-500" />
+                      <h3 className="text-sm font-semibold text-gray-900">Password</h3>
+                      <span className="text-xs text-gray-400">(Optional)</span>
+                    </div>
+
+                    {/* Info box about Google login */}
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 flex items-start gap-2">
+                      <svg className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                        <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      <div className="text-xs text-blue-700">
+                        <strong>Password is optional.</strong> If the user has a Google account (Gmail), they can use "Sign in with Google" instead.
+                        Only set a password if you want to allow email/password login.
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Password <span className="text-red-500">*</span>
+                          Password
                         </label>
                         <div className="relative">
                           <input
                             type={showPassword ? 'text' : 'password'}
-                            required
                             value={formData.password}
                             onChange={(e) => handleInputChange('password', e.target.value)}
+                            placeholder="Leave blank for Google-only login"
                             className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                           />
                           <button
@@ -759,101 +779,106 @@ const UserManagement = ({ open, onClose }) => {
                           </button>
                         </div>
                       </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Confirm Password <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          value={formData.confirmPassword}
-                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+
+                      {formData.password && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Confirm Password
+                          </label>
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={formData.confirmPassword}
+                            onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Module Access */}
+                {/* Role Permissions Preview (Read-Only) - Clean Compact Design */}
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Module Access</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {modules.map(module => (
-                      <label key={module.id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.modules.includes(module.id)}
-                          onChange={() => handleModuleToggle(module.id)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {module.icon} {module.name}
-                        </span>
-                      </label>
-                    ))}
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-sm font-semibold text-gray-900">Role Permissions</h3>
+                    <span className="ml-auto text-xs text-gray-400 italic">Read-only</span>
                   </div>
+
+                  {(() => {
+                    const roleDefaults = getRoleDefaults(formData.role);
+                    const roleModules = roleDefaults?.modules || [];
+                    const rolePermissions = roleDefaults?.permissions || {};
+
+                    return (
+                      <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 overflow-hidden">
+                        {/* Compact table layout */}
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-100/80">
+                              <th className="text-left px-3 py-2 font-medium text-gray-600">Module</th>
+                              <th className="text-center px-2 py-2 font-medium text-gray-600 w-12">View</th>
+                              <th className="text-center px-2 py-2 font-medium text-gray-600 w-14">Create</th>
+                              <th className="text-center px-2 py-2 font-medium text-gray-600 w-12">Edit</th>
+                              <th className="text-center px-2 py-2 font-medium text-gray-600 w-14">Delete</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {roleModules.map(moduleId => {
+                              const module = modules.find(m => m.id === moduleId);
+                              if (!module) return null;
+                              const perms = rolePermissions[moduleId] || {};
+
+                              return (
+                                <tr key={moduleId} className="hover:bg-blue-50/30">
+                                  <td className="px-3 py-2 font-medium text-gray-700">
+                                    <span className="mr-1.5">{module.icon}</span>
+                                    {module.name}
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    {perms.view ? <span className="text-green-600">✓</span> : <span className="text-gray-300">–</span>}
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    {perms.create ? <span className="text-green-600">✓</span> : <span className="text-gray-300">–</span>}
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    {perms.edit ? <span className="text-green-600">✓</span> : <span className="text-gray-300">–</span>}
+                                  </td>
+                                  <td className="text-center px-2 py-2">
+                                    {perms.delete ? <span className="text-green-600">✓</span> : <span className="text-gray-300">–</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        {roleModules.length === 0 && (
+                          <div className="px-4 py-3 text-center text-gray-400 text-xs">
+                            No modules assigned to this role
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {/* Permissions */}
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Permissions</h3>
-                  <div className="space-y-3">
-                    {formData.modules.map(moduleId => {
-                      const module = modules.find(m => m.id === moduleId);
-                      if (!module) return null;
-                      
-                      const permissions = formData.permissions[moduleId] || {};
-                      
-                      return (
-                        <div key={moduleId} className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="font-medium text-gray-900 mb-2">
-                            {module.icon} {module.name}
-                          </h4>
-                          <div className="grid grid-cols-4 gap-3">
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={permissions.view || false}
-                                onChange={(e) => handlePermissionChange(moduleId, 'view', e.target.checked)}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm text-gray-700">View</span>
-                            </label>
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={permissions.create || false}
-                                onChange={(e) => handlePermissionChange(moduleId, 'create', e.target.checked)}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm text-gray-700">Create</span>
-                            </label>
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={permissions.edit || false}
-                                onChange={(e) => handlePermissionChange(moduleId, 'edit', e.target.checked)}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm text-gray-700">Edit</span>
-                            </label>
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={permissions.delete || false}
-                                onChange={(e) => handlePermissionChange(moduleId, 'delete', e.target.checked)}
-                                className="rounded border-gray-300"
-                              />
-                              <span className="text-sm text-gray-700">Delete</span>
-                            </label>
-                          </div>
-                        </div>
-                      );
-                    })}
+                {/* Send Invite Email Option */}
+                {!editingUser && (
+                  <div className="border-t border-gray-200 pt-4">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.sendInviteEmail || false}
+                        onChange={(e) => handleInputChange('sendInviteEmail', e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">Send invite email to user</span>
+                        <p className="text-xs text-gray-500">User will receive an email with login instructions</p>
+                      </div>
+                    </label>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Actions */}

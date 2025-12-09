@@ -528,7 +528,7 @@ export const challansAPI = {
   search: async (query, options = {}) => {
     try {
       // Use the main delivery challan endpoint instead of pg wrapper
-      const response = await apiClient.get('/enterprise-delivery-challan/', {
+      const response = await apiClient.get('/challan/', {
         params: {
           limit: options.limit || 50,
           offset: options.offset || 0,
@@ -560,7 +560,7 @@ export const challansAPI = {
    */
   get: async (challanId) => {
     try {
-      const response = await apiClient.get(`/enterprise-delivery-challan/${challanId}`);
+      const response = await apiClient.get(`/challan/${challanId}`);
       return {
         success: true,
         data: response.data
@@ -579,7 +579,7 @@ export const challansAPI = {
    */
   create: async (challanData) => {
     try {
-      const response = await apiClient.post('/enterprise-delivery-challan/', challanData);
+      const response = await apiClient.post('/challan/', challanData);
       return {
         success: true,
         data: response.data
@@ -598,7 +598,7 @@ export const challansAPI = {
    */
   update: async (challanId, challanData) => {
     try {
-      const response = await apiClient.put(`/enterprise-delivery-challan/${challanId}`, challanData);
+      const response = await apiClient.put(`/challan/${challanId}`, challanData);
       return {
         success: true,
         data: response.data

@@ -20,33 +20,27 @@ class UserRepository:
     @staticmethod
     def find_by_email(email: str, db: Session) -> Optional[Dict[str, Any]]:
         """
-        Find user by email with org and role info
-        Returns None if not found
+        Find user by email with org, role, and branch info.
+        Returns None if not found.
         """
         try:
             result = db.execute(text("""
                 SELECT 
                     u.user_id, u.username, u.email, u.full_name,
                     u.org_id, u.is_active, u.password_hash,
-                    u.role_id, u.branch_ids,
+                    u.role_id, u.branch_ids, u.is_admin,
                     o.org_name, o.is_active as org_active,
-                    b.branch_id as default_branch_id,
-                    r.role_name, r.permissions
+                    r.role_name, r.permissions, r.data_access_level
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
-                LEFT JOIN master.org_branches b ON b.org_id = u.org_id 
-                    AND b.is_active = true
                 LEFT JOIN master.roles r ON r.role_id = u.role_id
                 WHERE u.email = :email
-                ORDER BY b.branch_id
-                LIMIT 1
             """), {"email": email.lower().strip()})
             
             row = result.fetchone()
             if not row:
                 return None
             
-            # Convert row to dict using column names
             return {
                 "user_id": row[0],
                 "username": row[1],
@@ -56,12 +50,13 @@ class UserRepository:
                 "is_active": row[5],
                 "password_hash": row[6],
                 "role_id": row[7],
-                "branch_ids": row[8],
-                "org_name": row[9],
-                "org_active": row[10],
-                "default_branch_id": row[11],
+                "branch_ids": row[8] or [],
+                "is_admin": row[9],
+                "org_name": row[10],
+                "org_active": row[11],
                 "role_name": row[12],
-                "permissions": row[13]
+                "permissions": row[13] or {},
+                "data_access_level": row[14] or "branch"
             }
             
         except Exception as e:
