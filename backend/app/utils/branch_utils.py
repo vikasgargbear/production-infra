@@ -10,19 +10,41 @@ def get_default_branch_id(db: Session, org_id: str) -> int:
     """
     Get the default branch ID for an organization.
     
+    Priority:
+    1. Branch marked as is_default_location = true
+    2. First active branch for the organization
+    
     Args:
         db: Database session
         org_id: Organization ID (UUID)
         
     Returns:
         Default branch ID for the organization
+        
+    Raises:
+        ValueError: If no branch found for organization
     """
-    # For now, just return the first branch for the organization
-    # since there's no is_default column in master.org_branches
+    # First try to get branch marked as default location
     query = text("""
         SELECT branch_id 
         FROM master.org_branches 
         WHERE org_id = :org_id 
+        AND is_default_location = true
+        AND is_active = true
+        LIMIT 1
+    """)
+    
+    result = db.execute(query, {"org_id": org_id}).first()
+    
+    if result:
+        return result[0]
+    
+    # Fallback to first active branch
+    query = text("""
+        SELECT branch_id 
+        FROM master.org_branches 
+        WHERE org_id = :org_id 
+        AND is_active = true
         ORDER BY branch_id 
         LIMIT 1
     """)
@@ -32,9 +54,9 @@ def get_default_branch_id(db: Session, org_id: str) -> int:
     if result:
         return result[0]
     
-    # If no branch found, return 1 as fallback
-    # This matches the behavior we had before
-    return 1
+    # If no branch found, raise an error instead of returning hardcoded value
+    raise ValueError(f"No active branch found for organization {org_id}")
+
 
 
 def get_branch_name(db: Session, branch_id: int) -> str:

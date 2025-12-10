@@ -1,0 +1,689 @@
+"""
+Sales API Router
+Handles direct sales/cash sales and invoice generation
+"""
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+import logging
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+import uuid
+from pydantic import BaseModel, Field
+
+from ....core.database import get_db
+from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...services.gst_service import GSTService
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["sales"])
+
+# Pydantic models for request/response
+class SaleItemCreate(BaseModel):
+    """Sale item for direct invoice creation"""
+    product_id: int
+    product_name: str
+    hsn_code: Optional[str] = None
+    batch_id: Optional[int] = None
+    batch_number: Optional[str] = None
+    expiry_date: Optional[str] = None
+    quantity: int = Field(..., gt=0)
+    unit: str = "strip"
+    unit_price: Decimal = Field(..., ge=0)  # This is what frontend is missing
+    mrp: Decimal = Field(..., ge=0)
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    tax_percent: Decimal = Field(..., ge=0, le=28)  # This is what frontend is missing
+    
+
+class SaleCreate(BaseModel):
+    """Create a direct sale/invoice"""
+    sale_date: Optional[date] = None
+    party_id: int
+    party_name: str
+    party_gst: Optional[str] = None
+    party_address: Optional[str] = None
+    party_phone: Optional[str] = None
+    party_state_code: Optional[str] = None  # For parties without GSTIN
+    payment_method: str = "cash"  # cash, credit, card, upi
+    items: List[SaleItemCreate]
+    discount_amount: Optional[Decimal] = Decimal("0")
+    other_charges: Optional[Decimal] = Decimal("0")
+    notes: Optional[str] = None
+    seller_gstin: Optional[str] = None  # Organization GSTIN
+    
+
+class SaleResponse(BaseModel):
+    """Sale response with all details"""
+    sale_id: str
+    invoice_number: str
+    sale_date: date
+    party_id: int
+    party_name: str
+    subtotal_amount: Decimal
+    discount_amount: Decimal
+    tax_amount: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    total_amount: Decimal
+    gst_type: str
+    payment_method: str
+    sale_status: str
+    created_at: datetime
+
+@router.post("/", response_model=SaleResponse)
+async def create_direct_sale(
+    sale_data: SaleCreate,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Create a direct sale/cash sale with invoice
+    """
+    try:
+        # Generate invoice number
+        invoice_number = f"INV-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        # Use provided date or current date
+        sale_date = sale_data.sale_date or date.today()
+        
+        # Get seller GSTIN (from request or organization default)
+        if not sale_data.seller_gstin:
+            org = db.execute(
+                text("SELECT gst_number FROM master.organizations WHERE org_id = :org_id"),
+                {"org_id": org_id}
+            ).first()
+            seller_gstin = org.gst_number if org else None  # No default GSTIN
+        else:
+            seller_gstin = sale_data.seller_gstin
+            
+        # Determine GST type based on seller and buyer location
+        gst_type = GSTService.determine_gst_type(
+            seller_gstin=seller_gstin,
+            buyer_gstin=sale_data.party_gst,
+            buyer_state_code=sale_data.party_state_code  # For unregistered buyers
+        )
+        
+        # Calculate invoice with proper GST
+        invoice_calc = GSTService.calculate_invoice_gst(
+            invoice_data={
+                "items": [item.dict() for item in sale_data.items],
+                "discount_amount": sale_data.discount_amount,
+                "other_charges": sale_data.other_charges
+            },
+            seller_gstin=seller_gstin,
+            buyer_gstin=sale_data.party_gst
+        )
+        
+        # Extract calculated values
+        subtotal = invoice_calc["subtotal"]
+        total_discount = invoice_calc["total_discount"]
+        total_cgst = invoice_calc["cgst_amount"]
+        total_sgst = invoice_calc["sgst_amount"]
+        total_igst = invoice_calc["igst_amount"]
+        tax_amount = invoice_calc["total_tax"]
+        final_total = invoice_calc["grand_total"]
+        
+        # Create invoice record using existing invoices table
+        invoice_id = db.execute(
+            text("""
+                INSERT INTO sales.invoices (
+                    invoice_number, invoice_date, due_date,
+                    order_id, customer_id, customer_name, customer_gstin,
+                    billing_address, shipping_address,
+                    subtotal_amount, discount_amount, taxable_amount,
+                    cgst_amount, sgst_amount, igst_amount,
+                    total_tax_amount, round_off_amount, total_amount,
+                    payment_status, payment_method, notes,
+                    gst_type, place_of_supply
+                ) VALUES (
+                    :invoice_number, :invoice_date, :due_date,
+                    NULL, :customer_id, :customer_name, :customer_gstin,
+                    :billing_address, :shipping_address,
+                    :subtotal, :discount, :taxable,
+                    :cgst, :sgst, :igst,
+                    :tax_amount, :round_off, :total_amount,
+                    :payment_status, :payment_method, :notes,
+                    :gst_type, :place_of_supply
+                )
+                RETURNING invoice_id
+            """),
+            {
+                "invoice_number": invoice_number,
+                "invoice_date": sale_date,
+                "due_date": sale_date + timedelta(days=30),  # 30 day payment terms
+                "customer_id": sale_data.party_id,
+                "customer_name": sale_data.party_name,
+                "customer_gstin": sale_data.party_gst,
+                "billing_address": sale_data.party_address,
+                "shipping_address": sale_data.party_address,
+                "subtotal": subtotal,
+                "discount": total_discount,
+                "taxable": subtotal - total_discount,
+                "cgst": total_cgst,
+                "sgst": total_sgst,
+                "igst": total_igst,
+                "tax_amount": tax_amount,
+                "round_off": round(final_total) - final_total,
+                "total_amount": final_total,
+                "payment_status": "paid" if sale_data.payment_method == "cash" else "pending",
+                "payment_method": sale_data.payment_method,
+                "notes": sale_data.notes,
+                "gst_type": gst_type.value,
+                "place_of_supply": GSTService.get_state_name(GSTService.extract_state_code(sale_data.party_gst)) if sale_data.party_gst else None
+            }
+        ).scalar()
+        
+        # Create invoice items using calculated GST values
+        for idx, (item, calc_item) in enumerate(zip(sale_data.items, invoice_calc["items"])):
+            db.execute(
+                text("""
+                    INSERT INTO sales.invoice_items (
+                        invoice_id, product_id, product_name,
+                        quantity, unit_price, 
+                        discount_percent, discount_amount,
+                        tax_percent, cgst_amount, sgst_amount, igst_amount,
+                        line_total
+                    ) VALUES (
+                        :invoice_id, :product_id, :product_name,
+                        :quantity, :unit_price,
+                        :disc_percent, :disc_amount,
+                        :tax_percent, :cgst_amt, :sgst_amt, :igst_amt,
+                        :total
+                    )
+                """),
+                {
+                    "invoice_id": invoice_id,
+                    "product_id": item.product_id,
+                    "product_name": item.product_name,
+                    "quantity": calc_item["quantity"],
+                    "unit_price": calc_item["unit_price"],
+                    "disc_percent": calc_item["discount_percent"],
+                    "disc_amount": calc_item["discount_amount"],
+                    "tax_percent": calc_item["gst_rate"],
+                    "cgst_amt": calc_item["cgst_amount"],
+                    "sgst_amt": calc_item["sgst_amount"],
+                    "igst_amt": calc_item["igst_amount"],
+                    "total": calc_item["total_amount"]
+                }
+            )
+            
+            # Update inventory
+            if item.batch_id:
+                db.execute(
+                    text("""
+                        UPDATE inventory 
+                        SET current_stock = current_stock - :quantity
+                        WHERE batch_id = :batch_id
+                    """),
+                    {"quantity": item.quantity, "batch_id": item.batch_id}
+                )
+            else:
+                # Deduct from any available batch
+                db.execute(
+                    text("""
+                        UPDATE inventory 
+                        SET current_stock = current_stock - :quantity
+                        WHERE product_id = :product_id 
+                        AND current_stock >= :quantity
+                        AND org_id = :org_id
+                        ORDER BY expiry_date ASC
+                        LIMIT 1
+                    """),
+                    {
+                        "quantity": item.quantity,
+                        "product_id": item.product_id,
+                        "org_id": org_id
+                    }
+                )
+                
+        # Create ledger entry if credit sale
+        if sale_data.payment_method == "credit":
+            db.execute(
+                text("""
+                    INSERT INTO party_ledger (
+                        ledger_id, org_id, party_id, transaction_date,
+                        transaction_type, reference_type, reference_id,
+                        debit_amount, credit_amount, description
+                    ) VALUES (
+                        :ledger_id, :org_id, :party_id, :date,
+                        'debit', 'invoice', :invoice_id,
+                        :amount, 0, :description
+                    )
+                """),
+                {
+                    "ledger_id": str(uuid.uuid4()),
+                    "org_id": org_id,
+                    "party_id": sale_data.party_id,
+                    "date": sale_date,
+                    "invoice_id": str(invoice_id),
+                    "amount": final_total,
+                    "description": f"Sale Invoice - {invoice_number}"
+                }
+            )
+            
+        db.commit()
+        
+        return SaleResponse(
+            sale_id=str(invoice_id),  # Using invoice_id as sale_id
+            invoice_number=invoice_number,
+            sale_date=sale_date,
+            party_id=sale_data.party_id,
+            party_name=sale_data.party_name,
+            subtotal_amount=subtotal,
+            discount_amount=total_discount,
+            tax_amount=tax_amount,
+            cgst_amount=total_cgst,
+            sgst_amount=total_sgst,
+            igst_amount=total_igst,
+            total_amount=final_total,
+            gst_type=gst_type.value,
+            payment_method=sale_data.payment_method,
+            sale_status="completed",
+            created_at=datetime.now()
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating sale: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/")
+async def get_sales(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    party_id: Optional[int] = None,
+    from_date: Optional[str] = None,
+    org_id: str = Depends(get_org_id_string),
+    to_date: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of direct sales/invoices (without orders)
+    """
+    try:
+        query = """
+            SELECT i.invoice_id as sale_id, i.invoice_number, i.invoice_date as sale_date,
+                   i.customer_id as party_id, i.customer_name as party_name, 
+                   '' as party_gst, i.final_amount, i.payment_status,
+                   'cash' as payment_method, i.cgst_amount, i.sgst_amount, i.igst_amount,
+                   '' as gst_type, i.created_at
+            FROM sales.invoices i
+            WHERE i.order_id IS NULL  -- Direct sales without orders
+        """
+        params = {
+            "skip": skip,
+            "limit": limit
+        }
+        
+        if party_id:
+            query += " AND i.customer_id = :party_id"
+            params["party_id"] = party_id
+            
+        if from_date:
+            query += " AND i.invoice_date >= :from_date"
+            params["from_date"] = from_date
+            
+        if to_date:
+            query += " AND i.invoice_date <= :to_date"
+            params["to_date"] = to_date
+            
+        if payment_method:
+            query += " AND i.payment_method = :payment_method"
+            params["payment_method"] = payment_method
+            
+        query += " ORDER BY i.invoice_date DESC, i.created_at DESC LIMIT :limit OFFSET :skip"
+        
+        sales = db.execute(text(query), params).fetchall()
+        
+        # Get count with a proper count query
+        count_query = """
+            SELECT COUNT(*)
+            FROM sales.invoices i
+            WHERE i.order_id IS NULL  -- Direct sales without orders
+        """
+        # Add the same filters as main query
+        if party_id:
+            count_query += " AND i.customer_id = :party_id"
+        if from_date:
+            count_query += " AND i.invoice_date >= :from_date"
+        if to_date:
+            count_query += " AND i.invoice_date <= :to_date"
+        if payment_method:
+            count_query += " AND i.payment_method = :payment_method"
+            
+        total = db.execute(text(count_query), params).scalar()
+        
+        return {
+            "total": total,
+            "sales": [dict(sale._mapping) for sale in sales]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching sales: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/outstanding")
+async def get_outstanding_sales(
+    customer_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Get outstanding sales/invoices with advance payment information
+
+    - Calculates at customer level: total invoices - total payments
+    - Returns all unpaid/partial invoices for display
+    - Shows true net position per customer
+    """
+    try:
+        # First get customer-level totals (all customers with invoices OR payments)
+        customer_summary_query = """
+            WITH customer_invoices AS (
+                SELECT
+                    c.customer_id,
+                    c.customer_name,
+                    c.primary_phone as customer_phone,
+                    c.primary_email as customer_email,
+                    COALESCE(SUM(i.final_amount), 0) as total_invoice_amount
+                FROM parties.customers c
+                LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id
+                    AND i.org_id = :org_id
+                    AND i.invoice_status != 'cancelled'
+                WHERE c.org_id = :org_id
+                GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email
+            ),
+            customer_payments AS (
+                SELECT
+                    party_id as customer_id,
+                    COALESCE(SUM(payment_amount), 0) as total_payment_amount,
+                    COALESCE(SUM(unallocated_amount), 0) as total_unallocated
+                FROM financial.payments
+                WHERE party_type = 'customer'
+                    AND org_id = :org_id
+                    AND payment_status != 'cancelled'
+                GROUP BY party_id
+            )
+            SELECT
+                ci.customer_id,
+                ci.customer_name,
+                ci.customer_phone,
+                ci.customer_email,
+                ci.total_invoice_amount,
+                COALESCE(cp.total_payment_amount, 0) as total_payment_amount,
+                COALESCE(cp.total_unallocated, 0) as total_unallocated,
+                (ci.total_invoice_amount - COALESCE(cp.total_payment_amount, 0)) as net_position
+            FROM customer_invoices ci
+            LEFT JOIN customer_payments cp ON ci.customer_id = cp.customer_id
+            WHERE ci.total_invoice_amount > 0 OR cp.total_payment_amount > 0
+        """
+
+        params = {"org_id": org_id}
+
+        if customer_id:
+            customer_summary_query += " AND ci.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+
+        customer_result = db.execute(text(customer_summary_query), params)
+        customer_summaries = {row.customer_id: dict(row._mapping) for row in customer_result}
+
+        # Now get the unpaid/partial invoices for display
+        invoice_query = """
+            SELECT
+                i.invoice_id,
+                i.invoice_number,
+                i.invoice_date,
+                i.due_date,
+                i.final_amount,
+                COALESCE(i.paid_amount, 0) as paid_amount,
+                (i.final_amount - COALESCE(i.paid_amount, 0)) as pending_amount,
+                i.payment_status,
+                c.customer_id,
+                c.customer_name,
+                c.primary_phone as customer_phone,
+                c.primary_email as customer_email,
+                CASE
+                    WHEN i.due_date < CURRENT_DATE THEN
+                        CURRENT_DATE - i.due_date
+                    ELSE 0
+                END as days_overdue
+            FROM sales.invoices i
+            JOIN parties.customers c ON i.customer_id = c.customer_id
+            WHERE i.org_id = :org_id
+                AND i.payment_status IN ('unpaid', 'partial', 'pending')
+                AND i.invoice_status != 'cancelled'
+        """
+
+        if customer_id:
+            invoice_query += " AND c.customer_id = :customer_id"
+
+        invoice_query += " ORDER BY i.due_date, i.invoice_date"
+
+        invoice_result = db.execute(text(invoice_query), params)
+        invoices = [dict(row._mapping) for row in invoice_result]
+
+        # Add customer-level advance information to each invoice
+        for inv in invoices:
+            cust_id = inv["customer_id"]
+            if cust_id in customer_summaries:
+                summary = customer_summaries[cust_id]
+                # Customer's total unallocated amount (true advance)
+                inv["customer_advance"] = float(summary["total_unallocated"])
+                inv["customer_net_position"] = float(summary["net_position"])
+
+        # Calculate true totals from customer-level data
+        total_outstanding = 0  # Sum of customers who owe money (positive net position)
+        total_advances = 0     # Sum of customers with advances (negative net position)
+        total_unallocated = 0  # Total unallocated payments
+
+        for summary in customer_summaries.values():
+            # Convert Decimal to float for calculations
+            net_pos = float(summary["net_position"]) if summary["net_position"] is not None else 0
+            unallocated = float(summary["total_unallocated"]) if summary["total_unallocated"] is not None else 0
+
+            # Only count as outstanding if customer actually owes money (positive net position)
+            if net_pos > 0:
+                total_outstanding += net_pos
+
+            # Track total unallocated payments
+            total_unallocated += unallocated
+
+            # If customer has advance (negative net position), count it
+            if net_pos < 0:
+                total_advances += abs(net_pos)
+
+        return {
+            "invoices": invoices,
+            "total_outstanding": total_outstanding,  # True outstanding (customers who owe)
+            "total_advances": total_unallocated,     # Total unallocated payments
+            "net_position": total_advances - total_outstanding,  # Net position
+            "count": len(invoices),
+            "customer_summaries": customer_summaries
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting outstanding invoices: {str(e)}")
+        # Return empty result instead of error to allow payment flow to continue
+        return {
+            "invoices": [],
+            "total_outstanding": 0,
+            "total_advances": 0,
+            "net_position": 0,
+            "count": 0
+        }
+
+@router.get("/{sale_id}")
+async def get_sale_detail(
+    sale_id: str,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Get detailed sale information including items
+    """
+    try:
+        # Get invoice (treating invoice_id as sale_id for direct sales)
+        sale = db.execute(
+            text("""
+                SELECT i.invoice_id as sale_id, i.invoice_number, i.invoice_date as sale_date,
+                       i.customer_id as party_id, i.customer_name as party_name,
+                       i.customer_gstin as party_gst, i.billing_address as party_address,
+                       i.final_amount, i.subtotal_amount, i.discount_amount,
+                       i.cgst_amount, i.sgst_amount, i.igst_amount,
+                       i.gst_type, i.payment_method, i.payment_status as sale_status,
+                       i.notes, i.created_at
+                FROM sales.invoices i
+                WHERE i.invoice_id = :sale_id
+            """),
+            {"sale_id": sale_id}
+        ).first()
+        
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+            
+        # Get items
+        items = db.execute(
+            text("""
+                SELECT ii.*, p.product_name, p.hsn_code
+                FROM sales.invoice_items ii
+                LEFT JOIN inventory.products p ON ii.product_id = p.product_id
+                WHERE ii.invoice_id = :sale_id
+            """),
+            {"sale_id": sale_id}
+        ).fetchall()
+        
+        result = dict(sale._mapping)
+        result["items"] = [dict(item._mapping) for item in items]
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching sale detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/calculate")
+async def calculate_sale_totals(
+    sale_data: SaleCreate,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Calculate sale totals without creating the sale
+    Used for preview and validation
+    """
+    try:
+        # Get seller GSTIN
+        if not sale_data.seller_gstin:
+            org = db.execute(
+                text("SELECT gst_number FROM master.organizations WHERE org_id = :org_id"),
+                {"org_id": org_id}
+            ).first()
+            seller_gstin = org.gst_number if org else None
+        else:
+            seller_gstin = sale_data.seller_gstin
+            
+        # Determine GST type
+        gst_type = GSTService.determine_gst_type(
+            seller_gstin=seller_gstin,
+            buyer_gstin=sale_data.party_gst,
+            buyer_state_code=sale_data.party_state_code
+        )
+        
+        # Calculate invoice with GST
+        invoice_calc = GSTService.calculate_invoice_gst(
+            invoice_data={
+                "items": [item.dict() for item in sale_data.items],
+                "discount_amount": sale_data.discount_amount,
+                "other_charges": sale_data.other_charges
+            },
+            seller_gstin=seller_gstin,
+            buyer_gstin=sale_data.party_gst
+        )
+        
+        return {
+            "subtotal": invoice_calc["subtotal"],
+            "total_discount": invoice_calc["total_discount"],
+            "taxable_amount": invoice_calc["subtotal"] - invoice_calc["total_discount"],
+            "cgst_amount": invoice_calc["cgst_amount"],
+            "sgst_amount": invoice_calc["sgst_amount"],
+            "igst_amount": invoice_calc["igst_amount"],
+            "total_tax": invoice_calc["total_tax"],
+            "grand_total": invoice_calc["grand_total"],
+            "gst_type": gst_type.value,
+            "items": invoice_calc["items"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating sale: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/invoice/{invoice_number}")
+async def get_sale_by_invoice(
+    invoice_number: str,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Get sale by invoice number
+    """
+    try:
+        sale = db.execute(
+            text("""
+                SELECT s.*, p.party_name, p.gst_number as party_gst
+                FROM sales s
+                LEFT JOIN parties p ON s.party_id = p.party_id
+                WHERE s.invoice_number = :invoice_number
+            """),
+            {"invoice_number": invoice_number}
+        ).first()
+        
+        if not sale:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+            
+        return dict(sale._mapping)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching invoice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{sale_id}/print")
+async def get_sale_print_data(
+    sale_id: str,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_string)
+):
+    """
+    Get sale data formatted for printing
+    """
+    try:
+        # Get organization details
+        org = db.execute(
+            text("SELECT * FROM master.organizations WHERE org_id = :org_id"),
+            {"org_id": org_id}
+        ).first()
+        
+        # Get sale with all details
+        sale_data = await get_sale_detail(sale_id, db)
+        
+        # Format for printing
+        print_data = {
+            "organization": dict(org._mapping) if org else {},  # Empty if no org data
+            "invoice": sale_data,
+            "print_date": datetime.now().isoformat()
+        }
+        
+        return print_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting print data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

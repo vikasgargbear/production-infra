@@ -1,252 +1,220 @@
 """
 FastAPI Main Application
+Reorganized with domain-based folder structure
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import os
 
-# Import routers
-from .api.routes import (
-    customers, products, sales, inventory, 
-    payments, dashboard, billing, api_wrapper
-)
+# =============================================================================
+# DOMAIN-BASED IMPORTS - Organized by module
+# =============================================================================
 
-# Import additional routers that are actually available
-from .api.routes import (
-    customers_router, orders_router, inventory_router, billing_router, 
-    payments_router, invoices_router, order_items_router,
-    suppliers_router, purchases_router,  # Removed delivery_challan_router
-    dashboard_router, stock_adjustments_router, tax_entries_router,
-    purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
-    purchase_returns_router, stock_movements_router, party_ledger_router,
-    credit_debit_notes_router, sales_router,
-    collection_center_router
-)
+# Auth Module
+from .api.routes.auth import enterprise as auth_enterprise
+from .api.routes.auth import oauth as auth_oauth
+from .api.routes.auth import users
+from .api.routes.auth import roles as role_management
 
-# Import bank accounts, employees, departments, and branches directly
-from .api.routes.bank_accounts import router as bank_accounts_router
-from .api.routes.employees import router as employees_router
-from .api.routes.departments import router as departments_router
-from .api.routes.branches import router as branches_router
+# Master Data Module
+from .api.routes.master import customers
+from .api.routes.master import suppliers
+from .api.routes.master import products
+from .api.routes.master import branches
+from .api.routes.master import departments
+from .api.routes.master import employees
+from .api.routes.master import bank_accounts
 
-# Import additional routers not in __init__.py
-from .api.routes import stock_receive, challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims
-from .api.routes.settings import router as settings_router  # New consolidated settings
-# Import enhanced purchase returns and supplier invoices
-from .api.routes import purchase_returns_enhanced, supplier_invoices
-# Import user management and role APIs
-from .api.routes import users, role_management
-# Import new APIs
-from .api.routes import schemes_discounts, loyalty_points, compliance, metadata
-# Import comprehensive enterprise API
-from .api.routes import enterprise_api_complete
-# Import GST API
-from .api.routes import gst
-# Import enterprise calculation service
+# Sales Module
+from .api.routes.sales import orders
+from .api.routes.sales import sales_orders
+from .api.routes.sales import invoices
+from .api.routes.sales import direct_sales as sales
+from .api.routes.sales import challan
+from .api.routes.sales import quick_sale
+from .api.routes.sales import returns as sale_returns
+
+# Purchase Module
+from .api.routes.purchase import orders as purchases
+from .api.routes.purchase import supplier_invoices
+from .api.routes.purchase import grn
+from .api.routes.purchase import returns as purchase_returns
+from .api.routes.purchase import upload as purchase_upload
+
+# Inventory Module
+from .api.routes.inventory import stock as inventory
+from .api.routes.inventory import adjustments as stock_adjustments
+from .api.routes.inventory import movements as stock_movements
+from .api.routes.inventory import receive as stock_receive
+from .api.routes.inventory import writeoff as stock_writeoff
+from .api.routes.inventory import dashboard as stock_dashboard
+
+# Finance Module
+from .api.routes.finance import payments
+from .api.routes.finance import allocation as payment_allocation
+from .api.routes.finance import ledger
+from .api.routes.finance import journal as journal_entries
+from .api.routes.finance import tax as tax_entries
+from .api.routes.finance import credit_notes as credit_debit_notes
+from .api.routes.finance import expenses as expense_claims
+
+# Compliance Module
+from .api.routes.compliance import gst
+from .api.routes.compliance import compliance
+
+# Analytics Module
+from .api.routes.analytics import dashboard
+from .api.routes.analytics import collection as collection_center
+from .api.routes.analytics import outstanding as customer_outstanding
+
+# Organization Module
+from .api.routes.org import company
+from .api.routes.org import initial_setup
+
+# Settings (already in folder)
+from .api.routes.settings import router as settings_router
+
+# Standalone utilities (remain at root level)
+from .api.routes import metadata
 from .api.routes import enterprise_calculations
-# Import simple company API (no database dependencies)
-from .api.routes import company_simple
-from .api.routes import company
-# Note: master_data.py archived - use /customers, /suppliers, /products APIs directly
-# All temporary endpoints removed - using main endpoints only
+from .api.routes import schemes_discounts
+from .api.routes import loyalty_points
+from .api.routes import conversions
+from .api.routes import api_wrapper
+from .api.routes import enterprise_api_complete
 
-# Lifecycle management
+# =============================================================================
+# APPLICATION SETUP
+# =============================================================================
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     print("🚀 Starting Pharma ERP Backend...")
     yield
-    # Shutdown
     print("👋 Shutting down...")
 
-# Create FastAPI app
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.2.2",  # Fixed auth schema column names
+    version="3.0.0",  # Major version bump for folder restructure
     lifespan=lifespan
 )
 
-# Configure CORS - MUST be first middleware
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now to avoid CORS issues
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers including Content-Type for multipart/form-data
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
 )
 
-# RLS handled by database dependency - no middleware needed
-
-# Disable automatic trailing slash redirects to avoid CORS preflight issues
-# This allows both /api/customers and /api/customers/ to work without redirects
 app.router.redirect_slashes = False
 
-# Handle OPTIONS requests for CORS preflight
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
-    """Handle CORS preflight requests"""
     return {"message": "OK", "status": "preflight_success"}
 
-# Health check endpoint
 @app.get("/")
 async def root():
     return {
         "message": "Pharma ERP API",
-        "version": "2.2.0",
+        "version": "3.0.0",
         "status": "healthy",
-        "deployment": "settings-api-added",
-        "endpoints": {
-            "health": "/health",
-            "docs": "/docs",
-            "api": "/api",
-            "purchases": "/api/purchases",
-            "purchase-upload": "/api/purchase-upload",
-            "bank-accounts": "/api/bank-accounts"
-        }
+        "structure": "domain-based-folders"
     }
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "pharma-erp-backend",
-        "version": "2.0.0"
-    }
+    return {"status": "healthy", "service": "pharma-erp-backend", "version": "3.0.0"}
 
+# =============================================================================
+# API ROUTER REGISTRATION
+# =============================================================================
 
-# Consolidated API prefix - no version numbers
-from fastapi import APIRouter
 api = APIRouter(prefix="/api")
 
-# Register routes
-# Enterprise authentication system (email/password + Google OAuth + offline support)
-from .api.routes import auth_enterprise, auth_oauth
+# --- Auth ---
 api.include_router(auth_enterprise.router, tags=["Authentication"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
-api.include_router(customers.router, prefix="/customers", tags=["Customers"])
-api.include_router(products.router, prefix="/products", tags=["Products"])
-api.include_router(sales.router, prefix="/sales", tags=["Sales"])
-api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
-api.include_router(payments.router, prefix="/payments", tags=["Payments"])
-api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-api.include_router(billing.router, prefix="/billing", tags=["Billing"])
-api.include_router(company.router, prefix="/company", tags=["Company"])
-api.include_router(settings_router, prefix="/settings", tags=["Settings"])
-api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
-api.include_router(employees_router, prefix="/employees", tags=["Employees"])
-api.include_router(departments_router, prefix="/departments", tags=["Departments"])
-api.include_router(branches_router, prefix="/branches", tags=["Branches"])
-# Register additional routes from __init__.py
-api.include_router(orders_router, tags=["Orders"])
-api.include_router(invoices_router, tags=["Invoices"])
-api.include_router(order_items_router, prefix="/order-items", tags=["Order Items"])
-# Users API (consolidated from org_users_secure)
 api.include_router(users.router, tags=["Users"])
-api.include_router(suppliers_router, prefix="/suppliers", tags=["Suppliers"])
-api.include_router(purchases_router, prefix="/purchases", tags=["Purchases"])
-api.include_router(dashboard_router, tags=["Dashboard API"])
-# Delivery Challan API (modernized)
-api.include_router(challan.router, prefix="/challan", tags=["Challan"])
-api.include_router(stock_adjustments_router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
-api.include_router(tax_entries_router, prefix="/tax-entries", tags=["Tax Entries"])
-api.include_router(purchase_upload_router, prefix="/purchase-upload", tags=["Purchase Upload"])
-api.include_router(purchase_enhanced_router, prefix="/purchase-enhanced", tags=["Purchase Enhanced"])
-api.include_router(sale_returns_api_router, prefix="/sale-returns", tags=["Sale Returns"])
-api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
-api.include_router(purchase_returns_enhanced.router, prefix="/purchase-returns-enhanced", tags=["Purchase Returns Enhanced"])
-api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
-api.include_router(stock_movements_router, prefix="/stock-movements", tags=["Stock Movements"])
-api.include_router(party_ledger_router, prefix="/party-ledger", tags=["Party Ledger"])
-api.include_router(credit_debit_notes_router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
-api.include_router(collection_center_router, prefix="/collection-center", tags=["Collection Center"])
-api.include_router(stock_receive.router, prefix="/stock", tags=["Stock Receive"])
-api.include_router(stock_dashboard.router, prefix="/stock-dashboard", tags=["Stock Dashboard"])
-api.include_router(sales_orders.router, tags=["Sales Orders"])
-api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
-api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
-api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
-api.include_router(gst.router, prefix="/gst", tags=["GST"])
-
-# Initial setup route (doesn't require auth)
-from .api.routes import initial_setup
-api.include_router(initial_setup.router, prefix="/setup", tags=["Setup"])
-
-# Register new APIs
-# master_settings.router removed - consolidated into settings folder
-api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])
-api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
-api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
-api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
-# Note: master_data.py and master_data_crud.py archived - use /customers, /suppliers, /products APIs and /metadata for dropdowns
-
-# Register comprehensive enterprise API
-api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
-api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
-
-# Register simple company API
-api.include_router(company_simple.router, tags=["Company"])
-
-# Role management API
 api.include_router(role_management.router, tags=["Role Management"])
 
-# Enterprise tenant service handles security automatically
+# --- Master Data ---
+api.include_router(customers.router, prefix="/customers", tags=["Customers"])
+api.include_router(suppliers.router, prefix="/suppliers", tags=["Suppliers"])
+api.include_router(products.router, prefix="/products", tags=["Products"])
+api.include_router(branches.router, prefix="/branches", tags=["Branches"])
+api.include_router(departments.router, prefix="/departments", tags=["Departments"])
+api.include_router(employees.router, prefix="/employees", tags=["Employees"])
+api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
 
-# Temporary debug endpoint for party ledger - ARCHIVED during cleanup
-# from .api.routes import party_ledger_debug
-# api.include_router(party_ledger_debug.router, tags=["Debug"])
+# --- Sales ---
+api.include_router(orders.router, tags=["Orders"])
+api.include_router(sales_orders.router, tags=["Sales Orders"])
+api.include_router(invoices.router, tags=["Invoices"])
+api.include_router(sales.router, prefix="/sales", tags=["Sales"])
+api.include_router(challan.router, prefix="/challan", tags=["Challan"])
+api.include_router(quick_sale.router, tags=["Quick Sale"])
+api.include_router(sale_returns.router, prefix="/sale-returns", tags=["Sale Returns"])
 
-# Payment allocation and ledger
-from .api.routes import payment_allocation, ledger
+# --- Purchase ---
+api.include_router(purchases.router, prefix="/purchases", tags=["Purchases"])
+api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
+api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
+api.include_router(purchase_returns.router, prefix="/purchase-returns", tags=["Purchase Returns"])
+api.include_router(purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
+
+# --- Inventory ---
+api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
+api.include_router(stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
+api.include_router(stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
+api.include_router(stock_receive.router, prefix="/stock", tags=["Stock Receive"])
+api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
+api.include_router(stock_dashboard.router, prefix="/stock-dashboard", tags=["Stock Dashboard"])
+
+# --- Finance ---
+api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(payment_allocation.router, tags=["Payment Allocation"])
 api.include_router(ledger.router, tags=["Ledger"])
+api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
+api.include_router(tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
+api.include_router(credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
+api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
-# Customer Outstanding API with net position
-from .api.routes import customer_outstanding
+# --- Compliance ---
+api.include_router(gst.router, prefix="/gst", tags=["GST"])
+api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
+
+# --- Analytics ---
+api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+api.include_router(collection_center.router, prefix="/collection-center", tags=["Collection Center"])
 api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 
-# Document conversions (SO↔Invoice↔Challan)
-from .api.routes import conversions, stock_writeoff
+# --- Organization ---
+api.include_router(company.router, prefix="/company", tags=["Company"])
+api.include_router(initial_setup.router, prefix="/setup", tags=["Setup"])
+
+# --- Settings ---
+api.include_router(settings_router, prefix="/settings", tags=["Settings"])
+
+# --- Utilities ---
+api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
+api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])
+api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
 api.include_router(conversions.router, tags=["Document Conversions"])
-api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
-
-# All endpoints consolidated - no temporary workarounds
-
-# Include the PostgreSQL function wrappers
+api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
+api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
 api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
 
-# Include the consolidated API
-app.include_router(api)
-
-# Test routes removed - using main endpoints only
-
-# Migration routes removed after successful deployment
-
-# Debug endpoints moved to archive - uncomment if needed for debugging
-# from .api.routes import debug_invoice, database_fix, table_inspector, create_fixed_triggers
-# app.include_router(debug_invoice.router)
-# app.include_router(database_fix.router)
-# app.include_router(table_inspector.router)
-# app.include_router(create_fixed_triggers.router)
-
-# No v1 routes - everything is consolidated under /api/
-
-# PostgreSQL function wrapper endpoints
-# Since frontend expects REST but backend has PostgreSQL functions
-# We'll create wrapper endpoints
 @api.get("/test-connection")
 async def test_connection():
-    """Test if backend is properly connected"""
-    return {
-        "status": "connected",
-        "message": "Backend is running and accessible",
-        "timestamp": "2024-01-15T12:00:00Z"
-    }
+    return {"status": "connected", "message": "Backend is running"}
+
+app.include_router(api)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)# Force rebuild Tue Oct 21 10:57:46 IST 2025
-# Force redeploy Sun Nov 30 14:58:55 PST 2025
+    uvicorn.run(app, host="0.0.0.0", port=8000)
