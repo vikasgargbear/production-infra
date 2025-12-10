@@ -4,28 +4,30 @@ Uses existing sales and GST data for tax calculations and reporting
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import date, datetime
 from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["tax-entries"])
 
 @router.get("/")
-def get_tax_entries(
+@with_tenant_context
+async def get_tax_entries(
     skip: int = 0,
     limit: int = 100,
     entry_type: Optional[str] = Query(None, description="Filter by type: sales, purchase"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get tax entries from sales invoices and purchase records"""
     try:
@@ -51,7 +53,7 @@ def get_tax_entries(
             LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
         """
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if entry_type and entry_type == 'sales':
             # Already filtered to sales above
@@ -81,8 +83,10 @@ def get_tax_entries(
         raise HTTPException(status_code=500, detail=f"Failed to get tax entries: {str(e)}")
 
 @router.get("/{entry_id}")
-def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_tax_entry(entry_id: int, _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get a single tax entry by invoice ID"""
     try:
         result = db.execute(
@@ -108,7 +112,7 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
                 LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :entry_id AND i.org_id = :org_id
             """),
-            {"entry_id": entry_id, "org_id": org_id}
+            {"entry_id": entry_id, "org_id": str(context.org_id)}
         )
         entry = result.first()
         if not entry:
@@ -121,8 +125,10 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to get tax entry: {str(e)}")
 
 @router.post("/calculate")
-def calculate_tax(calculation_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def calculate_tax(calculation_data: dict, _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Calculate tax for given parameters"""
     try:
         taxable_amount = Decimal(str(calculation_data.get("taxable_amount", 0)))
@@ -157,11 +163,13 @@ def calculate_tax(calculation_data: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to calculate tax: {str(e)}")
 
 @router.get("/gstr1/summary")
-def get_gstr1_summary(
+@with_tenant_context
+async def get_gstr1_summary(
     month: int = Query(..., description="Month (1-12)"),
     year: int = Query(..., description="Year"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get GSTR-1 summary for the specified month using sales data"""
     try:
@@ -196,7 +204,7 @@ def get_gstr1_summary(
         b2b_result = db.execute(text(b2b_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         b2b_supplies = [dict(row._mapping) for row in b2b_result]
         
@@ -220,7 +228,7 @@ def get_gstr1_summary(
         b2c_result = db.execute(text(b2c_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         b2c_summary = dict(b2c_result.first()._mapping)
         
@@ -246,7 +254,7 @@ def get_gstr1_summary(
         hsn_result = db.execute(text(hsn_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         hsn_summary = [dict(row._mapping) for row in hsn_result]
         
@@ -264,11 +272,13 @@ def get_gstr1_summary(
         raise HTTPException(status_code=500, detail=f"Failed to generate GSTR-1 summary: {str(e)}")
 
 @router.get("/analytics/summary")
-def get_tax_analytics(
+@with_tenant_context
+async def get_tax_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get tax analytics and summary from sales data"""
     try:
@@ -287,7 +297,7 @@ def get_tax_analytics(
             FROM sales.invoices i
             WHERE i.org_id = :org_id
         """
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if start_date:
             query += " AND i.invoice_date >= :start_date"
@@ -312,6 +322,7 @@ def get_tax_analytics(
         raise HTTPException(status_code=500, detail=f"Failed to get tax analytics: {str(e)}")
 
 @router.get("/overview")
+@with_tenant_context
 async def tax_overview():
     """Get tax service overview"""
     return {

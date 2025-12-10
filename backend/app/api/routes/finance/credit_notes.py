@@ -4,21 +4,23 @@ Handles financial adjustments independent of physical returns
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime
 from decimal import Decimal
 import uuid
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+from ....utils.branch_utils import get_default_branch_id  # RBAC
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["credit-debit-notes"])
 
 @router.get("/")
+@with_tenant_context
 async def get_notes(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -26,8 +28,9 @@ async def get_notes(
     party_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get list of credit/debit notes with optional filters
@@ -155,10 +158,12 @@ async def get_notes(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/credit-note")
+@with_tenant_context
 async def create_credit_note(
     note_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a credit note (reduce customer liability)
@@ -214,7 +219,7 @@ async def create_credit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -243,7 +248,7 @@ async def create_credit_note(
             """),
             {
                 "ledger_id": str(uuid.uuid4()),
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "party_id": note_data["party_id"],
                 "date": note_data["note_date"],
                 "note_id": note_id,
@@ -252,7 +257,7 @@ async def create_credit_note(
             }
         )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
@@ -270,10 +275,12 @@ async def create_credit_note(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/debit-note")
+@with_tenant_context
 async def create_debit_note(
     note_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a debit note (increase customer liability or reduce supplier liability)
@@ -323,7 +330,7 @@ async def create_debit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -364,7 +371,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "supplier_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -390,7 +397,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "party_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -400,7 +407,7 @@ async def create_debit_note(
                 }
             )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
@@ -418,10 +425,12 @@ async def create_debit_note(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{note_id}")
+@with_tenant_context
 async def get_note_detail(
     note_id: str,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get detailed information about a specific note
@@ -455,10 +464,12 @@ async def get_note_detail(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{note_id}/print")
+@with_tenant_context
 async def get_note_print_data(
     note_id: str,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get note data formatted for printing
@@ -491,11 +502,13 @@ async def get_note_print_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{note_id}")
+@with_tenant_context
 async def cancel_note(
     note_id: str,
     cancellation_reason: str,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Cancel a credit/debit note
@@ -546,7 +559,7 @@ async def cancel_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "party_id": note.party_id,
                     "note_id": note_id,
                     "amount": note.total_amount,
@@ -576,7 +589,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "party_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,
@@ -599,7 +612,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "supplier_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,
@@ -607,7 +620,7 @@ async def cancel_note(
                     }
                 )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
@@ -623,6 +636,7 @@ async def cancel_note(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/reasons/list")
+@with_tenant_context
 async def get_predefined_reasons():
     """
     Get predefined reasons for credit/debit notes
@@ -648,14 +662,16 @@ async def get_predefined_reasons():
     }
 
 @router.get("/linked-invoices/{party_id}")
+@with_tenant_context
 async def get_party_invoices_for_linking(
     party_id: str,
     invoice_type: str = Query("sales", description="sales/purchase"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     limit: int = Query(5, ge=1, le=50, description="Items per page"),
     search: str = Query("", description="Search invoice number"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get invoices for a party that can be linked to notes
@@ -790,10 +806,12 @@ async def get_party_invoices_for_linking(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/invoice-items/{invoice_id}")
+@with_tenant_context
 async def get_invoice_items_for_notes(
     invoice_id: str,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get invoice items for creating credit/debit notes
@@ -856,9 +874,9 @@ async def get_invoice_items_for_notes(
 # ============= NEW CREDIT/DEBIT NOTE ENDPOINTS =============
 # These endpoints work with the new sales.credit_notes and sales.debit_notes tables
 
-from app.utils.branch_utils import get_default_branch_id
 
 @router.get("/credit-note-reasons")
+@with_tenant_context
 async def get_credit_note_reasons():
     """Get available credit note reason codes"""
     return [
@@ -874,6 +892,7 @@ async def get_credit_note_reasons():
     ]
 
 @router.get("/debit-note-reasons")
+@with_tenant_context
 async def get_debit_note_reasons():
     """Get available debit note reason codes"""
     return [
@@ -889,10 +908,12 @@ async def get_debit_note_reasons():
     ]
 
 @router.post("/credit-notes")
-async def create_credit_note(
+@with_tenant_context
+async def create_sales_credit_note(
     data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new credit note"""
     try:
@@ -913,7 +934,7 @@ async def create_credit_note(
         mapped_reason_code = reason_code_mapping.get(frontend_reason, 'OTHER')
         
         # Get default branch
-        branch_id = get_default_branch_id(db, org_id)
+        branch_id = get_default_branch_id(db, str(context.org_id))
         
         # Generate credit note number
         result = db.execute(text("""
@@ -921,7 +942,7 @@ async def create_credit_note(
             FROM sales.credit_notes
             WHERE org_id = :org_id
             AND credit_note_number LIKE 'CN-%'
-        """), {"org_id": org_id}).first()
+        """), {"org_id": str(context.org_id)}).first()
         
         next_num = result.next_num if result else 1
         credit_note_number = f"CN-{next_num:06d}"
@@ -947,7 +968,7 @@ async def create_credit_note(
                 'draft', 1
             ) RETURNING credit_note_id
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "branch_id": branch_id,
             "credit_note_number": credit_note_number,
             "credit_note_date": data.get('credit_note_date', datetime.now().date()),
@@ -968,7 +989,7 @@ async def create_credit_note(
         })
         
         credit_note_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {"success": True, "credit_note_id": credit_note_id, "credit_note_number": credit_note_number}
         
@@ -978,10 +999,12 @@ async def create_credit_note(
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/debit-notes")
-async def create_debit_note(
+@with_tenant_context
+async def create_sales_debit_note(
     data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new debit note"""
     try:
@@ -1002,7 +1025,7 @@ async def create_debit_note(
         mapped_reason_code = reason_code_mapping.get(frontend_reason, 'OTHER')
         
         # Get default branch
-        branch_id = get_default_branch_id(db, org_id)
+        branch_id = get_default_branch_id(db, str(context.org_id))
         
         # Generate debit note number
         result = db.execute(text("""
@@ -1010,7 +1033,7 @@ async def create_debit_note(
             FROM sales.debit_notes
             WHERE org_id = :org_id
             AND debit_note_number LIKE 'DN-%'
-        """), {"org_id": org_id}).first()
+        """), {"org_id": str(context.org_id)}).first()
         
         next_num = result.next_num if result else 1
         debit_note_number = f"DN-{next_num:06d}"
@@ -1036,7 +1059,7 @@ async def create_debit_note(
                 'draft', 1
             ) RETURNING debit_note_id
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "branch_id": branch_id,
             "debit_note_number": debit_note_number,
             "debit_note_date": data.get('debit_note_date', datetime.now().date()),
@@ -1057,7 +1080,7 @@ async def create_debit_note(
         })
         
         debit_note_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {"success": True, "debit_note_id": debit_note_id, "debit_note_number": debit_note_number}
         

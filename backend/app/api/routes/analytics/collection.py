@@ -4,15 +4,15 @@ Provides comprehensive receivables management and collection analytics
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text, func, case, and_, or_
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
 import logging
 from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
 
 router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)
@@ -22,9 +22,11 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 @router.get("/aging-data")
+@with_tenant_context
 async def get_aging_data(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get comprehensive aging data for smart dashboard
@@ -113,7 +115,7 @@ async def get_aging_data(
             LIMIT 50
         """)
         
-        result = db.execute(aging_query, {"org_id": org_id})
+        result = db.execute(aging_query, {"org_id": str(context.org_id)})
         customers_data = result.fetchall()
         
         # Calculate summary metrics
@@ -129,7 +131,7 @@ async def get_aging_data(
             WHERE org_id = :org_id 
                 AND payment_date >= CURRENT_DATE - INTERVAL '7 days'
         """)
-        collections_result = db.execute(collections_query, {"org_id": org_id}).fetchone()
+        collections_result = db.execute(collections_query, {"org_id": str(context.org_id)}).fetchone()
         
         # Calculate aging buckets summary
         aging_buckets = [
@@ -218,12 +220,14 @@ async def get_aging_data(
 
 
 @router.post("/send-whatsapp-reminder")
+@with_tenant_context
 async def send_whatsapp_reminder(
     customer_id: int,
     template_type: str,
     variables: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Send WhatsApp reminder to customer
@@ -268,12 +272,14 @@ async def send_whatsapp_reminder(
 
 
 @router.post("/send-sms-reminder")
+@with_tenant_context
 async def send_sms_reminder(
     customer_id: int,
     template_type: str,
     variables: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Send SMS reminder to customer
@@ -301,11 +307,13 @@ async def send_sms_reminder(
 # ============================================================================
 
 @router.get("/analytics/performance")
+@with_tenant_context
 async def get_collection_performance(
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get collection performance analytics
@@ -325,7 +333,7 @@ async def get_collection_performance(
         """)
         
         daily_result = db.execute(daily_collections_query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "start_date": start_date,
             "end_date": end_date
         })
@@ -355,11 +363,13 @@ async def get_collection_performance(
 
 
 @router.get("/analytics/agent-performance")
+@with_tenant_context
 async def get_agent_performance(
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get field agent performance metrics
@@ -368,7 +378,7 @@ async def get_agent_performance(
         # For now return mock data - implement when agent assignments are ready
         agents = [
             {
-                "id": 1,
+                "id": None,  # Generated dynamically
                 "name": "Rajesh Kumar",
                 "avatar": "/api/placeholder/40/40",
                 "region": "Mumbai North",
@@ -401,10 +411,12 @@ async def get_agent_performance(
 # ============================================================================
 
 @router.get("/customer/{customer_id}/outstanding")
+@with_tenant_context
 async def get_customer_outstanding(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get detailed outstanding for a specific customer
@@ -456,11 +468,13 @@ async def get_customer_outstanding(
 
 
 @router.post("/customer/{customer_id}/record-payment")
+@with_tenant_context
 async def record_customer_payment(
     customer_id: int,
     payment_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Record payment for customer
@@ -479,7 +493,7 @@ async def record_customer_payment(
         )
         
         db.add(payment)
-        db.commit()
+        # TenantAwareSession auto-commits
         db.refresh(payment)
         
         logger.info(f"Payment recorded: Customer {customer_id}, Amount {payment_data['amount']}")
@@ -501,9 +515,11 @@ async def record_customer_payment(
 # ============================================================================
 
 @router.get("/hub-stats")
+@with_tenant_context
 async def get_hub_statistics(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get comprehensive hub statistics for dashboard
@@ -520,7 +536,7 @@ async def get_hub_statistics(
             WHERE org_id = :org_id AND payment_date = CURRENT_DATE
         """)
         
-        today_result = db.execute(today_payments_query, {"org_id": org_id}).fetchone()
+        today_result = db.execute(today_payments_query, {"org_id": str(context.org_id)}).fetchone()
         
         # Get field agents count (FROM master.org_users table)
         agents_query = text("""
@@ -530,7 +546,7 @@ async def get_hub_statistics(
                 AND role ILIKE '%agent%' OR role ILIKE '%collection%'
         """)
         
-        agents_result = db.execute(agents_query, {"org_id": org_id}).fetchone()
+        agents_result = db.execute(agents_query, {"org_id": str(context.org_id)}).fetchone()
         
         return {
             "total_outstanding": aging_response["summary"]["totalOutstanding"],
@@ -550,10 +566,12 @@ async def get_hub_statistics(
 
 
 @router.get("/notifications")
+@with_tenant_context
 async def get_hub_notifications(
     limit: int = 10,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get real-time notifications for hub dashboard
@@ -613,9 +631,11 @@ async def get_hub_notifications(
 # ============================================================================
 
 @router.get("/campaigns")
+@with_tenant_context
 async def get_collection_campaigns(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get active collection campaigns
@@ -624,7 +644,7 @@ async def get_collection_campaigns(
         # Mock campaigns data for now - implement campaigns table later
         campaigns = [
             {
-                "id": 1,
+                "id": None,  # Generated dynamically
                 "name": "Overdue Reminder Campaign",
                 "description": "Automated reminders for overdue customers",
                 "status": "active",
@@ -659,10 +679,12 @@ async def get_collection_campaigns(
 
 
 @router.post("/campaigns")
+@with_tenant_context
 async def create_collection_campaign(
     campaign_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create new collection campaign

@@ -2,24 +2,32 @@
 Stock Adjustments API Router (Simplified)
 Uses existing inventory_movements table for adjustments
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import date, datetime
-from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string, get_user_context_secure  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
 from ....utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
 
+# Module-level constants
+ADJUSTMENT_TYPE_MAPPING = {
+    "damage": "stock_damage",
+    "expiry": "stock_expiry",
+    "count": "stock_count",
+    "other": "stock_adjustment"
+}
+
 router = APIRouter(tags=["stock-adjustments"])
 
 @router.get("/")
-def get_stock_adjustments(
+@with_tenant_context
+async def get_stock_adjustments(
     skip: int = 0,
     limit: int = 100,
     product_id: Optional[int] = Query(None, description="Filter by product"),
@@ -27,18 +35,13 @@ def get_stock_adjustments(
     adjustment_type: Optional[str] = Query(None, description="Filter by type: damage, expiry, count, other"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get stock adjustments from inventory movements"""
     try:
-        # Map adjustment types to movement types
-        type_mapping = {
-            "damage": "stock_damage",
-            "expiry": "stock_expiry", 
-            "count": "stock_count",
-            "other": "stock_adjustment"
-        }
+        # Use module-level type mapping
         
         # Query using actual database schema
         query = """
@@ -61,7 +64,7 @@ def get_stock_adjustments(
             WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
               AND org_id = :org_id
         """
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if product_id:
             query += " AND product_id = :product_id"
@@ -72,7 +75,7 @@ def get_stock_adjustments(
             params["batch_id"] = batch_id
             
         if adjustment_type:
-            movement_type = type_mapping.get(adjustment_type, 'stock_adjustment')
+            movement_type = ADJUSTMENT_TYPE_MAPPING.get(adjustment_type, 'stock_adjustment')
             query += " AND movement_type = :movement_type"
             params["movement_type"] = movement_type
             
@@ -97,9 +100,13 @@ def get_stock_adjustments(
         raise HTTPException(status_code=500, detail=f"Failed to get stock adjustments: {str(e)}")
 
 @router.post("/")
-def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_secure)):
+@with_tenant_context
+async def create_stock_adjustment(
+    adjustment_data: dict,
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
     """
     Create a stock adjustment using inventory movements
     """
@@ -111,9 +118,9 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                     COALESCE(b.cost_per_unit, 0) as unit_cost
                 FROM inventory.batches b
                 JOIN inventory.products p ON b.product_id = p.product_id
-                WHERE b.batch_id = :batch_id
+                WHERE b.batch_id = :batch_id AND b.org_id = :org_id
             """),
-            {"batch_id": adjustment_data.get("batch_id")}
+            {"batch_id": adjustment_data.get("batch_id"), "org_id": str(context.org_id)}
         ).first()
         
         if not batch:
@@ -128,14 +135,8 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 detail=f"Insufficient stock. Available: {batch.quantity_available}"
             )
         
-        # Map adjustment type to movement type
-        type_mapping = {
-            "damage": "stock_damage",
-            "expiry": "stock_expiry",
-            "count": "stock_count",
-            "other": "stock_adjustment"
-        }
-        movement_type = type_mapping.get(adjustment_data.get("adjustment_type"), "stock_adjustment")
+        # Use module-level type mapping
+        movement_type = ADJUSTMENT_TYPE_MAPPING.get(adjustment_data.get("adjustment_type"), "stock_adjustment")
         
         # Create inventory movement
         movement_id = db.execute(
@@ -155,7 +156,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 ) RETURNING movement_id
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "movement_date": adjustment_data.get("adjustment_date", datetime.utcnow()),
                 "movement_type": movement_type,
                 "movement_direction": "in" if quantity_adjusted > 0 else "out",
@@ -164,10 +165,10 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 "quantity": abs(quantity_adjusted),
                 "unit_cost": float(batch.unit_cost) if batch.unit_cost else 0,
                 "total_cost": abs(quantity_adjusted) * float(batch.unit_cost) if batch.unit_cost else 0,
-                "location_id": adjustment_data.get("location_id") or get_default_branch_id(db, org_id),
+                "location_id": adjustment_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                 "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
                 "reason": adjustment_data.get("reason"),
-                "created_by": user_context.get("user_id", 1)
+                "created_by": context.user_id
             }
         ).scalar()
         
@@ -185,7 +186,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
             }
         )
         
-        db.commit()
+        # TenantAwareSession auto-commits on success
         
         return {
             "movement_id": movement_id,
@@ -204,9 +205,13 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=f"Failed to create stock adjustment: {str(e)}")
 
 @router.post("/physical-count")
-def process_physical_count(count_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_secure)):
+@with_tenant_context
+async def process_physical_count(
+    count_data: dict,
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
     """
     Process physical inventory count
     Creates stock adjustments for differences
@@ -220,11 +225,12 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
             
             # Get current quantity
             batch = db.execute(
-                text("SELECT * FROM inventory.batches WHERE batch_id = :batch_id"),
-                {"batch_id": batch_id}
+                text("SELECT * FROM inventory.batches WHERE batch_id = :batch_id AND org_id = :org_id"),
+                {"batch_id": batch_id, "org_id": str(context.org_id)}
             ).first()
             
             if not batch:
+                logger.warning(f"Batch {batch_id} not found during physical count")
                 continue
                 
             system_quantity = batch.quantity_available
@@ -248,16 +254,16 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
                         ) RETURNING movement_id
                     """),
                     {
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "movement_date": count_data.get("count_date", datetime.utcnow()),
                         "movement_direction": "in" if difference > 0 else "out",
                         "product_id": batch.product_id,
                         "batch_id": batch_id,
                         "quantity": abs(difference),
-                        "location_id": 1,  # Default location
+                        "location_id": context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                         "reference_number": count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
                         "reason": f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
-                        "created_by": user_context.get("user_id", 1)
+                        "created_by": context.user_id
                     }
                 ).scalar()
                 
@@ -282,7 +288,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
                     "difference": difference
                 })
         
-        db.commit()
+        # TenantAwareSession auto-commits on success
         
         return {
             "message": "Physical count processed successfully",
@@ -296,9 +302,12 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to process physical count: {str(e)}")
 
 @router.post("/expire-batches")
-def expire_batches(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_secure)):
+@with_tenant_context
+async def expire_batches(
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
     """
     Mark expired batches and create stock adjustments
     """
@@ -312,7 +321,9 @@ def expire_batches(db: Session = Depends(get_db),
                 WHERE b.expiry_date <= CURRENT_DATE
                 AND b.quantity_available > 0
                 AND b.batch_status != 'expired'
-            """)
+                AND b.org_id = :org_id
+            """),
+            {"org_id": str(context.org_id)}
         ).fetchall()
         
         adjustments_created = []
@@ -335,14 +346,14 @@ def expire_batches(db: Session = Depends(get_db),
                     ) RETURNING movement_id
                 """),
                 {
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "product_id": batch.product_id,
                     "batch_id": batch.batch_id,
                     "quantity": batch.quantity_available,
-                    "location_id": 1,  # Default location
+                    "location_id": context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                     "reference_number": f"EXP-{batch.batch_number}",
                     "reason": f"Batch expired on {batch.expiry_date}",
-                    "created_by": 1  # Default user
+                    "created_by": context.user_id
                 }
             ).scalar()
             
@@ -366,7 +377,7 @@ def expire_batches(db: Session = Depends(get_db),
                 "expiry_date": str(batch.expiry_date)
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits on success
         
         return {
             "message": "Expired batches processed",
@@ -380,11 +391,13 @@ def expire_batches(db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to process expired batches: {str(e)}")
 
 @router.get("/analytics/summary")
-def get_adjustment_analytics(
+@with_tenant_context
+async def get_adjustment_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get stock adjustment analytics"""
     try:
@@ -400,8 +413,9 @@ def get_adjustment_analytics(
                 COUNT(CASE WHEN movement_type = 'stock_count' THEN 1 END) as count_adjustments
             FROM inventory.inventory_movements
             WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
+              AND org_id = :org_id
         """
-        params = {}
+        params = {"org_id": str(context.org_id)}
         
         if start_date:
             query += " AND movement_date >= :start_date"

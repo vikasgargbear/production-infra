@@ -8,23 +8,23 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
-from ....dependencies import get_current_org
-
-# Default org ID for now
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
+from ....utils.branch_utils import get_default_branch_id
 
 router = APIRouter(
     tags=["stock"]
 )
 
 @router.get("/")
-async def stock_overview(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def stock_overview(_: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get stock overview and available operations"""
     try:
         # Simple stock stats
@@ -84,16 +84,16 @@ class StockReceiveResponse(BaseModel):
     message: str
 
 @router.post("/receive", response_model=StockReceiveResponse)
+@with_tenant_context
 async def receive_stock(
     stock_data: StockReceiveRequest,
-    db: Session = Depends(get_db),
-    current_org = Depends(get_current_org)
-,
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Receive stock for a product by creating a new batch
     """
-    org_id = current_org["org_id"]
     
     try:
         # Get product details
@@ -103,7 +103,7 @@ async def receive_stock(
             WHERE product_id = :product_id AND org_id = :org_id
         """), {
             "product_id": stock_data.product_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if not product:
@@ -124,7 +124,7 @@ async def receive_stock(
             WHERE batch_number = :batch_number AND org_id = :org_id
         """), {
             "batch_number": batch_number,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if existing:
@@ -162,7 +162,7 @@ async def receive_stock(
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING batch_id
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "product_id": stock_data.product_id,
             "batch_number": batch_number,
             "expiry_date": expiry_date,
@@ -183,7 +183,7 @@ async def receive_stock(
         })
         
         batch_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return StockReceiveResponse(
             batch_id=batch_id,
@@ -206,16 +206,17 @@ async def receive_stock(
         )
 
 @router.get("/check/{product_id}")
+@with_tenant_context
 async def check_stock(
     product_id: int,
-    db: Session = Depends(get_db),
-    current_org = Depends(get_current_org)
-,
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Check available stock for a product
     """
-    org_id = current_org["org_id"]
+    # org_id now from context
     
     # Get product details
     product = db.execute(text("""
@@ -224,7 +225,7 @@ async def check_stock(
         WHERE product_id = :product_id AND org_id = :org_id
     """), {
         "product_id": product_id,
-        "org_id": org_id
+        "org_id": str(context.org_id)
     }).first()
     
     if not product:
@@ -248,7 +249,7 @@ async def check_stock(
         ORDER BY expiry_date ASC
     """), {
         "product_id": product_id,
-        "org_id": org_id
+        "org_id": str(context.org_id)
     }).fetchall()
     
     # Calculate total
@@ -271,6 +272,7 @@ async def check_stock(
     }
 
 @router.get("/current")
+@with_tenant_context
 async def get_current_stock(
     include_batches: bool = False,
     include_valuation: bool = False,
@@ -278,8 +280,9 @@ async def get_current_stock(
     low_stock_only: bool = False,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get current stock levels for all products
@@ -339,7 +342,7 @@ async def get_current_stock(
             WHERE p.org_id = :org_id
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if category:
             query += " AND (p.category_id = :category OR bs.category_name = :category)"
@@ -377,7 +380,7 @@ async def get_current_stock(
                     ORDER BY expiry_date ASC
                 """), {
                     "product_id": product_data["id"],
-                    "org_id": org_id
+                    "org_id": str(context.org_id)
                 })
                 
                 batches = []
@@ -405,6 +408,7 @@ async def get_current_stock(
         )
 
 @router.patch("/products/{product_id}")
+@with_tenant_context
 async def update_product_properties(
     product_id: int,
     category: Optional[str] = None,
@@ -415,8 +419,9 @@ async def update_product_properties(
     sub_unit_quantity: Optional[int] = None,
     purchase_unit: Optional[str] = None,
     sale_unit: Optional[str] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Update product properties for stock management
@@ -425,7 +430,7 @@ async def update_product_properties(
     try:
         # Build update query dynamically
         update_fields = []
-        params = {"product_id": product_id, "org_id": org_id}
+        params = {"product_id": product_id, "org_id": str(context.org_id)}
         
         # Note: category, pack_type, pack_size are now stored in batches table
         # These updates will be handled by the batch update endpoint
@@ -463,7 +468,7 @@ async def update_product_properties(
         if not updated_product:
             raise HTTPException(status_code=404, detail="Product not found")
             
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return dict(updated_product._mapping)
         
@@ -477,10 +482,12 @@ async def update_product_properties(
         )
 
 @router.get("/alerts")
+@with_tenant_context
 async def get_stock_alerts(
     alert_type: Optional[str] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get stock alerts for low stock, expiring items, etc.
@@ -549,7 +556,7 @@ async def get_stock_alerts(
         
         # Execute queries
         if not alert_type or alert_type in ['low_stock', 'all']:
-            result = db.execute(text(low_stock_query), {"org_id": org_id})
+            result = db.execute(text(low_stock_query), {"org_id": str(context.org_id)})
             for row in result:
                 alert_data = dict(row._mapping)
                 alerts["low_stock"].append(alert_data)
@@ -557,7 +564,7 @@ async def get_stock_alerts(
                     alerts["out_of_stock"].append(alert_data)
                     
         if not alert_type or alert_type in ['expiring', 'all']:
-            result = db.execute(text(expiry_query), {"org_id": org_id})
+            result = db.execute(text(expiry_query), {"org_id": str(context.org_id)})
             for row in result:
                 alerts["expiring"].append(dict(row._mapping))
         
@@ -577,14 +584,16 @@ async def get_stock_alerts(
         )
 
 @router.get("/batches")
+@with_tenant_context
 async def get_batches(
     product_id: Optional[int] = None,
     include_movements: bool = False,
     include_product_details: bool = True,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get batches with optional filters
@@ -632,7 +641,7 @@ async def get_batches(
             WHERE b.org_id = :org_id
             """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if product_id:
             query += " AND b.product_id = :product_id"
@@ -675,189 +684,3 @@ async def get_batches(
             detail=f"Failed to get batches: {str(e)}"
         )
 
-@router.post("/adjustments")
-async def create_stock_adjustment(
-    adjustment_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
-):
-    """
-    Create stock adjustment for damage, loss, or corrections
-    """
-    
-    try:
-        # Validate adjustment data
-        adjustment_type = adjustment_data.get("adjustment_type")
-        reason = adjustment_data.get("reason")
-        notes = adjustment_data.get("notes", "")
-        adjustment_date = adjustment_data.get("adjustment_date", datetime.now().isoformat())
-        items = adjustment_data.get("items", [])
-        
-        if not adjustment_type or not reason or not items:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing required fields: adjustment_type, reason, or items"
-            )
-        
-        # Process each item
-        results = []
-        for item in items:
-            product_id = item.get("product_id")
-            quantity = item.get("quantity", 0)
-            batch_number = item.get("batch_number")
-            
-            if not product_id or quantity == 0:
-                continue
-                
-            # Get product info
-            product = db.execute(text("""
-                SELECT product_id, product_name, product_code
-                FROM inventory.products
-                WHERE product_id = :product_id AND org_id = :org_id
-            """), {
-                "product_id": product_id,
-                "org_id": org_id
-            }).first()
-            
-            if not product:
-                continue
-            
-            # Create stock movement record
-            movement_type = "adjustment_in" if adjustment_type == "increase" else "adjustment_out"
-            
-            # If specific batch is mentioned, update that batch
-            if batch_number:
-                batch = db.execute(text("""
-                    SELECT batch_id, quantity_available
-                    FROM inventory.batches
-                    WHERE batch_number = :batch_number 
-                    AND product_id = :product_id
-                    AND org_id = :org_id
-                """), {
-                    "batch_number": batch_number,
-                    "product_id": product_id,
-                    "org_id": org_id
-                }).first()
-                
-                if batch:
-                    new_quantity = batch.quantity_available + quantity
-                    if new_quantity < 0:
-                        new_quantity = 0
-                        
-                    db.execute(text("""
-                        UPDATE inventory.batches
-                        SET quantity_available = :new_quantity,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE batch_id = :batch_id
-                    """), {
-                        "new_quantity": new_quantity,
-                        "batch_id": batch.batch_id
-                    })
-            else:
-                # Adjust the oldest batch first
-                if adjustment_type == "decrease":
-                    # For decrease, deduct from available batches FIFO
-                    remaining_qty = abs(quantity)
-                    batches = db.execute(text("""
-                        SELECT batch_id, quantity_available
-                        FROM inventory.batches
-                        WHERE product_id = :product_id 
-                        AND org_id = :org_id
-                        AND quantity_available > 0
-                        ORDER BY expiry_date ASC
-                    """), {
-                        "product_id": product_id,
-                        "org_id": org_id
-                    }).fetchall()
-                    
-                    for batch in batches:
-                        if remaining_qty <= 0:
-                            break
-                            
-                        deduct_qty = min(batch.quantity_available, remaining_qty)
-                        new_qty = batch.quantity_available - deduct_qty
-                        
-                        db.execute(text("""
-                            UPDATE inventory.batches
-                            SET quantity_available = :new_qty,
-                                updated_at = CURRENT_TIMESTAMP
-                            WHERE batch_id = :batch_id
-                        """), {
-                            "new_qty": new_qty,
-                            "batch_id": batch.batch_id
-                        })
-                        
-                        remaining_qty -= deduct_qty
-                else:
-                    # For increase, add to the latest batch or create new
-                    latest_batch = db.execute(text("""
-                        SELECT batch_id, batch_number
-                        FROM inventory.batches
-                        WHERE product_id = :product_id 
-                        AND org_id = :org_id
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """), {
-                        "product_id": product_id,
-                        "org_id": org_id
-                    }).first()
-                    
-                    if latest_batch:
-                        db.execute(text("""
-                            UPDATE inventory.batches
-                            SET quantity_available = quantity_available + :quantity,
-                                initial_quantity = initial_quantity + :quantity,
-                                updated_at = CURRENT_TIMESTAMP
-                            WHERE batch_id = :batch_id
-                        """), {
-                            "quantity": quantity,
-                            "batch_id": latest_batch.batch_id
-                        })
-                    else:
-                        # Create new batch
-                        batch_number = f"ADJ-{datetime.now().strftime('%Y%m%d')}-{product_id}"
-                        db.execute(text("""
-                            INSERT INTO inventory.batches (
-                                org_id, product_id, batch_number,
-                                expiry_date, initial_quantity, quantity_available,
-                                batch_status, mrp_per_unit, source_type, created_at, updated_at
-                            ) VALUES (
-                                :org_id, :product_id, :batch_number,
-                                :expiry_date, :quantity, :quantity,
-                                'active', 0, 'adjustment', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                            )
-                        """), {
-                            "org_id": org_id,
-                            "product_id": product_id,
-                            "batch_number": batch_number,
-                            "expiry_date": (datetime.now() + timedelta(days=730)).date(),
-                            "quantity": quantity
-                        })
-            
-            results.append({
-                "product_id": product_id,
-                "product_name": product.product_name,
-                "quantity_adjusted": quantity,
-                "reason": reason,
-                "status": "completed"
-            })
-        
-        db.commit()
-        
-        return {
-            "adjustment_type": adjustment_type,
-            "reason": reason,
-            "items_adjusted": len(results),
-            "adjustment_date": adjustment_date,
-            "details": results
-        }
-        
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create adjustment: {str(e)}"
-        )

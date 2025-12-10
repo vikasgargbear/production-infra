@@ -4,22 +4,24 @@ Shows true outstanding considering advance payments
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/customer-outstanding", tags=["customer-outstanding"])
 
 @router.get("/net-position")
+@with_tenant_context
 async def get_customer_net_position(
     customer_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get customer net position including advances
@@ -77,7 +79,7 @@ async def get_customer_net_position(
                     WHERE c.customer_id = :customer_id
                     AND c.org_id = :org_id
                 """),
-                {"customer_id": customer_id, "org_id": org_id}
+                {"customer_id": customer_id, "org_id": str(context.org_id)}
             ).fetchone()
 
             if result:
@@ -144,7 +146,7 @@ async def get_customer_net_position(
                     AND (i.outstanding_amount > 0 OR p.advance_amount > 0)
                     ORDER BY ABS(COALESCE(p.advance_amount, 0) - COALESCE(i.outstanding_amount, 0)) DESC
                 """),
-                {"org_id": org_id}
+                {"org_id": str(context.org_id)}
             ).fetchall()
 
             customers = []
@@ -187,9 +189,11 @@ async def get_customer_net_position(
 
 
 @router.get("/collection-metrics")
+@with_tenant_context
 async def get_collection_metrics(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get real-time collection metrics for dashboard
@@ -249,7 +253,7 @@ async def get_collection_metrics(
                 AND payment_status = 'completed'
                 AND party_type = 'customer'
             """),
-            {"org_id": org_id, "today": today}
+            {"org_id": str(context.org_id), "today": today}
         ).fetchone()
 
         # 2. Calculate MTD (Month-to-Date) Collections
@@ -263,7 +267,7 @@ async def get_collection_metrics(
                 AND payment_status = 'completed'
                 AND party_type = 'customer'
             """),
-            {"org_id": org_id, "month_start": month_start, "today": today}
+            {"org_id": str(context.org_id), "month_start": month_start, "today": today}
         ).fetchone()
 
         # 3. Calculate Pipeline Value (promised/scheduled payments)
@@ -279,7 +283,7 @@ async def get_collection_metrics(
                     AND promise_date >= :today
                     AND promise_status IN ('pending', 'confirmed')
                 """),
-                {"org_id": org_id, "today": today}
+                {"org_id": str(context.org_id), "today": today}
             ).fetchone()
         except Exception as e:
             logger.debug(f"payment_promises table might not exist: {e}")
@@ -297,7 +301,7 @@ async def get_collection_metrics(
                     AND i.payment_status IN ('pending', 'partial')
                     AND i.due_date BETWEEN :today AND :future_date
                 """),
-                {"org_id": org_id, "today": today, "future_date": today + timedelta(days=7)}
+                {"org_id": str(context.org_id), "today": today, "future_date": today + timedelta(days=7)}
             ).fetchone()
 
         # 4. Calculate Risk Exposure (high-risk accounts)
@@ -322,7 +326,7 @@ async def get_collection_metrics(
                 WHERE max_overdue_days > 90
                 OR outstanding_amount > 100000
             """),
-            {"org_id": org_id}
+            {"org_id": str(context.org_id)}
         ).fetchone()
 
         # 5. Calculate DSO (Days Sales Outstanding) and Collection Efficiency
@@ -359,7 +363,7 @@ async def get_collection_metrics(
                     END as collection_efficiency
                 FROM sales_data sd, collection_data cd
             """),
-            {"org_id": org_id, "thirty_days_ago": thirty_days_ago}
+            {"org_id": str(context.org_id), "thirty_days_ago": thirty_days_ago}
         ).fetchone()
 
         # 6. Calculate collection trend (compare with previous period)
@@ -374,7 +378,7 @@ async def get_collection_metrics(
                 AND party_type = 'customer'
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "prev_start": thirty_days_ago - timedelta(days=30),
                 "prev_end": thirty_days_ago
             }
@@ -399,7 +403,7 @@ async def get_collection_metrics(
                 WHERE org_id = :org_id
                 AND payment_status IN ('pending', 'partial')
             """),
-            {"org_id": org_id}
+            {"org_id": str(context.org_id)}
         ).fetchone()
 
         return {

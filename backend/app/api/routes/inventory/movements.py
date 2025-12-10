@@ -2,24 +2,26 @@
 Stock Movement API Router
 Handles manual stock receive/issue operations not related to sales or purchases
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime
-from decimal import Decimal
 import uuid
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker  # RBAC
+from ....utils.branch_utils import get_default_branch_id
+from ....utils.feature_flags import check_negative_stock_allowed
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["stock-movements"])
 
 @router.get("/")
-def get_inventory_movements(
+@with_tenant_context
+async def get_inventory_movements(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     movement_type: Optional[str] = Query(None, description="Movement type filter"),
@@ -30,8 +32,9 @@ def get_inventory_movements(
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     sort: Optional[str] = Query("movement_date", description="Sort field"),
     order: Optional[str] = Query("desc", description="Sort order (asc/desc)"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get inventory movements with direct database query
@@ -73,7 +76,7 @@ def get_inventory_movements(
         """
 
         # Add filters
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
 
         if movement_type:
             query += " AND im.movement_type = :movement_type"
@@ -122,7 +125,7 @@ def get_inventory_movements(
         """
 
         # Add same filters for count
-        count_params = {"org_id": org_id}
+        count_params = {"org_id": str(context.org_id)}
 
         if movement_type:
             count_query += " AND im.movement_type = :movement_type"
@@ -225,19 +228,17 @@ def get_movement_reasons():
     }
 
 @router.post("/receive")
-def create_stock_receive(
+@with_tenant_context
+async def create_stock_receive(
     receive_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a stock receive entry (increase inventory)
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
         
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
@@ -251,10 +252,10 @@ def create_stock_receive(
         movement_id = str(uuid.uuid4())
         movement_number = f"SR-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        # Get product details
+        # Get product details - with org_id security filter
         product = db.execute(
-            text("SELECT * FROM inventory.products WHERE product_id = :product_id"),
-            {"product_id": receive_data["product_id"]}
+            text("SELECT * FROM inventory.products WHERE product_id = :product_id AND org_id = :org_id"),
+            {"product_id": receive_data["product_id"], "org_id": str(context.org_id)}
         ).first()
         
         if not product:
@@ -274,9 +275,9 @@ def create_stock_receive(
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "product_id": receive_data["product_id"],
-                "location_id": receive_data.get("location_id", 1),
+                "location_id": receive_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                 "batch_id": receive_data.get("batch_id")
             }
         ).first()
@@ -311,8 +312,8 @@ def create_stock_receive(
                     )
                 """),
                 {
-                    "org_id": org_id,
-                    "location_id": receive_data.get("location_id", 1),
+                    "org_id": str(context.org_id),
+                    "location_id": receive_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                     "product_id": receive_data["product_id"],
                     "batch_id": receive_data.get("batch_id"),
                     "quantity": receive_data["quantity"],
@@ -322,7 +323,7 @@ def create_stock_receive(
             
         # No need for separate ledger entry as inventory_movements serves as the ledger
         
-        db.commit()
+        # TenantAwareSession auto-commits on success
         
         return {
             "status": "success",
@@ -340,19 +341,17 @@ def create_stock_receive(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/issue")
-def create_stock_issue(
+@with_tenant_context
+async def create_stock_issue(
     issue_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a stock issue entry (decrease inventory)
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
         
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
@@ -377,16 +376,13 @@ def create_stock_issue(
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "product_id": issue_data["product_id"],
-                "location_id": issue_data.get("location_id", 1),
+                "location_id": issue_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
                 "batch_id": batch_id
             }
         ).first()
         
-        # Import feature flags utility
-        from ....utils.feature_flags import check_negative_stock_allowed
-
         if not stock:
             raise HTTPException(
                 status_code=400,
@@ -394,7 +390,7 @@ def create_stock_issue(
             )
 
         # Check if negative stock is allowed from master settings
-        allow_negative = check_negative_stock_allowed(db, str(org_id))
+        allow_negative = check_negative_stock_allowed(db, str(context.org_id))
 
         if not allow_negative and stock.quantity_available < issue_data["quantity"]:
             raise HTTPException(
@@ -428,7 +424,7 @@ def create_stock_issue(
         
         # No need for separate ledger entry as inventory_movements serves as the ledger
         
-        db.commit()
+        # TenantAwareSession auto-commits on success
         
         return {
             "status": "success",
@@ -446,19 +442,17 @@ def create_stock_issue(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/transfer")
-def create_stock_transfer(
+@with_tenant_context
+async def create_stock_transfer(
     transfer_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Transfer stock between locations/warehouses
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
         
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", 
@@ -511,10 +505,12 @@ def create_stock_transfer(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/product/{product_id}/batches")
-def get_product_batches(
+@with_tenant_context
+async def get_product_batches(
     product_id: str,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get available batches for a product with stock info
@@ -538,7 +534,7 @@ def get_product_batches(
         batches = db.execute(
             text(query),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "product_id": product_id
             }
         ).fetchall()
@@ -553,10 +549,12 @@ def get_product_batches(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/near-expiry")
-def get_near_expiry_stock(
+@with_tenant_context
+async def get_near_expiry_stock(
     days: int = Query(90, description="Days to expiry"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get products nearing expiry
@@ -580,7 +578,7 @@ def get_near_expiry_stock(
         items = db.execute(
             text(query),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "days": days
             }
         ).fetchall()
@@ -596,9 +594,11 @@ def get_near_expiry_stock(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/low-stock")
-def get_low_stock_items(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_low_stock_items(
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get products with low stock based on reorder level
@@ -625,7 +625,7 @@ def get_low_stock_items(
         
         items = db.execute(
             text(query),
-            {"org_id": org_id}
+            {"org_id": str(context.org_id)}
         ).fetchall()
         
         return {
