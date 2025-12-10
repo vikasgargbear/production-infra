@@ -14,7 +14,6 @@ import uuid
 
 from ....core.database import get_db
 from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
-from ....core.auth import get_current_org
 
 router = APIRouter(
     prefix="/quick-sale",
@@ -55,8 +54,6 @@ class QuickSaleResponse(BaseModel):
 async def create_quick_sale(
     sale: QuickSaleRequest,
     db: Session = Depends(get_db),
-    current_org = Depends(get_current_org)
-,
     org_id: str = Depends(get_org_id_string)
 ):
     """
@@ -72,8 +69,6 @@ async def create_quick_sale(
     
     All in one atomic transaction!
     """
-    org_id = current_org["org_id"]
-    
     try:
         # Start transaction
         print(f"🚀 Quick sale for customer {sale.customer_id}")
