@@ -3,15 +3,16 @@ Employee Management API
 CRUD operations for master.employees table
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 import logging
 import json
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,13 +21,14 @@ router = APIRouter()
 # ============== EMPLOYEE ENDPOINTS ==============
 
 @router.get("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def list_employees(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """List all employees with pagination and search"""
     try:
@@ -74,7 +76,7 @@ async def list_employees(
         search_pattern = f"%{search}%" if search else None
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active,
@@ -100,7 +102,7 @@ async def list_employees(
         """)
         
         count_result = db.execute(count_query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active
@@ -121,10 +123,11 @@ async def list_employees(
 
 
 @router.get("/{employee_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def get_employee(
     employee_id: int, 
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get employee by ID"""
     try:
@@ -141,7 +144,7 @@ async def get_employee(
         
         result = db.execute(query, {
             "employee_id": employee_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         employee = result.first()
         
@@ -161,10 +164,11 @@ async def get_employee(
 
 
 @router.post("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def create_employee(
     employee_data: Dict[str, Any], 
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new employee"""
     try:
@@ -175,7 +179,7 @@ async def create_employee(
             count_query = text("""
                 SELECT COUNT(*) FROM master.employees WHERE org_id = :org_id
             """)
-            count_result = db.execute(count_query, {"org_id": org_id})
+            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
             count = count_result.scalar() + 1
             employee_code = f"EMP{count:04d}"
         
@@ -221,7 +225,7 @@ async def create_employee(
             }
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "employee_code": employee_code,
             "first_name": first_name,
             "last_name": last_name,
@@ -242,7 +246,7 @@ async def create_employee(
             "employment_status": 'active' if employee_data.get("is_active", True) else 'inactive'
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         row = result.first()
         
         return {
@@ -262,11 +266,12 @@ async def create_employee(
 
 
 @router.put("/{employee_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def update_employee(
     employee_id: int,
     employee_data: Dict[str, Any], 
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update employee"""
     try:
@@ -274,7 +279,7 @@ async def update_employee(
         update_fields = []
         params = {
             "employee_id": employee_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }
         
         # Handle name update
@@ -367,7 +372,7 @@ async def update_employee(
         """)
         
         result = db.execute(query, params)
-        db.commit()
+        # TenantAwareSession auto-commits
         
         updated = result.first()
         if not updated:
@@ -391,10 +396,11 @@ async def update_employee(
 
 
 @router.delete("/{employee_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def delete_employee(
     employee_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete (soft delete) employee"""
     try:
@@ -408,9 +414,9 @@ async def delete_employee(
         
         result = db.execute(query, {
             "employee_id": employee_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
-        db.commit()
+        # TenantAwareSession auto-commits
         
         deleted = result.first()
         if not deleted:

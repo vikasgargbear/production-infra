@@ -3,26 +3,28 @@ Departments API
 CRUD operations for master.departments table
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 import logging
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def list_departments(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """List all departments"""
     try:
@@ -51,7 +53,7 @@ async def list_departments(
         search_pattern = f"%{search}%" if search else None
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active,
@@ -74,7 +76,7 @@ async def list_departments(
         """)
         
         count_result = db.execute(count_query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active
@@ -95,10 +97,11 @@ async def list_departments(
 
 
 @router.get("/{department_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def get_department(
     department_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get department by ID"""
     try:
@@ -109,7 +112,7 @@ async def get_department(
         
         result = db.execute(query, {
             "department_id": department_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         department = result.first()
         
@@ -129,10 +132,11 @@ async def get_department(
 
 
 @router.post("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def create_department(
     department_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new department"""
     try:
@@ -142,7 +146,7 @@ async def create_department(
             count_query = text("""
                 SELECT COUNT(*) FROM master.departments WHERE org_id = :org_id
             """)
-            count_result = db.execute(count_query, {"org_id": org_id})
+            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
             count = count_result.scalar() + 1
             department_code = f"DEPT{count:03d}"
         
@@ -157,7 +161,7 @@ async def create_department(
         """)
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "department_code": department_code,
             "department_name": department_data.get("department_name"),
             "department_type": department_data.get("department_type"),
@@ -167,7 +171,7 @@ async def create_department(
             "is_active": department_data.get("is_active", True)
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         row = result.first()
         
         return {
@@ -187,18 +191,19 @@ async def create_department(
 
 
 @router.put("/{department_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def update_department(
     department_id: int,
     department_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update department"""
     try:
         update_fields = []
         params = {
             "department_id": department_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }
         
         field_mapping = {
@@ -227,7 +232,7 @@ async def update_department(
         """)
         
         result = db.execute(query, params)
-        db.commit()
+        # TenantAwareSession auto-commits
         
         updated = result.first()
         if not updated:
@@ -251,10 +256,11 @@ async def update_department(
 
 
 @router.delete("/{department_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def delete_department(
     department_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete (soft delete) department"""
     try:
@@ -267,9 +273,9 @@ async def delete_department(
         
         result = db.execute(query, {
             "department_id": department_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
-        db.commit()
+        # TenantAwareSession auto-commits
         
         deleted = result.first()
         if not deleted:

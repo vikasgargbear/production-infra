@@ -3,27 +3,29 @@ Branches API
 CRUD operations for master.org_branches table
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 import logging
 import json
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def list_branches(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """List all branches"""
     try:
@@ -56,7 +58,7 @@ async def list_branches(
         search_pattern = f"%{search}%" if search else None
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active,
@@ -79,7 +81,7 @@ async def list_branches(
         """)
         
         count_result = db.execute(count_query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "search": search,
             "search_pattern": search_pattern,
             "is_active": is_active
@@ -100,10 +102,11 @@ async def list_branches(
 
 
 @router.get("/{branch_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def get_branch(
     branch_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get branch by ID"""
     try:
@@ -114,7 +117,7 @@ async def get_branch(
         
         result = db.execute(query, {
             "branch_id": branch_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
         branch = result.first()
         
@@ -134,10 +137,11 @@ async def get_branch(
 
 
 @router.post("/", response_model=Dict[str, Any])
+@with_tenant_context
 async def create_branch(
     branch_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new branch"""
     try:
@@ -147,7 +151,7 @@ async def create_branch(
             count_query = text("""
                 SELECT COUNT(*) FROM master.org_branches WHERE org_id = :org_id
             """)
-            count_result = db.execute(count_query, {"org_id": org_id})
+            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
             count = count_result.scalar() + 1
             branch_code = f"BR{count:03d}"
         
@@ -179,7 +183,7 @@ async def create_branch(
         """)
         
         result = db.execute(query, {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "branch_code": branch_code,
             "branch_name": branch_data.get("branch_name"),
             "branch_type": branch_data.get("branch_type", "office"),
@@ -191,7 +195,7 @@ async def create_branch(
             "is_active": branch_data.get("is_active", True)
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         row = result.first()
         
         return {
@@ -211,18 +215,19 @@ async def create_branch(
 
 
 @router.put("/{branch_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def update_branch(
     branch_id: int,
     branch_data: Dict[str, Any],
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update branch"""
     try:
         update_fields = []
         params = {
             "branch_id": branch_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }
         
         # Handle address JSONB
@@ -271,7 +276,7 @@ async def update_branch(
         """)
         
         result = db.execute(query, params)
-        db.commit()
+        # TenantAwareSession auto-commits
         
         updated = result.first()
         if not updated:
@@ -295,10 +300,11 @@ async def update_branch(
 
 
 @router.delete("/{branch_id}", response_model=Dict[str, Any])
+@with_tenant_context
 async def delete_branch(
     branch_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete (soft delete) branch"""
     try:
@@ -311,9 +317,9 @@ async def delete_branch(
         
         result = db.execute(query, {
             "branch_id": branch_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         })
-        db.commit()
+        # TenantAwareSession auto-commits
         
         deleted = result.first()
         if not deleted:

@@ -4,12 +4,13 @@ Manages individual items within orders
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...core.database import get_db
-from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 from ...models import OrderItem
 from ...core.crud_base import create_crud
 
@@ -21,13 +22,14 @@ router = APIRouter(prefix="/order-items", tags=["order-items"])
 order_item_crud = create_crud(OrderItem)
 
 @router.get("/")
-def get_order_items(
+@with_tenant_context
+async def get_order_items(
     skip: int = 0,
     limit: int = 100,
     order_id: Optional[int] = Query(None, description="Filter by order ID"),
     product_id: Optional[int] = Query(None, description="Filter by product ID"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get order items with optional filtering"""
     try:
@@ -55,8 +57,9 @@ def get_order_items(
         raise HTTPException(status_code=500, detail=f"Failed to get order items: {str(e)}")
 
 @router.get("/{order_item_id}")
-def get_order_item(order_item_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_order_item(order_item_id: int, db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get a single order item by ID"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -70,13 +73,14 @@ def get_order_item(order_item_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to get order item: {str(e)}")
 
 @router.post("/")
-def create_order_item(order_item_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def create_order_item(order_item_data: dict, db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Create a new order item"""
     try:
         order_item = OrderItem(**order_item_data)
         db.add(order_item)
-        db.commit()
+        # TenantAwareSession auto-commits
         db.refresh(order_item)
         return order_item
     except Exception as e:
@@ -85,8 +89,9 @@ def create_order_item(order_item_data: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to create order item: {str(e)}")
 
 @router.put("/{order_item_id}")
-def update_order_item(order_item_id: int, order_item_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def update_order_item(order_item_id: int, order_item_data: dict, db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Update an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -96,7 +101,7 @@ def update_order_item(order_item_id: int, order_item_data: dict, db: Session = D
         for key, value in order_item_data.items():
             setattr(order_item, key, value)
         
-        db.commit()
+        # TenantAwareSession auto-commits
         db.refresh(order_item)
         return order_item
     except HTTPException:
@@ -107,8 +112,9 @@ def update_order_item(order_item_id: int, order_item_data: dict, db: Session = D
         raise HTTPException(status_code=500, detail=f"Failed to update order item: {str(e)}")
 
 @router.delete("/{order_item_id}")
-def delete_order_item(order_item_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def delete_order_item(order_item_id: int, db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Delete an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -116,7 +122,7 @@ def delete_order_item(order_item_id: int, db: Session = Depends(get_db),
             raise HTTPException(status_code=404, detail="Order item not found")
         
         db.delete(order_item)
-        db.commit()
+        # TenantAwareSession auto-commits
         return {"message": "Order item deleted successfully"}
     except HTTPException:
         raise

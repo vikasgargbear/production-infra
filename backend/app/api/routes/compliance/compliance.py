@@ -5,14 +5,15 @@ Manages drug licenses, regulatory compliance, and inspections
 from typing import Optional, List
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 import json
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,11 @@ class ComplianceDocument(BaseModel):
     tags: Optional[List[str]] = []
 
 @router.post("/drug-licenses", response_model=dict)
+@with_tenant_context
 async def create_drug_license(
     license: DrugLicenseCreate,
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create or update drug license information
@@ -85,7 +87,7 @@ async def create_drug_license(
             WHERE org_id = :org_id AND license_number = :license_number
         """
         existing = db.execute(text(check_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "license_number": license.license_number
         }).first()
         
@@ -143,7 +145,7 @@ async def create_drug_license(
             """
             
             result = db.execute(text(insert_query), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "license_type": license.license_type,
                 "license_number": license.license_number,
                 "license_category": json.dumps(license.license_category),
@@ -178,13 +180,13 @@ async def create_drug_license(
         """
         
         db.execute(text(alert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "alert_date": license.expiry_date - timedelta(days=30),
             "license_id": license_id,
             "message": f"Drug License {license.license_number} expiring on {license.expiry_date}"
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "license_id": license_id,
@@ -198,10 +200,11 @@ async def create_drug_license(
         raise HTTPException(status_code=500, detail=f"Failed to create drug license: {str(e)}")
 
 @router.get("/drug-licenses")
+@with_tenant_context
 async def get_drug_licenses(
     org_id: str = Depends(get_org_id_string),
     include_expired: bool = Query(False),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get all drug licenses for the organization"""
     try:
@@ -233,7 +236,7 @@ async def get_drug_licenses(
         
         query += " ORDER BY expiry_date"
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         licenses = []
         
         for row in result:
@@ -248,10 +251,11 @@ async def get_drug_licenses(
         raise HTTPException(status_code=500, detail="Failed to fetch drug licenses")
 
 @router.get("/drug-licenses/expiring")
+@with_tenant_context
 async def get_expiring_licenses(
     days_ahead: int = Query(90, description="Days to look ahead"),
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get licenses expiring within specified days"""
     try:
@@ -271,7 +275,7 @@ async def get_expiring_licenses(
         """
         
         result = db.execute(text(query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "days_ahead": days_ahead
         })
         
@@ -288,10 +292,11 @@ async def get_expiring_licenses(
         raise HTTPException(status_code=500, detail="Failed to fetch expiring licenses")
 
 @router.post("/audits", response_model=dict)
+@with_tenant_context
 async def record_compliance_audit(
     audit: ComplianceAudit,
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Record a compliance audit
@@ -315,7 +320,7 @@ async def record_compliance_audit(
         """
         
         result = db.execute(text(insert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "audit_type": audit.audit_type,
             "audit_date": audit.audit_date,
             "auditor_name": audit.auditor_name,
@@ -350,7 +355,7 @@ async def record_compliance_audit(
                     due_days = 7 if priority == "high" else 30
                     
                     db.execute(text(action_query), {
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "audit_id": audit_id,
                         "area": finding["area"],
                         "issue": finding.get("observations", ""),
@@ -373,13 +378,13 @@ async def record_compliance_audit(
             """
             
             db.execute(text(alert_query), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "alert_date": audit.next_audit_date - timedelta(days=7),
                 "audit_id": audit_id,
                 "message": f"{audit.audit_type.title()} audit scheduled for {audit.next_audit_date}"
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "audit_id": audit_id,
@@ -393,10 +398,11 @@ async def record_compliance_audit(
         raise HTTPException(status_code=500, detail=f"Failed to record audit: {str(e)}")
 
 @router.post("/inspector-visits", response_model=dict)
+@with_tenant_context
 async def record_inspector_visit(
     visit: InspectorVisit,
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Record drug inspector visit
@@ -421,7 +427,7 @@ async def record_inspector_visit(
         """
         
         result = db.execute(text(insert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "visit_date": visit.visit_date,
             "inspector_name": visit.inspector_name,
             "inspector_id": visit.inspector_id,
@@ -452,7 +458,7 @@ async def record_inspector_visit(
             """
             
             db.execute(text(action_query), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "visit_id": visit_id,
                 "area": violation.get("area", "general"),
                 "issue": violation.get("description", ""),
@@ -462,7 +468,7 @@ async def record_inspector_visit(
                 "created_by": 1
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "visit_id": visit_id,
@@ -477,9 +483,10 @@ async def record_inspector_visit(
         raise HTTPException(status_code=500, detail=f"Failed to record visit: {str(e)}")
 
 @router.get("/checklist")
+@with_tenant_context
 async def get_compliance_checklist(
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get compliance checklist and status
@@ -501,7 +508,7 @@ async def get_compliance_checklist(
             WHERE org_id = :org_id AND is_active = true
         """
         
-        license_result = db.execute(text(license_query), {"org_id": org_id})
+        license_result = db.execute(text(license_query), {"org_id": str(context.org_id)})
         license_data = dict(license_result.first()._mapping)
         
         checklist.append({
@@ -521,7 +528,7 @@ async def get_compliance_checklist(
             WHERE org_id = :org_id AND is_active = true
         """
         
-        pharmacist_result = db.execute(text(pharmacist_query), {"org_id": org_id})
+        pharmacist_result = db.execute(text(pharmacist_query), {"org_id": str(context.org_id)})
         pharmacist_data = dict(pharmacist_result.first()._mapping)
         
         checklist.append({
@@ -541,7 +548,7 @@ async def get_compliance_checklist(
             WHERE org_id = :org_id
         """
         
-        audit_result = db.execute(text(audit_query), {"org_id": org_id})
+        audit_result = db.execute(text(audit_query), {"org_id": str(context.org_id)})
         audit_data = dict(audit_result.first()._mapping)
         
         days_since_audit = (date.today() - audit_data["last_audit"]).days if audit_data["last_audit"] else 999
@@ -563,7 +570,7 @@ async def get_compliance_checklist(
             WHERE org_id = :org_id AND is_active = true
         """
         
-        temp_result = db.execute(text(temp_query), {"org_id": org_id})
+        temp_result = db.execute(text(temp_query), {"org_id": str(context.org_id)})
         temp_data = dict(temp_result.first()._mapping)
         
         checklist.append({
@@ -583,7 +590,7 @@ async def get_compliance_checklist(
             WHERE org_id = :org_id AND status = 'pending'
         """
         
-        actions_result = db.execute(text(actions_query), {"org_id": org_id})
+        actions_result = db.execute(text(actions_query), {"org_id": str(context.org_id)})
         actions_data = dict(actions_result.first()._mapping)
         
         checklist.append({
@@ -611,11 +618,12 @@ async def get_compliance_checklist(
         raise HTTPException(status_code=500, detail="Failed to fetch checklist")
 
 @router.get("/alerts")
+@with_tenant_context
 async def get_compliance_alerts(
     alert_type: Optional[str] = Query(None),
     include_resolved: bool = Query(False),
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get active compliance alerts"""
     try:
@@ -636,7 +644,7 @@ async def get_compliance_alerts(
             WHERE org_id = :org_id
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if not include_resolved:
             query += " AND is_resolved = false"
@@ -669,11 +677,12 @@ async def get_compliance_alerts(
         raise HTTPException(status_code=500, detail="Failed to fetch alerts")
 
 @router.post("/documents/upload")
+@with_tenant_context
 async def upload_compliance_document(
     document: ComplianceDocument,
     file_data: Optional[str] = None,  # Base64 encoded file
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Upload compliance-related documents"""
     try:
@@ -688,7 +697,7 @@ async def upload_compliance_document(
         """
         
         result = db.execute(text(insert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "document_type": document.document_type,
             "document_name": document.document_name,
             "file_data": file_data,
@@ -714,13 +723,13 @@ async def upload_compliance_document(
             """
             
             db.execute(text(alert_query), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "alert_date": alert_date,
                 "document_id": document_id,
                 "message": f"Document '{document.document_name}' expiring on {document.expiry_date}"
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "document_id": document_id,
@@ -733,12 +742,13 @@ async def upload_compliance_document(
         raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
 
 @router.get("/reports/regulatory")
+@with_tenant_context
 async def generate_regulatory_report(
     report_type: str = Query(..., description="Report type (monthly, quarterly, annual)"),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Generate regulatory compliance reports
@@ -789,7 +799,7 @@ async def generate_regulatory_report(
         """
         
         schedule_h_result = db.execute(text(schedule_h_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "from_date": from_date,
             "to_date": to_date
         })
@@ -814,7 +824,7 @@ async def generate_regulatory_report(
         """
         
         expired_result = db.execute(text(expired_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "from_date": from_date,
             "to_date": to_date
         })
@@ -836,7 +846,7 @@ async def generate_regulatory_report(
         """
         
         summary_result = db.execute(text(summary_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "from_date": from_date,
             "to_date": to_date
         })

@@ -5,13 +5,14 @@ Version: 1.0.0
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 import json
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,10 @@ def validate_ifsc(ifsc_code: str) -> bool:
 router = APIRouter(tags=["Bank Accounts"])
 
 @router.get("/")
-def get_bank_accounts(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_bank_accounts(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all bank accounts for an organization"""
     try:
@@ -52,7 +54,7 @@ def get_bank_accounts(
             ORDER BY is_default_account DESC, created_at DESC
         """
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         accounts = []
         
         for row in result:
@@ -82,10 +84,11 @@ def get_bank_accounts(
         raise HTTPException(status_code=500, detail=f"Failed to fetch bank accounts: {str(e)}")
 
 @router.post("/")
-def create_bank_account(
+@with_tenant_context
+async def create_bank_account(
     account_data: dict = Body(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new bank account"""
     try:
@@ -100,7 +103,7 @@ def create_bank_account(
                 UPDATE master.org_bank_accounts
                 SET is_default_account = false
                 WHERE org_id = :org_id
-            """), {"org_id": org_id})
+            """), {"org_id": str(context.org_id)})
         
         # Insert new account
         insert_query = """
@@ -117,7 +120,7 @@ def create_bank_account(
         """
         
         result = db.execute(text(insert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "account_name": account_data.get("account_name", ""),
             "account_number": account_data.get("account_number", ""),
             "account_type": account_data.get("account_type", "CURRENT"),
@@ -130,7 +133,7 @@ def create_bank_account(
             "is_payment_account": account_data.get("is_payment_account", True)
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         new_id = result.first().bank_account_id
         return {"id": new_id, "message": "Bank account created successfully"}
@@ -143,11 +146,12 @@ def create_bank_account(
         raise HTTPException(status_code=500, detail=f"Failed to create bank account: {str(e)}")
 
 @router.put("/{account_id}")
-def update_bank_account(
+@with_tenant_context
+async def update_bank_account(
     account_id: int,
     account_data: dict = Body(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update a bank account"""
     try:
@@ -164,11 +168,11 @@ def update_bank_account(
                 UPDATE master.org_bank_accounts
                 SET is_default_account = false
                 WHERE org_id = :org_id AND bank_account_id != :account_id
-            """), {"org_id": org_id, "account_id": account_id})
+            """), {"org_id": str(context.org_id), "account_id": account_id})
         
         # Build update query dynamically
         update_fields = []
-        params = {"org_id": org_id, "account_id": account_id}
+        params = {"org_id": str(context.org_id), "account_id": account_id}
         
         allowed_fields = [
             "account_name", "account_number", "account_type",
@@ -195,7 +199,7 @@ def update_bank_account(
             """
             
             db.execute(text(update_query), params)
-            db.commit()
+            # TenantAwareSession auto-commits
         
         return {"message": "Bank account updated successfully"}
         
@@ -207,10 +211,11 @@ def update_bank_account(
         raise HTTPException(status_code=500, detail=f"Failed to update bank account: {str(e)}")
 
 @router.delete("/{account_id}")
-def delete_bank_account(
+@with_tenant_context
+async def delete_bank_account(
     account_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete (soft delete) a bank account"""
     try:
@@ -223,7 +228,7 @@ def delete_bank_account(
             WHERE org_id = :org_id AND bank_account_id = :account_id
         """
         
-        result = db.execute(text(check_query), {"org_id": org_id, "account_id": account_id}).first()
+        result = db.execute(text(check_query), {"org_id": str(context.org_id), "account_id": account_id}).first()
         
         if not result:
             raise HTTPException(status_code=404, detail="Bank account not found")
@@ -241,8 +246,8 @@ def delete_bank_account(
             WHERE org_id = :org_id AND bank_account_id = :account_id
         """
         
-        db.execute(text(delete_query), {"org_id": org_id, "account_id": account_id})
-        db.commit()
+        db.execute(text(delete_query), {"org_id": str(context.org_id), "account_id": account_id})
+        # TenantAwareSession auto-commits
         
         return {"message": "Bank account deleted successfully"}
         
@@ -254,10 +259,11 @@ def delete_bank_account(
         raise HTTPException(status_code=500, detail=f"Failed to delete bank account: {str(e)}")
 
 @router.put("/{account_id}/set-default")
-def set_default_account(
+@with_tenant_context
+async def set_default_account(
     account_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Set a bank account as default"""
     try:
@@ -266,16 +272,16 @@ def set_default_account(
             UPDATE master.org_bank_accounts
             SET is_default_account = false
             WHERE org_id = :org_id
-        """), {"org_id": org_id})
+        """), {"org_id": str(context.org_id)})
         
         # Set this account as default
         db.execute(text("""
             UPDATE master.org_bank_accounts
             SET is_default_account = true, updated_at = CURRENT_TIMESTAMP
             WHERE org_id = :org_id AND bank_account_id = :account_id
-        """), {"org_id": org_id, "account_id": account_id})
+        """), {"org_id": str(context.org_id), "account_id": account_id})
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {"message": "Default account updated successfully"}
         

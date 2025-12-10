@@ -4,28 +4,30 @@ Handles supplier invoices and related operations
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime
 from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["supplier-invoices"])
 
 @router.get("/")
+@with_tenant_context
 async def get_supplier_invoices(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     supplier_id: Optional[int] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=5000),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get all supplier invoices with GST details for input credit calculation
@@ -59,7 +61,7 @@ async def get_supplier_invoices(
             AND si.itc_eligible = true
         """
 
-        params = {"org_id": org_id, "skip": skip, "limit": limit}
+        params = {"org_id": str(context.org_id), "skip": skip, "limit": limit}
 
         if from_date:
             query += " AND si.invoice_date >= :from_date"
@@ -95,14 +97,15 @@ async def get_supplier_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/returnable/")
+@with_tenant_context
 async def get_returnable_invoices(
     supplier_id: Optional[int] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get supplier invoices that have returnable items
@@ -175,10 +178,11 @@ async def get_returnable_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{invoice_id}")
+@with_tenant_context
 async def get_invoice_details(
     invoice_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get detailed information about a supplier invoice
@@ -211,10 +215,11 @@ async def get_invoice_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{invoice_id}/items")
+@with_tenant_context
 async def get_invoice_items(
     invoice_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get items for a supplier invoice

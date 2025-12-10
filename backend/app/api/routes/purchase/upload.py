@@ -4,7 +4,6 @@ Handles PDF/image upload, parsing, and purchase order creation
 """
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime
@@ -13,8 +12,10 @@ import tempfile
 import shutil
 from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 # Try to import bill_parser if available
 try:
@@ -98,7 +99,8 @@ def _check_supplier_in_result(extracted_data: dict, db: Session):
         logger.warning(f"Error checking supplier: {e}")
 
 @router.get("/version")
-def get_parser_version():
+@with_tenant_context
+async def get_parser_version():
     """Check if custom parser is available"""
     return {
         "status": "ok", 
@@ -108,11 +110,12 @@ def get_parser_version():
     }
 
 @router.get("/check-supplier")
+@with_tenant_context
 async def check_supplier(
     gstin: Optional[str] = None,
     name: Optional[str] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Check if supplier exists by GSTIN or name
@@ -176,10 +179,11 @@ async def check_supplier(
 
 @router.post("/parse-pdf")
 @router.post("/parse-invoice-safe")
+@with_tenant_context
 async def parse_purchase_invoice_safe(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Parse a purchase invoice PDF with better error handling
@@ -374,10 +378,11 @@ async def parse_purchase_invoice_safe(
         )
 
 @router.post("/parse-invoice")
+@with_tenant_context
 async def parse_purchase_invoice(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Upload and parse a purchase invoice (PDF/image)
@@ -517,10 +522,11 @@ async def parse_purchase_invoice(
         )
 
 @router.post("/create-from-parsed")
-def create_purchase_from_parsed(
+@with_tenant_context
+async def create_purchase_from_parsed(
     purchase_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create purchase order from parsed/verified invoice data
@@ -551,7 +557,7 @@ def create_purchase_from_parsed(
                     ) RETURNING supplier_id
                 """),
                 {
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "code": supplier_code,
                     "name": supplier_data.get("supplier_name"),
                     "gstin": supplier_data.get("supplier_gstin", supplier_data.get("gst_number")),
@@ -580,7 +586,7 @@ def create_purchase_from_parsed(
                 ) RETURNING purchase_id
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "purchase_number": purchase_number,
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": supplier_id,
@@ -616,7 +622,7 @@ def create_purchase_from_parsed(
                         ) RETURNING product_id
                     """),
                     {
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "code": product_code,
                         "name": item.get("description"),
                         "hsn": item.get("hsn_code"),
@@ -666,7 +672,7 @@ def create_purchase_from_parsed(
                 )
                 items_created += 1
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
@@ -688,11 +694,12 @@ def create_purchase_from_parsed(
         )
 
 @router.get("/parse-history")
-def get_parse_history(
+@with_tenant_context
+async def get_parse_history(
     skip: int = 0,
     limit: int = 10,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get history of parsed invoices (for future enhancement)
@@ -705,10 +712,11 @@ def get_parse_history(
     }
 
 @router.post("/validate-invoice")
-def validate_invoice_data(
+@with_tenant_context
+async def validate_invoice_data(
     invoice_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Validate parsed invoice data before creation

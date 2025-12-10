@@ -4,21 +4,23 @@ Provides stock management dashboard data and metrics
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime, date, timedelta
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/stock", tags=["stock-dashboard"])
 
 @router.get("/dashboard")
-def get_stock_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_stock_dashboard(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get stock dashboard metrics"""
     try:
         dashboard_data = {}
@@ -29,7 +31,7 @@ def get_stock_dashboard(db: Session = Depends(get_db),
             FROM inventory.products
             WHERE org_id = :org_id AND is_active = true
         """
-        result = db.execute(text(total_products_query), {"org_id": org_id})
+        result = db.execute(text(total_products_query), {"org_id": str(context.org_id)})
         dashboard_data["total_products"] = result.scalar() or 0
         
         # Get total batches
@@ -38,7 +40,7 @@ def get_stock_dashboard(db: Session = Depends(get_db),
             FROM inventory.batches
             WHERE org_id = :org_id
         """
-        result = db.execute(text(total_batches_query), {"org_id": org_id})
+        result = db.execute(text(total_batches_query), {"org_id": str(context.org_id)})
         dashboard_data["total_batches"] = result.scalar() or 0
         
         # Get recent movements count (last 7 days) - using sales data from movement_summary view
@@ -50,7 +52,7 @@ def get_stock_dashboard(db: Session = Depends(get_db),
         """
         week_ago = datetime.now() - timedelta(days=7)
         result = db.execute(text(recent_movements_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "week_ago": week_ago
         })
         dashboard_data["recent_movements"] = result.scalar() or 0
@@ -65,7 +67,7 @@ def get_stock_dashboard(db: Session = Depends(get_db),
                   AND cost_per_unit > 0
                   AND batch_status = 'active'
             """
-            result = db.execute(text(stock_value_query), {"org_id": org_id})
+            result = db.execute(text(stock_value_query), {"org_id": str(context.org_id)})
             dashboard_data["estimated_stock_value"] = float(result.scalar() or 0)
         except:
             dashboard_data["estimated_stock_value"] = 0
@@ -90,7 +92,7 @@ def get_stock_dashboard(db: Session = Depends(get_db),
                 WHERE min_stock_quantity > 0
                   AND total_stock <= min_stock_quantity
             """
-            result = db.execute(text(low_stock_query), {"org_id": org_id})
+            result = db.execute(text(low_stock_query), {"org_id": str(context.org_id)})
             dashboard_data["low_stock_alerts"] = result.scalar() or 0
         except:
             dashboard_data["low_stock_alerts"] = 0
@@ -106,14 +108,15 @@ def get_stock_dashboard(db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to get stock dashboard: {str(e)}")
 
 @router.get("/current")
-def get_current_stock(
+@with_tenant_context
+async def get_current_stock(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Search products"),
     category: Optional[str] = Query(None, description="Filter by category"),
     low_stock_only: bool = Query(False, description="Show only low stock items"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get current stock levels for all products"""
     try:
@@ -163,7 +166,7 @@ def get_current_stock(
             FROM product_stock 
             WHERE rn = 1
         """
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if search:
             query += " AND (LOWER(product_name) LIKE LOWER(:search) OR LOWER(generic_name) LIKE LOWER(:search))"
@@ -188,7 +191,7 @@ def get_current_stock(
             FROM inventory.products p
             WHERE p.org_id = :org_id AND p.is_active = true
         """
-        count_params = {"org_id": org_id}
+        count_params = {"org_id": str(context.org_id)}
         
         if search:
             count_query += " AND (LOWER(p.product_name) LIKE LOWER(:search) OR LOWER(p.generic_name) LIKE LOWER(:search))"
@@ -223,8 +226,9 @@ def get_current_stock(
         raise HTTPException(status_code=500, detail=f"Failed to get current stock: {str(e)}")
 
 @router.get("/alerts")
-def get_stock_alerts(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_stock_alerts(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get stock alerts for low stock and out of stock items"""
     try:
         query = """
@@ -267,7 +271,7 @@ def get_stock_alerts(db: Session = Depends(get_db),
                 product_name
         """
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         alerts = [dict(row._mapping) for row in result]
         
         # Categorize alerts
@@ -294,10 +298,11 @@ def get_stock_alerts(db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to get stock alerts: {str(e)}")
 
 @router.get("/recent-movements")
-def get_recent_movements(
+@with_tenant_context
+async def get_recent_movements(
     limit: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get recent stock movements"""
     try:
@@ -344,7 +349,7 @@ def get_recent_movements(
         """
         
         result = db.execute(text(query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "limit": limit
         })
         movements = [dict(row._mapping) for row in result]

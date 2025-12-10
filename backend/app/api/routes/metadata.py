@@ -3,21 +3,23 @@ Metadata API endpoints for fetching various options and configurations
 Provides dropdown data, categories, and other metadata for frontend
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Any
 import logging
 
-from ...core.database import get_db
-from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/categories")
+@with_tenant_context
 async def get_product_categories(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all product categories from database"""
     try:
@@ -41,8 +43,9 @@ async def get_product_categories(
         raise HTTPException(status_code=500, detail="Failed to fetch categories")
 
 @router.get("/pack-types")
-async def get_pack_types(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_pack_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all available pack types for products"""
     return {
         "pack_types": [
@@ -65,8 +68,9 @@ async def get_pack_types(db: Session = Depends(get_db),
     }
 
 @router.get("/payment-terms")
-async def get_payment_terms(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_payment_terms(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all available payment terms"""
     return {
         "payment_terms": [
@@ -90,8 +94,9 @@ async def get_payment_terms(db: Session = Depends(get_db),
     }
 
 @router.get("/payment-modes")
-async def get_payment_modes(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_payment_modes(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all available payment modes"""
     return {
         "payment_modes": [
@@ -110,8 +115,9 @@ async def get_payment_modes(db: Session = Depends(get_db),
     }
 
 @router.get("/document-statuses")
-async def get_document_statuses(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_document_statuses(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all document status options"""
     return {
         "invoice_statuses": ["draft", "pending", "paid", "partial", "overdue", "cancelled"],
@@ -123,8 +129,9 @@ async def get_document_statuses(db: Session = Depends(get_db),
     }
 
 @router.get("/units-of-measure")
-async def get_units_of_measure(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_units_of_measure(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all units of measure"""
     return {
         "units": [
@@ -147,8 +154,9 @@ async def get_units_of_measure(db: Session = Depends(get_db),
     }
 
 @router.get("/return-reasons")
-async def get_return_reasons(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_return_reasons(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all return reason options"""
     return {
         "sales_return_reasons": [
@@ -175,8 +183,9 @@ async def get_return_reasons(db: Session = Depends(get_db),
     }
 
 @router.get("/tax-types")
-async def get_tax_types(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_tax_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all tax type options"""
     return {
         "tax_types": [
@@ -193,8 +202,9 @@ async def get_tax_types(db: Session = Depends(get_db),
     }
 
 @router.get("/transport-modes")
-async def get_transport_modes(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_transport_modes(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all transport mode options"""
     return {
         "transport_modes": [
@@ -209,8 +219,9 @@ async def get_transport_modes(db: Session = Depends(get_db),
     }
 
 @router.get("/credit-plans")
-async def get_credit_plans(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_credit_plans(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get available credit plans from customer groups"""
     try:
         # Fetch from customer_groups table filtered by group_type
@@ -228,7 +239,7 @@ async def get_credit_plans(db: Session = Depends(get_db),
                     AND is_active = true
                 ORDER BY credit_limit_multiplier
             """),
-            {"org_id": org_id}
+            {"org_id": str(context.org_id)}
         )
         
         plans = []
@@ -262,8 +273,9 @@ async def get_credit_plans(db: Session = Depends(get_db),
         }
 
 @router.get("/credit-days")
-async def get_credit_days_options(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_credit_days_options(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get standard credit days options"""
     return {
         "credit_days": [
@@ -283,8 +295,9 @@ async def get_credit_days_options(db: Session = Depends(get_db),
     }
 
 @router.get("/credit-ratings")
-async def get_credit_ratings(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_credit_ratings(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get credit rating options from customer_groups table"""
     try:
         # Fetch from customer_groups table with group_type = 'CREDIT_RATING'
@@ -304,7 +317,7 @@ async def get_credit_ratings(db: Session = Depends(get_db),
                     AND is_active = true
                 ORDER BY group_code
             """),
-            {"org_id": org_id}
+            {"org_id": str(context.org_id)}
         )
         
         ratings = []
@@ -334,8 +347,9 @@ async def get_credit_ratings(db: Session = Depends(get_db),
     }
 
 @router.get("/all")
-async def get_all_metadata(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def get_all_metadata(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """Get all metadata in one call for caching - Enterprise approach"""
     try:
         # Fetch all metadata in one go for better performance

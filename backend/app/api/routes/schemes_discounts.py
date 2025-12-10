@@ -6,14 +6,15 @@ from typing import Optional, List
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 import json
 
-from ...core.database import get_db
-from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,11 @@ class DiscountCalculation(BaseModel):
     apply_best_scheme: bool = True
 
 @router.post("/", response_model=dict)
+@with_tenant_context
 async def create_scheme(
     scheme: SchemeCreate,
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a new promotional scheme
@@ -94,7 +96,7 @@ async def create_scheme(
         
         # Prepare scheme data
         scheme_data = {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "scheme_code": scheme_code,
             "scheme_name": scheme.scheme_name,
             "scheme_type": scheme.scheme_type,
@@ -174,7 +176,7 @@ async def create_scheme(
                     "customer_id": customer_id
                 })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "scheme_id": scheme_id,
@@ -188,11 +190,12 @@ async def create_scheme(
         raise HTTPException(status_code=500, detail=f"Failed to create scheme: {str(e)}")
 
 @router.get("/active")
+@with_tenant_context
 async def get_active_schemes(
     customer_id: Optional[int] = None,
     product_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get all active schemes
@@ -285,10 +288,11 @@ async def get_active_schemes(
         raise HTTPException(status_code=500, detail="Failed to fetch active schemes")
 
 @router.post("/calculate-discount")
+@with_tenant_context
 async def calculate_discount(
     calculation: DiscountCalculation,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Calculate applicable discounts for given products
@@ -431,10 +435,11 @@ async def calculate_discount(
         raise HTTPException(status_code=500, detail=f"Failed to calculate discount: {str(e)}")
 
 @router.post("/apply-to-invoice")
+@with_tenant_context
 async def apply_scheme_to_invoice(
     invoice_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Apply schemes to an invoice
@@ -513,7 +518,7 @@ async def apply_scheme_to_invoice(
                 "invoice_id": invoice_id
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "invoice_id": invoice_id,
@@ -530,10 +535,11 @@ async def apply_scheme_to_invoice(
         raise HTTPException(status_code=500, detail=f"Failed to apply schemes: {str(e)}")
 
 @router.get("/{scheme_id}")
+@with_tenant_context
 async def get_scheme_details(
     scheme_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get detailed information about a specific scheme"""
     try:
@@ -596,11 +602,12 @@ async def get_scheme_details(
         raise HTTPException(status_code=500, detail="Failed to fetch scheme details")
 
 @router.put("/{scheme_id}")
+@with_tenant_context
 async def update_scheme(
     scheme_id: int,
     update_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update scheme details"""
     try:
@@ -628,7 +635,7 @@ async def update_scheme(
             """
             
             db.execute(text(query), params)
-            db.commit()
+            # TenantAwareSession auto-commits
         
         return {"message": "Scheme updated successfully"}
         
@@ -638,10 +645,11 @@ async def update_scheme(
         raise HTTPException(status_code=500, detail=f"Failed to update scheme: {str(e)}")
 
 @router.delete("/{scheme_id}")
+@with_tenant_context
 async def deactivate_scheme(
     scheme_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Deactivate a scheme (soft delete)"""
     try:
@@ -656,7 +664,7 @@ async def deactivate_scheme(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Scheme not found")
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {"message": "Scheme deactivated successfully"}
         
@@ -668,12 +676,13 @@ async def deactivate_scheme(
         raise HTTPException(status_code=500, detail="Failed to deactivate scheme")
 
 @router.get("/usage/report")
+@with_tenant_context
 async def get_scheme_usage_report(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     scheme_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get scheme usage analytics and report

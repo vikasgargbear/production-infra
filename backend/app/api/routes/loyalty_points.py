@@ -6,13 +6,14 @@ from typing import Optional, List
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ...core.database import get_db
-from ...core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +55,11 @@ class PointsRedemption(BaseModel):
     points_to_redeem: int
 
 @router.post("/programs", response_model=dict)
+@with_tenant_context
 async def create_loyalty_program(
     program: LoyaltyProgramCreate,
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a new loyalty program
@@ -82,7 +84,7 @@ async def create_loyalty_program(
         """
         
         result = db.execute(text(insert_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "program_name": program.program_name,
             "description": program.description,
             "points_per_rupee": program.points_per_rupee,
@@ -97,7 +99,7 @@ async def create_loyalty_program(
         })
         
         program_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "program_id": program_id,
@@ -110,9 +112,10 @@ async def create_loyalty_program(
         raise HTTPException(status_code=500, detail=f"Failed to create loyalty program: {str(e)}")
 
 @router.get("/programs/active")
+@with_tenant_context
 async def get_active_program(
     org_id: str = Depends(get_org_id_string),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get the active loyalty program for the organization"""
     try:
@@ -123,7 +126,7 @@ async def get_active_program(
             LIMIT 1
         """
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         program = result.first()
         
         if not program:
@@ -148,11 +151,12 @@ async def get_active_program(
         raise HTTPException(status_code=500, detail="Failed to fetch active program")
 
 @router.post("/programs/{program_id}/tiers")
+@with_tenant_context
 async def add_program_tier(
     program_id: int,
     tier: CustomerTier,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Add a tier to a loyalty program"""
     try:
@@ -190,7 +194,7 @@ async def add_program_tier(
         })
         
         tier_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "tier_id": tier_id,
@@ -205,10 +209,11 @@ async def add_program_tier(
         raise HTTPException(status_code=500, detail=f"Failed to add tier: {str(e)}")
 
 @router.get("/customers/{customer_id}/points")
+@with_tenant_context
 async def get_customer_points(
     customer_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get customer's loyalty points summary
@@ -324,10 +329,11 @@ async def get_customer_points(
         raise HTTPException(status_code=500, detail="Failed to fetch customer points")
 
 @router.post("/earn")
+@with_tenant_context
 async def earn_points(
     transaction: PointsTransaction,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Record points earned by customer
@@ -381,7 +387,7 @@ async def earn_points(
         })
         
         transaction_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Get updated balance
         balance_query = """
@@ -412,10 +418,11 @@ async def earn_points(
         raise HTTPException(status_code=500, detail=f"Failed to record points: {str(e)}")
 
 @router.post("/redeem")
+@with_tenant_context
 async def redeem_points(
     redemption: PointsRedemption,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Redeem loyalty points for invoice discount
@@ -532,7 +539,7 @@ async def redeem_points(
             "invoice_id": redemption.invoice_id
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Get new balance
         new_balance = current_balance - actual_points_used
@@ -552,9 +559,10 @@ async def redeem_points(
         raise HTTPException(status_code=500, detail=f"Failed to redeem points: {str(e)}")
 
 @router.post("/points/expire")
+@with_tenant_context
 async def expire_points(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Process expired points
@@ -609,7 +617,7 @@ async def expire_points(
             
             total_expired += record.expired_amount
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "customers_affected": len(expired_records),
@@ -623,11 +631,12 @@ async def expire_points(
         raise HTTPException(status_code=500, detail=f"Failed to expire points: {str(e)}")
 
 @router.get("/analytics/summary")
+@with_tenant_context
 async def get_loyalty_analytics(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get loyalty program analytics
@@ -718,10 +727,11 @@ async def get_loyalty_analytics(
         raise HTTPException(status_code=500, detail="Failed to fetch analytics")
 
 @router.post("/campaigns/bonus")
+@with_tenant_context
 async def run_bonus_campaign(
     campaign_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Run a bonus points campaign
@@ -813,7 +823,7 @@ async def run_bonus_campaign(
             
             awarded_count += 1
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "campaign_name": campaign_data.get("campaign_name"),
