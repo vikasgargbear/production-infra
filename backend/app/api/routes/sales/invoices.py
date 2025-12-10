@@ -16,7 +16,7 @@ from ....core.org_context import get_org_context, OrgContext
 from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
 from ...services.document_number_service import DocumentNumberService
-from ...services.document_number_service_v2 import DocumentNumberServiceV2
+# Consolidated: using main DocumentNumberService
 from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
 from ....services.settings_service import SettingsService  # NEW: Settings enforcement
 
@@ -36,7 +36,7 @@ async def generate_invoice_number(
         # Get org_id from context
         org_id = str(context.org_id)
         # Use V2 service for atomic number generation
-        new_number = DocumentNumberServiceV2.generate_and_reserve_number(db, "invoice", org_id)
+        new_number = DocumentNumberService.generate_number(db.session, "invoice", org_id)
         return {"invoice_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate invoice number: {e}")
