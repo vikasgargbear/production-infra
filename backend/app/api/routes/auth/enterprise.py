@@ -285,7 +285,7 @@ async def check_user_exists(
     
     **Privacy Note**: Returns generic message to prevent email enumeration
     """
-    from ...repositories.user_repository import UserRepository
+    from ....repositories.user_repository import UserRepository
     
     user = UserRepository.find_by_email(email, db)
     

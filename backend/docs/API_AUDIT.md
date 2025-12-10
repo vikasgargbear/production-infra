@@ -24,6 +24,10 @@
 | `ledger.py` | 9 | ✅ **NEW** | Replaced party_ledger_v2.py, SQL injection fixed, enterprise features |
 | `conversions.py` | 5 | ✅ **NEW** | Unified document conversions (SO→Invoice, Challan→Invoice) |
 | `stock_writeoff.py` | 5 | ✅ **NEW** | Stock write-off with ITC reversal for GSTR-3B |
+| `sale_returns.py` | 9 | ✅ Complete | TenantAwareSession, RBAC, JWT context (user_id, branch_id) |
+| `purchase_returns_enhanced.py` | 2 | ✅ Complete | TenantAwareSession, RBAC, JWT context, smart tax fetch |
+| `gst.py` | 15 | ✅ Complete | TenantAwareSession, RBAC, JWT context |
+| `dashboard.py` | 17 | ✅ Complete | TenantAwareSession, RBAC, JWT context |
 
 ---
 
@@ -43,12 +47,7 @@
 
 | File | Priority | Notes |
 |------|----------|-------|
-| `auth_enterprise.py` | High | Core auth |
-| `sales_returns.py` | Medium | Returns - check for modern patterns |
-| `purchase_returns.py` | Medium | Returns - check for modern patterns |
-| `gst.py` | Medium | Tax compliance |
-| `dashboard.py` | Low | Analytics |
-| `reports.py` | Low | Reports |
+| `auth_enterprise.py` | High | Core auth (special - no RBAC typically) |
 
 ---
 

@@ -16,7 +16,7 @@ from datetime import timedelta
 from ....core.database import get_db
 from ....core.jwt_auth import create_access_token
 from ....core.supabase_auth import supabase_auth
-from ...repositories.user_repository import UserRepository
+from ....repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
