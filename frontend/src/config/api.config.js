@@ -66,14 +66,14 @@ export const API_CONFIG = {
       PRICE_HISTORY: (id) => `/products/${id}/price-history`
     },
 
-    // Sales Module
+    // Sales Module (uses /invoices endpoint)
     SALES: {
-      BASE: '/sales',
-      CREATE_INVOICE: '/sales/create-invoice',
-      CREATE_QUICK: '/sales/quick-sale',
-      GET_INVOICE: (id) => `/sales/invoice/${id}`,
-      PRINT_INVOICE: (id) => `/sales/invoice/${id}/print`,
-      CANCEL_INVOICE: (id) => `/sales/invoice/${id}/cancel`
+      BASE: '/invoices',
+      CREATE_INVOICE: '/invoices',
+      CREATE_QUICK: '/invoices',  // Deprecated - use /invoices
+      GET_INVOICE: (id) => `/invoices/${id}`,
+      PRINT_INVOICE: (id) => `/invoices/${id}/print`,
+      CANCEL_INVOICE: (id) => `/invoices/${id}/cancel`
     },
 
     INVOICES: {

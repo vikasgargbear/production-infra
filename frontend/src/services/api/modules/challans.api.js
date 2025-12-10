@@ -20,17 +20,17 @@ export const challansApi = {
   getAll: async (params = {}) => {
     return apiHelpers.get(CHALLAN_ENDPOINT, { params });
   },
-  
+
   // Search challans
   search: async (params = {}) => {
     return apiHelpers.get(CHALLAN_ENDPOINT, { params });
   },
-  
+
   // Get challan by ID
   getById: async (id) => {
     return apiHelpers.get(`${CHALLAN_ENDPOINT}${id}/`);
   },
-  
+
   // Create new challan
   create: async (data) => {
     // Direct challan creation - no order required
@@ -60,8 +60,8 @@ export const challansApi = {
         unit_price: parseFloat(item.unit_price || 0),
         // GST structure matching invoices - comes from product/batch selection
         gst_percent: parseFloat(item.gst_percent || item.tax_percent || 0),
-        cgst_percent: parseFloat(item.cgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
-        sgst_percent: parseFloat(item.sgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
+        cgst_percent: parseFloat(item.cgst_percent || (item.gst_percent ? item.gst_percent / 2 : 0) || 0),
+        sgst_percent: parseFloat(item.sgst_percent || (item.gst_percent ? item.gst_percent / 2 : 0) || 0),
         igst_percent: parseFloat(item.igst_percent || 0), // For inter-state
         uom: item.uom || item.unit || item.sale_unit || null, // Send UOM from product
         package_type: item.package_type || item.pack_type || null, // Send pack type from product
@@ -69,10 +69,10 @@ export const challansApi = {
         dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
       }))
     };
-    
+
     return apiHelpers.post(CHALLAN_ENDPOINT, challanData);
   },
-  
+
   // Create challan from order (legacy support)
   createFromOrder: async (orderId, data) => {
     const challanData = {
@@ -82,7 +82,7 @@ export const challansApi = {
       dispatch_date: data.dispatch_date || data.challan_date,
       expected_delivery_date: data.expected_delivery_date || data.challan_date,
       delivery_address: data.delivery_address || '',
-      delivery_city: data.delivery_city || '', 
+      delivery_city: data.delivery_city || '',
       delivery_state: data.delivery_state || '',
       delivery_pincode: data.delivery_pincode || '',
       transport_company: data.transport_company,
@@ -102,57 +102,35 @@ export const challansApi = {
         dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
       }))
     };
-    
+
     return apiHelpers.post(CHALLAN_ENDPOINT, challanData);
   },
-  
+
   // Update challan
   update: (id, data) => {
     const cleanedData = cleanData(data);
     return apiHelpers.put(`${CHALLAN_ENDPOINT}${id}/`, cleanedData);
   },
-  
+
   // Delete challan
   delete: (id) => {
     return apiHelpers.delete(`${CHALLAN_ENDPOINT}${id}/`);
   },
-  
-  // Convert challan to invoice (using existing endpoint that works)
+
+  // Convert challan to invoice (using proper conversions endpoint)
   convertToInvoice: async (challanIds, data = {}) => {
     const challanId = Array.isArray(challanIds) ? challanIds[0] : challanIds;
-    
+
     try {
-      // First get the challan data
-      const challanResponse = await apiHelpers.get(`${CHALLAN_ENDPOINT}${challanId}/`);
-      const challan = challanResponse.data;
-      
-      if (!challan) {
-        throw new Error(`Challan ${challanId} not found`);
-      }
-      
-      // Note: Allowing invoice creation for any challan status - user discretion
-      
-      // Prepare data for enterprise quick-sale endpoint
-      const invoiceData = {
-        customer_id: challan.customer_id,
-        items: (challan.items || []).map(item => ({
-          product_id: item.product_id,
-          quantity: item.dispatched_quantity || item.quantity,
-          unit_price: item.unit_price,
-          discount_percent: 0,
-          batch_id: item.batch_id
-        })),
+      // Use the proper conversions API endpoint
+      const response = await apiHelpers.post(`/conversions/challan-to-invoice/${challanId}`, {
+        target_date: data.invoice_date || new Date().toISOString().split('T')[0],
         payment_mode: data.payment_mode || 'credit',
-        payment_amount: data.payment_amount || 0,
         discount_amount: data.discount_amount || 0,
-        notes: data.notes || `Created from Delivery Challan #${challan.challan_number || challanId}`,
-        challan_id: challanId
-      };
-      
-      // Create invoice using enterprise quick-sale
-      const response = await apiHelpers.post('/enterprise-orders/quick-sale', invoiceData);
+        notes: data.notes || ''
+      });
       return response;
-      
+
     } catch (error) {
       throw error;
     }
@@ -162,7 +140,7 @@ export const challansApi = {
   convertToInvoiceLegacy: (id, data = {}) => {
     return apiHelpers.post(`${CHALLAN_ENDPOINT}${id}/convert-to-invoice/`, data);
   },
-  
+
   // Update delivery status
   updateDeliveryStatus: (id, status, data = {}) => {
     return apiHelpers.patch(`${CHALLAN_ENDPOINT}${id}/delivery-status/`, {
@@ -170,42 +148,42 @@ export const challansApi = {
       ...data
     });
   },
-  
+
   // Get challan PDF
   getPDF: (id) => {
     return apiHelpers.download(`${CHALLAN_ENDPOINT}${id}/pdf/`, `challan-${id}.pdf`);
   },
-  
+
   // Send challan via WhatsApp
   sendWhatsApp: (id, phoneNumber) => {
     return apiHelpers.post(`${CHALLAN_ENDPOINT}${id}/whatsapp/`, { phone_number: phoneNumber });
   },
-  
+
   // Draft management
   drafts: {
     // Save draft
     save: (data) => {
       return apiHelpers.post(`${CHALLAN_ENDPOINT}drafts/`, data);
     },
-    
+
     // Get draft
     get: (id) => {
       return apiHelpers.get(`${CHALLAN_ENDPOINT}drafts/${id}/`);
     },
-    
+
     // Delete draft
     delete: (id) => {
       return apiHelpers.delete(`${CHALLAN_ENDPOINT}drafts/${id}/`);
     },
   },
-  
+
   // Get pending deliveries
   getPendingDeliveries: () => {
     return apiHelpers.get(CHALLAN_ENDPOINT, {
       params: { delivery_status: 'pending' }
     });
   },
-  
+
   // Get today's deliveries
   getTodaysDeliveries: () => {
     const today = new Date().toISOString().split('T')[0];
