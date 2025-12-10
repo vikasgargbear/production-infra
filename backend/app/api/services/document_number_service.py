@@ -114,6 +114,37 @@ DOCUMENT_CONFIGS = {
         "table": "inventory.stock_adjustments",
         "column": "adjustment_number",
         "id_column": "adjustment_id"
+    },
+    # New document types added for service consolidation
+    "stock_receipt": {
+        "prefix": "SR",
+        "table": "inventory.stock_movements",
+        "column": "movement_number",
+        "id_column": "movement_id"
+    },
+    "stock_issue": {
+        "prefix": "SI",
+        "table": "inventory.stock_movements",
+        "column": "movement_number",
+        "id_column": "movement_id"
+    },
+    "writeoff": {
+        "prefix": "WO",
+        "table": "inventory.stock_writeoffs",
+        "column": "writeoff_number",
+        "id_column": "writeoff_id"
+    },
+    "scheme": {
+        "prefix": "SCH",
+        "table": "sales.promotional_schemes",
+        "column": "scheme_code",
+        "id_column": "scheme_id"
+    },
+    "stock_count": {
+        "prefix": "CNT",
+        "table": "inventory.stock_counts",
+        "column": "count_reference",
+        "id_column": "count_id"
     }
 }
 

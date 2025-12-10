@@ -8,6 +8,7 @@ from sqlalchemy import text
 import logging
 from datetime import datetime
 import uuid
+from ...services.document_number_service import DocumentNumberService
 
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext

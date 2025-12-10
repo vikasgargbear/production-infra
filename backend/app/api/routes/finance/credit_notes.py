@@ -14,6 +14,7 @@ from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, Te
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
 from ....utils.branch_utils import get_default_branch_id  # RBAC
+from ...services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ async def create_credit_note(
             )
             
         note_id = str(uuid.uuid4())
-        note_number = f"CN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        note_number = DocumentNumberService.generate_number(db.session, "credit_note", str(context.org_id))
         
         # Calculate tax if applicable
         subtotal = Decimal(str(note_data["amount"]))
@@ -305,7 +306,7 @@ async def create_debit_note(
             raise HTTPException(status_code=404, detail="Party not found")
             
         note_id = str(uuid.uuid4())
-        note_number = f"DN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        note_number = DocumentNumberService.generate_number(db.session, "debit_note", str(context.org_id))
         
         # Calculate tax if applicable
         subtotal = Decimal(str(note_data["amount"]))
@@ -937,15 +938,8 @@ async def create_sales_credit_note(
         branch_id = get_default_branch_id(db, str(context.org_id))
         
         # Generate credit note number
-        result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(credit_note_number FROM 'CN-([0-9]+)') AS INTEGER)), 0) + 1 as next_num
-            FROM sales.credit_notes
-            WHERE org_id = :org_id
-            AND credit_note_number LIKE 'CN-%'
-        """), {"org_id": str(context.org_id)}).first()
-        
-        next_num = result.next_num if result else 1
-        credit_note_number = f"CN-{next_num:06d}"
+        # Use DocumentNumberService for consistent number generation
+        credit_note_number = DocumentNumberService.generate_number(db.session, "credit_note", str(context.org_id))
         
         # Calculate total amount
         total_amount = float(data.get('credit_amount', 0)) + float(data.get('tax_amount', 0))
@@ -1028,15 +1022,8 @@ async def create_sales_debit_note(
         branch_id = get_default_branch_id(db, str(context.org_id))
         
         # Generate debit note number
-        result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(debit_note_number FROM 'DN-([0-9]+)') AS INTEGER)), 0) + 1 as next_num
-            FROM sales.debit_notes
-            WHERE org_id = :org_id
-            AND debit_note_number LIKE 'DN-%'
-        """), {"org_id": str(context.org_id)}).first()
-        
-        next_num = result.next_num if result else 1
-        debit_note_number = f"DN-{next_num:06d}"
+        # Use DocumentNumberService for consistent number generation
+        debit_note_number = DocumentNumberService.generate_number(db.session, "debit_note", str(context.org_id))
         
         # Calculate total amount
         total_amount = float(data.get('debit_amount', 0)) + float(data.get('tax_amount', 0))

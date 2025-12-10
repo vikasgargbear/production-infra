@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
+from ...services.document_number_service import DocumentNumberService
 from datetime import date, datetime
 
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession

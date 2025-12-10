@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
+from ...services.document_number_service import DocumentNumberService
 from datetime import datetime
 from decimal import Decimal
 
