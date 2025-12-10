@@ -58,8 +58,13 @@ const BatchSelector = ({
 
   useEffect(() => {
     if (show && product && mode === 'modal') {
-      loadBatches();
-      hasLoadedRef.current = true;
+      const productId = product.product_id || product.id;
+      
+      // Only load if we haven't loaded for this product yet
+      if (!hasLoadedRef.current || hasLoadedRef.current !== productId) {
+        loadBatches();
+        hasLoadedRef.current = productId;
+      }
     } else if (!show && mode === 'modal') {
       // Reset when modal closes
       hasLoadedRef.current = false;
@@ -67,7 +72,7 @@ const BatchSelector = ({
       setBatches([]);
       setError(null);
     }
-  }, [show, product, mode]);
+  }, [show, product?.product_id, product?.id, mode]);
 
   // Load batches on mount for inline/dropdown modes
   useEffect(() => {
@@ -79,41 +84,48 @@ const BatchSelector = ({
   const loadBatches = async () => {
     if (!product) return;
 
-    // STEP 0: Check memory cache FIRST (instant - synchronous)
-    const cachedBatches = searchCache.get('batches', { product_id: product.product_id });
+    const productId = product.product_id || product.id;
+    
+    // PERFORMANCE: Check memory cache FIRST (instant - synchronous, no await)
+    const cacheKey = `batches_${productId}`;
+    const cachedBatches = searchCache.get(cacheKey);
     if (cachedBatches && cachedBatches.length > 0) {
+      console.log('[BatchSelector] Using memory cache - INSTANT');
       processBatches(cachedBatches);
       return; // Return immediately - INSTANT loading!
     }
 
+    // PERFORMANCE: Check localStorage cache (faster than API, no IndexedDB async)
+    try {
+      const localCacheKey = `batches_${productId}`;
+      const localCacheTime = `batches_${productId}_time`;
+      const cached = localStorage.getItem(localCacheKey);
+      const cacheTime = localStorage.getItem(localCacheTime);
+      const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
+      
+      // Use cache if less than 2 minutes old (batches don't change often in a session)
+      if (cached && cacheAge < 2 * 60 * 1000) {
+        console.log('[BatchSelector] Using localStorage cache - FAST');
+        const batchesData = JSON.parse(cached);
+        processBatches(batchesData);
+        
+        // Also store in memory cache for next time
+        searchCache.set(cacheKey, batchesData);
+        return;
+      }
+    } catch (error) {
+      console.error('[BatchSelector] Cache read error:', error);
+    }
+    
     setLoading(true);
     setError(null);
     
     try {
-      // STEP 1: Try IndexedDB (fast async, works offline)
-      const offlineBatches = await offlineDB.getBatchesByProduct(product.product_id);
-      
-      if (offlineBatches && offlineBatches.length > 0) {
-        processBatches(offlineBatches);
-        setLoading(false);
-        
-        // Cache in memory for instant access next time
-        searchCache.set('batches', { product_id: product.product_id }, offlineBatches);
-        
-        // Background refresh if online (silent)
-        if (navigator.onLine) {
-          fetchAndStoreBatches(product.product_id, false).catch(() => {
-            // Silent fail - user already has data
-          });
-        }
-        return;
-      }
-      
-      // STEP 2: Cache miss → fetch from API
-      await fetchAndStoreBatches(product.product_id, true);
-      
+      // Fetch from API and cache
+      console.log('[BatchSelector] Fetching from API for product:', productId);
+      await fetchAndStoreBatches(productId, true);
     } catch (error) {
-      console.error('Failed to load batches:', error);
+      console.error('[BatchSelector] Failed to load batches:', error);
       setError('Failed to load batches. Please try again.');
       
       // Create a fallback batch if allowed
@@ -126,17 +138,33 @@ const BatchSelector = ({
     }
   };
 
-  // Fetch batches from API and store in IndexedDB
+  // Fetch batches from API and cache aggressively
   const fetchAndStoreBatches = async (productId, showLoadingState = true) => {
     try {
       const response = await batchAPI.getByProduct(productId);
       const batchesData = response.data?.batches || response.data || [];
       
-      // Store in IndexedDB for offline use
-      await offlineDB.storeBatches(batchesData);
+      console.log('[BatchSelector] Fetched', batchesData.length, 'batches from API');
       
-      // Also keep in memory cache for fast access
-      searchCache.set('batches', { product_id: productId }, batchesData);
+      // PERFORMANCE: Triple cache strategy
+      // 1. Memory cache (instant access)
+      const cacheKey = `batches_${productId}`;
+      searchCache.set(cacheKey, batchesData);
+      
+      // 2. localStorage cache (fast, 2-minute TTL)
+      try {
+        localStorage.setItem(`batches_${productId}`, JSON.stringify(batchesData));
+        localStorage.setItem(`batches_${productId}_time`, Date.now().toString());
+      } catch (e) {
+        console.warn('[BatchSelector] localStorage cache failed:', e);
+      }
+      
+      // 3. IndexedDB cache (offline support, slower but persistent)
+      try {
+        await offlineDB.storeBatches(batchesData);
+      } catch (e) {
+        console.warn('[BatchSelector] IndexedDB cache failed:', e);
+      }
       
       if (showLoadingState) {
         processBatches(batchesData);
@@ -144,7 +172,7 @@ const BatchSelector = ({
       
       return batchesData;
     } catch (error) {
-      console.error('Failed to fetch batches:', error);
+      console.error('[BatchSelector] Failed to fetch batches:', error);
       throw error;
     }
   };

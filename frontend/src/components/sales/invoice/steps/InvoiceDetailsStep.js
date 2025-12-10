@@ -124,8 +124,16 @@ const InvoiceDetailsStep = ({
                       title="Billing Address"
                       addressType="billing"
                       customer={selectedCustomer}
-                      readonly={true}
+                      readonly={false}
                       className=""
+                      onChange={(address) => {
+                        console.log('[Invoice] Billing address changed:', address);
+                        setInvoice(prev => ({ ...prev, billing_address: address }));
+                      }}
+                      onSave={(addressData) => {
+                        console.log('[Invoice] Billing address saved:', addressData);
+                        setInvoice(prev => ({ ...prev, billing_address_data: addressData }));
+                      }}
                     />
                     <AddressForm
                       title="Shipping Address"
@@ -412,9 +420,9 @@ const InvoiceDetailsStep = ({
                         min="0"
                         max={invoice.discount_type === 'percentage' ? "100" : undefined}
                         step={invoice.discount_type === 'percentage' ? "0.1" : "0.01"}
-                        value={invoice.discount_type === 'fixed' ? (invoice.discount_amount || 0) : (invoice.discount_percent || 0)}
+                        value={invoice.discount_type === 'fixed' ? (invoice.discount_amount === 0 ? '' : invoice.discount_amount) : (invoice.discount_percent === 0 ? '' : invoice.discount_percent)}
                         onChange={(e) => {
-                          const value = parseFloat(e.target.value) || 0;
+                          const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
                           if (invoice.discount_type === 'fixed') {
                             setInvoice(prev => ({ ...prev, discount_amount: value }));
                           } else {
@@ -432,7 +440,7 @@ const InvoiceDetailsStep = ({
                           `₹${(
                             invoice.discount_type === 'fixed' 
                               ? invoice.discount_amount 
-                              : (parseFloat(invoice.totals?.gross_amount || 0) * (invoice.discount_percent || 0)) / 100
+                              : (parseFloat(invoice.totals?.taxable_amount || 0) * (invoice.discount_percent || 0)) / 100
                           ).toFixed(2)}` : 
                           '₹0'
                         }
@@ -441,13 +449,67 @@ const InvoiceDetailsStep = ({
                   </div>
                 </div>
 
-                {/* Total Summary */}
+                {/* Total Summary - Shows amounts breakdown */}
                 <div className="border-t border-gray-100 pt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total Amount</span>
-                    <span className="text-lg font-semibold text-gray-900">
-                      ₹{parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
-                    </span>
+                  <div className="space-y-2">
+                    {/* Gross Amount */}
+                    {invoice.totals?.gross_amount && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Gross Amount</span>
+                        <span className="text-gray-900">₹{parseFloat(invoice.totals.gross_amount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Item-level Discounts */}
+                    {invoice.totals?.total_discount > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Item Discounts</span>
+                        <span className="text-green-600">
+                          -₹{parseFloat(invoice.totals.total_discount).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Taxable Amount (after item discounts, before invoice discount) */}
+                    {invoice.totals?.taxable_amount && (
+                      <div className="flex justify-between items-center text-sm font-medium">
+                        <span className="text-gray-700">Taxable Amount</span>
+                        <span className="text-gray-900">₹{parseFloat(invoice.totals.taxable_amount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Invoice Discount (applied on taxable amount) */}
+                    {(invoice.discount_percent > 0 || invoice.discount_amount > 0) && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">
+                          Invoice Discount 
+                          {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
+                        </span>
+                        <span className="text-green-600">
+                          -₹{(
+                            invoice.discount_type === 'fixed' 
+                              ? invoice.discount_amount 
+                              : (parseFloat(invoice.totals?.taxable_amount || 0) * (invoice.discount_percent || 0)) / 100
+                          ).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Delivery Charges */}
+                    {invoice.delivery_charges > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Delivery Charges</span>
+                        <span className="text-gray-900">+₹{parseFloat(invoice.delivery_charges).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Final Amount */}
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                      <span className="text-sm font-medium text-gray-700">Total Amount</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        ₹{parseFloat(invoice.totals?.final_amount || invoice.net_amount || 0).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -214,7 +214,7 @@ const InvoicePreviewEnterprise = ({
                 <div className="space-y-1.5">
                   <p className="text-xs text-gray-700">
                     <span className="text-gray-500">No:</span>
-                    <span className="ml-1 font-medium">{invoice.invoice_no}</span>
+                    <span className="ml-1 font-medium">{invoice.invoice_number || invoice.invoice_no}</span>
                   </p>
                   <p className="text-xs text-gray-700">
                     <span className="text-gray-500">Date:</span>
@@ -235,119 +235,88 @@ const InvoicePreviewEnterprise = ({
           </div>
         </div>
 
-        {/* Customer & Transport Section - Portrait-Friendly Layout */}
+        {/* Customer & Transport Section - Professional Compact Design */}
         {showAddresses && (
           <div className="mb-4">
-            {/* Customer Details - 2 columns for Bill To and Ship To */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              {/* Bill To */}
-              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
-                <div className="bg-blue-50 px-3 py-2 border-b border-blue-200 print-bg-blue">
-                  <h3 className="text-xs font-bold text-blue-700 uppercase">Bill To</h3>
-                </div>
-                <div className="p-3 bg-white">
-                  <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</p>
-                  {invoice.billing_address ? (
-                    <p className="text-xs text-gray-600 leading-relaxed">{invoice.billing_address}</p>
-                  ) : invoice.customer_details ? (
-                    <>
-                      <p className="text-xs text-gray-600 leading-relaxed">{invoice.customer_details.address}</p>
-                      {invoice.customer_details.city && invoice.customer_details.state && (
-                        <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
-                      )}
-                    </>
-                  ) : null}
-                  {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                    <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
-                  )}
-                  {invoice.customer_details?.gstin && (
-                    <p className="text-xs text-gray-600 font-medium">GST: {invoice.customer_details.gstin}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Ship To */}
-              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
-                <div className="bg-green-50 px-3 py-2 border-b border-green-200 print-bg-gray">
-                  <h3 className="text-xs font-bold text-green-700 uppercase">Ship To</h3>
-                </div>
-                <div className="p-3 bg-white">
-                  {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
-                    <>
-                      <p className="text-xs text-green-600 mb-2 font-medium">✓ Same as billing address</p>
-                      <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</p>
-                      {/* Use exact same format as Bill To */}
+            {/* Combined Customer & Transport Table - All in One Professional Block */}
+            <div className="border border-gray-800 print-border">
+              <table className="w-full">
+                <tbody>
+                  <tr className="border-b border-gray-800">
+                    {/* Bill To */}
+                    <td className="border-r border-gray-800 p-3 align-top w-1/3">
+                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Bill To</div>
+                      <div className="font-semibold text-gray-900 text-xs mb-1">{invoice.customer_name}</div>
                       {invoice.billing_address ? (
-                        <p className="text-xs text-gray-600 leading-relaxed">{invoice.billing_address}</p>
+                        <div className="text-xs text-gray-700 leading-relaxed">{invoice.billing_address}</div>
                       ) : invoice.customer_details ? (
                         <>
-                          <p className="text-xs text-gray-600 leading-relaxed">{invoice.customer_details.address}</p>
+                          <div className="text-xs text-gray-700 leading-relaxed">{invoice.customer_details.address}</div>
                           {invoice.customer_details.city && invoice.customer_details.state && (
-                            <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
+                            <div className="text-xs text-gray-700">{invoice.customer_details.city}, {invoice.customer_details.state}</div>
                           )}
                         </>
                       ) : null}
-                      {/* Always show phone for shipping */}
                       {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                        <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                        <div className="text-xs text-gray-700 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</div>
                       )}
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.shipping_contact_name || invoice.customer_name}</p>
-                      {invoice.shipping_address && (
-                        <p className="text-xs text-gray-600 leading-relaxed">{invoice.shipping_address}</p>
+                      {invoice.customer_details?.gstin && (
+                        <div className="text-xs text-gray-700 font-medium">GST: {invoice.customer_details.gstin}</div>
                       )}
-                      {/* Always show phone for different shipping address */}
-                      {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                        <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                    </td>
+
+                    {/* Ship To */}
+                    <td className="border-r border-gray-800 p-3 align-top w-1/3">
+                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Ship To</div>
+                      {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
+                        <>
+                          <div className="text-xs text-gray-600 mb-1 italic">Same as billing address</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-gray-900 text-xs mb-1">{invoice.shipping_contact_name || invoice.customer_name}</div>
+                          {invoice.shipping_address && (
+                            <div className="text-xs text-gray-700 leading-relaxed">{invoice.shipping_address}</div>
+                          )}
+                          {(invoice.shipping_phone || invoice.customer_details?.phone) && (
+                            <div className="text-xs text-gray-700 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone}</div>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                </div>
-              </div>
+                    </td>
+
+                    {/* Transport Details */}
+                    <td className="p-3 align-top w-1/3">
+                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Transport</div>
+                      <div className="space-y-1">
+                        {invoice.delivery_type && (
+                          <div className="text-xs text-gray-700">
+                            <span className="text-gray-600">Type:</span> <span className="font-medium">{invoice.delivery_type}</span>
+                          </div>
+                        )}
+                        {invoice.transport_company && (
+                          <div className="text-xs text-gray-700">
+                            <span className="text-gray-600">Company:</span> {invoice.transport_company}
+                          </div>
+                        )}
+                        {invoice.vehicle_number && (
+                          <div className="text-xs text-gray-700">
+                            <span className="text-gray-600">Vehicle:</span> {invoice.vehicle_number}
+                          </div>
+                        )}
+                        {invoice.delivery_charges > 0 && (
+                          <div className="text-xs text-gray-700">
+                            <span className="text-gray-600">Charges:</span> <span className="font-medium">{formatCurrency(invoice.delivery_charges)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
-            {/* Transport Details - Full width for better visibility */}
-            {companyInfo?.business_settings?.show_transport_details !== false && (
-              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
-                <div className="bg-yellow-50 px-3 py-2 border-b border-yellow-200 print-colors">
-                  <h3 className="text-xs font-bold text-yellow-700 uppercase">Transport Details</h3>
-                </div>
-                <div className="p-3 bg-white">
-                  {invoice.delivery_type || invoice.transport_company || invoice.vehicle_number || invoice.lr_number ? (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                      {invoice.delivery_type && (
-                        <div>
-                          <span className="text-gray-500">Type:</span>
-                          <p className="font-medium text-gray-900">{invoice.delivery_type}</p>
-                        </div>
-                      )}
-                      {invoice.transport_company && (
-                        <div>
-                          <span className="text-gray-500">Company:</span>
-                          <p className="font-medium text-gray-900">{invoice.transport_company}</p>
-                        </div>
-                      )}
-                      {invoice.vehicle_number && (
-                        <div>
-                          <span className="text-gray-500">Vehicle:</span>
-                          <p className="font-medium text-gray-900">{invoice.vehicle_number}</p>
-                        </div>
-                      )}
-                      {invoice.lr_number && (
-                        <div>
-                          <span className="text-gray-500">LR No:</span>
-                          <p className="font-medium text-gray-900">{invoice.lr_number}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 text-center py-2">No transport details provided</p>
-                  )}
-                </div>
-              </div>
-            )}
+
           </div>
         )}
 
@@ -356,14 +325,16 @@ const InvoicePreviewEnterprise = ({
           <table className="w-full border border-gray-300">
             <thead className="bg-gray-100 print-colors">
               <tr className="border-b border-gray-300">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">#</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Product</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Batch/Exp</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Qty</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Rate</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Disc%</th>
-                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">GST%</th>
-                <th className="text-right py-3 px-4 text-sm font-medium text-gray-700 uppercase">Amount</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">#</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Product</th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">HSN</th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Expiry</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">MRP</th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Qty</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Rate</th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Disc%</th>
+                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">GST%</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -383,33 +354,41 @@ const InvoicePreviewEnterprise = ({
                 
                 return (
                   <tr key={index} className="border-b border-gray-200">
-                    <td className="py-3 px-4 text-sm border-r border-gray-200">{index + 1}</td>
-                    <td className="py-3 px-4 border-r border-gray-200">
+                    <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
+                    <td className="py-2 px-3 border-r border-gray-200">
                       <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
-                      <div className="text-xs text-gray-500">HSN: {item.hsn_code || '3004'}</div>
+                      <div className="text-[10px] text-gray-500">Batch: {item.batch_number || 'N/A'}</div>
                     </td>
-                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">
-                      <div className="text-sm font-medium">{item.batch_number}</div>
-                      <div className="text-xs text-gray-500">
-                        {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { 
-                          month: '2-digit',
-                          year: '2-digit' 
-                        }) : '-'}
-                      </div>
+                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                      {item.hsn_code || '3004'}
                     </td>
-                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200 font-medium">
+                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { 
+                        month: '2-digit',
+                        year: '2-digit' 
+                      }) : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-xs text-right border-r border-gray-200">
+                      {formatCurrency(item.mrp || rate)}
+                    </td>
+                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200 font-medium">
                       {item.quantity}
                       {item.free_quantity > 0 && (
                         <div className="text-green-600 text-xs">+{item.free_quantity} free</div>
                       )}
                     </td>
-                    <td className="py-3 px-4 border-r border-gray-200 text-right">
-                      <div className="text-sm font-medium">{formatCurrency(rate)}</div>
-                      <div className="text-xs text-gray-500">MRP: {formatCurrency(item.mrp)}</div>
+                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">
+                      {formatCurrency(rate)}
                     </td>
-                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">{discount}%</td>
-                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">{gstPercent}%</td>
-                    <td className="py-3 px-4 text-sm text-right font-semibold">{formatCurrency(lineTotal)}</td>
+                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                      {discount > 0 ? `${discount.toFixed(1)}%` : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                      {gstPercent > 0 ? `${gstPercent}%` : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-sm text-right font-semibold">
+                      {formatCurrency(lineTotal)}
+                    </td>
                   </tr>
                 );
               })}
@@ -487,8 +466,14 @@ const InvoicePreviewEnterprise = ({
                 </div>
                 {totals.total_discount > 0 && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-600">Discount:</span>
-                    <span className="font-medium">-{formatCurrency(totals.total_discount)}</span>
+                    <span className="text-gray-600">Item Discounts:</span>
+                    <span className="font-medium text-green-600">-{formatCurrency(totals.total_discount)}</span>
+                  </div>
+                )}
+                {totals.additional_discount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Invoice Discount:</span>
+                    <span className="font-medium text-green-600">-{formatCurrency(totals.additional_discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
@@ -496,7 +481,7 @@ const InvoicePreviewEnterprise = ({
                   <span className="font-medium">{formatCurrency(totals.taxable_amount)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Total GST (12%):</span>
+                  <span className="text-gray-600">Total GST:</span>
                   <span className="font-medium">{formatCurrency(totals.total_tax)}</span>
                 </div>
                 {totals.delivery_charges > 0 && (
@@ -515,11 +500,8 @@ const InvoicePreviewEnterprise = ({
                   <span className="text-sm font-bold text-gray-900">Net Amount:</span>
                   <span className="text-sm font-bold text-blue-600">
                     {formatCurrency(
-                      // Net Amount = taxable + tax + roundoff + delivery
-                      (totals.taxable_amount || 0) + 
-                      (totals.total_tax || totals.tax_amount || 0) + 
-                      (totals.round_off || 0) + 
-                      (totals.delivery_charges || 0)
+                      // Use final_amount from calculator (includes all discounts, delivery, etc.)
+                      totals.final_amount || totals.net_amount || 0
                     )}
                   </span>
                 </div>

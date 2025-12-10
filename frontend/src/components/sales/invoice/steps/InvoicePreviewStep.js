@@ -45,32 +45,6 @@ const InvoicePreviewStep = ({
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="w-full max-w-5xl mx-auto px-8 py-6">
 
-            {/* Step Navigation */}
-            <div className="mb-4 flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => onBack(1)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                >
-                  <span className="text-xs">← Step 1:</span> Items
-                </button>
-                <span className="text-gray-300">|</span>
-                <button
-                  onClick={() => onBack(2)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                >
-                  <span className="text-xs">← Step 2:</span> Details
-                </button>
-                <span className="text-gray-300">|</span>
-                <span className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-900 bg-blue-50 rounded-lg">
-                  <span className="text-xs">Step 3:</span> Preview
-                </span>
-              </div>
-              <div className="text-xs text-gray-500">
-                Review and generate invoice
-              </div>
-            </div>
-            
             {/* Invoice Preview */}
             <PrintUtility
               documentData={{

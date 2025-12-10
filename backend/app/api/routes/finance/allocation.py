@@ -5,14 +5,15 @@ Handles linking payments to invoices for proper accounting
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime, date
 from decimal import Decimal
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,11 @@ class AutoAllocationRequest(BaseModel):
     method: str = Field(default="fifo", pattern="^(fifo|lifo|proportional)$")
 
 @router.post("/allocate")
+@with_tenant_context
 async def allocate_payment(
     allocation: AllocationRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Manually allocate a payment to an invoice
@@ -49,7 +51,7 @@ async def allocate_payment(
                 FROM financial.payments
                 WHERE payment_id = :payment_id AND org_id = :org_id
             """),
-            {"payment_id": allocation.payment_id, "org_id": org_id}
+            {"payment_id": allocation.payment_id, "org_id": str(context.org_id)}
         ).fetchone()
         
         if not payment_check:
@@ -100,7 +102,7 @@ async def allocate_payment(
                 RETURNING allocation_id
             """),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "payment_id": allocation.payment_id,
                 "invoice_id": allocation.invoice_id,
                 "amount": allocation.amount
@@ -108,7 +110,7 @@ async def allocate_payment(
         )
         
         allocation_id = result.scalar()
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Get updated status
         updated_payment = db.execute(
@@ -155,10 +157,11 @@ async def allocate_payment(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/allocate-bulk")
+@with_tenant_context
 async def allocate_payment_bulk(
     request: BulkAllocationRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Allocate a payment to multiple invoices
@@ -195,10 +198,11 @@ async def allocate_payment_bulk(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auto-allocate")
+@with_tenant_context
 async def auto_allocate_payment(
     request: AutoAllocationRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Automatically allocate payment to outstanding invoices using FIFO/LIFO
@@ -218,7 +222,7 @@ async def auto_allocate_payment(
             for row in result
         ]
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Get final payment status
         payment_status = db.execute(
@@ -247,10 +251,11 @@ async def auto_allocate_payment(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/payment/{payment_id}/allocations")
+@with_tenant_context
 async def get_payment_allocations(
     payment_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get all allocations for a payment
@@ -293,10 +298,11 @@ async def get_payment_allocations(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/invoice/{invoice_id}/payments")
+@with_tenant_context
 async def get_invoice_payments(
     invoice_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get all payments allocated to an invoice
@@ -365,10 +371,11 @@ async def get_invoice_payments(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/allocation/{allocation_id}")
+@with_tenant_context
 async def delete_allocation(
     allocation_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Delete an allocation (unallocate payment from invoice)
@@ -382,7 +389,7 @@ async def delete_allocation(
                 JOIN financial.payments p ON pa.payment_id = p.payment_id
                 WHERE pa.allocation_id = :allocation_id AND p.org_id = :org_id
             """),
-            {"allocation_id": allocation_id, "org_id": org_id}
+            {"allocation_id": allocation_id, "org_id": str(context.org_id)}
         ).fetchone()
         
         if not allocation:
@@ -394,7 +401,7 @@ async def delete_allocation(
             {"allocation_id": allocation_id}
         )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
@@ -409,10 +416,11 @@ async def delete_allocation(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/unallocated-payments")
+@with_tenant_context
 async def get_unallocated_payments(
     party_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get payments with unallocated amounts
@@ -436,7 +444,7 @@ async def get_unallocated_payments(
             AND payment_status != 'cancelled'
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if party_id:
             query += " AND party_id = :party_id"
@@ -468,10 +476,11 @@ async def get_unallocated_payments(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/unpaid-invoices")
+@with_tenant_context
 async def get_unpaid_invoices(
     customer_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get invoices with outstanding amounts

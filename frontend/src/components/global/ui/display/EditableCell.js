@@ -85,8 +85,12 @@ const EditableCell = forwardRef(({
     
     setLocalValue(processedValue);
     
-    // Only save if value changed
-    if (processedValue !== originalValue) {
+    // Always save - let parent decide if it needs to update
+    // Fire both onChange (for real-time calc) and onSave (for state update)
+    if (onChange) {
+      onChange(processedValue);
+    }
+    if (onSave && processedValue !== originalValue) {
       onSave(processedValue);
       setOriginalValue(processedValue);
     }
@@ -185,11 +189,9 @@ const EditableCell = forwardRef(({
       const cleaned = val.replace(/[^0-9.-]/g, '');
       setLocalValue(cleaned);
       
-      // Fire onChange immediately for real-time calculation updates
-      if (onChange) {
-        const num = parseFloat(cleaned) || 0;
-        onChange(num);
-      }
+      // DON'T fire onChange immediately - only fire on blur/enter
+      // This prevents flickering/jumping when user is typing
+      // The parent state update causes re-render which interferes with typing
     } else {
       setLocalValue(val);
       if (onChange) {

@@ -2,7 +2,6 @@
 Initial setup endpoint for creating the first organization
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any
 import uuid
@@ -11,7 +10,9 @@ import os
 from datetime import datetime
 import logging
 
-from ....core.database import get_db
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
 from ....core.supabase_auth import supabase_auth
 from ....core.role_management import RoleManager
 
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["setup"])
 
 @router.get("/check")
-async def check_setup_status(db: Session = Depends(get_db)):
+@with_tenant_context
+async def check_setup_status(db: TenantAwareSession = Depends(get_tenant_aware_db)):
     """Check if initial setup is complete"""
     try:
         # Check if any organization exists
@@ -60,9 +62,10 @@ async def check_setup_status(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error checking setup status: {str(e)}")
 
 @router.post("/initialize")
+@with_tenant_context
 async def initialize_organization(
     setup_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Initialize the first organization and admin user
@@ -116,7 +119,7 @@ async def initialize_organization(
                 true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "org_code": setup_data.get("org_code", "ORG001"),
             "org_name": setup_data["org_name"],
             "legal_name": setup_data.get("legal_name", setup_data["org_name"]),
@@ -141,7 +144,7 @@ async def initialize_organization(
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "address": json.dumps(setup_data.get("address", {}))
         })
         
@@ -193,7 +196,7 @@ async def initialize_organization(
                     true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             """), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "auth_user_id": auth_user_id,  # Links to Supabase auth.users
                 "username": setup_data.get("admin_email", "").split('@')[0],  # Use email prefix as username
                 "email": setup_data["admin_email"],
@@ -225,7 +228,7 @@ async def initialize_organization(
                     :org_id, :category, :key, :value, :type, true, CURRENT_TIMESTAMP
                 )
             """), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "category": category,
                 "key": key,
                 "value": value,
@@ -241,23 +244,23 @@ async def initialize_organization(
         admin_role = db.execute(text("""
             SELECT role_id FROM master.roles 
             WHERE org_id = :org_id AND role_code = 'admin'
-        """), {"org_id": org_id}).fetchone()
+        """), {"org_id": str(context.org_id)}).fetchone()
         
         if admin_role:
             db.execute(text("""
                 UPDATE master.org_users 
                 SET role_id = :role_id
                 WHERE org_id = :org_id AND is_admin = true
-            """), {"org_id": org_id, "role_id": admin_role.role_id})
+            """), {"org_id": str(context.org_id), "role_id": admin_role.role_id})
             logger.info(f"Assigned admin role (id={admin_role.role_id}) to admin user")
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
             "message": "Organization initialized successfully",
             "organization": {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "org_name": setup_data["org_name"],
                 "admin_email": setup_data.get("admin_email")
             },
@@ -271,6 +274,7 @@ async def initialize_organization(
         raise HTTPException(status_code=500, detail=f"Failed to initialize organization: {str(e)}")
 
 @router.get("/required-fields")
+@with_tenant_context
 async def get_required_fields():
     """Get list of required fields for initial setup"""
     return {

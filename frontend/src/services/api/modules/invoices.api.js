@@ -17,10 +17,13 @@ export const invoicesApi = {
     return apiHelpers.get(`${ENDPOINTS.BASE}/${id}`);
   },
   
-  // Create new invoice (through sales endpoint)
+  // Create new invoice
   create: (data) => {
     const cleanedData = cleanData(data);
-    return apiHelpers.post(SALES_ENDPOINTS.DIRECT_INVOICE, cleanedData);
+    console.log('[Invoices API] POST endpoint:', ENDPOINTS.BASE);
+    console.log('[Invoices API] Data size:', JSON.stringify(cleanedData).length, 'bytes');
+    // Use invoices endpoint directly, not sales
+    return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
   
   // Update invoice

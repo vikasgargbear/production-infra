@@ -6,13 +6,14 @@ from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field, validator
 import logging
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,9 @@ class JournalEntryCreate(BaseModel):
         return v
 
 @router.get("/generate-journal-number")
-async def generate_journal_number(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def generate_journal_number(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """
     Generate unique journal entry number
     
@@ -91,7 +93,7 @@ async def generate_journal_number(db: Session = Depends(get_db),
         like_pattern = f"JV-{year}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "year": year,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -118,12 +120,13 @@ async def generate_journal_number(db: Session = Depends(get_db),
         }
 
 @router.get("/chart-of-accounts")
+@with_tenant_context
 async def get_chart_of_accounts(
     search: Optional[str] = Query(None, description="Search account name or code"),
     account_type: Optional[str] = Query(None, description="Filter by account type"),
     active_only: bool = Query(True, description="Show only active accounts"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get chart of accounts for journal entry selection
@@ -143,7 +146,7 @@ async def get_chart_of_accounts(
             WHERE org_id = :org_id
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         if active_only:
             query += " AND is_active = true"
@@ -182,10 +185,11 @@ async def get_chart_of_accounts(
         }
 
 @router.post("", response_model=dict)
+@with_tenant_context
 async def create_journal_entry(
     journal_entry: JournalEntryCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a new journal entry
@@ -227,7 +231,7 @@ async def create_journal_entry(
         result = db.execute(
             text(seq_query),
             {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "year": year,
                 "pattern": pattern,
                 "extract_pattern": extract_pattern,
@@ -247,7 +251,7 @@ async def create_journal_entry(
                     ORDER BY user_id
                     LIMIT 1
                 """),
-                {"org_id": org_id}
+                {"org_id": str(context.org_id)}
             ).first()
             
             if user_result:
@@ -276,7 +280,7 @@ async def create_journal_entry(
         """
         
         journal_result = db.execute(text(journal_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "journal_number": journal_number,
             "journal_date": journal_entry.journal_date,
             "reference_number": journal_entry.reference_number,
@@ -293,7 +297,7 @@ async def create_journal_entry(
             # Validate account exists
             account_check = db.execute(
                 text("SELECT account_id FROM financial.chart_of_accounts WHERE account_code = :code AND org_id = :org_id"),
-                {"code": line.account_code, "org_id": org_id}
+                {"code": line.account_code, "org_id": str(context.org_id)}
             ).first()
             
             if not account_check:
@@ -307,7 +311,7 @@ async def create_journal_entry(
                         ) RETURNING account_id
                     """),
                     {
-                        "org_id": org_id,
+                        "org_id": str(context.org_id),
                         "account_code": line.account_code,
                         "account_name": line.account_name
                     }
@@ -337,7 +341,7 @@ async def create_journal_entry(
                 "line_narration": line.narration
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": "Journal entry created successfully",
@@ -356,14 +360,15 @@ async def create_journal_entry(
         raise HTTPException(status_code=500, detail=f"Failed to create journal entry: {str(e)}")
 
 @router.get("", response_model=dict)
+@with_tenant_context
 async def get_journal_entries(
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get list of journal entries with pagination and filters
@@ -389,7 +394,7 @@ async def get_journal_entries(
         """
         
         params = {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "limit": limit,
             "offset": offset
         }
@@ -424,7 +429,7 @@ async def get_journal_entries(
             WHERE je.org_id = :org_id
         """
         
-        count_params = {"org_id": org_id}
+        count_params = {"org_id": str(context.org_id)}
         
         if from_date:
             count_query += " AND je.journal_date >= :from_date"
@@ -452,10 +457,11 @@ async def get_journal_entries(
         raise HTTPException(status_code=500, detail="Failed to retrieve journal entries")
 
 @router.get("/{journal_id}", response_model=dict)
+@with_tenant_context
 async def get_journal_entry_details(
     journal_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get detailed journal entry with all line items
@@ -481,7 +487,7 @@ async def get_journal_entry_details(
         
         header_result = db.execute(text(header_query), {
             "journal_id": journal_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if not header_result:
@@ -518,11 +524,12 @@ async def get_journal_entry_details(
         raise HTTPException(status_code=500, detail="Failed to retrieve journal entry details")
 
 @router.delete("/{journal_id}")
+@with_tenant_context
 async def delete_journal_entry(
     journal_id: int,
     reason: str = Query(..., description="Deletion reason"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Delete/cancel journal entry
@@ -541,7 +548,7 @@ async def delete_journal_entry(
         
         entry = db.execute(text(check_query), {
             "journal_id": journal_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if not entry:
@@ -564,7 +571,7 @@ async def delete_journal_entry(
             "reason": reason
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": "Journal entry cancelled successfully",

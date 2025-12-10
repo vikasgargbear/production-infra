@@ -39,11 +39,17 @@ const AddressForm = ({
     landmark: ''
   });
 
-  // Fetch customer addresses when customer changes
+  // Fetch customer addresses when customer changes (with ref to prevent duplicate calls)
+  const customerIdRef = React.useRef(null);
+  
   useEffect(() => {
-    if (customer?.customer_id) {
-      fetchCustomerAddresses(customer.customer_id);
-    } else if (customer) {
+    const currentCustomerId = customer?.customer_id;
+    
+    // Only fetch if customer_id actually changed
+    if (currentCustomerId && currentCustomerId !== customerIdRef.current) {
+      customerIdRef.current = currentCustomerId;
+      fetchCustomerAddresses(currentCustomerId);
+    } else if (customer && !currentCustomerId) {
       // If customer exists but no saved addresses, use customer data
       const mobileNumber = customer.mobile || customer.phone || 
                           customer.primary_phone || customer.contact_number || 
@@ -69,14 +75,46 @@ const AddressForm = ({
     }
   }, [customer]);
 
-  // Fetch saved addresses from backend
+  // Fetch saved addresses from backend with caching
   const fetchCustomerAddresses = async (customerId) => {
     setLoadingAddresses(true);
     try {
+      // PERFORMANCE: Check cache first
+      const cacheKey = `customer_addresses_${customerId}`;
+      const cached = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
+      
+      // Use cache if less than 5 minutes old
+      if (cached && cacheAge < 5 * 60 * 1000) {
+        console.log('[AddressForm] Using cached addresses for customer', customerId);
+        const addresses = JSON.parse(cached);
+        const filteredAddresses = addresses.filter(addr => 
+          !addr.address_type || addr.address_type === addressType || addr.is_default
+        );
+        setSavedAddresses(filteredAddresses.length > 0 ? filteredAddresses : addresses);
+        
+        const defaultAddr = filteredAddresses.find(addr => 
+          addr.address_type === addressType && addr.is_default
+        ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
+        
+        if (defaultAddr) {
+          selectAddress(defaultAddr);
+        }
+        setLoadingAddresses(false);
+        return; // Use cache, skip API call
+      }
+      
+      console.log('[AddressForm] Fetching addresses from API for customer', customerId);
       const response = await apiClient.get(`/customers/${customerId}/addresses`);
       
       if (response.data?.success && response.data.data) {
         const addresses = response.data.data;
+        
+        // PERFORMANCE: Cache for 5 minutes
+        localStorage.setItem(cacheKey, JSON.stringify(addresses));
+        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+        
         // Filter addresses by type - only show relevant addresses
         const filteredAddresses = addresses.filter(addr => 
           !addr.address_type || addr.address_type === addressType || addr.is_default
@@ -93,6 +131,7 @@ const AddressForm = ({
         }
       }
     } catch (error) {
+      console.error('[AddressForm] Failed to fetch addresses:', error);
       // Fallback to customer data if fetch fails
       const fallbackAddress = {
         id: 'default',

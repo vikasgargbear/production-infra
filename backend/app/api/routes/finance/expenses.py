@@ -6,13 +6,14 @@ from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,9 @@ class ExpenseClaimCreate(BaseModel):
     created_by: Optional[int] = None
 
 @router.get("/generate-claim-number")
-async def generate_claim_number(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)):
+@with_tenant_context
+async def generate_claim_number(db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)):
     """
     Generate unique expense claim number
     
@@ -69,7 +71,7 @@ async def generate_claim_number(db: Session = Depends(get_db),
         like_pattern = f"EXP-{year}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "year": year,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -96,6 +98,7 @@ async def generate_claim_number(db: Session = Depends(get_db),
         }
 
 @router.get("/expense-types")
+@with_tenant_context
 async def get_expense_types():
     """
     Get list of available expense types
@@ -116,10 +119,11 @@ async def get_expense_types():
     }
 
 @router.post("", response_model=dict)
+@with_tenant_context
 async def create_expense_claim(
     claim: ExpenseClaimCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a new expense claim
@@ -233,7 +237,7 @@ async def create_expense_claim(
                 "receipt_reference": expense.receipt_reference
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": "Expense claim created successfully",
@@ -252,6 +256,7 @@ async def create_expense_claim(
         raise HTTPException(status_code=500, detail=f"Failed to create expense claim: {str(e)}")
 
 @router.get("", response_model=dict)
+@with_tenant_context
 async def get_expense_claims(
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
@@ -259,8 +264,8 @@ async def get_expense_claims(
     employee_id: Optional[int] = Query(None, description="Filter by employee"),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get list of expense claims with pagination and filters
@@ -288,7 +293,7 @@ async def get_expense_claims(
         """
         
         params = {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "limit": limit,
             "offset": offset
         }
@@ -327,7 +332,7 @@ async def get_expense_claims(
             WHERE ec.org_id = :org_id
         """
         
-        count_params = {"org_id": org_id}
+        count_params = {"org_id": str(context.org_id)}
         
         if status:
             count_query += " AND ec.claim_status = :status"
@@ -359,10 +364,11 @@ async def get_expense_claims(
         raise HTTPException(status_code=500, detail="Failed to retrieve expense claims")
 
 @router.get("/{claim_id}", response_model=dict)
+@with_tenant_context
 async def get_expense_claim_details(
     claim_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get detailed expense claim with all line items
@@ -393,7 +399,7 @@ async def get_expense_claim_details(
         
         header_result = db.execute(text(header_query), {
             "claim_id": claim_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if not header_result:
@@ -430,11 +436,12 @@ async def get_expense_claim_details(
         raise HTTPException(status_code=500, detail="Failed to retrieve expense claim details")
 
 @router.put("/{claim_id}/approve")
+@with_tenant_context
 async def approve_expense_claim(
     claim_id: int,
     approval_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Approve expense claim
@@ -456,7 +463,7 @@ async def approve_expense_claim(
         
         claim = db.execute(text(check_query), {
             "claim_id": claim_id,
-            "org_id": org_id
+            "org_id": str(context.org_id)
         }).first()
         
         if not claim:
@@ -487,7 +494,7 @@ async def approve_expense_claim(
             "approved_by": 1  # Default system user
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": "Expense claim approved successfully",
@@ -504,11 +511,12 @@ async def approve_expense_claim(
         raise HTTPException(status_code=500, detail="Failed to approve expense claim")
 
 @router.put("/{claim_id}/reject")
+@with_tenant_context
 async def reject_expense_claim(
     claim_id: int,
     rejection_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Reject expense claim
@@ -535,7 +543,7 @@ async def reject_expense_claim(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Expense claim not found")
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": "Expense claim rejected successfully",

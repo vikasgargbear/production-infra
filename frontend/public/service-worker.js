@@ -1,8 +1,10 @@
 /* eslint-disable no-restricted-globals */
 
 // Service Worker for Pharma ERP - Offline Support
-const CACHE_NAME = 'pharma-erp-v1';
-const DATA_CACHE_NAME = 'pharma-data-v1';
+// Version: Update this when making changes to force update
+const CACHE_VERSION = 'v2'; // Incremented after fixing POST handling
+const CACHE_NAME = `pharma-erp-${CACHE_VERSION}`;
+const DATA_CACHE_NAME = `pharma-data-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
 // URLs to cache on install
@@ -52,16 +54,16 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Clone the response before caching
-          const responseToCache = response.clone();
-          
-          // Cache successful GET requests
+          // IMPORTANT: Pass through the response for POST/PUT/DELETE
+          // Only cache GET requests
           if (request.method === 'GET' && response.status === 200) {
+            const responseToCache = response.clone();
             caches.open(DATA_CACHE_NAME).then((cache) => {
               cache.put(request, responseToCache);
             });
           }
           
+          // Always return the network response (don't modify it)
           return response;
         })
         .catch(() => {
@@ -86,13 +88,18 @@ self.addEventListener('fetch', (event) => {
             });
           }
           
-          // For non-GET requests, queue for sync
-          if (request.method === 'POST' || request.method === 'PUT' || request.method === 'DELETE') {
-            // Queue the request for background sync
-            return request.json().then(body => {
-              return queueRequest(request.method, request.url, body);
-            });
-          }
+          // For non-GET requests when offline, return error response
+          // Don't try to queue - just fail gracefully
+          return new Response(
+            JSON.stringify({ 
+              error: 'Network unavailable',
+              message: 'Cannot perform this action while offline. Please check your connection.' 
+            }),
+            {
+              headers: { 'Content-Type': 'application/json' },
+              status: 503
+            }
+          );
         })
     );
     return;

@@ -101,13 +101,13 @@ export const API_CONFIG: APIConfig = {
     },
     
     INVOICES: {
-      BASE: '/invoices/',  // Added trailing slash
-      CALCULATE: '/invoices/calculate-live/',  // Added trailing slash
-      VALIDATE: '/invoices/validate/',  // Added trailing slash
-      GENERATE_NUMBER: '/invoices/generate-number/',  // Added trailing slash
-      DRAFTS: '/invoices/drafts/',  // Added trailing slash
-      PDF: (id) => `/invoices/${id}/pdf/`,  // Added trailing slash
-      WHATSAPP: (id) => `/invoices/${id}/whatsapp/`,  // Added trailing slash
+      BASE: 'invoices/',  // Relative to baseURL /api
+      CALCULATE: 'invoices/calculate-live/',
+      VALIDATE: 'invoices/validate/',
+      GENERATE_NUMBER: 'invoices/generate-number/',
+      DRAFTS: 'invoices/drafts/',
+      PDF: (id) => `invoices/${id}/pdf/`,
+      WHATSAPP: (id) => `invoices/${id}/whatsapp/`,
     },
     
     // Challans (implemented as Orders with order_type='challan')

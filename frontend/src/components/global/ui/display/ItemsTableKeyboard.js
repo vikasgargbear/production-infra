@@ -259,13 +259,20 @@ const ItemsTableKeyboard = forwardRef(({
                 <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'rate', el)}
-                    value={item.rate || item.sale_price || 0}
+                    value={item.sale_price || item.rate || item.unit_price || 0}
                     type="number"
                     min={0}
                     decimalPlaces={2}
                     prefix={currencySymbol}
-                    onChange={(val) => onUpdateItem(index, 'rate', val)}  // Real-time update
-                    onSave={(val) => onUpdateItem(index, 'rate', val)}
+                    onChange={(val) => {
+                      // Update sale_price to match what preview expects
+                      onUpdateItem(index, 'sale_price', val);
+                      onUpdateItem(index, 'rate', val); // Also keep rate in sync
+                    }}
+                    onSave={(val) => {
+                      onUpdateItem(index, 'sale_price', val);
+                      onUpdateItem(index, 'rate', val);
+                    }}
                     onNavigate={(dir) => handleNavigate(index, 'rate', dir)}
                     readOnly={readOnly}
                     selectOnFocus={true}

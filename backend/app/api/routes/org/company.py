@@ -4,23 +4,25 @@ Handles company profile and settings
 """
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Body
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from datetime import datetime
 import json
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_org_id_string  # SECURE: JWT-based auth
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
+# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["company"])
 
 @router.get("/info")
-def get_company_info(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_company_info(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get company information"""
     try:
@@ -46,7 +48,7 @@ def get_company_info(
             WHERE org_id = :org_id
         """
         
-        result = db.execute(text(org_query), {"org_id": org_id})
+        result = db.execute(text(org_query), {"org_id": str(context.org_id)})
         org_data = result.first()
         
         if org_data:
@@ -88,7 +90,7 @@ def get_company_info(
                 WHERE org_id = :org_id AND is_default_account = true AND is_active = true
                 LIMIT 1
             """
-            bank_result = db.execute(text(bank_query), {"org_id": org_id})
+            bank_result = db.execute(text(bank_query), {"org_id": str(context.org_id)})
             bank_data = bank_result.first()
             
             # Return formatted data matching frontend expectations
@@ -185,10 +187,11 @@ def get_company_info(
         }
 
 @router.put("/info")
-def update_company_info(
+@with_tenant_context
+async def update_company_info(
     company_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update company information"""
     try:
@@ -201,7 +204,7 @@ def update_company_info(
             WHERE org_id = :org_id
         """
         
-        exists = db.execute(text(check_query), {"org_id": org_id}).first()
+        exists = db.execute(text(check_query), {"org_id": str(context.org_id)}).first()
         
         # Prepare JSON fields
         registered_address = json.dumps({
@@ -246,7 +249,7 @@ def update_company_info(
         
         # Execute the update
         result = db.execute(text(update_query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "name": company_data.get("name", ""),
             "registered_address": registered_address,
             "contact_numbers": contact_numbers,
@@ -258,7 +261,7 @@ def update_company_info(
             "fssai_no": company_data.get("fssai_no", "")
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Handle bank account data separately
         if any([company_data.get("bank_name"), company_data.get("account_number"), company_data.get("ifsc_code")]):
@@ -267,7 +270,7 @@ def update_company_info(
                 SELECT bank_account_id FROM master.org_bank_accounts
                 WHERE org_id = :org_id AND is_default_account = true
                 LIMIT 1
-            """), {"org_id": org_id}).first()
+            """), {"org_id": str(context.org_id)}).first()
             
             if existing_bank:
                 # Update existing bank account
@@ -303,7 +306,7 @@ def update_company_info(
                         true, true
                     )
                 """), {
-                    "org_id": org_id,
+                    "org_id": str(context.org_id),
                     "account_name": company_data.get("account_name", company_data.get("name", "")),
                     "account_number": company_data.get("account_number"),
                     "account_type": company_data.get("account_type", "CURRENT"),
@@ -339,11 +342,11 @@ def update_company_info(
             SET business_settings = CAST(:business_settings AS jsonb)
             WHERE org_id = :org_id
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "business_settings": json.dumps(business_settings)
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Return the data in same format as GET
         return company_data
@@ -363,16 +366,18 @@ def update_company_info(
         raise HTTPException(status_code=500, detail=f"Failed to update company info: {error_message}")
 
 @router.get("/org-id")
-def get_organization_id(
+@with_tenant_context
+async def get_organization_id(
     org_id: str = Depends(get_org_id_string)
 ):
     """Get current organization ID"""
-    return {"org_id": org_id}
+    return {"org_id": str(context.org_id)}
 
 @router.get("/profile")
-def get_company_profile(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_company_profile(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get complete company profile including all bank accounts - OPTIMIZED single query"""
     try:
@@ -419,7 +424,7 @@ def get_company_profile(
             LEFT JOIN qr_data q ON true
         """
         
-        result = db.execute(text(profile_query), {"org_id": org_id})
+        result = db.execute(text(profile_query), {"org_id": str(context.org_id)})
         row = result.first()
         
         if not row:
@@ -474,9 +479,10 @@ def get_company_profile(
         raise HTTPException(status_code=500, detail=f"Failed to fetch company profile: {str(e)}")
 
 @router.get("/bank-accounts")
-def get_bank_accounts(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_bank_accounts(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all bank accounts for the organization"""
     try:
@@ -496,7 +502,7 @@ def get_bank_accounts(
             ORDER BY is_default_account DESC, created_at ASC
         """
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         bank_accounts = []
         
         for row in result:
@@ -525,10 +531,11 @@ def get_bank_accounts(
         }
 
 @router.post("/qr-code")
-def upload_qr_code(
+@with_tenant_context
+async def upload_qr_code(
     qr_data: Dict[str, str] = Body(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Upload payment QR code"""
     try:
@@ -546,11 +553,11 @@ def upload_qr_code(
         """
         
         db.execute(text(query), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "qr_code": qr_code_base64
         })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
@@ -563,9 +570,10 @@ def upload_qr_code(
         raise HTTPException(status_code=500, detail=f"Failed to upload QR code: {str(e)}")
 
 @router.get("/settings")
-def get_company_settings(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+@with_tenant_context
+async def get_company_settings(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get company settings"""
     try:
@@ -577,7 +585,7 @@ def get_company_settings(
             WHERE org_id = :org_id
         """
         
-        result = db.execute(text(query), {"org_id": org_id})
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
         settings_rows = result.fetchall()
         
         # Convert to dictionary
@@ -619,10 +627,11 @@ def get_company_settings(
         return {}
 
 @router.put("/settings")
-def update_company_settings(
+@with_tenant_context
+async def update_company_settings(
     settings: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_string)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update company settings"""
     try:
@@ -640,12 +649,12 @@ def update_company_settings(
             """
             
             db.execute(text(query), {
-                "org_id": org_id,
+                "org_id": str(context.org_id),
                 "key": key,
                 "value": value
             })
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Return updated settings
         return get_company_settings(db, org_id)

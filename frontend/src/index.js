@@ -27,5 +27,8 @@ serviceWorkerRegistration.register({
     if (window.confirm('New version available! Reload to update?')) {
       window.location.reload();
     }
+  },
+  onOffline: () => {
+    console.log('[ServiceWorker] 📴 You are offline - App will continue to work');
   }
 });

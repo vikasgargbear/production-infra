@@ -191,10 +191,27 @@ class EnterpriseCalculator {
       total: i.quantity * i.unit_price
     })));
     
+    // Calculate additional discount from percentage or amount
+    let additionalDiscount = 0;
+    if (invoiceData.discount_type === 'percentage' && invoiceData.discount_percent) {
+      // IMPORTANT: Calculate discount as percentage of TAXABLE amount (after item-level discounts)
+      // This is the standard practice - invoice discount applies on pre-tax amount after item discounts
+      const prelimResult = this.calculateTotals(invoiceData.items || [], {
+        gst_type: invoiceData.gst_type,
+        delivery_charges: 0,
+        additional_discount: 0
+      });
+      additionalDiscount = (prelimResult.totals.taxable_amount * invoiceData.discount_percent) / 100;
+      console.log('🧮 [CALCULATOR] Percentage discount:', invoiceData.discount_percent, '% of taxable amount', prelimResult.totals.taxable_amount, '=', additionalDiscount);
+    } else if (invoiceData.discount_type === 'fixed' && invoiceData.discount_amount) {
+      additionalDiscount = invoiceData.discount_amount;
+      console.log('🧮 [CALCULATOR] Fixed discount:', additionalDiscount);
+    }
+    
     const result = this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
       delivery_charges: invoiceData.delivery_charges,
-      additional_discount: invoiceData.discount_amount || 0  // Apply invoice-level discount (in addition to item discounts)
+      additional_discount: additionalDiscount  // Apply invoice-level discount (in addition to item discounts)
     });
     
     console.log('🧮 [CALCULATOR] Calculated result:', result);

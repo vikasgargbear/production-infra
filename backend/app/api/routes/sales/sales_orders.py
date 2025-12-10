@@ -7,11 +7,12 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ....core.database import get_db
+from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.org_context import get_org_context, OrgContext
+from ....core.permissions import PermissionChecker
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ...services.document_number_service import DocumentNumberService
@@ -64,7 +65,7 @@ async def get_employees_for_created_by(
             FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true
             ORDER BY full_name
-        """), {"org_id": org_id})
+        """), {"org_id": str(context.org_id)})
         
         employees = [dict(row._mapping) for row in result]
         return employees
@@ -128,7 +129,7 @@ async def create_sales_order(
             SELECT customer_id, customer_name, primary_phone, gst_number
             FROM parties.customers
             WHERE customer_id = :id AND org_id = :org_id
-        """), {"id": order.customer_id, "org_id": org_id}).fetchone()
+        """), {"id": order.customer_id, "org_id": str(context.org_id)}).fetchone()
         
         if not customer:
             logger.error(f"Customer {order.customer_id} does not exist")
@@ -143,7 +144,7 @@ async def create_sales_order(
             product = db.execute(text("""
                 SELECT product_id, product_name FROM inventory.products
                 WHERE product_id = :id AND org_id = :org_id
-            """), {"id": item["product_id"], "org_id": org_id}).fetchone()
+            """), {"id": item["product_id"], "org_id": str(context.org_id)}).fetchone()
             
             if not product:
                 raise HTTPException(
@@ -216,7 +217,7 @@ async def create_sales_order(
             SELECT branch_id FROM master.org_branches 
             WHERE org_id = :org_id 
             LIMIT 1
-        """), {"org_id": org_id})
+        """), {"org_id": str(context.org_id)})
         branch = branch_result.fetchone()
         
         if not branch:
@@ -269,7 +270,7 @@ async def create_sales_order(
             SELECT user_id FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true 
             LIMIT 1
-        """), {"org_id": org_id})
+        """), {"org_id": str(context.org_id)})
         user = user_result.fetchone()
         
         if not user:
@@ -318,7 +319,7 @@ async def create_sales_order(
             product_details = db.execute(text("""
                 SELECT product_name, hsn_code, product_code FROM inventory.products
                 WHERE product_id = :product_id AND org_id = :org_id
-            """), {"product_id": item_data["product_id"], "org_id": org_id}).fetchone()
+            """), {"product_id": item_data["product_id"], "org_id": str(context.org_id)}).fetchone()
             
             # CORRECTED calculation logic - matching invoice pattern
             base_quantity = Decimal(str(item_data["quantity"]))  # What customer PAYS for
@@ -435,7 +436,7 @@ async def create_sales_order(
         
         # NO inventory allocation for sales orders - that happens on approval
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Return created order by fetching it directly
         result = db.execute(text("""
@@ -443,7 +444,7 @@ async def create_sales_order(
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id})
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         order = result.fetchone()
         if not order:
@@ -459,7 +460,7 @@ async def create_sales_order(
             JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
             WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": order_id, "org_id": org_id})
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -504,7 +505,7 @@ async def list_sales_orders(
             WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         # Add filters
         if customer_id:
@@ -547,7 +548,7 @@ async def list_sales_orders(
                 JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
                 WHERE oi.order_id = ANY(:order_ids) AND oi.org_id = :org_id
                 ORDER BY oi.order_id, oi.order_item_id
-            """), {"order_ids": order_ids, "org_id": org_id})
+            """), {"order_ids": order_ids, "org_id": str(context.org_id)})
             
             for item in items_result:
                 order_id = item.order_id
@@ -594,7 +595,7 @@ async def get_sales_order(
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id})
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         order = result.fetchone()
         if not order:
@@ -610,7 +611,7 @@ async def get_sales_order(
             JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
             WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": order_id, "org_id": org_id})
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -639,7 +640,7 @@ async def update_sales_order(
         existing = db.execute(text("""
             SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id}).fetchone()
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not existing:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -652,7 +653,7 @@ async def update_sales_order(
         
         # Build update query
         update_fields = []
-        params = {"order_id": order_id, "org_id": org_id}
+        params = {"order_id": order_id, "org_id": str(context.org_id)}
         
         update_data = order_data.dict(exclude_unset=True)
         for field, value in update_data.items():
@@ -674,7 +675,7 @@ async def update_sales_order(
         """
         
         db.execute(text(update_query), params)
-        db.commit()
+        # TenantAwareSession auto-commits
         
         # Return updated order by fetching it directly
         result = db.execute(text("""
@@ -682,7 +683,7 @@ async def update_sales_order(
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id})
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         order = result.fetchone()
         if not order:
@@ -698,7 +699,7 @@ async def update_sales_order(
             JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
             WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": order_id, "org_id": org_id})
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -731,7 +732,7 @@ async def approve_sales_order(
         order = db.execute(text("""
             SELECT order_status, customer_id FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id}).fetchone()
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -747,7 +748,7 @@ async def approve_sales_order(
             SELECT product_id, batch_id, quantity, unit_price
             FROM sales.order_items 
             WHERE order_id = :order_id
-        """), {"order_id": order_id, "org_id": org_id}).fetchall()
+        """), {"order_id": order_id, "org_id": str(context.org_id)}).fetchall()
         
         items_dict = [dict(item._mapping) for item in items]
         
@@ -789,12 +790,12 @@ async def approve_sales_order(
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id})
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         # NOW allocate inventory
         OrderService.allocate_inventory(db, order_id, items_dict, org_id)
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": f"Sales order {order_id} approved successfully", 
@@ -824,7 +825,7 @@ async def convert_to_invoice(
         order = db.execute(text("""
             SELECT order_status, order_number FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id}).fetchone()
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -851,7 +852,7 @@ async def convert_to_invoice(
             WHERE order_id = :id
         """), {"id": order_id})
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return InvoiceResponse(**invoice_data)
         
@@ -877,7 +878,7 @@ async def convert_to_challan(
         order = db.execute(text("""
             SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": org_id}).fetchone()
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -897,7 +898,7 @@ async def convert_to_challan(
             WHERE order_id = :id
         """), {"id": order_id})
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "message": f"Sales order {order_id} converted to challan",
@@ -928,7 +929,7 @@ async def validate_sales_order(
         customer = db.execute(text("""
             SELECT customer_id FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
-        """), {"id": order_data.customer_id, "org_id": org_id}).fetchone()
+        """), {"id": order_data.customer_id, "org_id": str(context.org_id)}).fetchone()
         
         if not customer:
             return {"valid": False, "message": "Customer not found"}
@@ -938,7 +939,7 @@ async def validate_sales_order(
             product = db.execute(text("""
                 SELECT product_id FROM inventory.products 
                 WHERE product_id = :id AND org_id = :org_id
-            """), {"id": item.product_id, "org_id": org_id}).fetchone()
+            """), {"id": item.product_id, "org_id": str(context.org_id)}).fetchone()
             
             if not product:
                 return {"valid": False, "message": f"Product {item.product_id} not found"}
@@ -953,7 +954,7 @@ async def validate_sales_order(
 @with_tenant_context
 async def get_sales_order_dashboard(
     context: OrgContext = Depends(get_org_context),
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get sales order dashboard statistics"""
     try:
