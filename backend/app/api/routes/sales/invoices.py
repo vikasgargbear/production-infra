@@ -17,7 +17,7 @@ from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
 from ...services.document_number_service import DocumentNumberService
 from ...services.document_number_service_v2 import DocumentNumberServiceV2
-from .enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
+from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
 from ....services.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
