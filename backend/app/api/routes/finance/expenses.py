@@ -44,54 +44,22 @@ class ExpenseClaimCreate(BaseModel):
 async def generate_claim_number(db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """
-    Generate unique expense claim number
-    
-    Format: EXP-YYYY-NNNN
+    Generate unique expense claim number using DocumentNumberService
     """
     try:
-        current_date = date.today()
-        year = current_date.year
-        
-        # Get next sequence number atomically
-        seq_query = """
-            SELECT COALESCE(MAX(
-                CASE 
-                    WHEN claim_number ~ :pattern THEN 
-                        CAST(SUBSTRING(claim_number FROM :extract_pattern) AS INTEGER)
-                    ELSE 0 
-                END
-            ), 0) + 1 as next_number
-            FROM financial.expense_claims 
-            WHERE org_id = :org_id
-                AND EXTRACT(YEAR FROM claim_date) = :year
-                AND claim_number LIKE :like_pattern
-        """
-        
-        pattern = f"^EXP-{year}-[0-9]+$"
-        extract_pattern = f"EXP-{year}-([0-9]+)$"
-        like_pattern = f"EXP-{year}-%"
-        
-        result = db.execute(text(seq_query), {
-            "org_id": str(context.org_id),
-            "year": year,
-            "pattern": pattern,
-            "extract_pattern": extract_pattern,
-            "like_pattern": like_pattern
-        }).fetchone()
-        
-        next_number = str(result.next_number).zfill(4)
-        claim_number = f"EXP-{year}-{next_number}"
-        
+        claim_number = DocumentNumberService.generate_number(
+            db.session, "expense_claim", str(context.org_id)
+        )
         return {
             "claim_number": claim_number,
             "generated_at": datetime.now().isoformat()
         }
-        
     except Exception as e:
         logger.error(f"Error generating claim number: {str(e)}")
         # Fallback to timestamp-based generation
-        timestamp = int(datetime.now().timestamp())
-        fallback_number = f"EXP-{year}-{str(timestamp)[-4:]}"
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
+        fallback_number = f"EXP-{current_year:02d}{timestamp:08d}"
         return {
             "claim_number": fallback_number,
             "generated_at": datetime.now().isoformat(),

@@ -66,54 +66,21 @@ class JournalEntryCreate(BaseModel):
 async def generate_journal_number(db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """
-    Generate unique journal entry number
-    
-    Format: JV-YYYY-NNNN
+    Generate unique journal entry number using DocumentNumberService
     """
     try:
-        current_date = date.today()
-        year = current_date.year
-        
-        # Get next sequence number atomically
-        seq_query = """
-            SELECT COALESCE(MAX(
-                CASE 
-                    WHEN journal_number ~ :pattern THEN 
-                        CAST(SUBSTRING(journal_number FROM :extract_pattern) AS INTEGER)
-                    ELSE 0 
-                END
-            ), 0) + 1 as next_number
-            FROM financial.journal_entries 
-            WHERE org_id = :org_id
-                AND EXTRACT(YEAR FROM journal_date) = :year
-                AND journal_number LIKE :like_pattern
-        """
-        
-        pattern = f"^JV-{year}-[0-9]+$"
-        extract_pattern = f"JV-{year}-([0-9]+)$"
-        like_pattern = f"JV-{year}-%"
-        
-        result = db.execute(text(seq_query), {
-            "org_id": str(context.org_id),
-            "year": year,
-            "pattern": pattern,
-            "extract_pattern": extract_pattern,
-            "like_pattern": like_pattern
-        }).fetchone()
-        
-        next_number = str(result.next_number).zfill(4)
-        journal_number = f"JV-{year}-{next_number}"
-        
+        journal_number = DocumentNumberService.generate_number(
+            db.session, "journal_entry", str(context.org_id)
+        )
         return {
             "journal_number": journal_number,
             "generated_at": datetime.now().isoformat()
         }
-        
     except Exception as e:
         logger.error(f"Error generating journal number: {str(e)}")
-        # Fallback to timestamp-based generation
-        timestamp = int(datetime.now().timestamp())
-        fallback_number = f"JV-{year}-{str(timestamp)[-4:]}"
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
+        fallback_number = f"JV-{current_year:02d}{timestamp:08d}"
         return {
             "journal_number": fallback_number,
             "generated_at": datetime.now().isoformat(),
@@ -207,41 +174,10 @@ async def create_journal_entry(
         
         # Generate journal number if not provided
         # Can't call Depends functions directly, generate number here
-        current_date = date.today()
-        year = current_date.year
-        
-        # Get next sequence number atomically
-        seq_query = """
-            SELECT COALESCE(MAX(
-                CASE 
-                    WHEN journal_number ~ :pattern THEN 
-                        CAST(SUBSTRING(journal_number FROM :extract_pattern) AS INTEGER)
-                    ELSE 0 
-                END
-            ), 0) + 1 as next_number
-            FROM financial.journal_entries 
-            WHERE org_id = :org_id
-                AND EXTRACT(YEAR FROM journal_date) = :year
-                AND journal_number LIKE :like_pattern
-        """
-        
-        pattern = f"^JV-{year}-[0-9]+$"
-        extract_pattern = f"JV-{year}-([0-9]+)$"
-        like_pattern = f"JV-{year}-%"
-        
-        result = db.execute(
-            text(seq_query),
-            {
-                "org_id": str(context.org_id),
-                "year": year,
-                "pattern": pattern,
-                "extract_pattern": extract_pattern,
-                "like_pattern": like_pattern
-            }
-        ).first()
-        
-        next_number = result.next_number if result else 1
-        journal_number = f"JV-{year}-{str(next_number).zfill(4)}"
+        # Use DocumentNumberService for consistent number generation
+        journal_number = DocumentNumberService.generate_number(
+            db.session, "journal_entry", str(context.org_id)
+        )
         
         # Get or create system user for API operations
         if not journal_entry.created_by:
