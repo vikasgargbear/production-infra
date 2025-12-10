@@ -4,7 +4,6 @@ Integrates with Supabase OAuth for social login
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse, JSONResponse
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, EmailStr
@@ -13,7 +12,7 @@ import os
 import logging
 from datetime import timedelta
 
-from ....core.database import get_db
+from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....core.jwt_auth import create_access_token
 from ....core.supabase_auth import supabase_auth
 from ....repositories.user_repository import UserRepository
@@ -81,7 +80,7 @@ async def get_google_oauth_url(
 @router.post("/google/callback")
 async def google_oauth_callback(
     request: OAuthCallbackRequest,
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ) -> Dict[str, Any]:
     """
     Handle Google OAuth callback
@@ -185,7 +184,7 @@ async def google_oauth_callback(
 @router.post("/supabase/callback")
 async def supabase_oauth_callback(
     code: str,
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ) -> Dict[str, Any]:
     """
     Handle Supabase OAuth callback (alternative method)

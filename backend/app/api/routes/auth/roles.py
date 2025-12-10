@@ -4,12 +4,11 @@ Comprehensive role and permission management endpoints
 """
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import json
 import logging
 
-from ....core.database import get_db
+from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....core.permissions import PermissionChecker
 from ....core.role_management import RoleManager
 
@@ -19,7 +18,7 @@ router = APIRouter(prefix="/api/roles", tags=["Role Management"])
 
 @router.get("/")
 def get_roles(
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
 ):
     """Get all roles for the organization"""
@@ -62,7 +61,7 @@ def get_roles(
 
 @router.post("/setup-defaults")
 def setup_default_roles(
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ):
     """Setup default roles for the organization (Admin only)"""
@@ -85,7 +84,7 @@ def setup_default_roles(
 @router.get("/{role_id}")
 def get_role_details(
     role_id: int,
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
 ):
     """Get detailed information about a specific role"""
@@ -143,7 +142,7 @@ def get_role_details(
 @router.post("/")
 def create_custom_role(
     role_data: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ):
     """Create a custom role (Admin only)"""
@@ -184,7 +183,7 @@ def create_custom_role(
 def update_role(
     role_id: int,
     role_data: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ):
     """Update a role (Admin only)"""
@@ -235,7 +234,7 @@ def update_role(
             params
         )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
@@ -253,7 +252,7 @@ def update_role(
 def delete_role(
     role_id: int,
     reassign_to: Optional[int] = None,
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
 ):
     """Delete a role (Admin only)"""
@@ -307,7 +306,7 @@ def delete_role(
             {"role_id": role_id, "org_id": org_id}
         )
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
@@ -324,7 +323,7 @@ def delete_role(
 @router.post("/assign")
 def assign_role_to_users(
     assignment_data: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit"))
 ):
     """Assign role to multiple users"""
@@ -370,7 +369,7 @@ def assign_role_to_users(
         )
         
         updated_count = result.rowcount
-        db.commit()
+        # TenantAwareSession auto-commits
         
         return {
             "success": True,
@@ -388,7 +387,7 @@ def assign_role_to_users(
 @router.get("/user/{user_id}/permissions")
 def get_user_permissions(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
 ):
     """Get effective permissions for a user"""
@@ -424,7 +423,7 @@ def get_user_permissions(
 @router.post("/validate")
 def validate_permission(
     validation_data: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker())
 ):
     """Validate if current user has specific permission"""

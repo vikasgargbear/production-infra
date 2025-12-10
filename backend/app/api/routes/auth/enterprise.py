@@ -4,11 +4,10 @@ Clean, layered architecture with offline support for India's network conditions
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 from typing import Dict, Any
 import logging
 
-from ....core.database import get_db
+from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....services.auth import (
     AuthService,
     InvalidCredentialsError,
@@ -33,7 +32,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login(
     request_data: LoginRequest,
     req: Request,
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Authenticate user and return JWT tokens
@@ -192,7 +191,7 @@ async def logout(
 @router.get("/verify-token")
 async def verify_token(
     req: Request,
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ) -> Dict[str, Any]:
     """
     Verify if current token is valid (not expired, not blacklisted).
@@ -247,7 +246,7 @@ async def verify_token(
 
 
 @router.get("/health")
-async def auth_health_check(db: Session = Depends(get_db)) -> Dict[str, str]:
+async def auth_health_check(db: TenantAwareSession = Depends(get_tenant_aware_db)) -> Dict[str, str]:
     """
     Health check for authentication service
     Tests database connectivity
@@ -278,7 +277,7 @@ async def auth_health_check(db: Session = Depends(get_db)) -> Dict[str, str]:
 @router.post("/check-user")
 async def check_user_exists(
     email: str,
-    db: Session = Depends(get_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ) -> Dict[str, bool]:
     """
     Check if user exists (for registration flow)
