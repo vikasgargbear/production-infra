@@ -100,6 +100,7 @@ async def list_departments(
 @with_tenant_context
 async def get_department(
     department_id: int,
+    _: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -135,6 +136,7 @@ async def get_department(
 @with_tenant_context
 async def create_department(
     department_data: Dict[str, Any],
+    _: dict = Depends(PermissionChecker("master", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -195,6 +197,7 @@ async def create_department(
 async def update_department(
     department_id: int,
     department_data: Dict[str, Any],
+    _: dict = Depends(PermissionChecker("master", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -259,6 +262,7 @@ async def update_department(
 @with_tenant_context
 async def delete_department(
     department_id: int,
+    _: dict = Depends(PermissionChecker("master", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

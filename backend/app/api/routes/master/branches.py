@@ -105,6 +105,7 @@ async def list_branches(
 @with_tenant_context
 async def get_branch(
     branch_id: int,
+    _: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -140,6 +141,7 @@ async def get_branch(
 @with_tenant_context
 async def create_branch(
     branch_data: Dict[str, Any],
+    _: dict = Depends(PermissionChecker("master", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -219,6 +221,7 @@ async def create_branch(
 async def update_branch(
     branch_id: int,
     branch_data: Dict[str, Any],
+    _: dict = Depends(PermissionChecker("master", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -303,6 +306,7 @@ async def update_branch(
 @with_tenant_context
 async def delete_branch(
     branch_id: int,
+    _: dict = Depends(PermissionChecker("master", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

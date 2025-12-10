@@ -126,6 +126,7 @@ async def list_employees(
 @with_tenant_context
 async def get_employee(
     employee_id: int, 
+    _: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -167,6 +168,7 @@ async def get_employee(
 @with_tenant_context
 async def create_employee(
     employee_data: Dict[str, Any], 
+    _: dict = Depends(PermissionChecker("master", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -270,6 +272,7 @@ async def create_employee(
 async def update_employee(
     employee_id: int,
     employee_data: Dict[str, Any], 
+    _: dict = Depends(PermissionChecker("master", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -399,6 +402,7 @@ async def update_employee(
 @with_tenant_context
 async def delete_employee(
     employee_id: int,
+    _: dict = Depends(PermissionChecker("master", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

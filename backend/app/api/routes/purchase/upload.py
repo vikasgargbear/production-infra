@@ -2,8 +2,8 @@
 Purchase Order Upload and Extraction API Router
 Handles PDF/image upload, parsing, and purchase order creation
 """
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import text
 import logging
 from datetime import datetime
@@ -114,6 +114,7 @@ async def get_parser_version():
 async def check_supplier(
     gstin: Optional[str] = None,
     name: Optional[str] = None,
+    _: dict = Depends(PermissionChecker("purchase", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -525,6 +526,7 @@ async def parse_purchase_invoice(
 @with_tenant_context
 async def create_purchase_from_parsed(
     purchase_data: dict,
+    _: dict = Depends(PermissionChecker("purchase", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -698,6 +700,7 @@ async def create_purchase_from_parsed(
 async def get_parse_history(
     skip: int = 0,
     limit: int = 10,
+    _: dict = Depends(PermissionChecker("purchase", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -715,6 +718,7 @@ async def get_parse_history(
 @with_tenant_context
 async def validate_invoice_data(
     invoice_data: dict,
+    _: dict = Depends(PermissionChecker("purchase", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

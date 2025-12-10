@@ -194,6 +194,7 @@ async def create_scheme(
 async def get_active_schemes(
     customer_id: Optional[int] = None,
     product_id: Optional[int] = None,
+    _: dict = Depends(PermissionChecker("sales", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -291,6 +292,7 @@ async def get_active_schemes(
 @with_tenant_context
 async def calculate_discount(
     calculation: DiscountCalculation,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -438,6 +440,7 @@ async def calculate_discount(
 @with_tenant_context
 async def apply_scheme_to_invoice(
     invoice_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -538,6 +541,7 @@ async def apply_scheme_to_invoice(
 @with_tenant_context
 async def get_scheme_details(
     scheme_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -606,6 +610,7 @@ async def get_scheme_details(
 async def update_scheme(
     scheme_id: int,
     update_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -648,6 +653,7 @@ async def update_scheme(
 @with_tenant_context
 async def deactivate_scheme(
     scheme_id: int,
+    _: dict = Depends(PermissionChecker("sales", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

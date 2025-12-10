@@ -3,7 +3,7 @@ Bank Accounts API Router
 Handles multiple bank accounts for organizations
 Version: 1.0.0
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import text
 import logging
@@ -27,6 +27,7 @@ router = APIRouter(tags=["Bank Accounts"])
 @router.get("/")
 @with_tenant_context
 async def get_bank_accounts(
+    _: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -214,6 +215,7 @@ async def update_bank_account(
 @with_tenant_context
 async def delete_bank_account(
     account_id: int,
+    _: dict = Depends(PermissionChecker("master", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -262,6 +264,7 @@ async def delete_bank_account(
 @with_tenant_context
 async def set_default_account(
     account_id: int,
+    _: dict = Depends(PermissionChecker("master", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

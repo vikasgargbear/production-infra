@@ -4,7 +4,7 @@ Manages drug licenses, regulatory compliance, and inspections
 """
 from typing import Optional, List
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging

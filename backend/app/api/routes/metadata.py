@@ -4,7 +4,7 @@ Provides dropdown data, categories, and other metadata for frontend
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
-from typing import List, Dict, Any
+from typing import Any
 import logging
 
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
@@ -18,6 +18,7 @@ router = APIRouter()
 @router.get("/categories")
 @with_tenant_context
 async def get_product_categories(
+    _: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -44,7 +45,8 @@ async def get_product_categories(
 
 @router.get("/pack-types")
 @with_tenant_context
-async def get_pack_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_pack_types(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all available pack types for products"""
     return {
@@ -69,7 +71,8 @@ async def get_pack_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
 
 @router.get("/payment-terms")
 @with_tenant_context
-async def get_payment_terms(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_payment_terms(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all available payment terms"""
     return {
@@ -95,7 +98,8 @@ async def get_payment_terms(db: TenantAwareSession = Depends(get_tenant_aware_db
 
 @router.get("/payment-modes")
 @with_tenant_context
-async def get_payment_modes(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_payment_modes(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all available payment modes"""
     return {
@@ -116,7 +120,8 @@ async def get_payment_modes(db: TenantAwareSession = Depends(get_tenant_aware_db
 
 @router.get("/document-statuses")
 @with_tenant_context
-async def get_document_statuses(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_document_statuses(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all document status options"""
     return {
@@ -130,7 +135,8 @@ async def get_document_statuses(db: TenantAwareSession = Depends(get_tenant_awar
 
 @router.get("/units-of-measure")
 @with_tenant_context
-async def get_units_of_measure(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_units_of_measure(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all units of measure"""
     return {
@@ -155,7 +161,8 @@ async def get_units_of_measure(db: TenantAwareSession = Depends(get_tenant_aware
 
 @router.get("/return-reasons")
 @with_tenant_context
-async def get_return_reasons(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_return_reasons(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all return reason options"""
     return {
@@ -184,7 +191,8 @@ async def get_return_reasons(db: TenantAwareSession = Depends(get_tenant_aware_d
 
 @router.get("/tax-types")
 @with_tenant_context
-async def get_tax_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_tax_types(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all tax type options"""
     return {
@@ -203,7 +211,8 @@ async def get_tax_types(db: TenantAwareSession = Depends(get_tenant_aware_db),
 
 @router.get("/transport-modes")
 @with_tenant_context
-async def get_transport_modes(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_transport_modes(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all transport mode options"""
     return {
@@ -220,7 +229,8 @@ async def get_transport_modes(db: TenantAwareSession = Depends(get_tenant_aware_
 
 @router.get("/credit-plans")
 @with_tenant_context
-async def get_credit_plans(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_credit_plans(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get available credit plans from customer groups"""
     try:
@@ -274,7 +284,8 @@ async def get_credit_plans(db: TenantAwareSession = Depends(get_tenant_aware_db)
 
 @router.get("/credit-days")
 @with_tenant_context
-async def get_credit_days_options(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_credit_days_options(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get standard credit days options"""
     return {
@@ -296,7 +307,8 @@ async def get_credit_days_options(db: TenantAwareSession = Depends(get_tenant_aw
 
 @router.get("/credit-ratings")
 @with_tenant_context
-async def get_credit_ratings(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_credit_ratings(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get credit rating options from customer_groups table"""
     try:
@@ -348,7 +360,8 @@ async def get_credit_ratings(db: TenantAwareSession = Depends(get_tenant_aware_d
 
 @router.get("/all")
 @with_tenant_context
-async def get_all_metadata(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_all_metadata(_: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get all metadata in one call for caching - Enterprise approach"""
     try:

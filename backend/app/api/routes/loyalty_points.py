@@ -2,7 +2,7 @@
 Loyalty Points Management API
 Manages customer loyalty programs, points earning and redemption
 """
-from typing import Optional, List
+from typing import Optional
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -155,6 +155,7 @@ async def get_active_program(
 async def add_program_tier(
     program_id: int,
     tier: CustomerTier,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -212,6 +213,7 @@ async def add_program_tier(
 @with_tenant_context
 async def get_customer_points(
     customer_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -332,6 +334,7 @@ async def get_customer_points(
 @with_tenant_context
 async def earn_points(
     transaction: PointsTransaction,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -421,6 +424,7 @@ async def earn_points(
 @with_tenant_context
 async def redeem_points(
     redemption: PointsRedemption,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -561,6 +565,7 @@ async def redeem_points(
 @router.post("/points/expire")
 @with_tenant_context
 async def expire_points(
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -730,6 +735,7 @@ async def get_loyalty_analytics(
 @with_tenant_context
 async def run_bonus_campaign(
     campaign_data: dict,
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

@@ -2,7 +2,7 @@
 Stock Dashboard API Router
 Provides stock management dashboard data and metrics
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
@@ -19,7 +19,8 @@ router = APIRouter(prefix="/stock", tags=["stock-dashboard"])
 
 @router.get("/dashboard")
 @with_tenant_context
-async def get_stock_dashboard(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_stock_dashboard(_: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get stock dashboard metrics"""
     try:
@@ -227,7 +228,8 @@ async def get_current_stock(
 
 @router.get("/alerts")
 @with_tenant_context
-async def get_stock_alerts(db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_stock_alerts(_: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get stock alerts for low stock and out of stock items"""
     try:

@@ -2,7 +2,7 @@
 Supplier Invoice API Router
 Handles supplier invoices and related operations
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
@@ -181,6 +181,7 @@ async def get_returnable_invoices(
 @with_tenant_context
 async def get_invoice_details(
     invoice_id: int,
+    _: dict = Depends(PermissionChecker("purchase", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -218,6 +219,7 @@ async def get_invoice_details(
 @with_tenant_context
 async def get_invoice_items(
     invoice_id: int,
+    _: dict = Depends(PermissionChecker("purchase", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):

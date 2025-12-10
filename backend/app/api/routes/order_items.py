@@ -2,7 +2,7 @@
 Order Items API Router
 Manages individual items within orders
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
@@ -58,7 +58,8 @@ async def get_order_items(
 
 @router.get("/{order_item_id}")
 @with_tenant_context
-async def get_order_item(order_item_id: int, db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def get_order_item(order_item_id: int, _: dict = Depends(PermissionChecker("sales", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Get a single order item by ID"""
     try:
@@ -74,7 +75,8 @@ async def get_order_item(order_item_id: int, db: TenantAwareSession = Depends(ge
 
 @router.post("/")
 @with_tenant_context
-async def create_order_item(order_item_data: dict, db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def create_order_item(order_item_data: dict, _: dict = Depends(PermissionChecker("sales", "create")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Create a new order item"""
     try:
@@ -90,7 +92,8 @@ async def create_order_item(order_item_data: dict, db: TenantAwareSession = Depe
 
 @router.put("/{order_item_id}")
 @with_tenant_context
-async def update_order_item(order_item_id: int, order_item_data: dict, db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def update_order_item(order_item_id: int, order_item_data: dict, _: dict = Depends(PermissionChecker("sales", "edit")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Update an order item"""
     try:
@@ -113,7 +116,8 @@ async def update_order_item(order_item_id: int, order_item_data: dict, db: Tenan
 
 @router.delete("/{order_item_id}")
 @with_tenant_context
-async def delete_order_item(order_item_id: int, db: TenantAwareSession = Depends(get_tenant_aware_db),
+async def delete_order_item(order_item_id: int, _: dict = Depends(PermissionChecker("sales", "delete")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
     """Delete an order item"""
     try:
