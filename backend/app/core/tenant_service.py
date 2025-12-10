@@ -133,27 +133,65 @@ class TenantQueryBuilder:
     - branch_id: Injected for BRANCH_TABLES if user's branch_scope != ALL
     """
     
-    # Tables that need tenant (org_id) filtering
+    # Tables that need tenant (org_id) filtering - ALL business tables
+    # Extracted from SQL queries in API files - automatically injected
     TENANT_TABLES = {
-        'customers', 'suppliers', 'products', 'invoices', 'orders',
-        'payments', 'inventory', 'sales', 'purchase_orders', 
-        'delivery_challans', 'credit_notes', 'debit_notes',
-        'stock_movements', 'journal_entries', 'expense_claims',
-        'batches', 'inventory_batches'
+        # ===== PARTIES SCHEMA =====
+        'customers', 'suppliers', 'customer_groups',
+        
+        # ===== INVENTORY SCHEMA =====
+        'products', 'product_categories', 'product_types',
+        'batches', 'inventory_batches',
+        'location_wise_stock', 'inventory_movements', 'movement_summary',
+        
+        # ===== SALES SCHEMA =====
+        'invoices', 'invoice_items',
+        'orders', 'order_items',
+        'delivery_challans', 'delivery_challan_items',
+        'credit_notes', 'debit_notes',
+        'sales_returns', 'sales_return_items',
+        'promotional_schemes', 'scheme_customers', 'scheme_products', 'scheme_volume_slabs',
+        'loyalty_programs', 'loyalty_tiers', 'loyalty_transactions',
+        'payment_promises',
+        
+        # ===== PROCUREMENT SCHEMA =====
+        'purchase_orders', 'purchase_order_items',
+        'purchases', 'supplier_invoices', 'supplier_invoice_items',
+        'goods_receipt_notes', 'grn_items',
+        'purchase_returns',
+        
+        # ===== FINANCIAL SCHEMA =====
+        'payments', 'payment_allocations', 'payment_methods',
+        'journal_entries', 'journal_entry_lines',
+        'expense_claims', 'expense_claim_items',
+        'credit_debit_notes', 'customer_outstanding',
+        'chart_of_accounts',
+        
+        # ===== MASTER SCHEMA =====
+        'org_branches', 'org_bank_accounts', 'org_users',
+        'departments', 'employees', 'addresses',
+        'roles',  # Org-specific roles
+        
+        # ===== COMPLIANCE SCHEMA =====
+        'drug_licenses', 'pharmacist_registrations',
+        'compliance_audits', 'compliance_alerts', 'corrective_actions',
+        'inspector_visits', 'expired_destructions', 'temperature_zones',
     }
     
-    # Tables that ALSO need branch filtering (subset of TENANT_TABLES)
-    # These are operational tables where branch isolation matters
+    # Tables that ALSO need branch filtering (operational tables)
     BRANCH_TABLES = {
         'invoices', 'orders', 'payments', 'sales', 'purchase_orders',
         'delivery_challans', 'stock_movements', 'inventory',
-        'credit_notes', 'debit_notes', 'journal_entries'
+        'credit_notes', 'debit_notes', 'journal_entries',
+        'expense_claims', 'goods_receipt_notes', 'supplier_invoices',
     }
     
-    # Tables that are global (no tenant filtering)
+    # Tables that are GLOBAL (no tenant filtering)
     GLOBAL_TABLES = {
-        'organizations', 'users', 'roles', 'permissions', 
-        'system_config', 'audit_logs', 'branches'
+        'organizations',  # Org table itself
+        'users',          # User identity (spans orgs)
+        'system_settings', 'system_config', 'feature_flags',
+        'audit_logs',
     }
     
     @classmethod
