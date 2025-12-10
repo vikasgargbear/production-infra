@@ -6,70 +6,85 @@
 
 import apiClient from '../apiClient';
 
+// Backend routes are under /credit-debit-notes
+const BASE_URL = '/credit-debit-notes';
+
 export const notesApi = {
+  // List all notes with filters
+  list: async (params = {}) => {
+    const response = await apiClient.get(BASE_URL, { params });
+    return response.data;
+  },
+
   // List all credit notes with filters
   listCreditNotes: async (params = {}) => {
-    const response = await apiClient.get('/v1/credit-notes', { params });
+    const response = await apiClient.get(BASE_URL, { params: { ...params, note_type: 'credit' } });
     return response.data;
   },
 
   // List all debit notes with filters
   listDebitNotes: async (params = {}) => {
-    const response = await apiClient.get('/v1/debit-notes', { params });
+    const response = await apiClient.get(BASE_URL, { params: { ...params, note_type: 'debit' } });
+    return response.data;
+  },
+
+  // Get note details by ID
+  get: async (noteId) => {
+    const response = await apiClient.get(`${BASE_URL}/${noteId}`);
     return response.data;
   },
 
   // Get credit note details by ID
   getCreditNote: async (creditNoteId) => {
-    const response = await apiClient.get(`/v1/credit-notes/${creditNoteId}`);
+    const response = await apiClient.get(`${BASE_URL}/${creditNoteId}`);
     return response.data;
   },
 
   // Get debit note details by ID
   getDebitNote: async (debitNoteId) => {
-    const response = await apiClient.get(`/v1/debit-notes/${debitNoteId}`);
+    const response = await apiClient.get(`${BASE_URL}/${debitNoteId}`);
     return response.data;
   },
 
   // Create credit note
   createCreditNote: async (data) => {
-    const response = await apiClient.post('/v1/credit-notes', data);
+    const response = await apiClient.post(`${BASE_URL}/credit-notes`, data);
     return response.data;
   },
 
   // Create debit note
   createDebitNote: async (data) => {
-    const response = await apiClient.post('/v1/debit-notes', data);
+    const response = await apiClient.post(`${BASE_URL}/debit-notes`, data);
     return response.data;
   },
 
   // Update credit note
   updateCreditNote: async (creditNoteId, data) => {
-    const response = await apiClient.put(`/v1/credit-notes/${creditNoteId}`, data);
+    const response = await apiClient.put(`${BASE_URL}/${creditNoteId}`, data);
     return response.data;
   },
 
   // Update debit note
   updateDebitNote: async (debitNoteId, data) => {
-    const response = await apiClient.put(`/v1/debit-notes/${debitNoteId}`, data);
+    const response = await apiClient.put(`${BASE_URL}/${debitNoteId}`, data);
     return response.data;
   },
 
   // Apply credit note to invoice
   applyCreditNote: async (creditNoteId, applicationData) => {
-    const response = await apiClient.post(`/v1/credit-notes/${creditNoteId}/apply`, applicationData);
+    const response = await apiClient.post(`${BASE_URL}/${creditNoteId}/apply`, applicationData);
     return response.data;
   },
 
   // Get credit note reasons
   getCreditNoteReasons: async () => {
-    const response = await apiClient.get('/v1/credit-note-reasons');
+    const response = await apiClient.get(`${BASE_URL}/credit-note-reasons`);
     return response.data;
   },
 
   // Get debit note reasons
   getDebitNoteReasons: async () => {
-    const response = await apiClient.get('/v1/debit-note-reasons');
+    const response = await apiClient.get(`${BASE_URL}/debit-note-reasons`);
     return response.data;
   },
 
@@ -91,7 +106,7 @@ export const notesApi = {
     try {
       // Import the InvoiceApiService to use the working method
       const InvoiceApiService = require('../../invoiceApiService').default;
-      
+
       // Use the same getInvoices method that works in InvoiceSelector, SalesReturnFlow, etc.
       const response = await InvoiceApiService.getInvoices({
         customer_id: partyId,
@@ -99,19 +114,19 @@ export const notesApi = {
         // Get unpaid and partially paid invoices for credit note
         payment_status: 'pending,partial,unpaid'
       });
-      
+
       if (response.success && response.data) {
         // Return in expected format
         return {
           invoices: response.data.invoices || response.data || []
         };
       }
-      
+
       return { invoices: [] };
     } catch (error) {
       // Fallback to direct API call if service not available
       const response = await apiClient.get('/v1/invoices', {
-        params: { 
+        params: {
           customer_id: partyId,
           limit: 100
         }
@@ -145,15 +160,15 @@ export const notesApi = {
     list: async (params) => {
       return notesApi.list({ ...params, note_type: 'credit' });
     },
-    
+
     create: async (data) => {
       return notesApi.createCreditNote(data);
     },
-    
+
     get: async (id) => {
       return notesApi.get(id);
     },
-    
+
     cancel: async (id, reason) => {
       return notesApi.cancel(id, reason);
     }
@@ -164,15 +179,15 @@ export const notesApi = {
     list: async (params) => {
       return notesApi.list({ ...params, note_type: 'debit' });
     },
-    
+
     create: async (data) => {
       return notesApi.createDebitNote(data);
     },
-    
+
     get: async (id) => {
       return notesApi.get(id);
     },
-    
+
     cancel: async (id, reason) => {
       return notesApi.cancel(id, reason);
     }
