@@ -156,9 +156,9 @@ const InvoicePreviewEnterprise = ({
                     <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
                     {(() => {
                       // Get selected bank account from invoice or use default
-                      const selectedBank = invoice.bank_account_id && companyInfo.bankAccounts
+                      const selectedBank = invoice.bank_account_id && companyInfo?.bankAccounts
                         ? companyInfo.bankAccounts.find(acc => acc.id === invoice.bank_account_id)
-                        : companyInfo.bankAccounts?.[0]; // Default to first account
+                        : companyInfo?.bankAccounts?.[0]; // Default to first account
                       
                       if (selectedBank) {
                         return (
@@ -195,7 +195,7 @@ const InvoicePreviewEnterprise = ({
                             </svg>
                           </div>
                         </div>
-                        <p className="text-[9px] text-gray-600 mt-1">{companyInfo.upiId || 'aasopharma@paytm'}</p>
+                        <p className="text-[9px] text-gray-600 mt-1">{companyInfo?.upiId || 'aasopharma@paytm'}</p>
                       </>
                     ) : (
                       <div className="h-16 flex items-center justify-center">
@@ -447,7 +447,7 @@ const InvoicePreviewEnterprise = ({
 
             {/* Compact Authorization - Smaller */}
             <div className="border border-gray-200 rounded p-2">
-              <p className="text-xs text-gray-600">For {invoice.company_name || companyInfo.name || 'Your Company'}</p>
+              <p className="text-xs text-gray-600">For {invoice.company_name || companyInfo?.name || 'Your Company'}</p>
               <p className="text-xs text-gray-400 mt-1">Digitally Authorized</p>
               <p className="text-xs text-gray-400">ERP System Generated</p>
             </div>
