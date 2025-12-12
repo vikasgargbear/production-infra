@@ -29,9 +29,7 @@ from .api.routes.master import bank_accounts
 from .api.routes.sales import orders
 from .api.routes.sales import sales_orders
 from .api.routes.sales import invoices
-from .api.routes.sales import direct_sales as sales
 from .api.routes.sales import challan
-from .api.routes.sales import quick_sale
 from .api.routes.sales import returns as sale_returns
 
 # Purchase Module
