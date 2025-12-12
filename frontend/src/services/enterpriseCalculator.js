@@ -42,6 +42,9 @@
  * - InvoiceCalculator.js → Moved to archive 2024-12-01
  */
 
+// Import centralized field aliases - SINGLE SOURCE OF TRUTH for variable naming
+import { getNumericField } from '../config/fieldAliases';
+
 class EnterpriseCalculator {
   /**
    * Calculate single item - reusable across all modules
@@ -52,13 +55,14 @@ class EnterpriseCalculator {
   static calculateItem(item, options = {}) {
     const gstType = options.gst_type || 'CGST/SGST';
 
-    // Parse inputs - unit_price is canonical, fallback to legacy names
-    const unit_price = parseFloat(item.unit_price || item.sale_price || item.rate || item.selling_price) || 0;
-    const quantity = parseFloat(item.quantity) || 0;
+    // Parse inputs using centralized field aliases
+    // This ensures we always check canonical name first, then fallback to aliases
+    const unit_price = getNumericField(item, 'unit_price', 0);
+    const quantity = getNumericField(item, 'quantity', 0);
     const baseQuantity = quantity; // base_quantity = billable quantity (always same as quantity)
-    const freeQuantity = parseFloat(item.free_quantity) || 0;
-    const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
-    const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 0;
+    const freeQuantity = getNumericField(item, 'free_quantity', 0);
+    const discountPercent = getNumericField(item, 'discount_percent', 0);
+    const gstPercent = getNumericField(item, 'gst_percent', 0);
 
     // PRODUCTION LOGIC: Use quantity for billing calculations
     // Free items are truly FREE and don't affect pricing
@@ -67,6 +71,7 @@ class EnterpriseCalculator {
     const taxableAmount = subtotal - discountAmount;
     const gstAmount = (taxableAmount * gstPercent) / 100;
     const totalAmount = taxableAmount + gstAmount;
+
 
     // GST breakdown
     const cgstAmount = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
