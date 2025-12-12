@@ -7,6 +7,7 @@ Organized by domain to match routes structure:
 - finance/    - Payments, allocations, journals
 - inventory/  - Stock movements, batches
 - master/     - Customers, suppliers, products
+- purchase/   - Purchase orders, GRN, supplier invoices
 - sales/      - Orders, invoices, returns, challans
 - settings/   - Org settings, billing config
 """
@@ -15,57 +16,96 @@ Organized by domain to match routes structure:
 
 # Master data schemas
 from .master.customer import (
-    CustomerBase, CustomerCreate, CustomerUpdate, CustomerResponse,
+    CustomerBase, CustomerCreate, CustomerUpdate, CustomerResponse, CustomerSummary,
     CustomerListResponse, CustomerLedgerEntry, CustomerLedgerResponse,
     OutstandingInvoice, CustomerOutstandingResponse,
     PaymentRecord, PaymentResponse
 )
-from .master.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
-from .master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
+from .master.supplier import (
+    SupplierBase, SupplierCreate, SupplierUpdate, SupplierResponse,
+    SupplierListResponse, SupplierSummary
+)
+from .master.product_schema import (
+    Product, ProductBase, ProductCreate, ProductUpdate, ProductResponse, 
+    ProductSummary, ProductSearch, ProductListResponse
+)
 
 # Sales schemas
 from .sales.order import (
-    OrderItemCreate, OrderCreate, OrderResponse, OrderSummary
+    OrderStatus, OrderType,
+    OrderItemCreate, OrderCreate, OrderUpdate, OrderResponse, OrderSummary, OrderListResponse
 )
-from .sales.returns import SalesReturnItem, SalesReturnCreate
+from .sales.returns import (
+    ReturnCategory, ReturnMethod, ReturnStatus,
+    SalesReturnItem, SalesReturnCreate, SalesReturnResponse
+)
 from .sales.billing import (
-    PaymentCreate, PaymentAllocationCreate, InvoicePaymentUpdate
+    InvoiceStatus, PaymentMode, GSTType,
+    InvoiceCreate, InvoiceResponse, InvoiceSummary,
+    PaymentCreate, PaymentResponse as InvoicePaymentResponse,
+    GeneralPaymentCreate, InvoicePaymentCreate
 )
 from .sales.challan import (
-    ChallanItemRequest, ChallanCreationRequest, ChallanResponse, ChallanTrackingRequest,
-    ConversionRequest, BulkChallanToInvoiceRequest, ConversionResponse
+    ChallanStatus,
+    ChallanItemRequest, ChallanCreationRequest, ChallanResponse, ChallanSummary,
+    ChallanTrackingRequest, ConversionRequest, BulkChallanToInvoiceRequest, ConversionResponse
+)
+
+# Purchase schemas
+from .purchase import (
+    POStatus, POType, GRNStatus, QCStatus, SupplierInvoiceStatus,
+    PurchaseOrderCreate, PurchaseOrderResponse, PurchaseOrderSummary,
+    GRNCreate, GRNResponse, GRNSummary,
+    SupplierInvoiceCreate, SupplierInvoiceResponse, SupplierPaymentCreate
 )
 
 # Finance schemas  
 from .finance.finance import (
-    AllocationRequest, BulkAllocationRequest, AutoAllocationRequest,
-    JournalLineCreate, JournalEntryCreate,
-    ExpenseLineCreate, ExpenseClaimCreate,
-    LedgerTransaction, LedgerSummary
+    AllocationMethod, JournalEntryType,
+    AllocationRequest, BulkAllocationRequest, AutoAllocationRequest, AllocationResponse,
+    JournalLineCreate, JournalEntryCreate, JournalEntryResponse,
+    ExpenseLineCreate, ExpenseClaimCreate, ExpenseClaimResponse,
+    LedgerTransaction, LedgerSummary, LedgerRequest
 )
 
 # Inventory schemas
 from .inventory.inventory import (
-    StockMovementCreate, StockAdjustmentCreate,
-    BatchCreate, BatchUpdate, BatchResponse
+    MovementType, MovementDirection, AdjustmentType,
+    BatchCreate, BatchUpdate, BatchResponse, BatchSummary,
+    StockMovementCreate, StockMovementResponse,
+    StockAdjustment, StockTransfer,
+    CurrentStock, ExpiryAlert, LowStockAlert,
+    InventoryDashboard
 )
 
 # Auth schemas
 from .auth.auth_schemas import (
-    UserCreate, UserLogin, UserResponse, TokenResponse,
-    PasswordReset, PasswordChange
+    UserRole, SessionStatus,
+    LoginRequest, LoginResponse, UserSummary,
+    RefreshTokenRequest, RefreshTokenResponse,
+    PasswordChangeRequest, PasswordResetRequest,
+    AuthError, SessionInfo, SessionListResponse,
+    UserCreate, UserUpdate, UserResponse
 )
 
 # Compliance schemas
 from .compliance.compliance import (
-    DrugLicenseCreate, ComplianceAudit, InspectorVisit, ComplianceDocument
+    LicenseType, LicenseStatus, AuditType, AuditStatus,
+    DrugLicenseCreate, DrugLicenseResponse,
+    ComplianceAuditCreate, ComplianceAuditResponse,
+    InspectorVisitCreate, InspectorVisitResponse,
+    ComplianceDocumentCreate, ComplianceDocumentResponse,
+    ComplianceDashboard
 )
 from .compliance.loyalty import (
-    LoyaltyProgramCreate, CustomerTier, PointsTransaction, PointsRedemption,
+    LoyaltyProgramCreate, CustomerTier,
+    PointsTransaction, PointsRedemption,
     SchemeCreate, SchemeResponse, DiscountCalculation
 )
 
 # Settings schemas
 from .settings.settings import (
-    SettingUpdate, BillingSettings, InventorySettings, ComplianceSettings
+    SettingUpdate, SettingResponse,
+    BillingSettings, InventorySettings, ComplianceSettings,
+    NotificationSettings, OrganizationSettings
 )

@@ -15,8 +15,11 @@ from .compliance import (
 )
 
 from .loyalty import (
-    LoyaltyTransaction, LoyaltyPointsCreate, LoyaltyRedemption,
-    LoyaltyTierUpdate, LoyaltySummary,
+    # Loyalty Program
+    LoyaltyProgramCreate, CustomerTier,
+    PointsTransaction, PointsRedemption,
+    # Schemes
+    SchemeCreate, SchemeResponse, DiscountCalculation,
 )
 
 __all__ = [
@@ -33,6 +36,8 @@ __all__ = [
     # Dashboard
     "ComplianceDashboard",
     # Loyalty
-    "LoyaltyTransaction", "LoyaltyPointsCreate", "LoyaltyRedemption",
-    "LoyaltyTierUpdate", "LoyaltySummary",
+    "LoyaltyProgramCreate", "CustomerTier",
+    "PointsTransaction", "PointsRedemption",
+    # Schemes
+    "SchemeCreate", "SchemeResponse", "DiscountCalculation",
 ]
