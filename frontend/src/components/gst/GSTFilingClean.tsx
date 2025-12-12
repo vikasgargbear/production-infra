@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, AlertCircle, Loader2 } from 'lucide-react';
-import { gstApi } from '../../services/api/modules/gst.api';
+import { gstApi } from '../../services/api';
 
 interface GSTFilingProps {
   open?: boolean;

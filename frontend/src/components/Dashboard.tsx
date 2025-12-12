@@ -13,7 +13,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5'; // New improved version
 // import { AddSalePage } from './Home';
 import BusinessSalesEntry from './BusinessSalesEntry';
-import { apiUtils, dashboardApi, ordersApi, invoiceAPI, salesApi, purchasesAPI, productsApi, customersApi } from '../services/api';
+import { dashboardApi, ordersApi, invoiceAPI, invoicesApi, purchasesAPI, productsApi, customersApi } from '../services/api';
 import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
 // Type definitions
@@ -314,9 +314,8 @@ const Dashboard: React.FC = () => {
     });
 
     return (
-      <div className={`bg-white rounded-lg border border-gray-100 p-4 ${
-        !alert.read ? 'border-l-4 border-l-blue-500' : ''
-      }`}>
+      <div className={`bg-white rounded-lg border border-gray-100 p-4 ${!alert.read ? 'border-l-4 border-l-blue-500' : ''
+        }`}>
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-3">
             <div className={`p-2 rounded-lg bg-${color}-50`}>
@@ -412,7 +411,7 @@ const Dashboard: React.FC = () => {
         returnRate: 0 // Calculate if needed
       });
 
-          // Update recent orders - use both orders and invoices
+      // Update recent orders - use both orders and invoices
       const allOrders: Order[] = [];
 
       // Add orders from dashboard API
@@ -422,7 +421,7 @@ const Dashboard: React.FC = () => {
           customer: order.customer_name || 'Unknown Customer',
           amount: order.final_amount || 0,
           status: order.order_status === 'confirmed' ? 'Completed' :
-                  order.order_status === 'pending' ? 'Pending' : 'Cancelled',
+            order.order_status === 'pending' ? 'Pending' : 'Cancelled',
           date: new Date(order.order_date).toLocaleDateString('en-IN')
         }));
         allOrders.push(...mappedOrders);
@@ -435,7 +434,7 @@ const Dashboard: React.FC = () => {
           customer: invoice.customer_name || 'Unknown Customer',
           amount: invoice.final_amount || 0,
           status: invoice.payment_status === 'paid' ? 'Completed' :
-                  invoice.payment_status === 'partial' ? 'Pending' : 'Pending',
+            invoice.payment_status === 'partial' ? 'Pending' : 'Pending',
           date: new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString('en-IN')
         }));
         allOrders.push(...recentInvoices);
@@ -709,9 +708,8 @@ const Dashboard: React.FC = () => {
             <Icon className={`w-5 h-5 text-${kpi.color}-500`} />
           </div>
           <div className="flex items-center space-x-2">
-            <span className={`text-xs font-medium ${
-              kpi.trend.startsWith('+') ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <span className={`text-xs font-medium ${kpi.trend.startsWith('+') ? 'text-green-600' : 'text-red-600'
+              }`}>
               {kpi.trend}
             </span>
             <button
@@ -755,11 +753,10 @@ const Dashboard: React.FC = () => {
           {customKPIs.map(kpi => (
             <div
               key={kpi.id}
-              className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                selectedKPIs.includes(kpi.id)
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedKPIs.includes(kpi.id)
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+                }`}
               onClick={() => {
                 if (selectedKPIs.includes(kpi.id)) {
                   setSelectedKPIs(selectedKPIs.filter(id => id !== kpi.id));
@@ -810,11 +807,10 @@ const Dashboard: React.FC = () => {
             <button
               key={range}
               onClick={() => onTimeRangeChange(range)}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                chartTimeRange === range
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${chartTimeRange === range
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+                }`}
             >
               {range.charAt(0).toUpperCase() + range.slice(1)}
             </button>
@@ -843,8 +839,8 @@ const Dashboard: React.FC = () => {
             <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0}/>
+                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -858,7 +854,7 @@ const Dashboard: React.FC = () => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `₹${(value/1000).toFixed(0)}K`}
+                tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
                 tickMargin={10}
               />
               <CartesianGrid vertical={false} stroke="#f0f0f0" strokeDasharray="3 3" />
@@ -897,7 +893,7 @@ const Dashboard: React.FC = () => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `₹${(value/1000).toFixed(0)}K`}
+                tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
                 tickMargin={10}
               />
               <CartesianGrid vertical={false} stroke="#f0f0f0" strokeDasharray="3 3" />
@@ -945,11 +941,10 @@ const Dashboard: React.FC = () => {
               <button
                 key={status}
                 onClick={() => setOrderFilter(status)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  orderFilter === status
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-900'
-                }`}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${orderFilter === status
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-900'
+                  }`}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </button>
@@ -974,9 +969,8 @@ const Dashboard: React.FC = () => {
                 >
                   <span>Date</span>
                   {orderSort.field === 'date' && (
-                    <ChevronDown className={`w-4 h-4 transition-transform ${
-                      orderSort.direction === 'asc' ? 'rotate-180' : ''
-                    }`} />
+                    <ChevronDown className={`w-4 h-4 transition-transform ${orderSort.direction === 'asc' ? 'rotate-180' : ''
+                      }`} />
                   )}
                 </button>
               </th>
@@ -992,9 +986,8 @@ const Dashboard: React.FC = () => {
                 >
                   <span>Amount</span>
                   {orderSort.field === 'amount' && (
-                    <ChevronDown className={`w-4 h-4 transition-transform ${
-                      orderSort.direction === 'asc' ? 'rotate-180' : ''
-                    }`} />
+                    <ChevronDown className={`w-4 h-4 transition-transform ${orderSort.direction === 'asc' ? 'rotate-180' : ''
+                      }`} />
                   )}
                 </button>
               </th>
@@ -1010,11 +1003,10 @@ const Dashboard: React.FC = () => {
                 <td className="py-3 px-4 text-sm text-gray-900">{order.customer}</td>
                 <td className="py-3 px-4 text-sm text-gray-900">₹{order.amount.toLocaleString('en-IN')}</td>
                 <td className="py-3 px-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${order.status === 'Completed' ? 'bg-green-100 text-green-800' :
                     order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
+                      'bg-red-100 text-red-800'
+                    }`}>
                     {order.status}
                   </span>
                 </td>
@@ -1077,7 +1069,7 @@ const Dashboard: React.FC = () => {
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
                 disabled={loading || refreshing}
               >
-                                 <RefreshCw className={`w-4 h-4 ${loading || refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${loading || refreshing ? 'animate-spin' : ''}`} />
                 <span className="text-sm font-medium">Refresh</span>
               </button>
 
@@ -1107,28 +1099,28 @@ const Dashboard: React.FC = () => {
             description="Create a new customer bill"
             icon={ShoppingCart}
             gradient="from-blue-500 to-blue-600"
-            onClick={() => {}}
+            onClick={() => { }}
           />
           <QuickAction
             title="Add Purchase"
             description="Record new inventory purchase"
             icon={Package}
             gradient="from-green-500 to-green-600"
-            onClick={() => {}}
+            onClick={() => { }}
           />
           <QuickAction
             title="Daily Report"
             description="View today's sales report"
             icon={FileText}
             gradient="from-purple-500 to-purple-600"
-            onClick={() => {}}
+            onClick={() => { }}
           />
           <QuickAction
             title="Stock Alert"
             description="Check low stock items"
             icon={AlertTriangle}
             gradient="from-red-500 to-red-600"
-            onClick={() => {}}
+            onClick={() => { }}
           />
         </div>
 
@@ -1308,11 +1300,10 @@ const Dashboard: React.FC = () => {
                     <button
                       key={type}
                       onClick={() => setAlertFilter(type)}
-                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                        alertFilter === type
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-500 hover:text-gray-900'
-                      }`}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${alertFilter === type
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-900'
+                        }`}
                     >
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </button>

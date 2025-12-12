@@ -10,7 +10,11 @@ import logging
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
 from ...core.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+from ...core.constants import (
+    OrderStatus, InvoiceStatus, InvoicePaymentStatus, PaymentStatus,
+    PaymentRecordStatus, PaymentMethod, POStatus, GRNStatus, ReturnStatus,
+    PartyType, CustomerType
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -101,17 +105,16 @@ async def get_payment_terms(_: dict = Depends(PermissionChecker("master", "view"
 async def get_payment_modes(_: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
-    """Get all available payment modes"""
+    """Get all available payment modes - derived from constants.py"""
     return {
         "payment_modes": [
-            {"value": "CASH", "label": "Cash", "requires_reference": False},
-            {"value": "BANK_TRANSFER", "label": "Bank Transfer", "requires_reference": True},
-            {"value": "CHEQUE", "label": "Cheque", "requires_reference": True},
-            {"value": "CREDIT_CARD", "label": "Credit Card", "requires_reference": True},
-            {"value": "DEBIT_CARD", "label": "Debit Card", "requires_reference": True},
-            {"value": "UPI", "label": "UPI", "requires_reference": True},
-            {"value": "NEFT", "label": "NEFT", "requires_reference": True},
-            {"value": "RTGS", "label": "RTGS", "requires_reference": True},
+            {"value": PaymentMethod.CASH.value.upper(), "label": "Cash", "requires_reference": False},
+            {"value": PaymentMethod.BANK_TRANSFER.value.upper(), "label": "Bank Transfer", "requires_reference": True},
+            {"value": PaymentMethod.CHEQUE.value.upper(), "label": "Cheque", "requires_reference": True},
+            {"value": PaymentMethod.CARD.value.upper(), "label": "Card", "requires_reference": True},
+            {"value": PaymentMethod.UPI.value.upper(), "label": "UPI", "requires_reference": True},
+            {"value": PaymentMethod.NEFT.value.upper(), "label": "NEFT", "requires_reference": True},
+            {"value": PaymentMethod.RTGS.value.upper(), "label": "RTGS", "requires_reference": True},
             {"value": "IMPS", "label": "IMPS", "requires_reference": True},
             {"value": "WALLET", "label": "Digital Wallet", "requires_reference": True},
             {"value": "CREDIT", "label": "Credit", "requires_reference": False}
@@ -123,14 +126,14 @@ async def get_payment_modes(_: dict = Depends(PermissionChecker("master", "view"
 async def get_document_statuses(_: dict = Depends(PermissionChecker("master", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)):
-    """Get all document status options"""
+    """Get all document status options - SINGLE SOURCE OF TRUTH from constants.py"""
     return {
-        "invoice_statuses": ["draft", "pending", "paid", "partial", "overdue", "cancelled"],
-        "order_statuses": ["draft", "confirmed", "processing", "shipped", "delivered", "cancelled"],
-        "payment_statuses": ["pending", "completed", "failed", "cancelled", "refunded"],
-        "delivery_statuses": ["pending", "in_transit", "delivered", "returned", "failed"],
-        "grn_statuses": ["draft", "partial", "completed", "cancelled"],
-        "return_statuses": ["initiated", "approved", "rejected", "completed", "cancelled"]
+        "invoice_statuses": [s.value for s in InvoiceStatus],
+        "order_statuses": [s.value for s in OrderStatus],
+        "payment_statuses": [s.value for s in PaymentRecordStatus],
+        "grn_statuses": [s.value for s in GRNStatus],
+        "return_statuses": [s.value for s in ReturnStatus],
+        "po_statuses": [s.value for s in POStatus]
     }
 
 @router.get("/units-of-measure")

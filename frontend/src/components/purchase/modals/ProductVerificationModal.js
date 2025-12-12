@@ -4,7 +4,7 @@ import {
   ChevronRight, Calendar, Hash, DollarSign, Percent, Info,
   SkipForward, Save, AlertTriangle, Plus, Trash2
 } from 'lucide-react';
-import { purchasesApi } from '../../../services/api/modules/purchases.api';
+import { purchasesApi } from '../../../services/api';
 import { debounce } from 'lodash';
 import { PurchaseProductSearch } from '../../global';
 

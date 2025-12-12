@@ -233,6 +233,32 @@ async def create_product(
         org_id = context.org_id
         
         logger.info(f"Creating product with data: {product}")
+        
+        # Validate product data using ProductService
+        validation = ProductService.validate_product_data(product)
+        if not validation["valid"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Validation failed: {', '.join(validation['errors'])}"
+            )
+        
+        # Use validated data (with defaults applied)
+        validated = validation["data"]
+        
+        # Check for duplicate products
+        duplicate_check = ProductService.check_duplicate_product(
+            db, str(org_id),
+            product_name=validated.get("product_name")
+        )
+        if duplicate_check["has_duplicates"]:
+            # Return existing product instead of error for duplicate name
+            existing = duplicate_check["duplicates"][0]
+            return {
+                "product_id": existing["product_id"],
+                "product_name": existing["product_name"],
+                "message": "Product already exists"
+            }
+        
         # Map frontend fields to database fields (matching actual table columns)
         # Handle composition - could be dict or string
         composition_value = product.get("composition", "")
@@ -242,17 +268,22 @@ async def create_product(
         else:
             generic_name_default = str(composition_value) if composition_value else ""
         
+        # Generate product code using service if not provided
+        product_code = product.get("product_code")
+        if not product_code:
+            product_code = ProductService.generate_product_code(db, str(org_id))
+        
         product_data = {
-                        "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
-            "product_name": product.get("product_name"),
+            "product_code": product_code,
+            "product_name": validated.get("product_name"),
             "generic_name": product.get("generic_name") or generic_name_default,
             "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
             "composition": json.dumps(_format_composition(composition_value)),
             "category_id": product.get("category_id") if product.get("category_id") else None,
             "type_id": product.get("type_id") if product.get("type_id") else None,
-            "hsn_code": product.get("hsn_code") or "3004",
-            "gst_percent": product.get("gst_percent") or product.get("gst_rate") or 0,  # Use standard field name
+            "hsn_code": validated.get("hsn_code"),  # Uses validated HSN (with default applied)
+            "gst_percent": validated.get("gst_percent") or product.get("gst_rate") or 0,
             "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,

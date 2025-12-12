@@ -1,6 +1,8 @@
 """
 Payment management endpoints
 Handles invoice payments, tracking, and reconciliation
+
+MODERNIZED: Uses centralized schemas from schemas/billing.py
 """
 from typing import Optional, List
 from datetime import date, datetime
@@ -16,8 +18,13 @@ import logging
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
+from ....core.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
 from ...services.payment_service import PaymentService
 from ...services.document_number_service import DocumentNumberService
+from ...schemas.billing import (
+    GeneralPaymentCreate, InvoicePaymentCreate, 
+    PaymentListResponse, PaymentSummaryResponse, PaymentResponse
+)
 
 logger = logging.getLogger(__name__)
 # Fixed notification trigger issues - Jan 15, 2025
@@ -81,15 +88,16 @@ async def search_payments(
 ):
     """Search payments with filters"""
     try:
+        # Base params with status constants
+        params = {"cancelled_status": PaymentRecordStatus.CANCELLED.value}
         query = """
             SELECT p.*, 
                 COALESCE(c.customer_name, s.supplier_name) as party_name
             FROM financial.payments p
             LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
             LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            WHERE p.payment_status != 'cancelled'
+            WHERE p.payment_status != :cancelled_status
         """
-        params = {}
         
         if q:
             query += """ AND (
@@ -100,10 +108,10 @@ async def search_payments(
             )"""
             params["q"] = f"%{q}%"
         
-        if party_id and party_type == "customer":
+        if party_id and party_type == PartyType.CUSTOMER.value:
             query += " AND p.customer_id = :party_id"
             params["party_id"] = party_id
-        elif party_id and party_type == "supplier":
+        elif party_id and party_type == PartyType.SUPPLIER.value:
             query += " AND p.supplier_id = :party_id"
             params["party_id"] = party_id
             
@@ -154,15 +162,18 @@ async def get_pending_payments(
             FROM financial.payments p
             LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
             LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            WHERE p.payment_status = 'pending'
-                OR (p.payment_mode = 'cheque' AND p.cleared_date IS NULL)
+            WHERE p.payment_status = :pending_status
+                OR (p.payment_mode = :cheque_mode AND p.cleared_date IS NULL)
         """
-        params = {}
+        params = {
+            "pending_status": PaymentRecordStatus.PENDING.value,
+            "cheque_mode": PaymentMethod.CHEQUE.value
+        }
         
-        if party_type == "customer" and party_id:
+        if party_type == PartyType.CUSTOMER.value and party_id:
             query += " AND p.customer_id = :party_id"
             params["party_id"] = party_id
-        elif party_type == "supplier" and party_id:
+        elif party_type == PartyType.SUPPLIER.value and party_id:
             query += " AND p.supplier_id = :party_id"
             params["party_id"] = party_id
             
@@ -306,69 +317,14 @@ async def generate_receipt_number(
         
     except Exception as e:
         logger.error(f"Error generating receipt number: {str(e)}")
-        # Fallback to timestamp-based generation
-        timestamp = int(datetime.now().timestamp())
-        fallback_number = f"{prefix}-{date_part}-{str(timestamp)[-4:]}"
-        return {
-            "receipt_number": fallback_number,
-            "payment_type": payment_type,
-            "generated_at": datetime.now().isoformat(),
-            "fallback": True
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to generate receipt number: {str(e)}")
 
-class PaymentCreate(BaseModel):
-    """Schema for recording a payment"""
-    invoice_id: int
-    payment_date: date = Field(default_factory=date.today)
-    payment_mode: str = Field(..., pattern="^(cash|cheque|online|card|upi|neft|rtgs)$")
-    amount: Decimal = Field(..., gt=0)
-    transaction_reference: Optional[str] = None
-    bank_name: Optional[str] = None
-    cheque_number: Optional[str] = None
-    cheque_date: Optional[date] = None
-    notes: Optional[str] = None
-
-class GeneralPaymentCreate(BaseModel):
-    """Schema for creating a general payment (advance or against multiple invoices)"""
-    org_id: Optional[str] = None  # Will be provided via header
-    payment_number: Optional[str] = None
-    payment_date: date = Field(default_factory=date.today)
-    customer_id: Optional[int] = None
-    supplier_id: Optional[int] = None
-    payment_type: str = Field(..., pattern="^(advance_payment|invoice_payment|regular_payment|adjustment_entry)$")
-    amount: Decimal = Field(..., gt=0)
-    payment_mode: str = Field(..., pattern="^(cash|cheque|upi|bank_transfer|credit_adjustment)$")
-    reference_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    payment_status: str = Field(default="completed")
-    cleared_date: Optional[date] = None
-    branch_id: Optional[int] = None
-    created_by: Optional[int] = None
-    approved_by: Optional[int] = None
-    notes: Optional[str] = None
-
-class PaymentResponse(BaseModel):
-    """Schema for payment response"""
-    payment_id: int
-    payment_reference: str
-    invoice_id: int
-    amount: Decimal
-    balance_amount: Decimal
-    payment_status: str
-    message: str
-
-class PaymentListResponse(BaseModel):
-    """Schema for payment list"""
-    payments: List[dict]
-    total: int
-
-class PaymentSummaryResponse(BaseModel):
-    """Schema for payment summary"""
-    total_payments: int
-    invoices_paid: int
-    total_collected: Decimal
-    payment_modes: dict
-    pending: dict
+# Note: Schema classes moved to schemas/billing.py
+# - GeneralPaymentCreate
+# - InvoicePaymentCreate (was PaymentCreate)
+# - PaymentListResponse
+# - PaymentSummaryResponse
+# - PaymentResponse
 
 @router.post("/", response_model=dict)
 @with_tenant_context
@@ -391,7 +347,8 @@ async def create_payment(
         
         # Generate payment number if not provided
         if not payment.payment_number:
-            payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(datetime.now().timestamp())}"
+            doc_type = "receipt" if payment.customer_id else "payment"
+            payment.payment_number = DocumentNumberService.generate_number(db, doc_type, org_id)
         
         # Get party name if needed
         party_name = None
@@ -453,16 +410,16 @@ async def create_payment(
         # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
             'org_id': org_id,
-            'branch_id': payment.branch_id or context.primary_branch_id or 1,  # Use JWT branch, fallback only if none assigned
+            'branch_id': payment.branch_id or context.primary_branch_id,  # SECURITY: No fallback to 1
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
             'payment_type': 'payment' if payment.supplier_id else 'receipt',
             'payment_method_id': payment_method_id,
-            'party_type': 'customer' if payment.customer_id else 'supplier',
+            'party_type': PartyType.CUSTOMER.value if payment.customer_id else PartyType.SUPPLIER.value,
             'party_id': payment.customer_id or payment.supplier_id,
             'party_name': party_name,
             'payment_amount': payment.amount,
-            'payment_status': 'cleared' if payment.payment_mode == 'cash' else 'pending',
+            'payment_status': PaymentRecordStatus.CLEARED.value if payment.payment_mode == PaymentMethod.CASH.value else PaymentRecordStatus.PENDING.value,
             'clearance_date': payment.cleared_date if payment.cleared_date else (payment.payment_date if payment.payment_mode == 'cash' else None),
             'reference_number': payment.reference_number,
             'narration': payment.notes,
@@ -503,7 +460,7 @@ async def create_payment(
 @router.post("/record", response_model=PaymentResponse)
 @with_tenant_context
 async def record_payment(
-    payment: PaymentCreate,
+    payment: InvoicePaymentCreate,
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -581,10 +538,16 @@ async def cancel_payment(
     
     - Reverses the payment amount from invoice
     - Updates payment status to cancelled
-    - Maintains audit trail
+    - Maintains audit trail with user context
     """
     try:
-        result = PaymentService.cancel_payment(db, payment_id, reason)
+        result = PaymentService.cancel_payment(
+            db=db, 
+            payment_id=payment_id, 
+            reason=reason,
+            org_id=str(context.org_id),
+            cancelled_by=context.user_id
+        )
         db.commit()
         return result
     except ValueError as e:
@@ -605,70 +568,25 @@ async def create_customer_receipt(
     """
     Create a customer payment receipt
     
-    Simple endpoint for recording customer payments
+    Uses PaymentService for consolidated business logic.
     """
     try:
-        # Use org_id from context
-        org_id = context.org_id
-        
-        # Generate receipt number
-        receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(datetime.now().timestamp())}"
-        
-        # Get customer name
-        customer_result = db.execute(
-            text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
-            {"id": receipt_data.get("customer_id")}
-        ).first()
-        customer_name = customer_result.customer_name if customer_result else f"Customer {receipt_data.get('customer_id')}"
-        
-        # Insert payment
-        result = db.execute(text("""
-            INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, payment_type, payment_mode,
-                party_type, party_id, party_name, payment_amount,
-                bank_reference, payment_status, notes
-            ) VALUES (
-                :org_id, :receipt_number, :payment_date, 'receipt', :payment_mode,
-                'customer', :customer_id, :customer_name, :amount,
-                :reference_number, 'cleared', :notes
-            ) RETURNING payment_id, payment_number, payment_amount
-        """), {
-            "org_id": org_id,
-            "receipt_number": receipt_number,
-            "payment_date": receipt_data.get("payment_date", date.today()),
-            "customer_id": receipt_data.get("customer_id"),
-            "customer_name": customer_name,
-            "amount": receipt_data.get("amount"),
-            "payment_mode": receipt_data.get("payment_mode", "cash"),
-            "reference_number": receipt_data.get("reference_number"),
-            "notes": receipt_data.get("notes")
-        })
-        
-        payment = result.fetchone()
-        
-        # Update customer outstanding if exists
-        db.execute(text("""
-            UPDATE parties.customers
-            SET outstanding_balance = outstanding_balance - :amount,
-                last_payment_date = :payment_date,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE customer_id = :customer_id
-        """), {
-            "amount": receipt_data.get("amount"),
-            "payment_date": receipt_data.get("payment_date", date.today()),
-            "customer_id": receipt_data.get("customer_id")
-        })
-        
+        from decimal import Decimal
+        result = PaymentService.create_customer_receipt(
+            db=db,
+            org_id=str(context.org_id),
+            customer_id=receipt_data.get("customer_id"),
+            amount=Decimal(str(receipt_data.get("amount", 0))),
+            payment_mode=receipt_data.get("payment_mode", "cash"),
+            payment_date=receipt_data.get("payment_date"),
+            reference_number=receipt_data.get("reference_number"),
+            notes=receipt_data.get("notes"),
+            created_by=context.user_id
+        )
         db.commit()
-        
-        return {
-            "success": True,
-            "payment_id": payment.payment_id,
-            "receipt_number": payment.payment_number,
-            "amount": float(payment.payment_amount),
-            "message": "Payment receipt created successfully"
-        }
-        
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating customer receipt: {str(e)}")

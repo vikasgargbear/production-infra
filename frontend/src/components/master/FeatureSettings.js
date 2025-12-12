@@ -5,7 +5,7 @@ import {
   AlertTriangle, Save, Truck, Shield,
   Loader2, AlertCircle
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const FeatureSettings = ({ open, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);

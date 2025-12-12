@@ -6,7 +6,7 @@ import {
   ArrowRight, Clock, Trash2, RefreshCw, Loader2, X
 } from 'lucide-react';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const BulkOperations = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('import');

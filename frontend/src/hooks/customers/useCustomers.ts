@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { customerAPI } from '../../services/api/apiClientExports';
+import { customersApi as customerAPI } from '../../services/api';
 import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
 import localFirstService from '../../services/offline/localFirstService';
@@ -79,7 +79,7 @@ export function useCreateCustomer(
   options?: UseMutationOptions<ApiResponse<Customer>, unknown, CustomerCreateInput>
 ) {
   const queryClient = useQueryClient();
-  
+
   return useMutation(
     (data: CustomerCreateInput) => customerAPI.create(data),
     {

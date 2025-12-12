@@ -4,8 +4,8 @@ import {
   TrendingDown, Package, AlertTriangle, DollarSign,
   FileText, ChevronRight, X, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { productsApi } from '../../services/api/modules/products.api';
-import { stockApi } from '../../services/api/modules/stock.api';
+import { productsApi } from '../../services/api';
+import { stockApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DatePicker, Select, SummaryCard, DataTable, ModuleHeader } from '../global';
 

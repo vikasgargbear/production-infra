@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
+import {
+  FileText,
+  Download,
+  Calendar,
   X,
   AlertCircle,
   CheckCircle,
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
-import { salesApi, purchasesApi, paymentsApi } from '../../services/api';
+import { invoicesApi, purchasesApi, paymentsApi } from '../../services/api';
 import { StandardMonthYearPicker } from '../global';
 import * as XLSX from 'xlsx';
 
@@ -19,7 +19,7 @@ const GSTR3BReport = ({ open, onClose }) => {
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   });
-  
+
   const [gstr3bData, setGstr3bData] = useState({
     // 3.1 Details of Outward Supplies
     outwardSupplies: {
@@ -76,7 +76,7 @@ const GSTR3BReport = ({ open, onClose }) => {
     setLoading(true);
     try {
       const [salesResponse, purchasesResponse] = await Promise.all([
-        salesApi.getAll({
+        invoicesApi.getAll({
           start_date: dateRange.startDate,
           end_date: dateRange.endDate
         }),
@@ -148,7 +148,7 @@ const GSTR3BReport = ({ open, onClose }) => {
       if (igst > 0) {
         data.outwardSupplies.taxable.integrated += taxableAmount;
         data.taxPayment.integrated += igst;
-        
+
         // Inter-state to unregistered
         if (!sale.customer_gstin) {
           data.interStateSupplies.unregistered += taxableAmount;
@@ -219,7 +219,7 @@ const GSTR3BReport = ({ open, onClose }) => {
       [],
       ['5. Payment of Tax'],
       ['Description', 'Tax Payable', 'Paid through ITC', 'Tax/Cess Paid in Cash', 'Interest', 'Late Fee'],
-      ['Integrated Tax', 
+      ['Integrated Tax',
         gstr3bData.taxPayment.integrated > 0 ? gstr3bData.taxPayment.integrated : 0,
         gstr3bData.eligibleITC.integrated,
         Math.max(0, gstr3bData.taxPayment.integrated),

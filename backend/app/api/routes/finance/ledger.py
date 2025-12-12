@@ -1,7 +1,7 @@
 """
 Ledger API - Party ledger statements and aging analysis
 
-MODERNIZED: Uses TenantAwareSession + PermissionChecker + OrgContext
+MODERNIZED: Uses TenantAwareSession + PermissionChecker + OrgContext + LedgerService
 Supports: Customers, Suppliers, Credit/Debit Notes, Sales Returns, Pagination
 """
 from typing import Optional, List
@@ -14,6 +14,8 @@ from datetime import date
 from ....core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from ....core.org_context import OrgContext, get_org_context
 from ....core.permissions import PermissionChecker
+from ....core.constants import InvoiceStatus, PaymentRecordStatus, PartyType
+from ...services.ledger_service import LedgerService
 
 logger = logging.getLogger(__name__)
 
@@ -63,140 +65,36 @@ async def get_party_statement(
         org_id = str(context.org_id)
         offset = (page - 1) * limit
         
+        # Get statement from service
+        statement_data = LedgerService.get_party_statement(
+            db, party_id, party_type, org_id, from_date, to_date
+        )
+        
+        # Apply pagination
+        all_transactions = statement_data["transactions"]
+        total_count = statement_data["transaction_count"]
+        paginated = all_transactions[offset:offset + limit]
+        
+        # Get party details
         if party_type == "customer":
-            # Complete statement with all transaction types
-            query = """
-                WITH all_transactions AS (
-                    -- Invoices (Debit)
-                    SELECT 
-                        i.invoice_id as id,
-                        i.invoice_date as date,
-                        'Invoice' as type,
-                        i.invoice_number as reference,
-                        CONCAT('Invoice #', i.invoice_number) as description,
-                        i.final_amount as debit,
-                        0::numeric as credit,
-                        1 as sort_order
-                    FROM sales.invoices i
-                    WHERE i.customer_id = :party_id AND i.org_id = :org_id
-                    AND i.invoice_status != 'cancelled'
-                    AND (:from_date IS NULL OR i.invoice_date >= :from_date)
-                    AND (:to_date IS NULL OR i.invoice_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Payments (Credit)
-                    SELECT 
-                        p.payment_id as id,
-                        p.payment_date as date,
-                        'Payment' as type,
-                        p.payment_number as reference,
-                        CONCAT('Payment - ', COALESCE(p.payment_mode, 'Cash')) as description,
-                        0::numeric as debit,
-                        p.payment_amount as credit,
-                        2 as sort_order
-                    FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = 'customer' AND p.org_id = :org_id
-                    AND p.payment_status != 'cancelled'
-                    AND (:from_date IS NULL OR p.payment_date >= :from_date)
-                    AND (:to_date IS NULL OR p.payment_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Credit Notes (Credit) - if table exists
-                    SELECT 
-                        cn.note_id as id,
-                        cn.note_date as date,
-                        'Credit Note' as type,
-                        cn.note_number as reference,
-                        CONCAT('Credit Note - ', COALESCE(cn.reason, '')) as description,
-                        0::numeric as debit,
-                        cn.amount as credit,
-                        3 as sort_order
-                    FROM financial.credit_debit_notes cn
-                    WHERE cn.party_id = :party_id AND cn.party_type = 'customer' 
-                    AND cn.note_type = 'credit' AND cn.org_id = :org_id
-                    AND cn.status = 'approved'
-                    AND (:from_date IS NULL OR cn.note_date >= :from_date)
-                    AND (:to_date IS NULL OR cn.note_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Debit Notes (Debit)
-                    SELECT 
-                        dn.note_id as id,
-                        dn.note_date as date,
-                        'Debit Note' as type,
-                        dn.note_number as reference,
-                        CONCAT('Debit Note - ', COALESCE(dn.reason, '')) as description,
-                        dn.amount as debit,
-                        0::numeric as credit,
-                        4 as sort_order
-                    FROM financial.credit_debit_notes dn
-                    WHERE dn.party_id = :party_id AND dn.party_type = 'customer'
-                    AND dn.note_type = 'debit' AND dn.org_id = :org_id
-                    AND dn.status = 'approved'
-                    AND (:from_date IS NULL OR dn.note_date >= :from_date)
-                    AND (:to_date IS NULL OR dn.note_date <= :to_date)
-                )
-                SELECT * FROM all_transactions
-                ORDER BY date DESC, sort_order
-            """
-            
-            # Get all for running balance calculation
-            all_result = db.execute(text(query), {
-                "party_id": party_id, "org_id": org_id,
-                "from_date": from_date, "to_date": to_date
-            })
-            
-            all_transactions = []
-            running_balance = 0
-            
-            for row in all_result:
-                trans = dict(row._mapping)
-                # Debit increases balance owed TO us, Credit decreases it
-                running_balance = running_balance + float(trans['debit']) - float(trans['credit'])
-                trans['running_balance'] = running_balance
-                trans['balance_type'] = 'Dr' if running_balance > 0 else 'Cr'
-                trans['display_balance'] = abs(running_balance)
-                all_transactions.append(trans)
-            
-            # Pagination
-            total_count = len(all_transactions)
-            paginated = all_transactions[offset:offset + limit]
-            
-            # Get customer details
-            customer = db.execute(text("""
-                SELECT customer_name, primary_phone, primary_email, credit_limit
+            party = db.execute(text("""
+                SELECT customer_name as name, primary_phone, primary_email, credit_limit
                 FROM parties.customers
                 WHERE customer_id = :party_id AND org_id = :org_id
             """), {"party_id": party_id, "org_id": org_id}).fetchone()
             
-            # Calculate outstanding
-            outstanding = db.execute(text("""
-                SELECT COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0)
-                FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
-                AND invoice_status != 'cancelled' AND payment_status != 'paid'
-            """), {"party_id": party_id, "org_id": org_id}).scalar() or 0
-            
-            # Calculate advance (unallocated payments)
-            advance = db.execute(text("""
-                SELECT COALESCE(SUM(unallocated_amount), 0)
-                FROM financial.payments
-                WHERE party_id = :party_id AND party_type = 'customer' AND org_id = :org_id
-                AND payment_status != 'cancelled' AND unallocated_amount > 0
-            """), {"party_id": party_id, "org_id": org_id}).scalar() or 0
+            # Get additional customer summary
+            balance_data = LedgerService.get_party_balance(db, party_id, party_type, org_id)
             
             return {
                 "success": True,
                 "party": {
                     "id": party_id,
                     "type": party_type,
-                    "name": customer.customer_name if customer else f"Customer {party_id}",
-                    "phone": customer.primary_phone if customer else None,
-                    "email": customer.primary_email if customer else None,
-                    "credit_limit": float(customer.credit_limit) if customer and customer.credit_limit else None
+                    "name": party.name if party else f"Customer {party_id}",
+                    "phone": party.primary_phone if party else None,
+                    "email": party.primary_email if party else None,
+                    "credit_limit": float(party.credit_limit) if party and party.credit_limit else None
                 },
                 "statement": paginated,
                 "pagination": {
@@ -206,91 +104,30 @@ async def get_party_statement(
                     "pages": (total_count + limit - 1) // limit
                 },
                 "summary": {
-                    "outstanding": float(outstanding),
-                    "advance": float(advance),
-                    "net_balance": float(outstanding) - float(advance),
+                    "outstanding": balance_data.get("outstanding", 0),
+                    "advance": balance_data.get("advance", 0),
+                    "net_balance": balance_data.get("net_balance", 0),
                     "transaction_count": total_count,
-                    "final_balance": running_balance
+                    "final_balance": statement_data["final_balance"]
                 }
             }
-            
-        else:  # Supplier
-            query = """
-                WITH all_transactions AS (
-                    -- Purchase Invoices (Credit - we owe them)
-                    SELECT 
-                        si.invoice_id as id,
-                        si.invoice_date as date,
-                        'Purchase Invoice' as type,
-                        si.invoice_number as reference,
-                        CONCAT('Purchase #', si.invoice_number) as description,
-                        0::numeric as debit,
-                        si.final_amount as credit,
-                        1 as sort_order
-                    FROM purchases.supplier_invoices si
-                    WHERE si.supplier_id = :party_id AND si.org_id = :org_id
-                    AND si.invoice_status != 'cancelled'
-                    AND (:from_date IS NULL OR si.invoice_date >= :from_date)
-                    AND (:to_date IS NULL OR si.invoice_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Payments to Supplier (Debit - reduces what we owe)
-                    SELECT 
-                        p.payment_id as id,
-                        p.payment_date as date,
-                        'Payment' as type,
-                        p.payment_number as reference,
-                        CONCAT('Payment to Supplier - ', COALESCE(p.payment_mode, 'Cash')) as description,
-                        p.payment_amount as debit,
-                        0::numeric as credit,
-                        2 as sort_order
-                    FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = 'supplier' AND p.org_id = :org_id
-                    AND p.payment_status != 'cancelled'
-                    AND (:from_date IS NULL OR p.payment_date >= :from_date)
-                    AND (:to_date IS NULL OR p.payment_date <= :to_date)
-                )
-                SELECT * FROM all_transactions
-                ORDER BY date DESC, sort_order
-            """
-            
-            result = db.execute(text(query), {
-                "party_id": party_id, "org_id": org_id,
-                "from_date": from_date, "to_date": to_date
-            })
-            
-            transactions = []
-            running_balance = 0
-            
-            for row in result:
-                trans = dict(row._mapping)
-                # For supplier: Credit increases what we owe, Debit decreases it
-                running_balance = running_balance + float(trans['credit']) - float(trans['debit'])
-                trans['running_balance'] = running_balance
-                trans['balance_type'] = 'Cr' if running_balance > 0 else 'Dr'
-                trans['display_balance'] = abs(running_balance)
-                transactions.append(trans)
-            
-            # Pagination
-            total_count = len(transactions)
-            paginated = transactions[offset:offset + limit]
-            
-            # Get supplier details
-            supplier = db.execute(text("""
-                SELECT supplier_name, primary_phone, primary_email
+        else:
+            party = db.execute(text("""
+                SELECT supplier_name as name, primary_phone, primary_email
                 FROM parties.suppliers
                 WHERE supplier_id = :party_id AND org_id = :org_id
             """), {"party_id": party_id, "org_id": org_id}).fetchone()
             
+            final_balance = statement_data["final_balance"]
+            
             return {
                 "success": True,
                 "party": {
                     "id": party_id,
                     "type": party_type,
-                    "name": supplier.supplier_name if supplier else f"Supplier {party_id}",
-                    "phone": supplier.primary_phone if supplier else None,
-                    "email": supplier.primary_email if supplier else None
+                    "name": party.name if party else f"Supplier {party_id}",
+                    "phone": party.primary_phone if party else None,
+                    "email": party.primary_email if party else None
                 },
                 "statement": paginated,
                 "pagination": {
@@ -300,9 +137,9 @@ async def get_party_statement(
                     "pages": (total_count + limit - 1) // limit
                 },
                 "summary": {
-                    "payable": running_balance if running_balance > 0 else 0,
-                    "advance": abs(running_balance) if running_balance < 0 else 0,
-                    "net_balance": running_balance,
+                    "payable": final_balance if final_balance > 0 else 0,
+                    "advance": abs(final_balance) if final_balance < 0 else 0,
+                    "net_balance": final_balance,
                     "transaction_count": total_count
                 }
             }
@@ -323,50 +160,9 @@ async def get_balance(
 ):
     """Get party balance (quick summary without full statement)"""
     try:
-        org_id = str(context.org_id)
-        
-        if party_type == "customer":
-            result = db.execute(text("""
-                SELECT 
-                    COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as outstanding,
-                    COUNT(*) as invoice_count
-                FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
-                AND invoice_status != 'cancelled' AND payment_status != 'paid'
-            """), {"party_id": party_id, "org_id": org_id}).fetchone()
-            
-            advance = db.execute(text("""
-                SELECT COALESCE(SUM(unallocated_amount), 0)
-                FROM financial.payments
-                WHERE party_id = :party_id AND party_type = 'customer' AND org_id = :org_id
-                AND payment_status != 'cancelled'
-            """), {"party_id": party_id, "org_id": org_id}).scalar() or 0
-            
-            return {
-                "party_id": party_id,
-                "party_type": party_type,
-                "outstanding": float(result.outstanding) if result else 0,
-                "advance": float(advance),
-                "net_balance": float(result.outstanding or 0) - float(advance),
-                "pending_invoices": result.invoice_count if result else 0
-            }
-        else:  # Supplier
-            result = db.execute(text("""
-                SELECT 
-                    COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as payable,
-                    COUNT(*) as invoice_count
-                FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id AND org_id = :org_id
-                AND invoice_status != 'cancelled' AND payment_status != 'paid'
-            """), {"party_id": party_id, "org_id": org_id}).fetchone()
-            
-            return {
-                "party_id": party_id,
-                "party_type": party_type,
-                "payable": float(result.payable) if result else 0,
-                "pending_invoices": result.invoice_count if result else 0
-            }
-            
+        return LedgerService.get_party_balance(
+            db, party_id, party_type, str(context.org_id)
+        )
     except Exception as e:
         logger.error(f"Error getting balance: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get balance: {str(e)}")
@@ -383,47 +179,9 @@ async def get_outstanding_bills(
 ):
     """Get outstanding bills for a party"""
     try:
-        org_id = str(context.org_id)
-        
-        if party_type == "customer":
-            result = db.execute(text("""
-                SELECT 
-                    i.invoice_id, i.invoice_number, i.invoice_date, i.due_date,
-                    i.final_amount, COALESCE(i.paid_amount, 0) as paid_amount,
-                    (i.final_amount - COALESCE(i.paid_amount, 0)) as outstanding_amount,
-                    i.payment_status,
-                    GREATEST(0, CURRENT_DATE - i.due_date) as days_overdue
-                FROM sales.invoices i
-                WHERE i.customer_id = :party_id AND i.org_id = :org_id
-                AND i.payment_status IN ('unpaid', 'partial', 'pending')
-                AND i.invoice_status != 'cancelled'
-                ORDER BY i.due_date
-            """), {"party_id": party_id, "org_id": org_id})
-        else:
-            result = db.execute(text("""
-                SELECT 
-                    si.invoice_id, si.invoice_number, si.invoice_date, si.due_date,
-                    si.final_amount, COALESCE(si.paid_amount, 0) as paid_amount,
-                    (si.final_amount - COALESCE(si.paid_amount, 0)) as outstanding_amount,
-                    si.payment_status,
-                    GREATEST(0, CURRENT_DATE - si.due_date) as days_overdue
-                FROM purchases.supplier_invoices si
-                WHERE si.supplier_id = :party_id AND si.org_id = :org_id
-                AND si.payment_status IN ('unpaid', 'partial', 'pending')
-                AND si.invoice_status != 'cancelled'
-                ORDER BY si.due_date
-            """), {"party_id": party_id, "org_id": org_id})
-        
-        bills = [dict(row._mapping) for row in result]
-        
-        return {
-            "party_id": party_id,
-            "party_type": party_type,
-            "outstanding_bills": bills,
-            "total_outstanding": sum(b["outstanding_amount"] for b in bills),
-            "bill_count": len(bills)
-        }
-        
+        return LedgerService.get_outstanding_bills(
+            db, party_id, party_type, str(context.org_id)
+        )
     except Exception as e:
         logger.error(f"Error getting outstanding bills: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get outstanding bills: {str(e)}")
@@ -439,68 +197,9 @@ async def get_aging_analysis(
 ):
     """Get aging analysis for all parties"""
     try:
-        org_id = str(context.org_id)
-        
-        if party_type == "customer":
-            result = db.execute(text("""
-                SELECT
-                    c.customer_id, c.customer_name, c.primary_phone as phone,
-                    COUNT(i.invoice_id) as invoice_count,
-                    COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as total_outstanding,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date <= 30 
-                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as current,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date BETWEEN 31 AND 60 
-                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as days_31_60,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date BETWEEN 61 AND 90 
-                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as days_61_90,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date > 90 
-                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as over_90
-                FROM sales.invoices i
-                JOIN parties.customers c ON i.customer_id = c.customer_id AND i.org_id = c.org_id
-                WHERE i.payment_status != 'paid' AND i.invoice_status != 'cancelled'
-                AND i.final_amount > COALESCE(i.paid_amount, 0)
-                AND i.org_id = :org_id
-                GROUP BY c.customer_id, c.customer_name, c.primary_phone
-                ORDER BY total_outstanding DESC
-            """), {"org_id": org_id})
-        else:
-            result = db.execute(text("""
-                SELECT
-                    s.supplier_id, s.supplier_name, s.primary_phone as phone,
-                    COUNT(si.invoice_id) as invoice_count,
-                    COALESCE(SUM(si.final_amount - COALESCE(si.paid_amount, 0)), 0) as total_payable,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date <= 30 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as current,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date BETWEEN 31 AND 60 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as days_31_60,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date BETWEEN 61 AND 90 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as days_61_90,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date > 90 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as over_90
-                FROM purchases.supplier_invoices si
-                JOIN parties.suppliers s ON si.supplier_id = s.supplier_id AND si.org_id = s.org_id
-                WHERE si.payment_status != 'paid' AND si.invoice_status != 'cancelled'
-                AND si.final_amount > COALESCE(si.paid_amount, 0)
-                AND si.org_id = :org_id
-                GROUP BY s.supplier_id, s.supplier_name, s.primary_phone
-                ORDER BY total_payable DESC
-            """), {"org_id": org_id})
-        
-        aging_data = [dict(row._mapping) for row in result]
-        
-        total_key = "total_outstanding" if party_type == "customer" else "total_payable"
-        
-        return {
-            "party_type": party_type,
-            "aging_data": aging_data,
-            "summary": {
-                "total": sum(a.get(total_key, 0) or 0 for a in aging_data),
-                "current": sum(a.get("current", 0) or 0 for a in aging_data),
-                "overdue": sum((a.get("days_31_60", 0) or 0) + (a.get("days_61_90", 0) or 0) + (a.get("over_90", 0) or 0) for a in aging_data),
-                "party_count": len(aging_data)
-            }
-        }
-        
+        return LedgerService.get_aging_analysis(
+            db, party_type, str(context.org_id)
+        )
     except Exception as e:
         logger.error(f"Error getting aging analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get aging analysis: {str(e)}")
@@ -538,16 +237,22 @@ async def get_opening_balance(
                     SELECT 'invoice' as type, final_amount as amount
                     FROM sales.invoices
                     WHERE customer_id = :party_id AND org_id = :org_id
-                    AND invoice_date < :as_of_date AND invoice_status != 'cancelled'
+                    AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
                     
                     UNION ALL
                     
                     SELECT 'payment' as type, payment_amount as amount
                     FROM financial.payments
-                    WHERE party_id = :party_id AND party_type = 'customer' AND org_id = :org_id
-                    AND payment_date < :as_of_date AND payment_status != 'cancelled'
+                    WHERE party_id = :party_id AND party_type = :customer_type AND org_id = :org_id
+                    AND payment_date < :as_of_date AND payment_status != :cancelled_status
                 ) combined
-            """), {"party_id": party_id, "org_id": org_id, "as_of_date": as_of_date}).fetchone()
+            """), {
+                "party_id": party_id, 
+                "org_id": org_id, 
+                "as_of_date": as_of_date,
+                "cancelled_status": InvoiceStatus.CANCELLED.value,
+                "customer_type": PartyType.CUSTOMER.value
+            }).fetchone()
         else:
             result = db.execute(text("""
                 SELECT
@@ -557,16 +262,22 @@ async def get_opening_balance(
                     SELECT 'invoice' as type, final_amount as amount
                     FROM purchases.supplier_invoices
                     WHERE supplier_id = :party_id AND org_id = :org_id
-                    AND invoice_date < :as_of_date AND invoice_status != 'cancelled'
+                    AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
                     
                     UNION ALL
                     
                     SELECT 'payment' as type, payment_amount as amount
                     FROM financial.payments
-                    WHERE party_id = :party_id AND party_type = 'supplier' AND org_id = :org_id
-                    AND payment_date < :as_of_date AND payment_status != 'cancelled'
+                    WHERE party_id = :party_id AND party_type = :supplier_type AND org_id = :org_id
+                    AND payment_date < :as_of_date AND payment_status != :cancelled_status
                 ) combined
-            """), {"party_id": party_id, "org_id": org_id, "as_of_date": as_of_date}).fetchone()
+            """), {
+                "party_id": party_id, 
+                "org_id": org_id, 
+                "as_of_date": as_of_date,
+                "cancelled_status": InvoiceStatus.CANCELLED.value,
+                "supplier_type": PartyType.SUPPLIER.value
+            }).fetchone()
         
         opening = float(result.opening_balance) if result else 0
         
@@ -604,13 +315,14 @@ async def get_last_payment_info(
                 payment_mode, CURRENT_DATE - payment_date as days_since
             FROM financial.payments
             WHERE party_id = :party_id AND party_type = :party_type AND org_id = :org_id
-            AND payment_status != 'cancelled'
+            AND payment_status != :cancelled_status
             ORDER BY payment_date DESC
             LIMIT 1
         """), {
             "party_id": party_id, 
             "party_type": party_type,
-            "org_id": str(context.org_id)
+            "org_id": str(context.org_id),
+            "cancelled_status": PaymentRecordStatus.CANCELLED.value
         }).fetchone()
         
         if result:

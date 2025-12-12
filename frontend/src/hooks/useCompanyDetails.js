@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { settingsApi } from '../services/api/modules/settings.api';
+import { settingsApi } from '../services/api';
 
 const useCompanyDetails = () => {
   const [companyDetails, setCompanyDetails] = useState({

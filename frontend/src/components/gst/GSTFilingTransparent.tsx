@@ -4,7 +4,7 @@ import {
   Calculator, Eye, Download, ChevronDown, ChevronUp,
   Info, Shield, CheckCircle, AlertTriangle, X
 } from 'lucide-react';
-import { gstApi } from '../../services/api/modules/gst.api';
+import { gstApi } from '../../services/api';
 import { invoicesApi, purchasesAPI } from '../../services/api';
 
 interface GSTFilingTransparentProps {

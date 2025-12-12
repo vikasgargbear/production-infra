@@ -3,8 +3,8 @@ import {
   AlertTriangle, Package, ShoppingCart, TrendingDown,
   Clock, Filter, Download, Bell, Settings, Edit2, X, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { productsApi } from '../../services/api/modules/products.api';
-import { stockApi } from '../../services/api/modules/stock.api';
+import { productsApi } from '../../services/api';
+import { stockApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 

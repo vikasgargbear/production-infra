@@ -12,6 +12,7 @@ from decimal import Decimal
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
+from ...services.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
 
@@ -135,26 +136,21 @@ async def calculate_tax(calculation_data: dict, _: dict = Depends(PermissionChec
         gst_rate = Decimal(str(calculation_data.get("gst_rate", 0)))
         is_interstate = calculation_data.get("is_interstate", False)
         
-        cgst_rate = gst_rate / 2 if not is_interstate else 0
-        sgst_rate = gst_rate / 2 if not is_interstate else 0
-        igst_rate = gst_rate if is_interstate else 0
+        # Use GSTService for consistent calculations
+        gst_type = "IGST" if is_interstate else "CGST/SGST"
+        gst = GSTService.calculate_gst_components(taxable_amount, gst_rate, gst_type)
         
-        cgst_amount = taxable_amount * cgst_rate / 100
-        sgst_amount = taxable_amount * sgst_rate / 100
-        igst_amount = taxable_amount * igst_rate / 100
-        
-        total_tax = cgst_amount + sgst_amount + igst_amount
-        total_amount = taxable_amount + total_tax
+        total_amount = taxable_amount + gst["total_tax_amount"]
         
         return {
             "taxable_amount": float(taxable_amount),
-            "cgst_rate": float(cgst_rate),
-            "cgst_amount": float(cgst_amount),
-            "sgst_rate": float(sgst_rate),
-            "sgst_amount": float(sgst_amount),
-            "igst_rate": float(igst_rate),
-            "igst_amount": float(igst_amount),
-            "total_tax": float(total_tax),
+            "cgst_rate": float(gst["cgst_percent"]),
+            "cgst_amount": float(gst["cgst_amount"]),
+            "sgst_rate": float(gst["sgst_percent"]),
+            "sgst_amount": float(gst["sgst_amount"]),
+            "igst_rate": float(gst["igst_percent"]),
+            "igst_amount": float(gst["igst_amount"]),
+            "total_tax": float(gst["total_tax_amount"]),
             "total_amount": float(total_amount)
         }
         

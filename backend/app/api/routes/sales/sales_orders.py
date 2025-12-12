@@ -13,9 +13,9 @@ import logging
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
+from ....core.constants import OrderStatus, PaymentStatus
 from ...services.document_number_service import DocumentNumberService
+from ...services.gst_service import GSTService
 from ...schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
@@ -38,15 +38,11 @@ async def generate_sales_order_number(
     """Generate next sales order number using unified service"""
     try:
         # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "sales_order", org_id)
+        new_number = DocumentNumberService.generate_number(db, "sales_order", str(context.org_id))
         return {"order_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate sales order number: {e}")
-        # Use service's fallback mechanism
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"SO-{current_year:02d}{timestamp:08d}"
-        return {"order_number": fallback_number}
+        raise HTTPException(status_code=500, detail=f"Failed to generate order number: {str(e)}")
 
 @router.get("/employees")
 @with_tenant_context
@@ -172,17 +168,12 @@ async def create_sales_order(
             discount_amount = (gross_amount * discount_percent) / 100
             taxable_amount = gross_amount - discount_amount
             
-            # Calculate GST components based on type
-            if gst_type == "IGST":
-                igst_amount = (taxable_amount * tax_percent) / 100
-                cgst_amount = Decimal("0")
-                sgst_amount = Decimal("0")
-            else:
-                cgst_amount = (taxable_amount * tax_percent / 2) / 100
-                sgst_amount = (taxable_amount * tax_percent / 2) / 100
-                igst_amount = Decimal("0")
-            
-            tax_amount = cgst_amount + sgst_amount + igst_amount
+            # Use GSTService for consistent GST calculations
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            cgst_amount = gst_components["cgst_amount"]
+            sgst_amount = gst_components["sgst_amount"]
+            igst_amount = gst_components["igst_amount"]
+            tax_amount = gst_components["total_tax_amount"]
             
             # Add to totals
             total_subtotal += gross_amount
@@ -234,7 +225,7 @@ async def create_sales_order(
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
-            "order_status": "draft",  # Match schema values
+            "order_status": OrderStatus.DRAFT.value,  # Single source of truth
             "branch_id": branch_id,  # Use actual branch from DB
             "customer_name": customer.customer_name,  # Schema has this column!
             "customer_phone": customer.primary_phone,  # Schema has this column!
@@ -249,8 +240,8 @@ async def create_sales_order(
             "items_count": len(order.items),  # Add items count!
             "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
-            "fulfillment_status": "pending",
-            "payment_status": "pending",  # Match schema enum
+            "fulfillment_status": PaymentStatus.PENDING.value,
+            "payment_status": PaymentStatus.PENDING.value,  # Single source of truth
             "paid_amount": Decimal("0"),  # Schema has this!
             "balance_amount": totals["total"],  # Schema has this!
             "payment_mode": "credit",  # Schema has this with default!
@@ -344,27 +335,17 @@ async def create_sales_order(
             taxable_amount = gross_amount - discount_amount
             
             # Step 4: Tax calculations (GST components)
-            # Determine GST type based on item data or default to CGST/SGST
+            # Use GSTService for consistent calculations
             gst_type = item_data.get("gst_type", "CGST/SGST")
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
             
-            if gst_type == "IGST":
-                # Inter-state: Full tax as IGST
-                igst_percent = tax_percent
-                cgst_percent = Decimal("0")
-                sgst_percent = Decimal("0")
-                igst_amount = (taxable_amount * igst_percent) / 100
-                cgst_amount = Decimal("0")
-                sgst_amount = Decimal("0")
-            else:
-                # Intra-state: Split tax between CGST and SGST
-                cgst_percent = tax_percent / 2
-                sgst_percent = tax_percent / 2 
-                igst_percent = Decimal("0")
-                cgst_amount = (taxable_amount * cgst_percent) / 100
-                sgst_amount = (taxable_amount * sgst_percent) / 100
-                igst_amount = Decimal("0")
-            
-            tax_amount = cgst_amount + sgst_amount + igst_amount
+            cgst_percent = gst_components["cgst_percent"]
+            sgst_percent = gst_components["sgst_percent"]
+            igst_percent = gst_components["igst_percent"]
+            cgst_amount = gst_components["cgst_amount"]
+            sgst_amount = gst_components["sgst_amount"]
+            igst_amount = gst_components["igst_amount"]
+            tax_amount = gst_components["total_tax_amount"]
             
             # Step 5: Final line total
             line_total = taxable_amount + tax_amount
@@ -645,7 +626,7 @@ async def update_sales_order(
         if not existing:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if existing.order_status not in ["pending", "draft"]:
+        if existing.order_status not in [OrderStatus.PENDING.value, OrderStatus.DRAFT.value]:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Cannot edit order with status: {existing.order_status}"
@@ -737,7 +718,7 @@ async def approve_sales_order(
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if order.order_status != "pending":
+        if order.order_status != OrderStatus.PENDING.value:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Order cannot be approved. Current status: {order.order_status}"
@@ -984,7 +965,7 @@ async def get_sales_order_dashboard(
         logger.error(f"Error getting sales order dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
 
-def _get_or_create_address(db: Session, org_id: str, customer_id: int, 
+def _get_or_create_address(db: TenantAwareSession, org_id: str, customer_id: int, 
                            address_text: str, address_type: str) -> Optional[int]:
     """
     Helper function to get existing address or create new one

@@ -4,7 +4,7 @@ import {
   Download, Upload, Loader2, AlertCircle, Check,
   ArrowRight, Hash, X, RefreshCw
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const UnitMaster = ({ open, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');

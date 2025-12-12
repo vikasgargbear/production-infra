@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
-  CreditCard, Calculator, CheckCircle, Printer, ArrowLeft, 
+import {
+  CreditCard, Calculator, CheckCircle, Printer, ArrowLeft,
   X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
-import { customersApi, salesApi, apiClient } from '../../services/api';
+import { customersApi, invoicesApi, apiClient } from '../../services/api';
 // Payment API not yet implemented - will use direct apiClient when ready
 // import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
 import InvoiceSelector from './components/InvoiceSelector';
@@ -56,14 +56,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
   const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
   const [showCustomerModal, setShowCustomerModal] = React.useState<boolean>(false);
-  
+
   // API data states
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  
+
   // Manual invoice selection state
   const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
-  const [manualAllocations, setManualAllocations] = React.useState<{[key: number]: number}>({});
+  const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
 
   // Generate receipt number on component mount
   React.useEffect(() => {
@@ -72,14 +72,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setPaymentField('receipt_no', receiptNo);
     }
   }, []);
-  
+
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
     // Only auto-allocate if user explicitly chose a method other than manual
     if (payment.amount && parseFloat(payment.amount) > 0 &&
-        outstandingInvoices && outstandingInvoices.length > 0 &&
-        payment.allocation_method && payment.allocation_method !== 'manual' &&
-        ['fifo', 'lifo', 'highest'].includes(payment.allocation_method)) {
+      outstandingInvoices && outstandingInvoices.length > 0 &&
+      payment.allocation_method && payment.allocation_method !== 'manual' &&
+      ['fifo', 'lifo', 'highest'].includes(payment.allocation_method)) {
       const timeoutId = setTimeout(() => {
         applyAllocationMethod(payment.allocation_method);
       }, 500); // Debounce for 500ms
@@ -93,16 +93,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     const handleOpenCustomerModal = () => {
       setShowCustomerModal(true);
     };
-    
+
     const handleCustomerSelectedEvent = (event: any) => {
       if (event.detail) {
         handleCustomerSelect(event.detail);
       }
     };
-    
+
     window.addEventListener('openCustomerModal', handleOpenCustomerModal);
     window.addEventListener('customerSelected', handleCustomerSelectedEvent);
-    
+
     return () => {
       window.removeEventListener('openCustomerModal', handleOpenCustomerModal);
       window.removeEventListener('customerSelected', handleCustomerSelectedEvent);
@@ -164,8 +164,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setMessage('Please select a payment mode', 'error');
       return false;
     }
-    
-    
+
+
     return true;
   };
 
@@ -179,7 +179,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setSaving(true);
     try {
       // Map payment mode to backend expected format
-      const paymentModeMap: {[key: string]: string} = {
+      const paymentModeMap: { [key: string]: string } = {
         'CASH': 'cash',
         'UPI': 'upi',
         'BANK': 'bank_transfer',
@@ -230,27 +230,27 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         };
 
         const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
-        
+
         if (response.data) {
           // Backend returns payment details
           const paymentId = response.data.payment_id;
           const paymentNumber = response.data.payment_reference || response.data.reference_number || payment.reference_number;
-          
+
           setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
-          
+
           // Allocations are handled by backend through invoice_ids
           // The backend will create payment_allocations records
           // Triggers will update customer_outstanding automatically
           if (payment.allocations && payment.allocations.length > 0) {
           }
-          
+
           setMessage('Payment saved successfully!', 'success');
           setCurrentStep(3);
         } else {
           throw new Error('Failed to save payment');
         }
       } catch (apiError: any) {
-        
+
         // If backend returns 405, simulate success for now
         // TODO: Fix backend payment endpoint
         if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
@@ -258,7 +258,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           setPaymentField('receipt_no', simulatedReceiptNo);
           setMessage('Payment recorded locally (backend pending)', 'warning');
           setCurrentStep(3);
-          
+
           // Log for debugging
         } else {
           throw apiError;
@@ -285,12 +285,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const applyAllocationMethod = (method: string) => {
     const invoices = outstandingInvoices || [];
     if (invoices.length === 0) return;
-    
+
     const paymentAmount = parseFloat(payment.amount || '0');
     if (paymentAmount <= 0) return;
-    
+
     let sortedInvoices = [...invoices];
-    
+
     // Sort based on method
     switch (method) {
       case 'fifo':
@@ -306,14 +306,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         sortedInvoices.sort((a, b) => b.amount_due - a.amount_due);
         break;
     }
-    
+
     // Auto-allocate payment to sorted invoices
     let remainingAmount = paymentAmount;
     const allocations: any[] = [];
-    
+
     for (const invoice of sortedInvoices) {
       if (remainingAmount <= 0) break;
-      
+
       const allocatedAmount = Math.min(remainingAmount, invoice.amount_due);
       if (allocatedAmount > 0) {
         allocations.push({
@@ -327,22 +327,22 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         remainingAmount -= allocatedAmount;
       }
     }
-    
+
     // Update payment with allocations
     setPaymentField('allocations', allocations);
     setPaymentField('auto_allocate', true);
-    
+
   };
 
   // Handle manual invoice selection with proper allocation amounts
   const handleManualInvoiceSelection = (checked: boolean, invoiceId: number, invoice: any) => {
     const paymentAmount = parseFloat(payment.amount) || 0;
     const newSelected = new Set(selectedInvoiceIds);
-    let newManualAllocations = {...manualAllocations};
-    
+    let newManualAllocations = { ...manualAllocations };
+
     if (checked) {
       newSelected.add(invoiceId);
-      
+
       // Calculate remaining payment amount after existing allocations
       let totalAllocated = 0;
       Object.entries(newManualAllocations).forEach(([id, amount]) => {
@@ -350,11 +350,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           totalAllocated += amount as number;
         }
       });
-      
+
       const remainingAmount = paymentAmount - totalAllocated;
       // Allocate the minimum of remaining payment or invoice due amount
       const allocateAmount = Math.min(remainingAmount, invoice.amount_due);
-      
+
       if (allocateAmount > 0) {
         newManualAllocations[invoiceId] = allocateAmount;
       } else {
@@ -366,10 +366,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       newSelected.delete(invoiceId);
       delete newManualAllocations[invoiceId];
     }
-    
+
     setSelectedInvoiceIds(newSelected);
     setManualAllocations(newManualAllocations);
-    
+
     // Update payment allocations with correct amounts
     const allocations = Array.from(newSelected).map(id => {
       const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
@@ -379,37 +379,37 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         allocated_amount: newManualAllocations[id] || 0
       };
     });
-    
+
     setPaymentField('allocations', allocations);
   };
 
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
-    
+
     // Clear manual selections when customer changes
     setSelectedInvoiceIds(new Set());
     setManualAllocations({});
     setPaymentField('allocations', []);
-    
+
     // Keep manual as default - more user friendly
     if (!payment.allocation_method) {
       setPaymentField('allocation_method', 'manual');
     }
-    
+
     // Fetch outstanding invoices - using the same approach as return component
     if (!customer) {
       setOutstandingInvoices([]);
       return;
     }
-    
+
     const customerId = customer.customer_id || customer.id || customer.party_id;
-    
+
     try {
       setIsLoading(true);
-      
+
       // Import the invoice service
       const InvoiceApiService = (await import('../../services/invoiceApiService')).default;
-      
+
       // Use the same API call structure as return component
       const response = await InvoiceApiService.getInvoices({
         customer_id: customerId,
@@ -422,7 +422,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       if (response && response.success && response.data) {
         // The invoices are in response.data.invoices array
         const invoices = response.data.invoices || [];
-        
+
         // Fetch existing allocations for each invoice
         const invoicesWithAllocations = await Promise.all(
           invoices.map(async (inv: any) => {
@@ -479,14 +479,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               customer_id: customerId
             };
           });
-        
+
         // Sort invoices by date (oldest first) for display
-        outstandingInvoices.sort((a, b) => 
+        outstandingInvoices.sort((a, b) =>
           new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
         );
-        
+
         setOutstandingInvoices(outstandingInvoices);
-        
+
         // Keep manual as default - don't auto-allocate
         if (!payment.allocation_method) {
           setPaymentField('allocation_method', 'manual');
@@ -518,7 +518,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               <p className="text-2xl font-bold text-gray-900 mb-8">
                 Amount: ₹{parseFloat(payment.amount).toFixed(2)}
               </p>
-              
+
               <div className="flex justify-center space-x-3">
                 <button
                   onClick={generateReceipt}
@@ -581,48 +581,47 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
-          
-          {/* Loading State */}
-          {isLoading && (
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                <p className="text-gray-600">Loading payment entry form...</p>
-              </div>
-            </div>
-          )}
 
-          {/* Error State */}
-          {error && (
-            <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
-              <div className="text-center max-w-md mx-auto">
-                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
-                <p className="text-red-700 mb-4">{error}</p>
-                <button
-                  onClick={() => setError(null)}
-                  className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
-                >
-                  Dismiss
+            {/* Loading State */}
+            {isLoading && (
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Loading payment entry form...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Message Display */}
+            {message && (
+              <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+                  messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+                    'bg-blue-50 text-blue-800 border border-blue-200'
+                }`}>
+                {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+                <div className="flex-1">{message}</div>
+                <button onClick={clearMessage} className="ml-2 hover:opacity-70">
+                  <X className="w-3 h-3" />
                 </button>
               </div>
-            </div>
-          )}
-          
-          {/* Message Display */}
-          {message && (
-            <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${
-              messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' : 
-              messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
-              'bg-blue-50 text-blue-800 border border-blue-200'
-            }`}>
-              {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-              <div className="flex-1">{message}</div>
-              <button onClick={clearMessage} className="ml-2 hover:opacity-70">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
+            )}
 
             {currentStep === 1 ? (
               <>
@@ -654,7 +653,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                               <span>Auto FIFO</span>
                             </button>
                           )}
-                          
+
                           {/* Allocation Method Dropdown (simplified) */}
                           <select
                             value={payment.allocation_method || 'manual'}
@@ -677,7 +676,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Invoice Display Tile - Like payment amount tile */}
                     <Card className="p-6 bg-white border border-gray-200">
                       {/* Loading state */}
@@ -687,7 +686,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           <p className="text-gray-600">Loading invoices...</p>
                         </div>
                       )}
-                      
+
                       {/* Show Auto Allocation Status */}
                       {!isLoading && payment.allocation_method && payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && payment.allocations && payment.allocations.length > 0 && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
@@ -714,7 +713,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Advance Payment Notice */}
                       {!isLoading && payment.allocation_method === 'advance' && (
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
@@ -725,7 +724,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           </p>
                         </div>
                       )}
-                      
+
                       {/* No invoices message */}
                       {!isLoading && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
                         <div className="text-center py-8">
@@ -736,7 +735,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           </p>
                         </div>
                       )}
-                      
+
                       {/* Show invoices table - Clean and simple */}
                       {!isLoading && outstandingInvoices && outstandingInvoices.length > 0 && payment.allocation_method !== 'advance' && (
                         <div>
@@ -744,7 +743,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           <div className="mb-3 text-sm text-gray-600">
                             <span>{outstandingInvoices.length} invoices • Outstanding: ₹{outstandingInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_due || 0), 0).toFixed(2)}</span>
                           </div>
-                          
+
                           {/* Simple table */}
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -760,9 +759,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                             // Select all with FIFO-like allocation up to payment amount
                                             const paymentAmount = parseFloat(payment.amount) || 0;
                                             const newSelected = new Set<number>();
-                                            const newAllocations: {[key: number]: number} = {};
+                                            const newAllocations: { [key: number]: number } = {};
                                             let remainingPayment = paymentAmount;
-                                            
+
                                             outstandingInvoices.forEach((inv: any) => {
                                               if (remainingPayment > 0) {
                                                 const id = inv.invoice_id;
@@ -772,10 +771,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                                 remainingPayment -= allocateAmount;
                                               }
                                             });
-                                            
+
                                             setSelectedInvoiceIds(newSelected);
                                             setManualAllocations(newAllocations);
-                                            
+
                                             // Update payment allocations
                                             const allocations = Array.from(newSelected).map(id => {
                                               const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
@@ -808,10 +807,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 {outstandingInvoices.map((invoice: any, index: number) => {
                                   const invoiceId = invoice.invoice_id || index;
                                   const isSelected = selectedInvoiceIds.has(invoiceId);
-                                  const autoAllocation = payment.allocations?.find((alloc: any) => 
+                                  const autoAllocation = payment.allocations?.find((alloc: any) =>
                                     alloc.invoice_id === invoiceId || alloc.invoice_no === invoice.invoice_no
                                   );
-                                  
+
                                   return (
                                     <tr key={invoiceId} className={`border-b hover:bg-gray-50 ${isSelected || autoAllocation ? 'bg-blue-50' : ''}`}>
                                       <td className="py-2 px-3">
@@ -891,7 +890,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           saving={saving}
         />
       </div>
-      
+
       {/* GST Calculator Modal */}
       {showGSTCalculator && (
         <GSTCalculator
@@ -924,7 +923,7 @@ interface ModularPaymentEntryV3Props {
 // Main component with providers
 const ModularPaymentEntryV3: React.FC<ModularPaymentEntryV3Props> = ({ open = true, onClose }) => {
   if (!open) return null;
-  
+
   return (
     <PaymentProvider>
       <PaymentEntryContent onClose={onClose} />

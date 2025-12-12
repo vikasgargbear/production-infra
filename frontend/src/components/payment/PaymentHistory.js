@@ -11,7 +11,7 @@ import {
   Filter,
   DollarSign
 } from 'lucide-react';
-import { paymentsApi } from '../../services/api/modules/payments.api';
+import { paymentsApi } from '../../services/api';
 import { Pagination, StatusBadge, useToast } from '../global';
 import { format } from 'date-fns';
 

@@ -13,7 +13,18 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 import logging
 
+from .inventory_service import InventoryService
+from ..schemas.inventory import StockMovementCreate
+from ...core.constants import ReturnStatus, DispositionType
+
 logger = logging.getLogger(__name__)
+
+# Damaged reasons for inventory disposition decisions
+DAMAGED_REASONS = [
+    "damaged", "broken", "expired", "expiry", "quality issue", "defective",
+    "contaminated", "leaking", "melted", "manufacturing defect"
+]
+
 
 
 class ReturnService:
@@ -212,53 +223,30 @@ class ReturnService:
         product_id: int,
         batch_id: Optional[int],
         quantity: float,
-        location_id: int,  # Required - callers must ensure valid location
+        location_id: int,
         return_id: int,
         return_number: str,
         reason: str,
         created_by: int,
-        movement_type: str = "RETURN",
-        direction: str = "IN",
-        reference_type: str = "SALES_RETURN"
+        movement_type: str = "return",
+        reference_type: str = "sales_return"
     ) -> None:
-        """Record standard inventory movement for returns."""
-        try:
-            notes = f"Return #{return_number}"
-            
-            db.execute(
-                text("""
-                    INSERT INTO inventory.inventory_movements (
-                        org_id, movement_type, movement_date, movement_direction,
-                        product_id, batch_id, quantity, base_quantity,
-                        location_id, reference_type, reference_id, reference_number,
-                        reason, notes, created_by
-                    ) VALUES (
-                        :org_id, :movement_type, CURRENT_TIMESTAMP, :direction,
-                        :product_id, :batch_id, :quantity, :quantity,
-                        :location_id, :reference_type, :return_id, :return_number,
-                        :reason, :notes, :created_by
-                    )
-                """),
-                {
-                    "org_id": org_id,
-                    "movement_type": movement_type,
-                    "direction": direction,
-                    "product_id": product_id,
-                    "batch_id": batch_id,
-                    "quantity": quantity,
-                    "location_id": location_id,
-                    "reference_type": reference_type,
-                    "return_id": return_id,
-                    "return_number": return_number,
-                    "reason": reason,
-                    "notes": notes,
-                    "created_by": created_by
-                }
-            )
-            logger.debug(f"Recorded {movement_type} movement for product {product_id}")
-        except Exception as e:
-            logger.error(f"Failed to record inventory movement: {e}")
-            raise
+        """Record inventory movement for returns using InventoryService."""
+        movement_data = StockMovementCreate(
+            org_id=org_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            movement_type=movement_type,
+            quantity=Decimal(str(quantity)),
+            reference_type=reference_type,
+            reference_id=return_id,
+            reference_number=return_number,
+            location_id=location_id,
+            reason=reason,
+            notes=f"Return #{return_number}",
+            created_by=created_by
+        )
+        InventoryService.record_stock_movement(db, movement_data)
     
     @staticmethod
     def determine_disposition(
@@ -267,16 +255,12 @@ class ReturnService:
     ) -> Tuple[str, bool]:
         """
         Determine item disposition based on reason and restock flag.
+        Uses DAMAGED_REASONS constant for consistency.
         
         Returns:
             Tuple of (disposition, is_damaged)
         """
-        damaged_reasons = [
-            "damaged", "broken", "expired", "expiry", "quality issue", "defective",
-            "contaminated", "leaking", "melted", "manufacturing defect"
-        ]
-        
-        is_damaged = any(reason in return_reason.lower() for reason in damaged_reasons)
+        is_damaged = any(reason in return_reason.lower() for reason in DAMAGED_REASONS)
         
         if explicit_restock is False or is_damaged:
             disposition = "DESTROY" if is_damaged else "QUARANTINE"

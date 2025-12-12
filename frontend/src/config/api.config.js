@@ -11,19 +11,23 @@ export const API_CONFIG = {
   BASE_URL: API_BASE_URL,
   TIMEOUT: 30000,
 
-  // Storage keys
+  // Storage keys - CONSISTENT naming for token storage
   AUTH: {
     USER_KEY: 'pharma_user',
-    TOKEN_KEY: 'pharma_token'
+    TOKEN_KEY: 'authToken',  // Changed from 'pharma_token' to match apiClient.ts
+    REFRESH_TOKEN_KEY: 'pharma_refresh_token'
   },
 
   ENDPOINTS: {
     // Authentication
     AUTH: {
+      BASE: '/auth',
       LOGIN: '/auth/login',
       LOGOUT: '/auth/logout',
       REFRESH: '/auth/refresh',
       PROFILE: '/auth/profile',
+      VERIFY: '/auth/verify',
+      REGISTER: '/auth/register',
       CHANGE_PASSWORD: '/auth/change-password',
       // OAuth endpoints
       OAUTH_GOOGLE_URL: '/auth/oauth/google/url',

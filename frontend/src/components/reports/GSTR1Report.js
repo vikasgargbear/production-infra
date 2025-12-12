@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
+import {
+  FileText,
+  Download,
+  Calendar,
   Filter,
   Search,
   X,
   AlertCircle,
   CheckCircle
 } from 'lucide-react';
-import { salesApi, customersApi } from '../../services/api';
+import { invoicesApi, customersApi } from '../../services/api';
 import { StandardMonthYearPicker } from '../global';
 import * as XLSX from 'xlsx';
 
@@ -45,11 +45,11 @@ const GSTR1Report = ({ open, onClose }) => {
   const loadSalesData = async () => {
     setLoading(true);
     try {
-      const response = await salesApi.getAll({
+      const response = await invoicesApi.getAll({
         start_date: dateRange.startDate,
         end_date: dateRange.endDate
       });
-      
+
       const sales = response.data || [];
       setSalesData(sales);
       processGSTR1Data(sales);
@@ -142,12 +142,12 @@ const GSTR1Report = ({ open, onClose }) => {
               igst: 0
             };
           }
-          
+
           const itemTaxable = item.amount || 0;
           const itemCgst = (itemTaxable * (item.cgst_percent || 9)) / 100;
           const itemSgst = (itemTaxable * (item.sgst_percent || 9)) / 100;
           const itemIgst = (itemTaxable * (item.igst_percent || 0)) / 100;
-          
+
           hsnSummary[hsnCode].totalQuantity += item.quantity || 0;
           hsnSummary[hsnCode].taxableValue += itemTaxable;
           hsnSummary[hsnCode].cgst += itemCgst;
@@ -185,7 +185,7 @@ const GSTR1Report = ({ open, onClose }) => {
       'SGST': item.sgst.toFixed(2),
       'IGST': item.igst.toFixed(2)
     }));
-    
+
     if (b2bData.length > 0) {
       const b2bSheet = XLSX.utils.json_to_sheet(b2bData);
       XLSX.utils.book_append_sheet(wb, b2bSheet, 'B2B');
@@ -202,7 +202,7 @@ const GSTR1Report = ({ open, onClose }) => {
       'IGST': item.igst.toFixed(2),
       'Total Value': item.totalValue.toFixed(2)
     }));
-    
+
     if (b2cData.length > 0) {
       const b2cSheet = XLSX.utils.json_to_sheet(b2cData);
       XLSX.utils.book_append_sheet(wb, b2cSheet, 'B2C');
@@ -220,7 +220,7 @@ const GSTR1Report = ({ open, onClose }) => {
       'SGST': item.sgst.toFixed(2),
       'IGST': item.igst.toFixed(2)
     }));
-    
+
     if (hsnData.length > 0) {
       const hsnSheet = XLSX.utils.json_to_sheet(hsnData);
       XLSX.utils.book_append_sheet(wb, hsnSheet, 'HSN');
@@ -237,14 +237,14 @@ const GSTR1Report = ({ open, onClose }) => {
       'Total SGST': gstSummary.docs.totalSGST.toFixed(2),
       'Total IGST': gstSummary.docs.totalIGST.toFixed(2)
     }];
-    
+
     const docSheet = XLSX.utils.json_to_sheet(docData);
     XLSX.utils.book_append_sheet(wb, docSheet, 'Document Summary');
 
     // Generate filename with date range
     const startMonth = new Date(dateRange.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
     const filename = `GSTR1_${startMonth}.xlsx`;
-    
+
     XLSX.writeFile(wb, filename);
   };
 

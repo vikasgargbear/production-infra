@@ -251,7 +251,7 @@ async def create_stock_receive(
                 )
                 
         movement_id = str(uuid.uuid4())
-        movement_number = f"SR-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        movement_number = DocumentNumberService.generate_number(db, "stock_receipt", str(context.org_id))
         
         # Get product details - with org_id security filter
         product = db.execute(
@@ -364,7 +364,7 @@ async def create_stock_issue(
                 )
                 
         movement_id = str(uuid.uuid4())
-        movement_number = f"SI-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        movement_number = DocumentNumberService.generate_number(db, "stock_issue", str(context.org_id))
         
         # Check available stock
         batch_id = issue_data.get("batch_id")

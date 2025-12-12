@@ -22,6 +22,7 @@ from ...schemas.order import (
 from ...services.order_service import OrderService
 from ...services.customer_service import CustomerService
 from ...services.invoice_service import InvoiceService
+from ...services.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ async def create_order(
         customer_discount = Decimal("0")
         
         totals = OrderService.calculate_order_totals(
-            db, items_dict, customer_discount, org_id
+            db, items_dict, org_id, customer_discount
         )
         
         # Check credit limit with actual amount
@@ -161,16 +162,19 @@ async def create_order(
                     item_data.get("discount_amount", 0) + item_data.get("tax_amount", 0)
                 )
             
-            # Map tax_percent to rate columns
-            tax_percent = item_data.get("tax_percent", 0)
-            item_data["cgst_rate"] = tax_percent / 2
-            item_data["sgst_rate"] = tax_percent / 2
+            # Use GSTService for consistent GST rate/amount split
+            tax_percent = Decimal(str(item_data.get("tax_percent", 0)))
+            tax_amount = Decimal(str(item_data.get("tax_amount", 0)))
+            gst_components = GSTService.calculate_gst_components(tax_amount, Decimal("100"), "CGST/SGST")  # Use tax_amount as base
+            
+            # For rates, just split tax_percent
+            item_data["cgst_rate"] = float(tax_percent / 2)
+            item_data["sgst_rate"] = float(tax_percent / 2)
             item_data["igst_rate"] = 0  # For now, assume intra-state
             
-            # Calculate tax amounts
-            tax_amount = item_data.get("tax_amount", 0)
-            item_data["cgst_amount"] = tax_amount / 2
-            item_data["sgst_amount"] = tax_amount / 2
+            # For amounts, split tax_amount
+            item_data["cgst_amount"] = float(tax_amount / 2)
+            item_data["sgst_amount"] = float(tax_amount / 2)
             item_data["igst_amount"] = 0
             
             # Get product name

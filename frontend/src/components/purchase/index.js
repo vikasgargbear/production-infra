@@ -24,7 +24,4 @@ export { PURCHASE_CONFIG } from '../../config/purchase.config';
 export { validatePurchaseForm } from '../../utils/purchaseValidation';
 
 // API
-export { purchasesApi } from '../../services/api/modules/purchases.api';
-
-// Data Transformer
-export { purchaseDataTransformer } from '../../services/api/utils/purchaseDataTransformer';
+export { purchasesApi } from '../../services/api';

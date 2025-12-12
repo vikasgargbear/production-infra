@@ -9,13 +9,60 @@ This service ensures:
 4. GST compliance for GSTR filing
 """
 from decimal import Decimal
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from uuid import UUID
+from datetime import date
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+# Valid GST slabs in India
+GST_SLABS: List[int] = [0, 5, 12, 18, 28]
+
+# Complete mapping of GST state codes to state names
+STATE_CODES: Dict[str, str] = {
+    "01": "Jammu & Kashmir",
+    "02": "Himachal Pradesh",
+    "03": "Punjab",
+    "04": "Chandigarh",
+    "05": "Uttarakhand",
+    "06": "Haryana",
+    "07": "Delhi",
+    "08": "Rajasthan",
+    "09": "Uttar Pradesh",
+    "10": "Bihar",
+    "11": "Sikkim",
+    "12": "Arunachal Pradesh",
+    "13": "Nagaland",
+    "14": "Manipur",
+    "15": "Mizoram",
+    "16": "Tripura",
+    "17": "Meghalaya",
+    "18": "Assam",
+    "19": "West Bengal",
+    "20": "Jharkhand",
+    "21": "Odisha",
+    "22": "Chhattisgarh",
+    "23": "Madhya Pradesh",
+    "24": "Gujarat",
+    "26": "Dadra & Nagar Haveli and Daman & Diu",
+    "27": "Maharashtra",
+    "29": "Karnataka",
+    "30": "Goa",
+    "31": "Lakshadweep",
+    "32": "Kerala",
+    "33": "Tamil Nadu",
+    "34": "Puducherry",
+    "35": "Andaman & Nicobar Islands",
+    "36": "Telangana",
+    "37": "Andhra Pradesh",
+    "38": "Ladakh",
+    "97": "Other Territory",
+    "99": "Centre Jurisdiction"
+}
 
 
 class GSTService:
@@ -336,7 +383,170 @@ class GSTService:
         if not gst_number[13] == 'Z':
             return False, "14th character must be 'Z'"
 
+        # Validate state code exists
+        state_code = gst_number[:2]
+        if state_code not in STATE_CODES:
+            return False, f"Invalid state code: {state_code}"
+
         return True, None
+
+    @staticmethod
+    def validate_gstin(gstin: str) -> bool:
+        """
+        Validate GSTIN format with checksum verification.
+        
+        This is the simplified validation called by compliance/gst.py.
+        For detailed error messages, use validate_gst_number instead.
+        
+        Args:
+            gstin: GSTIN string to validate
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        is_valid, _ = GSTService.validate_gst_number(gstin)
+        return is_valid
+
+    @staticmethod
+    def extract_state_code(gstin: str) -> Optional[str]:
+        """
+        Extract the 2-digit state code from a GSTIN.
+        
+        Args:
+            gstin: Valid GSTIN string
+            
+        Returns:
+            str: 2-digit state code or None if invalid
+        """
+        if not gstin or len(gstin) < 2:
+            return None
+        
+        state_code = gstin[:2].strip()
+        if state_code.isdigit() and state_code in STATE_CODES:
+            return state_code
+        return None
+
+    @staticmethod
+    def get_state_name(state_code: str) -> Optional[str]:
+        """
+        Get state name from a 2-digit state code.
+        
+        Args:
+            state_code: 2-digit GST state code (e.g., "27" for Maharashtra)
+            
+        Returns:
+            str: State name or None if invalid code
+        """
+        if not state_code:
+            return None
+        return STATE_CODES.get(state_code.strip())
+
+    @staticmethod
+    def calculate_gst_amounts(
+        taxable_amount: Decimal,
+        gst_rate: Decimal,
+        gst_type: str
+    ) -> Dict[str, Decimal]:
+        """
+        Alias for calculate_gst_components for backward compatibility.
+        
+        This method is called by compliance/gst.py.
+        """
+        return GSTService.calculate_gst_components(taxable_amount, gst_rate, gst_type)
+
+    @staticmethod
+    def get_gst_rate_for_hsn(
+        db: Session,
+        hsn_code: str,
+        org_id: Optional[UUID] = None
+    ) -> Optional[Decimal]:
+        """
+        Look up GST rate from HSN master table.
+        
+        Args:
+            db: Database session
+            hsn_code: HSN/SAC code
+            org_id: Organization ID (optional, for org-specific rates)
+            
+        Returns:
+            Decimal: GST rate or None if not found
+        """
+        try:
+            if not hsn_code:
+                return None
+            
+            # Try org-specific HSN rates first
+            if org_id:
+                rate = db.execute(text("""
+                    SELECT gst_rate FROM master.hsn_codes
+                    WHERE hsn_code = :hsn_code AND org_id = :org_id
+                    LIMIT 1
+                """), {"hsn_code": hsn_code, "org_id": str(org_id)}).scalar()
+                
+                if rate is not None:
+                    return Decimal(str(rate))
+            
+            # Fallback to global HSN rates
+            rate = db.execute(text("""
+                SELECT gst_rate FROM master.hsn_codes
+                WHERE hsn_code = :hsn_code AND org_id IS NULL
+                LIMIT 1
+            """), {"hsn_code": hsn_code}).scalar()
+            
+            if rate is not None:
+                return Decimal(str(rate))
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error fetching GST rate for HSN {hsn_code}: {e}")
+            return None
+
+    @staticmethod
+    def get_financial_year(date_value: date = None) -> str:
+        """
+        Get financial year string for GST filing compliance.
+        
+        Financial year in India runs from April 1 to March 31.
+        
+        Args:
+            date_value: Date to get FY for (defaults to today)
+            
+        Returns:
+            str: Financial year string (e.g., "2024-25")
+        """
+        if date_value is None:
+            date_value = date.today()
+        
+        year = date_value.year
+        month = date_value.month
+        
+        # FY starts in April
+        if month >= 4:  # April to December
+            fy_start = year
+            fy_end = year + 1
+        else:  # January to March
+            fy_start = year - 1
+            fy_end = year
+        
+        return f"{fy_start}-{str(fy_end)[-2:]}"
+
+    @staticmethod
+    def is_valid_gst_slab(rate: Decimal) -> bool:
+        """
+        Check if a GST rate is a valid slab.
+        
+        Args:
+            rate: GST rate to validate
+            
+        Returns:
+            bool: True if rate is a valid GST slab
+        """
+        try:
+            rate_int = int(rate)
+            return rate_int in GST_SLABS
+        except (ValueError, TypeError):
+            return False
 
 
 # Convenience functions for backward compatibility
@@ -352,3 +562,37 @@ def get_gst_type(db: Session, org_id: UUID, customer_id: int = None,
 def calculate_gst(taxable_amount: Decimal, rate: Decimal, gst_type: str) -> Dict:
     """Shorthand for calculate_gst_components"""
     return GSTService.calculate_gst_components(taxable_amount, rate, gst_type)
+
+
+def calculate_gst_breakdown(
+    taxable_amount: float,
+    gst_percent: float,
+    gst_type: str = "CGST/SGST"
+) -> Dict[str, float]:
+    """
+    Calculate GST breakdown with float inputs/outputs.
+    
+    Convenience function for API routes that use float types.
+    
+    Args:
+        taxable_amount: Amount after discount
+        gst_percent: GST rate (e.g., 5, 12, 18, 28)
+        gst_type: "CGST/SGST" or "IGST"
+    
+    Returns:
+        Dict with cgst, sgst, igst, total_tax as floats
+    """
+    components = GSTService.calculate_gst_components(
+        Decimal(str(taxable_amount)),
+        Decimal(str(gst_percent)),
+        gst_type
+    )
+    return {
+        "cgst_amount": float(components["cgst_amount"]),
+        "sgst_amount": float(components["sgst_amount"]),
+        "igst_amount": float(components["igst_amount"]),
+        "cgst_percent": float(components["cgst_percent"]),
+        "sgst_percent": float(components["sgst_percent"]),
+        "igst_percent": float(components["igst_percent"]),
+        "total_tax": float(components["total_tax_amount"])
+    }

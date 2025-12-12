@@ -56,15 +56,7 @@ async def generate_claim_number(db: TenantAwareSession = Depends(get_tenant_awar
         }
     except Exception as e:
         logger.error(f"Error generating claim number: {str(e)}")
-        # Fallback to timestamp-based generation
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"EXP-{current_year:02d}{timestamp:08d}"
-        return {
-            "claim_number": fallback_number,
-            "generated_at": datetime.now().isoformat(),
-            "fallback": True
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to generate claim number: {str(e)}")
 
 @router.get("/expense-types")
 @with_tenant_context

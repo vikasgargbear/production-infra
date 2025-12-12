@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { CustomerSearch, Select, Card, DatePicker, Button } from '../../global';
 import CustomerCreationB2B from '../../global/ui/forms/CustomerCreationB2B';
-import { notesApi } from '../../../services/api/modules/notes.api';
+import { notesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface DebitNoteFlowProps {

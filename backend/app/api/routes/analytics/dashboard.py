@@ -2,7 +2,7 @@
 Dashboard API Router
 Provides analytics and dashboard data for the pharma system
 
-PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
+MODERNIZED: Uses TenantAwareSession + DashboardService for AI-agent safety
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +14,8 @@ from datetime import date, datetime, timedelta, timezone
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
+from ....core.constants import OrderStatus, InvoiceStatus, PaymentStatus
+from ...services.dashboard_service import DashboardService
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,7 @@ async def get_dashboard_overview(
 ):
     """Get main dashboard overview"""
     try:
-        # Return the same data as stats for consistency
-        return await get_dashboard_stats(_, db, context)
+        return DashboardService.get_dashboard_stats(db, str(context.org_id))
     except Exception as e:
         logger.error(f"Error getting dashboard overview: {str(e)}")
         return {
@@ -236,56 +237,12 @@ def get_inventory_alerts(
     context: OrgContext = Depends(get_org_context)
 ):
     """Get inventory alerts (low stock, expiring soon)"""
-    org_id = str(context.org_id)
     try:
-        # Low stock products
-        low_stock_query = """
-            SELECT 
-                p.product_id,
-                p.product_name,
-                p.brand,
-                COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                10 as minimum_stock_level,
-                'low_stock' as alert_type
-            FROM inventory.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
-            WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.brand
-            HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
-            ORDER BY current_stock ASC
-            LIMIT 20
-        """
-        
-        # Expiring soon products
-        expiring_query = """
-            SELECT 
-                b.batch_id,
-                p.product_id,
-                p.product_name,
-                p.brand,
-                b.batch_number,
-                b.expiry_date,
-                b.quantity_available as quantity_available,
-                'expiring_soon' as alert_type
-            FROM inventory.batches b
-            JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
-            AND b.quantity_available > 0
-            ORDER BY b.expiry_date ASC
-            LIMIT 20
-        """
-        
-        low_stock_result = db.execute(text(low_stock_query))
-        low_stock = [dict(row._mapping) for row in low_stock_result]
-        
-        expiring_result = db.execute(text(expiring_query))
-        expiring = [dict(row._mapping) for row in expiring_result]
-        
+        alerts = DashboardService.get_inventory_alerts(db, str(context.org_id))
         return {
-            "low_stock_products": low_stock,
-            "expiring_products": expiring
+            "low_stock_products": alerts["low_stock"],
+            "expiring_products": alerts["expiring_soon"]
         }
-        
     except Exception as e:
         logger.error(f"Error fetching inventory alerts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get inventory alerts: {str(e)}")
@@ -443,10 +400,9 @@ def get_top_customers(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Get top customers - matches test expectations"""
+    """Get top customers by order value"""
     try:
-        # Use existing customer analytics with different name
-        return get_customer_analytics(limit, 30, _, db, context)
+        return DashboardService.get_top_customers(db, str(context.org_id), limit)
     except Exception as e:
         logger.error(f"Error fetching top customers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get top customers: {str(e)}")
@@ -460,30 +416,9 @@ def get_expiry_alerts(
     context: OrgContext = Depends(get_org_context)
 ):
     """Get products expiring soon"""
-    org_id = str(context.org_id)
     try:
-        query = """
-            SELECT 
-                b.batch_id,
-                p.product_id,
-                p.product_name,
-                p.brand,
-                b.batch_number,
-                b.expiry_date,
-                b.quantity_available,
-                (b.expiry_date - CURRENT_DATE) as days_to_expire
-            FROM inventory.batches b
-            JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
-            AND b.quantity_available > 0
-            ORDER BY b.expiry_date ASC
-            LIMIT 50
-        """
-        
-        result = db.execute(text(query), {"days": days})
-        expiry_alerts = [dict(row._mapping) for row in result]
-        
-        return {"expiring_products": expiry_alerts, "count": len(expiry_alerts)}
+        alerts = DashboardService.get_expiry_alerts(db, str(context.org_id), days)
+        return {"expiring_products": alerts, "count": len(alerts)}
     except Exception as e:
         logger.error(f"Error fetching expiry alerts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get expiry alerts: {str(e)}")
@@ -496,29 +431,9 @@ def get_low_stock_alerts(
     context: OrgContext = Depends(get_org_context)
 ):
     """Get low stock products"""
-    org_id = str(context.org_id)
     try:
-        query = """
-            SELECT 
-                p.product_id,
-                p.product_name,
-                p.brand,
-                COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                10 as minimum_stock_level,
-                (10 - COALESCE(SUM(b.quantity_available), 0)) as stock_deficit
-            FROM inventory.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-            WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.brand
-            HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
-            ORDER BY stock_deficit DESC
-            LIMIT 50
-        """
-        
-        result = db.execute(text(query))
-        low_stock_alerts = [dict(row._mapping) for row in result]
-        
-        return {"low_stock_products": low_stock_alerts, "count": len(low_stock_alerts)}
+        alerts = DashboardService.get_low_stock_alerts(db, str(context.org_id))
+        return {"low_stock_products": alerts, "count": len(alerts)}
     except Exception as e:
         logger.error(f"Error fetching low stock alerts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get low stock alerts: {str(e)}")
@@ -531,51 +446,8 @@ def get_pending_payments(
     context: OrgContext = Depends(get_org_context)
 ):
     """Get pending payments summary"""
-    org_id = str(context.org_id)
     try:
-        query = """
-            SELECT 
-                'customer_receivables' as payment_type,
-                COUNT(*) as count,
-                COALESCE(SUM(current_outstanding), 0) as final_amount
-            FROM parties.customers 
-            WHERE current_outstanding > 0
-            
-            UNION ALL
-            
-            SELECT 
-                'supplier_payables' as payment_type,
-                COUNT(*) as count,
-                COALESCE(SUM(current_outstanding), 0) as final_amount
-            FROM parties.suppliers 
-            WHERE current_outstanding > 0
-            
-            UNION ALL
-            
-            SELECT 
-                'pending_invoices' as payment_type,
-                COUNT(*) as count,
-                COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as final_amount
-            FROM sales.invoices 
-            WHERE (payment_status != 'paid' OR payment_status IS NULL) 
-            AND final_amount > COALESCE(paid_amount, 0)
-        """
-        
-        result = db.execute(text(query))
-        pending_payments = [dict(row._mapping) for row in result]
-        
-        # Calculate totals
-        total_receivables = sum(row['final_amount'] for row in pending_payments if row['payment_type'] == 'customer_receivables')
-        total_payables = sum(row['final_amount'] for row in pending_payments if row['payment_type'] == 'supplier_payables')
-        
-        return {
-            "pending_payments": pending_payments,
-            "summary": {
-                "total_receivables": total_receivables,
-                "total_payables": total_payables,
-                "net_position": total_receivables - total_payables
-            }
-        }
+        return DashboardService.get_pending_payments(db, str(context.org_id))
     except Exception as e:
         logger.error(f"Error fetching pending payments: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get pending payments: {str(e)}")

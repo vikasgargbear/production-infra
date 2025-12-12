@@ -3,7 +3,7 @@ import {
   CreditCard, Save, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
-import { notesApi } from '../../../services/api/modules/notes.api';
+import { notesApi } from '../../../services/api';
 import CreditNoteFormPageCompact from './CreditNoteFormPageCompact';
 import CreditNoteReviewPage from './CreditNoteReviewPage';
 

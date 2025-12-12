@@ -6,7 +6,7 @@ import {
   ChevronRight, BarChart3, Clock, Settings, X,
   QrCode, Wifi, Thermometer, Lock, Activity, RefreshCw
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
 
 const WarehouseMaster = ({ open, onClose }) => {

@@ -12,10 +12,10 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal
 
-from ...core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
-from ...core.org_context import OrgContext, get_org_context
-from ...core.permissions import PermissionChecker
-from ..services.document_number_service import DocumentNumberService
+from ....core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
+from ....core.org_context import OrgContext, get_org_context
+from ....core.permissions import PermissionChecker
+from ...services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ async def convert_sales_order_to_invoice(
             raise HTTPException(status_code=400, detail=f"Order already has invoice: {existing.invoice_id}")
         
         # Generate invoice number
-        invoice_number = DocumentNumberService.generate_invoice_number(db, org_id)
+        invoice_number = DocumentNumberService.generate_number(db, "invoice", str(org_id))
         invoice_date = request.target_date or date.today()
         
         # Get org state for GST type
@@ -493,7 +493,7 @@ async def _create_invoice_from_challans(
     final_amount = subtotal + tax_total - (discount_amount or Decimal("0"))
     
     # Generate invoice
-    invoice_number = DocumentNumberService.generate_invoice_number(db, org_id)
+    invoice_number = DocumentNumberService.generate_number(db, "invoice", str(org_id))
     inv_date = invoice_date or date.today()
     
     invoice_result = db.execute(text("""

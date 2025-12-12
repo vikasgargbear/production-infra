@@ -25,7 +25,7 @@ import {
   ArrowDownRight,
   Loader2
 } from 'lucide-react';
-import { customersApi, salesApi, paymentsApi } from '../services/api';
+import { customersApi, invoicesApi, paymentsApi } from '../services/api';
 import offlineStorage from '../services/offlineStorage';
 
 const PaymentDashboard = () => {
@@ -52,10 +52,10 @@ const PaymentDashboard = () => {
   const loadAnalytics = async () => {
     setLoading(true);
     setError(null);
-    
+
     const endDate = new Date();
     const startDate = new Date();
-    
+
     switch (dateRange) {
       case 'today':
         startDate.setHours(0, 0, 0, 0);
@@ -108,20 +108,20 @@ const PaymentDashboard = () => {
       };
 
       setAnalytics(analyticsData);
-      
+
       // Store data offline for future use
-      await offlineStorage.storeOffline(`payment_analytics_${dateRange}`, analyticsData, { 
-        persistent: true 
+      await offlineStorage.storeOffline(`payment_analytics_${dateRange}`, analyticsData, {
+        persistent: true
       });
-      
+
     } catch (error) {
-      
+
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline(`payment_analytics_${dateRange}`, { persistent: true });
-      
+
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for analytics
         setAnalytics(offlineData.data);
-        
+
         // Show offline indicator
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -164,7 +164,7 @@ const PaymentDashboard = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       await loadAnalytics();
     } catch (error) {
@@ -176,7 +176,7 @@ const PaymentDashboard = () => {
 
   const formatCurrency = (amount) => {
     if (!amount || amount === 0) return '₹0';
-    
+
     if (amount >= 10000000) {
       return `₹${(amount / 10000000).toFixed(1)}Cr`;
     } else if (amount >= 100000) {
@@ -351,8 +351,8 @@ const PaymentDashboard = () => {
           </div>
           <div className="mt-4">
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-purple-600 h-2 rounded-full" 
+              <div
+                className="bg-purple-600 h-2 rounded-full"
                 style={{ width: `${Math.min(analytics.collectionRate, 100)}%` }}
               ></div>
             </div>
@@ -372,9 +372,9 @@ const PaymentDashboard = () => {
           </div>
           <div className="mt-4">
             <p className="text-sm text-gray-500">
-              {analytics.avgCollectionDays <= 30 ? 'Excellent' : 
-               analytics.avgCollectionDays <= 45 ? 'Good' : 
-               analytics.avgCollectionDays <= 60 ? 'Fair' : 'Needs Attention'}
+              {analytics.avgCollectionDays <= 30 ? 'Excellent' :
+                analytics.avgCollectionDays <= 45 ? 'Good' :
+                  analytics.avgCollectionDays <= 60 ? 'Fair' : 'Needs Attention'}
             </p>
           </div>
         </div>
@@ -389,7 +389,7 @@ const PaymentDashboard = () => {
               const config = paymentModeConfig[mode] || { icon: CreditCard, color: 'gray', label: mode };
               const IconComponent = config.icon;
               const percentage = analytics.totalCollected > 0 ? ((data.amount / analytics.totalCollected) * 100).toFixed(1) : 0;
-              
+
               return (
                 <div key={mode} className="text-center p-4 bg-gray-50 rounded-lg">
                   <div className={`inline-flex p-3 bg-${config.color}-100 rounded-full mb-3`}>
@@ -502,7 +502,7 @@ const PaymentDashboard = () => {
             {analytics.dailyTrends.map((day, index) => {
               const maxAmount = Math.max(...analytics.dailyTrends.map(d => d.amount));
               const height = maxAmount > 0 ? (day.amount / maxAmount) * 100 : 0;
-              
+
               return (
                 <div key={index} className="flex-1 flex flex-col items-center">
                   <div className="w-full bg-blue-200 rounded-t" style={{ height: `${height}%` }}>

@@ -4,7 +4,7 @@ import {
   Download, Upload, Loader2, AlertCircle, Check,
   Percent, X, RefreshCw, Building, Calculator, Info
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const TaxMaster = ({ open, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');

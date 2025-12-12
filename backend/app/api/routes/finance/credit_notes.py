@@ -1,20 +1,24 @@
 """
 Credit/Debit Note API Router
 Handles financial adjustments independent of physical returns
+
+MODERNIZED: Uses TenantAwareSession + CreditNoteService
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 import uuid
 
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
+from ....core.constants import PartyType, ReturnStatus
 from ....utils.branch_utils import get_default_branch_id  # RBAC
 from ...services.document_number_service import DocumentNumberService
+from ...services.credit_note_service import CreditNoteService
 
 logger = logging.getLogger(__name__)
 
@@ -37,122 +41,31 @@ async def get_notes(
     Get list of credit/debit notes with optional filters
     """
     try:
-        # Union query to get both credit notes (from sales returns) and debit notes (from purchase returns)
-        query = """
-            SELECT 
-                'credit' as note_type,
-                sr.return_id as note_id,
-                sr.credit_note_number as note_number,
-                sr.credit_note_date as note_date,
-                sr.customer_id as party_id,
-                'customer' as party_type,
-                c.customer_name as party_name,
-                c.gst_number as party_gst,
-                sr.total_amount,
-                sr.return_reason as reason,
-                sr.credit_note_status as status,
-                sr.created_at
-            FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.credit_note_number IS NOT NULL
-            
-            UNION ALL
-            
-            SELECT 
-                'debit' as note_type,
-                pr.return_id as note_id,
-                pr.debit_note_number as note_number,
-                pr.debit_note_date as note_date,
-                pr.supplier_id as party_id,
-                'supplier' as party_type,
-                s.supplier_name as party_name,
-                s.gst_number as party_gst,
-                pr.total_amount,
-                pr.return_reason as reason,
-                pr.debit_note_status as status,
-                pr.created_at
-            FROM procurement.purchase_returns pr
-            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.debit_note_number IS NOT NULL
-        """
-        # Apply filters
-        filter_conditions = []
-        params = {"skip": skip, "limit": limit}
-        
-        if note_type:
-            if note_type == 'credit':
-                filter_conditions.append("note_type = 'credit'")
-            elif note_type == 'debit':
-                filter_conditions.append("note_type = 'debit'")
-            
-        if party_id:
-            filter_conditions.append("party_id = :party_id")
-            params["party_id"] = party_id
-            
+        # Parse dates if provided
+        parsed_from = None
+        parsed_to = None
         if from_date:
-            filter_conditions.append("note_date >= :from_date")
-            params["from_date"] = from_date
-            
+            try:
+                parsed_from = datetime.strptime(from_date, "%Y-%m-%d").date()
+            except ValueError:
+                parsed_from = None
         if to_date:
-            filter_conditions.append("note_date <= :to_date")
-            params["to_date"] = to_date
+            try:
+                parsed_to = datetime.strptime(to_date, "%Y-%m-%d").date()
+            except ValueError:
+                parsed_to = None
         
-        # Wrap the union query and apply filters
-        if filter_conditions:
-            query = f"SELECT * FROM ({query}) as notes WHERE " + " AND ".join(filter_conditions)
-        else:
-            query = f"SELECT * FROM ({query}) as notes"
-            
-        query += " ORDER BY note_date DESC, created_at DESC LIMIT :limit OFFSET :skip"
-        
-        notes = db.execute(text(query), params).fetchall()
-        
-        # Get total count
-        base_count_query = """
-            SELECT COUNT(*) FROM (
-                SELECT sr.return_id
-                FROM sales.sales_returns sr
-                WHERE sr.credit_note_number IS NOT NULL
-                
-                UNION ALL
-                
-                SELECT pr.return_id
-                FROM procurement.purchase_returns pr
-                WHERE pr.debit_note_number IS NOT NULL
-            ) as all_notes
-        """
-        
-        if filter_conditions:
-            # For count, we need the same base union but with count
-            count_base = """
-                SELECT 
-                    'credit' as note_type,
-                    sr.return_id as note_id,
-                    sr.credit_note_date as note_date,
-                    sr.customer_id as party_id
-                FROM sales.sales_returns sr
-                WHERE sr.credit_note_number IS NOT NULL
-                
-                UNION ALL
-                
-                SELECT 
-                    'debit' as note_type,
-                    pr.return_id as note_id,
-                    pr.debit_note_date as note_date,
-                    pr.supplier_id as party_id
-                FROM procurement.purchase_returns pr
-                WHERE pr.debit_note_number IS NOT NULL
-            """
-            count_query = f"SELECT COUNT(*) FROM ({count_base}) as notes WHERE " + " AND ".join(filter_conditions)
-        else:
-            count_query = base_count_query
-            
-        total = db.execute(text(count_query), params).scalar()
-        
-        return {
-            "total": total,
-            "notes": [dict(note._mapping) for note in notes]
-        }
+        # Use CreditNoteService
+        return CreditNoteService.get_notes(
+            db=db,
+            org_id=str(context.org_id),
+            note_type=note_type,
+            party_id=int(party_id) if party_id else None,
+            from_date=parsed_from,
+            to_date=parsed_to,
+            skip=skip,
+            limit=limit
+        )
         
     except Exception as e:
         logger.error(f"Error fetching notes: {e}")
@@ -188,7 +101,7 @@ async def create_credit_note(
         if not party:
             raise HTTPException(status_code=404, detail="Party not found")
             
-        if party.party_type != "customer":
+        if party.party_type != PartyType.CUSTOMER.value:
             raise HTTPException(
                 status_code=400, 
                 detail="Credit notes can only be issued to customers"
@@ -524,14 +437,14 @@ async def cancel_note(
         if not note:
             raise HTTPException(status_code=404, detail="Note not found")
             
-        if note.status == "cancelled":
+        if note.status == ReturnStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Note already cancelled")
             
         # Update note status
         db.execute(
             text("""
                 UPDATE financial_notes 
-                SET status = 'cancelled',
+                SET status = :cancelled_status,
                     cancellation_reason = :reason,
                     cancelled_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
@@ -539,7 +452,8 @@ async def cancel_note(
             """),
             {
                 "note_id": note_id,
-                "reason": cancellation_reason
+                "reason": cancellation_reason,
+                "cancelled_status": ReturnStatus.CANCELLED.value
             }
         )
         

@@ -3,13 +3,14 @@ Customer Outstanding with Net Position
 Shows true outstanding considering advance payments
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import text
 import logging
 
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
+from ....core.constants import InvoiceStatus, PaymentRecordStatus, PartyType
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def get_customer_net_position(
                         FROM sales.invoices
                         WHERE customer_id = :customer_id
                         AND org_id = :org_id
-                        AND invoice_status != 'cancelled'
+                        AND invoice_status != :cancelled_status
                         GROUP BY customer_id
                     ),
                     payment_summary AS (
@@ -55,9 +56,9 @@ async def get_customer_net_position(
                             SUM(COALESCE(unallocated_amount, 0)) as advance_amount
                         FROM financial.payments
                         WHERE party_id = :customer_id
-                        AND party_type = 'customer'
+                        AND party_type = :customer_type
                         AND org_id = :org_id
-                        AND payment_status != 'cancelled'
+                        AND payment_status != :cancelled_status
                         GROUP BY party_id
                     )
                     SELECT
@@ -79,7 +80,12 @@ async def get_customer_net_position(
                     WHERE c.customer_id = :customer_id
                     AND c.org_id = :org_id
                 """),
-                {"customer_id": customer_id, "org_id": str(context.org_id)}
+                {
+                    "customer_id": customer_id, 
+                    "org_id": str(context.org_id),
+                    "cancelled_status": InvoiceStatus.CANCELLED.value,
+                    "customer_type": PartyType.CUSTOMER.value
+                }
             ).fetchone()
 
             if result:
@@ -427,23 +433,4 @@ async def get_collection_metrics(
 
     except Exception as e:
         logger.error(f"Error calculating collection metrics: {e}")
-        # Return mock data as fallback
-        return {
-            "success": False,
-            "error": str(e),
-            "metrics": {
-                "daily_revenue": 0,
-                "mtd_collections": 0,
-                "pipeline_value": 0,
-                "promised_customers": 0,
-                "high_risk_accounts": 0,
-                "risk_amount": 0,
-                "dso_days": 0,
-                "collection_efficiency": 0,
-                "collection_change": 0,
-                "total_outstanding": 0,
-                "total_overdue": 0,
-                "customers_with_outstanding": 0,
-                "customers_with_overdue": 0
-            }
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to calculate collection metrics: {str(e)}")

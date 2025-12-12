@@ -12,9 +12,9 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { invoicesApi } from '../../services/api/modules/invoices.api';
-import { salesOrdersApi } from '../../services/api/modules/salesOrders.api';
-import { challansApi } from '../../services/api/modules/challans.api';
+import { invoicesApi } from '../../services/api';
+import { salesOrdersApi } from '../../services/api';
+import { challansApi } from '../../services/api';
 import { Pagination, StatusBadge, useToast } from '../global';
 import { format } from 'date-fns';
 

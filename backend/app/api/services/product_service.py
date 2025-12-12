@@ -10,8 +10,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from uuid import UUID
 import logging
+import re
+
+from .gst_service import GSTService
+from .document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
+
+# Constants - single source of truth for product defaults
+DEFAULT_HSN_PHARMA = "30049099"  # Default pharmaceutical HSN code
+DEFAULT_HSN_GENERAL = "3004"     # General medicines HSN
+DEFAULT_BASE_UOM = "NOS"         # Default unit of measure
+DEFAULT_CONVERSION_FACTOR = 1
+DEFAULT_CESS_RATE = Decimal("0.00")
+GST_RATES = [0, 5, 12, 18, 28]   # Valid GST slabs in India
+PRODUCT_CODE_PREFIX = "PROD"
 
 
 class ProductService:
@@ -19,6 +32,122 @@ class ProductService:
     Service class for product-related business logic
     Follows same pattern as InventoryService
     """
+    
+    # --- Validation Methods ---
+    
+    @staticmethod
+    def validate_product_data(product_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate product data including HSN and GST.
+        Uses GSTService for GST slab validation.
+        """
+        errors = []
+        validated_data = product_data.copy()
+        
+        # Validate product name (required)
+        product_name = product_data.get("product_name")
+        if not product_name or not product_name.strip():
+            errors.append("Product name is required")
+        
+        # Validate HSN code format (4-8 digits)
+        hsn = product_data.get("hsn_code")
+        if hsn:
+            hsn = str(hsn).strip()
+            if not re.match(r"^\d{4,8}$", hsn):
+                errors.append("Invalid HSN code format (must be 4-8 digits)")
+            else:
+                validated_data["hsn_code"] = hsn
+        else:
+            # Default to pharma HSN
+            validated_data["hsn_code"] = DEFAULT_HSN_PHARMA
+        
+        # Validate GST rate using approved slabs
+        gst = product_data.get("gst_rate") or product_data.get("gst_percent")
+        if gst is not None:
+            try:
+                gst_value = int(gst)
+                if gst_value not in GST_RATES:
+                    errors.append(f"Invalid GST rate {gst_value}%. Must be one of: {GST_RATES}")
+                else:
+                    validated_data["gst_percent"] = gst_value
+            except (ValueError, TypeError):
+                errors.append(f"GST rate must be a number")
+        
+        # Validate base UOM
+        if not product_data.get("base_uom"):
+            validated_data["base_uom"] = DEFAULT_BASE_UOM
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "data": validated_data
+        }
+    
+    @staticmethod
+    def check_duplicate_product(
+        db: Session,
+        org_id: str,
+        product_name: Optional[str] = None,
+        product_code: Optional[str] = None,
+        exclude_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Check for duplicate products by name or code"""
+        duplicates = []
+        
+        # Check product name duplicate (exact match, case insensitive)
+        if product_name:
+            query = """
+                SELECT product_id, product_name, product_code 
+                FROM inventory.products 
+                WHERE org_id = :org_id 
+                  AND LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
+            """
+            params = {"org_id": org_id, "product_name": product_name}
+            if exclude_id:
+                query += " AND product_id != :exclude_id"
+                params["exclude_id"] = exclude_id
+            
+            result = db.execute(text(query), params).fetchone()
+            if result:
+                duplicates.append({
+                    "field": "product_name",
+                    "product_id": result.product_id,
+                    "product_name": result.product_name,
+                    "message": f"Product with name '{result.product_name}' already exists"
+                })
+        
+        # Check product code duplicate
+        if product_code:
+            query = """
+                SELECT product_id, product_name, product_code 
+                FROM inventory.products 
+                WHERE org_id = :org_id AND product_code = :product_code
+            """
+            params = {"org_id": org_id, "product_code": product_code}
+            if exclude_id:
+                query += " AND product_id != :exclude_id"
+                params["exclude_id"] = exclude_id
+            
+            result = db.execute(text(query), params).fetchone()
+            if result:
+                duplicates.append({
+                    "field": "product_code",
+                    "product_id": result.product_id,
+                    "product_name": result.product_name,
+                    "message": f"Product code '{product_code}' already exists for '{result.product_name}'"
+                })
+        
+        return {
+            "has_duplicates": len(duplicates) > 0,
+            "duplicates": duplicates
+        }
+    
+    @staticmethod
+    def generate_product_code(db: Session, org_id: str) -> str:
+        """Generate unique product code using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "product", org_id)
+    
+    # --- CRUD Methods ---
     
     @staticmethod
     def get_or_create_product(
@@ -97,15 +226,15 @@ class ProductService:
             # Get or create a default category
             category_id = ProductService._get_or_create_default_category(db, org_id)
             
-            # Generate product code if not provided
+            # Generate product code using service method if not provided
             product_code = additional_fields.get('product_code')
             if not product_code:
-                product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                product_code = ProductService.generate_product_code(db, org_id, product_name)
             
-            # Use provided HSN or default pharma HSN
-            hsn = hsn_code or additional_fields.get('hsn_code') or "30049099"
+            # Use provided HSN or default pharma HSN (using constant)
+            hsn = hsn_code or additional_fields.get('hsn_code') or DEFAULT_HSN_PHARMA
             
-            # Prepare product data
+            # Prepare product data (using constants for defaults)
             product_data = {
                 "org_id": org_id,
                 "product_name": product_name,
@@ -120,11 +249,11 @@ class ProductService:
                 "product_class": additional_fields.get('product_class'),
                 "product_type": additional_fields.get('product_type'),
                 "description": additional_fields.get('description'),
-                "base_uom": additional_fields.get('base_uom', 'NOS'),
+                "base_uom": additional_fields.get('base_uom', DEFAULT_BASE_UOM),
                 "alt_uom": additional_fields.get('alt_uom'),
-                "conversion_factor": additional_fields.get('conversion_factor', 1),
+                "conversion_factor": additional_fields.get('conversion_factor', DEFAULT_CONVERSION_FACTOR),
                 "gst_rate": additional_fields.get('gst_rate'),
-                "cess_rate": additional_fields.get('cess_rate', 0),
+                "cess_rate": additional_fields.get('cess_rate', DEFAULT_CESS_RATE),
                 "minimum_stock": additional_fields.get('minimum_stock'),
                 "reorder_level": additional_fields.get('reorder_level'),
                 "is_prescription_required": additional_fields.get('is_prescription_required', False),

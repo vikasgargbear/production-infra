@@ -278,3 +278,51 @@ class InvoiceSummary(BaseModel):
     current_month_invoices: int
     current_month_amount: Decimal
     current_month_collected: Decimal
+
+
+class GeneralPaymentCreate(BaseModel):
+    """Schema for creating a general payment (advance or against multiple invoices)"""
+    org_id: Optional[str] = None  # Will be provided via header
+    payment_number: Optional[str] = None
+    payment_date: date = Field(default_factory=date.today)
+    customer_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    payment_type: str = Field(..., pattern="^(advance_payment|invoice_payment|regular_payment|adjustment_entry)$")
+    amount: Decimal = Field(..., gt=0)
+    payment_mode: str = Field(..., pattern="^(cash|cheque|upi|bank_transfer|credit_adjustment)$")
+    reference_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    payment_status: str = Field(default="completed")
+    cleared_date: Optional[date] = None
+    branch_id: Optional[int] = None
+    created_by: Optional[int] = None
+    approved_by: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class InvoicePaymentCreate(BaseModel):
+    """Schema for recording a payment against invoice"""
+    invoice_id: int
+    payment_date: date = Field(default_factory=date.today)
+    payment_mode: str = Field(..., pattern="^(cash|cheque|online|card|upi|neft|rtgs)$")
+    amount: Decimal = Field(..., gt=0)
+    transaction_reference: Optional[str] = None
+    bank_name: Optional[str] = None
+    cheque_number: Optional[str] = None
+    cheque_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class PaymentListResponse(BaseModel):
+    """Schema for payment list"""
+    payments: List[dict]
+    total: int
+
+
+class PaymentSummaryResponse(BaseModel):
+    """Schema for payment summary"""
+    total_payments: int
+    invoices_paid: int
+    total_collected: Decimal
+    payment_modes: dict
+    pending: dict

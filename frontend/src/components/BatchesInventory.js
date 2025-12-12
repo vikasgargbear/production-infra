@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, AlertTriangle, Package2, Calendar, Archive, TrendingDown, TrendingUp, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
-import { batchesApi } from '../services/api/modules/batches.api';
-import { productsApi } from '../services/api/modules/products.api';
+import { batchesApi } from '../services/api';
+import { productsApi } from '../services/api';
 import offlineStorage from '../services/offlineStorage';
 
 const BatchesInventory = () => {

@@ -32,15 +32,11 @@ def generate_grn_number(
     """Generate next GRN number using unified service"""
     try:
         # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "grn", context.org_id)
+        new_number = DocumentNumberService.generate_number(db, "grn", str(context.org_id))
         return {"grn_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate GRN number: {e}")
-        # Use service's fallback mechanism
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"GRN-{current_year:02d}{timestamp:08d}"
-        return {"grn_number": fallback_number}
+        raise HTTPException(status_code=500, detail=f"Failed to generate GRN number: {str(e)}")
 
 @router.post("")
 @with_tenant_context
@@ -55,7 +51,7 @@ async def create_grn(
         # Use context for org_id, user_id, branch_id
         org_id = context.org_id
         user_id = context.user_id
-        branch_id = grn_data.get("branch_id") or context.primary_branch_id or 1
+        branch_id = grn_data.get("branch_id") or context.primary_branch_id  # SECURITY: No fallback to 1
         
         # Extract main GRN data
         main_data = {

@@ -10,7 +10,7 @@ import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
-import { challansApi } from '../../services/api/modules/challans.api';
+import { challansApi } from '../../services/api';
 import { apiClient, employeesAPI } from '../../services/api';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import useEscapeKey from '../../hooks/useEscapeKey';

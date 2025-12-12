@@ -6,12 +6,14 @@ Replaces all frontend calculation logic with secure backend calculations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from typing import List, Dict, Any, Tuple
+from decimal import Decimal
 import logging
 import time
 
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
 from ...core.permissions import PermissionChecker
+from ..services.gst_service import GSTService, calculate_gst_breakdown
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
@@ -30,6 +32,7 @@ def calculate_line_item(
 ) -> Dict[str, float]:
     """
     Single source of truth for line-item calculations.
+    Uses GSTService internally for consistency.
     
     Args:
         quantity: billable quantity (base_quantity for invoices)
@@ -44,26 +47,24 @@ def calculate_line_item(
     subtotal = quantity * unit_price
     discount_amount = (subtotal * discount_percent) / 100
     taxable_amount = subtotal - discount_amount
-    gst_amount = (taxable_amount * gst_percent) / 100
     
-    # GST breakdown based on type
-    if gst_type == "IGST":
-        cgst = sgst = 0
-        igst = gst_amount
-    else:
-        cgst = sgst = gst_amount / 2
-        igst = 0
+    # Use GSTService for GST breakdown (ensures consistency)
+    gst_components = GSTService.calculate_gst_components(
+        Decimal(str(taxable_amount)),
+        Decimal(str(gst_percent)),
+        gst_type
+    )
     
-    line_total = taxable_amount + gst_amount
+    line_total = taxable_amount + float(gst_components["total_tax_amount"])
     
     return {
         "subtotal": round(subtotal, 2),
         "discount_amount": round(discount_amount, 2),
         "taxable_amount": round(taxable_amount, 2),
-        "cgst_amount": round(cgst, 2),
-        "sgst_amount": round(sgst, 2),
-        "igst_amount": round(igst, 2),
-        "total_tax": round(gst_amount, 2),
+        "cgst_amount": float(gst_components["cgst_amount"]),
+        "sgst_amount": float(gst_components["sgst_amount"]),
+        "igst_amount": float(gst_components["igst_amount"]),
+        "total_tax": float(gst_components["total_tax_amount"]),
         "line_total": round(line_total, 2)
     }
 
@@ -178,13 +179,10 @@ async def calculate_purchase_totals(
             subtotal = quantity * purchase_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_percent) / 100
-            line_total = taxable_amount + gst_amount
             
-            # GST breakdown
-            cgst = gst_amount / 2 if gst_type != "IGST" else 0
-            sgst = gst_amount / 2 if gst_type != "IGST" else 0
-            igst = gst_amount if gst_type == "IGST" else 0
+            # Use GSTService for consistent GST breakdown
+            gst = calculate_gst_breakdown(taxable_amount, gst_percent, gst_type)
+            line_total = taxable_amount + gst["total_tax"]
             
             line_item = {
                 "line_number": idx + 1,
@@ -196,10 +194,10 @@ async def calculate_purchase_totals(
                 "discount_amount": round(discount_amount, 2),
                 "taxable_amount": round(taxable_amount, 2),
                 "gst_percent": gst_percent,
-                "cgst_amount": round(cgst, 2),
-                "sgst_amount": round(sgst, 2),
-                "igst_amount": round(igst, 2),
-                "total_tax": round(gst_amount, 2),
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "total_tax": gst["total_tax"],
                 "line_total": round(line_total, 2)
             }
             
@@ -209,10 +207,10 @@ async def calculate_purchase_totals(
             purchase_totals["gross_amount"] += subtotal
             purchase_totals["total_discount"] += discount_amount
             purchase_totals["taxable_amount"] += taxable_amount
-            purchase_totals["cgst_amount"] += cgst
-            purchase_totals["sgst_amount"] += sgst
-            purchase_totals["igst_amount"] += igst
-            purchase_totals["total_tax"] += gst_amount
+            purchase_totals["cgst_amount"] += gst["cgst_amount"]
+            purchase_totals["sgst_amount"] += gst["sgst_amount"]
+            purchase_totals["igst_amount"] += gst["igst_amount"]
+            purchase_totals["total_tax"] += gst["total_tax"]
         
         # Final calculations
         pre_total = (purchase_totals["taxable_amount"] + purchase_totals["total_tax"] + 
@@ -286,13 +284,10 @@ async def calculate_sales_order_totals(
             subtotal = quantity * unit_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_percent) / 100
-            line_total = taxable_amount + gst_amount
             
-            # GST breakdown
-            cgst = gst_amount / 2 if gst_type != "IGST" else 0
-            sgst = gst_amount / 2 if gst_type != "IGST" else 0
-            igst = gst_amount if gst_type == "IGST" else 0
+            # Use GSTService for consistent GST breakdown
+            gst = calculate_gst_breakdown(taxable_amount, gst_percent, gst_type)
+            line_total = taxable_amount + gst["total_tax"]
             
             line_item = {
                 "line_number": idx + 1,
@@ -304,10 +299,10 @@ async def calculate_sales_order_totals(
                 "discount_amount": round(discount_amount, 2),
                 "taxable_amount": round(taxable_amount, 2),
                 "gst_percent": gst_percent,
-                "cgst_amount": round(cgst, 2),
-                "sgst_amount": round(sgst, 2),
-                "igst_amount": round(igst, 2),
-                "total_tax": round(gst_amount, 2),
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "total_tax": gst["total_tax"],
                 "line_total": round(line_total, 2)
             }
             
@@ -317,10 +312,10 @@ async def calculate_sales_order_totals(
             order_totals["gross_amount"] += subtotal
             order_totals["total_discount"] += discount_amount
             order_totals["taxable_amount"] += taxable_amount
-            order_totals["cgst_amount"] += cgst
-            order_totals["sgst_amount"] += sgst
-            order_totals["igst_amount"] += igst
-            order_totals["total_tax"] += gst_amount
+            order_totals["cgst_amount"] += gst["cgst_amount"]
+            order_totals["sgst_amount"] += gst["sgst_amount"]
+            order_totals["igst_amount"] += gst["igst_amount"]
+            order_totals["total_tax"] += gst["total_tax"]
         
         # Final calculations
         pre_total = order_totals["taxable_amount"] + order_totals["total_tax"] + delivery_charges - order_discount
@@ -391,13 +386,10 @@ async def calculate_sales_return_totals(
             subtotal = return_quantity * unit_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_percent) / 100
-            line_total = taxable_amount + gst_amount
             
-            # GST breakdown
-            cgst = gst_amount / 2 if gst_type != "IGST" else 0
-            sgst = gst_amount / 2 if gst_type != "IGST" else 0
-            igst = gst_amount if gst_type == "IGST" else 0
+            # Use GSTService for consistent GST breakdown
+            gst = calculate_gst_breakdown(taxable_amount, gst_percent, gst_type)
+            line_total = taxable_amount + gst["total_tax"]
             
             line_item = {
                 "line_number": idx + 1,
@@ -409,10 +401,10 @@ async def calculate_sales_return_totals(
                 "discount_amount": round(discount_amount, 2),
                 "taxable_amount": round(taxable_amount, 2),
                 "gst_percent": gst_percent,
-                "cgst_amount": round(cgst, 2),
-                "sgst_amount": round(sgst, 2),
-                "igst_amount": round(igst, 2),
-                "total_tax": round(gst_amount, 2),
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "total_tax": gst["total_tax"],
                 "line_total": round(line_total, 2)
             }
             
@@ -422,10 +414,10 @@ async def calculate_sales_return_totals(
             return_totals["gross_amount"] += subtotal
             return_totals["total_discount"] += discount_amount
             return_totals["taxable_amount"] += taxable_amount
-            return_totals["cgst_amount"] += cgst
-            return_totals["sgst_amount"] += sgst
-            return_totals["igst_amount"] += igst
-            return_totals["total_tax"] += gst_amount
+            return_totals["cgst_amount"] += gst["cgst_amount"]
+            return_totals["sgst_amount"] += gst["sgst_amount"]
+            return_totals["igst_amount"] += gst["igst_amount"]
+            return_totals["total_tax"] += gst["total_tax"]
         
         # Final calculations
         pre_total = return_totals["taxable_amount"] + return_totals["total_tax"] - adjustment_amount
@@ -496,13 +488,10 @@ async def calculate_purchase_return_totals(
             subtotal = return_quantity * purchase_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_percent) / 100
-            line_total = taxable_amount + gst_amount
             
-            # GST breakdown
-            cgst = gst_amount / 2 if gst_type != "IGST" else 0
-            sgst = gst_amount / 2 if gst_type != "IGST" else 0
-            igst = gst_amount if gst_type == "IGST" else 0
+            # Use GSTService for consistent GST breakdown
+            gst = calculate_gst_breakdown(taxable_amount, gst_percent, gst_type)
+            line_total = taxable_amount + gst["total_tax"]
             
             line_item = {
                 "line_number": idx + 1,
@@ -514,10 +503,10 @@ async def calculate_purchase_return_totals(
                 "discount_amount": round(discount_amount, 2),
                 "taxable_amount": round(taxable_amount, 2),
                 "gst_percent": gst_percent,
-                "cgst_amount": round(cgst, 2),
-                "sgst_amount": round(sgst, 2),
-                "igst_amount": round(igst, 2),
-                "total_tax": round(gst_amount, 2),
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "total_tax": gst["total_tax"],
                 "line_total": round(line_total, 2)
             }
             
@@ -527,10 +516,10 @@ async def calculate_purchase_return_totals(
             return_totals["gross_amount"] += subtotal
             return_totals["total_discount"] += discount_amount
             return_totals["taxable_amount"] += taxable_amount
-            return_totals["cgst_amount"] += cgst
-            return_totals["sgst_amount"] += sgst
-            return_totals["igst_amount"] += igst
-            return_totals["total_tax"] += gst_amount
+            return_totals["cgst_amount"] += gst["cgst_amount"]
+            return_totals["sgst_amount"] += gst["sgst_amount"]
+            return_totals["igst_amount"] += gst["igst_amount"]
+            return_totals["total_tax"] += gst["total_tax"]
         
         # Final calculations
         pre_total = return_totals["taxable_amount"] + return_totals["total_tax"] - adjustment_amount
@@ -684,13 +673,10 @@ async def calculate_invoice_totals(
             subtotal = base_quantity * unit_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_percent) / 100
-            line_total = taxable_amount + gst_amount
             
-            # GST breakdown
-            cgst = gst_amount / 2 if gst_type != "IGST" else 0
-            sgst = gst_amount / 2 if gst_type != "IGST" else 0
-            igst = gst_amount if gst_type == "IGST" else 0
+            # Use GSTService for consistent GST breakdown
+            gst = calculate_gst_breakdown(taxable_amount, gst_percent, gst_type)
+            line_total = taxable_amount + gst["total_tax"]
             
             line_item = {
                 "line_number": idx + 1,
@@ -704,10 +690,10 @@ async def calculate_invoice_totals(
                 "discount_amount": round(discount_amount, 2),
                 "taxable_amount": round(taxable_amount, 2),
                 "gst_percent": gst_percent,
-                "cgst_amount": round(cgst, 2),
-                "sgst_amount": round(sgst, 2),
-                "igst_amount": round(igst, 2),
-                "total_tax": round(gst_amount, 2),
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "total_tax": gst["total_tax"],
                 "line_total": round(line_total, 2)
             }
             
@@ -717,10 +703,10 @@ async def calculate_invoice_totals(
             invoice_totals["gross_amount"] += subtotal
             invoice_totals["total_discount"] += discount_amount
             invoice_totals["taxable_amount"] += taxable_amount
-            invoice_totals["cgst_amount"] += cgst
-            invoice_totals["sgst_amount"] += sgst
-            invoice_totals["igst_amount"] += igst
-            invoice_totals["total_tax"] += gst_amount
+            invoice_totals["cgst_amount"] += gst["cgst_amount"]
+            invoice_totals["sgst_amount"] += gst["sgst_amount"]
+            invoice_totals["igst_amount"] += gst["igst_amount"]
+            invoice_totals["total_tax"] += gst["total_tax"]
         
         # Final calculations
         pre_total = (invoice_totals["taxable_amount"] + invoice_totals["total_tax"] + 

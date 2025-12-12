@@ -1,5 +1,10 @@
 """
 Payment service for tracking invoice payments
+
+Modernized service following patterns from return_service.py and invoice_service.py:
+- Uses DocumentNumberService for payment number generation
+- Centralized constants for payment statuses and modes
+- Multi-tenant security with org_id validation
 """
 from typing import Dict, Any, List, Optional
 from datetime import date, datetime
@@ -9,6 +14,11 @@ from sqlalchemy import text
 import logging
 from uuid import UUID
 
+from .document_number_service import DocumentNumberService
+from ...core.constants import (
+    PaymentStatus, PaymentRecordStatus, PaymentMethod, PaymentType, PartyType
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,73 +26,125 @@ class PaymentService:
     """Service class for payment-related operations"""
     
     @staticmethod
-    def record_payment(db: Session, invoice_id: int, payment_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Record a payment against an invoice"""
+    def generate_payment_number(db: Session, org_id: Optional[str] = None) -> str:
+        """
+        Generate unique payment number using DocumentNumberService.
         
-        # Get invoice details
-        invoice = db.execute(text("""
-            SELECT invoice_id, invoice_number, total_amount, 0 as paid_amount, payment_status
+        Replaces the legacy generate_payment_reference method for consistency
+        with other document types across the system.
+        """
+        return DocumentNumberService.generate_number(db, "payment", org_id)
+    
+    @staticmethod
+    def generate_receipt_number(db: Session, org_id: Optional[str] = None) -> str:
+        """Generate unique receipt number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "receipt", org_id)
+    
+    @staticmethod
+    def record_payment(
+        db: Session, 
+        invoice_id: int, 
+        payment_data: Dict[str, Any],
+        org_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Record a payment against an invoice.
+        
+        Args:
+            db: Database session
+            invoice_id: Invoice to record payment against
+            payment_data: Payment details (amount, mode, date, etc.)
+            org_id: Organization ID for multi-tenant security
+        
+        Returns:
+            Dict with payment details and updated invoice status
+        """
+        # Get invoice details with security check
+        invoice_query = """
+            SELECT invoice_id, invoice_number, final_amount as total_amount, 
+                   COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id}).fetchone()
+        """
+        params = {"invoice_id": invoice_id}
+        
+        # Add org_id security filter if provided
+        if org_id:
+            invoice_query = invoice_query.replace(
+                "WHERE invoice_id = :invoice_id",
+                "WHERE invoice_id = :invoice_id AND org_id = :org_id"
+            )
+            params["org_id"] = org_id
+        
+        invoice = db.execute(text(invoice_query), params).fetchone()
         
         if not invoice:
-            raise ValueError(f"Invoice {invoice_id} not found")
+            raise ValueError(f"Invoice {invoice_id} not found or access denied")
         
         # Validate payment amount
         payment_amount = Decimal(str(payment_data["amount"]))
-        balance_amount = invoice.total_amount - 0  # assuming no payments yet
+        balance_amount = Decimal(str(invoice.total_amount)) - Decimal(str(invoice.paid_amount))
         
         if payment_amount > balance_amount:
             raise ValueError(f"Payment amount exceeds balance. Balance: {balance_amount}")
         
-        # Generate payment reference
-        payment_reference = PaymentService.generate_payment_reference(db)
+        # Generate payment reference using DocumentNumberService
+        payment_reference = PaymentService.generate_payment_number(db, org_id)
         
         # Create payment record
         payment_record = {
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
             "payment_date": payment_data.get("payment_date", date.today()),
-            "payment_mode": payment_data["payment_mode"],
+            "payment_mode": payment_data.get("payment_mode", PaymentMethod.CASH.value),
             "payment_amount": payment_amount,
             "transaction_reference": payment_data.get("transaction_reference"),
             "bank_name": payment_data.get("bank_name"),
             "cheque_number": payment_data.get("cheque_number"),
             "cheque_date": payment_data.get("cheque_date"),
             "notes": payment_data.get("notes"),
-            "status": "completed",
+            "status": PaymentRecordStatus.COMPLETED.value,
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         }
         
-        # Insert payment
+        # Insert payment into financial.payments
         result = db.execute(text("""
-            INSERT INTO invoice_payments (
-                payment_reference, invoice_id, payment_date,
-                payment_mode, payment_amount, transaction_reference,
-                bank_name, cheque_number, cheque_date,
-                notes, status, created_at, updated_at
-            ) VALUES (
-                :payment_reference, :invoice_id, :payment_date,
-                :payment_mode, :payment_amount, :transaction_reference,
-                :bank_name, :cheque_number, :cheque_date,
-                :notes, :status, :created_at, :updated_at
-            ) RETURNING payment_id
+            INSERT INTO financial.payments (
+                org_id, payment_number, payment_date, payment_type, payment_mode,
+                party_type, party_id, payment_amount, payment_status,
+                reference_number, narration, created_at, updated_at
+            ) 
+            SELECT 
+                i.org_id, :payment_reference, :payment_date, 'receipt', :payment_mode,
+                'customer', i.customer_id, :payment_amount, 'cleared',
+                :transaction_reference, :notes, :created_at, :updated_at
+            FROM sales.invoices i
+            WHERE i.invoice_id = :invoice_id
+            RETURNING payment_id
         """), payment_record)
         
         payment_id = result.scalar()
         
-        # Update invoice paid amount and status
-        new_paid_amount = 0 + payment_amount
-        new_payment_status = "paid" if new_paid_amount >= invoice.total_amount else "partial"
+        # Calculate new totals
+        new_paid_amount = Decimal(str(invoice.paid_amount)) + payment_amount
+        total_amount = Decimal(str(invoice.total_amount))
         
+        # Determine new payment status using constants
+        if new_paid_amount >= total_amount:
+            new_payment_status = PaymentStatus.PAID.value
+        elif new_paid_amount > 0:
+            new_payment_status = PaymentStatus.PARTIAL.value
+        else:
+            new_payment_status = PaymentStatus.PENDING.value
+        
+        # Update invoice paid amount and status
         db.execute(text("""
             UPDATE sales.invoices
             SET paid_amount = :paid_amount,
                 payment_status = :payment_status,
                 payment_date = CASE 
-                    WHEN payment_status = 'paid' THEN :payment_date 
+                    WHEN :payment_status = 'paid' THEN :payment_date 
                     ELSE payment_date 
                 END,
                 updated_at = CURRENT_TIMESTAMP
@@ -95,7 +157,7 @@ class PaymentService:
         })
         
         # Update order payment status if fully paid
-        if new_payment_status == "paid":
+        if new_payment_status == PaymentStatus.PAID.value:
             db.execute(text("""
                 UPDATE sales.orders o
                 SET payment_status = 'paid',
@@ -110,43 +172,43 @@ class PaymentService:
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
             "amount": payment_amount,
-            "balance_amount": invoice.total_amount - new_paid_amount,
+            "balance_amount": total_amount - new_paid_amount,
             "payment_status": new_payment_status,
             "message": "Payment recorded successfully"
         }
     
     @staticmethod
-    def generate_payment_reference(db: Session) -> str:
-        """Generate unique payment reference"""
-        # Format: PAY-YYYYMMDD-XXXXX
-        today = date.today()
-        prefix = f"PAY-{today.strftime('%Y%m%d')}"
+    def get_invoice_payments(
+        db: Session, 
+        invoice_id: int,
+        org_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get all payments for an invoice."""
+        query = """
+            SELECT p.* 
+            FROM financial.payments p
+            JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
+            WHERE i.invoice_id = :invoice_id
+        """
+        params = {"invoice_id": invoice_id}
         
-        result = db.execute(text("""
-            SELECT COUNT(*) + 1 as next_num
-            FROM invoice_payments
-            WHERE payment_reference LIKE :prefix || '%'
-        """), {"prefix": prefix})
+        if org_id:
+            query += " AND p.org_id = :org_id"
+            params["org_id"] = org_id
+            
+        query += " ORDER BY p.payment_date DESC, p.created_at DESC"
         
-        next_num = result.scalar() or 1
-        return f"{prefix}-{next_num:05d}"
-    
-    @staticmethod
-    def get_invoice_payments(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
-        """Get all payments for an invoice"""
-        payments = db.execute(text("""
-            SELECT * FROM invoice_payments
-            WHERE invoice_id = :invoice_id
-            ORDER BY payment_date DESC, created_at DESC
-        """), {"invoice_id": invoice_id}).fetchall()
-        
+        payments = db.execute(text(query), params).fetchall()
         return [dict(payment._mapping) for payment in payments]
     
     @staticmethod
-    def get_payment_summary(db: Session, org_id: UUID, 
-                          from_date: Optional[date] = None,
-                          to_date: Optional[date] = None) -> Dict[str, Any]:
-        """Get payment summary for organization"""
+    def get_payment_summary(
+        db: Session, 
+        org_id: UUID, 
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Get payment summary for organization."""
         params = {"org_id": str(org_id)}
         date_filter = ""
         
@@ -172,12 +234,12 @@ class PaymentService:
             FROM financial.payments p
             LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.org_id = :org_id 
-                AND p.payment_status IN ('cleared', 'processed', 'approved')
+                AND p.payment_status IN ('cleared', 'processed', 'approved', 'completed')
                 AND p.party_type = 'customer' {date_filter}
         """), params).fetchone()
         
         # Get pending payments from invoices
-        pending_result = db.execute(text(f"""
+        pending_result = db.execute(text("""
             SELECT 
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
                 COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as pending_amount
@@ -212,42 +274,183 @@ class PaymentService:
         }
     
     @staticmethod
-    def cancel_payment(db: Session, payment_id: int, reason: str) -> Dict[str, Any]:
-        """Cancel a payment and adjust invoice"""
-        # Get payment details
-        payment = db.execute(text("""
-            SELECT * FROM invoice_payments
-            WHERE payment_id = :payment_id AND status = 'completed'
-        """), {"payment_id": payment_id}).fetchone()
+    def cancel_payment(
+        db: Session, 
+        payment_id: int, 
+        reason: str,
+        org_id: Optional[str] = None,
+        cancelled_by: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Cancel a payment and adjust invoice.
+        
+        Args:
+            db: Database session
+            payment_id: Payment to cancel
+            reason: Cancellation reason
+            org_id: Organization ID for security
+            cancelled_by: User ID performing cancellation
+        """
+        # Get payment details with security check
+        query = """
+            SELECT p.*, i.invoice_id, i.paid_amount as invoice_paid_amount
+            FROM financial.payments p
+            LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
+            WHERE p.payment_id = :payment_id 
+                AND p.payment_status NOT IN ('cancelled', 'failed')
+        """
+        params = {"payment_id": payment_id}
+        
+        if org_id:
+            query = query.replace(
+                "WHERE p.payment_id = :payment_id",
+                "WHERE p.payment_id = :payment_id AND p.org_id = :org_id"
+            )
+            params["org_id"] = org_id
+        
+        payment = db.execute(text(query), params).fetchone()
         
         if not payment:
-            raise ValueError("Payment not found or already cancelled")
+            raise ValueError("Payment not found, already cancelled, or access denied")
         
         # Update payment status
+        cancel_params = {
+            "payment_id": payment_id, 
+            "reason": reason,
+            "cancelled_by": cancelled_by,
+            "status": PaymentRecordStatus.CANCELLED.value
+        }
+        
         db.execute(text("""
-            UPDATE invoice_payments
-            SET status = 'cancelled',
-                cancellation_reason = :reason,
-                cancelled_at = CURRENT_TIMESTAMP,
+            UPDATE financial.payments
+            SET payment_status = :status,
+                narration = COALESCE(narration, '') || ' | Cancelled: ' || :reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE payment_id = :payment_id
-        """), {"payment_id": payment_id, "reason": reason})
+        """), cancel_params)
         
-        # Adjust invoice paid amount
-        db.execute(text("""
-            UPDATE sales.invoices
-            SET paid_amount = paid_amount - :amount,
-                payment_status = CASE 
-                    WHEN 0 - :amount = 0 THEN 'unpaid'
-                    WHEN 0 - :amount < total_amount THEN 'partial'
-                    ELSE payment_status
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE invoice_id = :invoice_id
-        """), {"invoice_id": payment.invoice_id, "amount": payment.payment_amount})
+        # Adjust invoice paid amount if linked
+        if payment.invoice_id:
+            db.execute(text("""
+                UPDATE sales.invoices
+                SET paid_amount = GREATEST(0, paid_amount - :amount),
+                    payment_status = CASE 
+                        WHEN GREATEST(0, paid_amount - :amount) = 0 THEN 'unpaid'
+                        WHEN GREATEST(0, paid_amount - :amount) < final_amount THEN 'partial'
+                        ELSE payment_status
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE invoice_id = :invoice_id
+            """), {"invoice_id": payment.invoice_id, "amount": payment.payment_amount})
+        
+        logger.info(f"Payment {payment_id} cancelled by user {cancelled_by}. Reason: {reason}")
         
         return {
             "payment_id": payment_id,
             "status": "cancelled",
             "message": "Payment cancelled successfully"
+        }
+    
+    @staticmethod
+    def get_payment_by_id(
+        db: Session, 
+        payment_id: int, 
+        org_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get single payment by ID with security validation."""
+        query = """
+            SELECT p.*, 
+                c.customer_name,
+                s.supplier_name,
+                i.invoice_number
+            FROM financial.payments p
+            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
+            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
+            LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
+            WHERE p.payment_id = :payment_id
+        """
+        params = {"payment_id": payment_id}
+        
+        if org_id:
+            query = query.replace(
+                "WHERE p.payment_id = :payment_id",
+                "WHERE p.payment_id = :payment_id AND p.org_id = :org_id"
+            )
+            params["org_id"] = org_id
+        
+        result = db.execute(text(query), params).first()
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def create_customer_receipt(
+        db: Session,
+        org_id: str,
+        customer_id: int,
+        amount: Decimal,
+        payment_mode: str = "cash",
+        payment_date: Optional[date] = None,
+        reference_number: Optional[str] = None,
+        notes: Optional[str] = None,
+        created_by: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a customer payment receipt.
+        
+        Consolidated from route logic for reusability.
+        """
+        # Generate receipt number
+        receipt_number = PaymentService.generate_receipt_number(db, org_id)
+        
+        # Get customer name
+        customer_result = db.execute(
+            text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
+            {"id": customer_id}
+        ).first()
+        customer_name = customer_result.customer_name if customer_result else f"Customer {customer_id}"
+        
+        # Insert payment
+        result = db.execute(text("""
+            INSERT INTO financial.payments (
+                org_id, payment_number, payment_date, payment_type, payment_mode,
+                party_type, party_id, party_name, payment_amount,
+                reference_number, payment_status, narration, created_by
+            ) VALUES (
+                :org_id, :receipt_number, :payment_date, 'receipt', :payment_mode,
+                'customer', :customer_id, :customer_name, :amount,
+                :reference_number, 'cleared', :notes, :created_by
+            ) RETURNING payment_id, payment_number, payment_amount
+        """), {
+            "org_id": org_id,
+            "receipt_number": receipt_number,
+            "payment_date": payment_date or date.today(),
+            "customer_id": customer_id,
+            "customer_name": customer_name,
+            "amount": amount,
+            "payment_mode": payment_mode,
+            "reference_number": reference_number,
+            "notes": notes,
+            "created_by": created_by
+        })
+        
+        payment = result.fetchone()
+        
+        # Update customer outstanding
+        db.execute(text("""
+            UPDATE parties.customers
+            SET current_outstanding = GREATEST(0, current_outstanding - :amount),
+                last_payment_date = :payment_date,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id
+        """), {
+            "amount": amount,
+            "payment_date": payment_date or date.today(),
+            "customer_id": customer_id
+        })
+        
+        return {
+            "success": True,
+            "payment_id": payment.payment_id,
+            "receipt_number": payment.payment_number,
+            "amount": float(payment.payment_amount),
+            "message": "Payment receipt created successfully"
         }

@@ -10,11 +10,21 @@ from sqlalchemy import text
 from uuid import UUID
 import logging
 
+from .document_number_service import DocumentNumberService
+from ...core.constants import (
+    OrderStatus, BatchStatus, PaymentStatus, ReturnStatus,
+    BusinessLimits, StockMovementType
+)
+
 from ..schemas.order import (
     ReturnRequest
 )
 
 logger = logging.getLogger(__name__)
+
+# Refund methods - could be moved to constants if used elsewhere
+REFUND_METHODS = ["credit_note", "cash", "bank_transfer"]
+DEFAULT_MRP_FALLBACK = Decimal("0")
 
 
 class OrderService:
@@ -22,20 +32,8 @@ class OrderService:
     
     @staticmethod
     def generate_order_number(db: Session, org_id: UUID) -> str:
-        """Generate unique order number"""
-        # Format: ORD-YYYYMMDD-XXXX
-        today = date.today()
-        prefix = f"ORD-{today.strftime('%Y%m%d')}"
-        
-        # Get the next sequence number for today for this org
-        result = db.execute(text("""
-            SELECT COUNT(*) + 1 as next_num
-            FROM sales.orders
-            WHERE order_number LIKE :prefix || '%' AND org_id = :org_id
-        """), {"prefix": prefix, "org_id": org_id})
-        
-        next_num = result.scalar() or 1
-        return f"{prefix}-{next_num:04d}"
+        """Generate unique order number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "sales_order", str(org_id))
     
     @staticmethod
     def validate_inventory(db: Session, items: List[dict], org_id: UUID) -> Dict[str, Any]:
@@ -138,37 +136,27 @@ class OrderService:
         }
     
     @staticmethod
-    def calculate_order_totals(db: Session, items: List[dict], customer_discount: Decimal = Decimal("0"), org_id: UUID = None) -> Dict[str, Decimal]:
-        """Calculate order totals with tax"""
+    def calculate_order_totals(db: Session, items: List[dict], org_id: UUID, customer_discount: Decimal = Decimal("0")) -> Dict[str, Decimal]:
+        """Calculate order totals with tax. org_id is required."""
         subtotal = Decimal("0")
         total_discount = Decimal("0")
         total_tax = Decimal("0")
         
         for item in items:
-            # Get product details - according to schema docs, products table has mrp field
-            query_params = {"product_id": item['product_id']}
-            if org_id:
-                product = db.execute(text("""
-                    SELECT 
-                        p.gst_percentage as gst_percent,
-                        COALESCE(b.mrp_per_unit, 100) as mrp
-                    FROM inventory.products p
-                    LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                    WHERE p.product_id = :product_id AND p.org_id = :org_id
-                    ORDER BY b.created_at DESC
-                    LIMIT 1
-                """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
-            else:
-                product = db.execute(text("""
-                    SELECT 
-                        p.gst_percentage as gst_percent,
-                        COALESCE(b.mrp_per_unit, 100) as mrp
-                    FROM inventory.products p
-                    LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                    WHERE p.product_id = :product_id
-                    ORDER BY b.created_at DESC
-                    LIMIT 1
-                """), {"product_id": item['product_id']}).fetchone()
+            product = db.execute(text("""
+                SELECT 
+                    p.gst_percentage as gst_percent,
+                    b.mrp_per_unit as mrp
+                FROM inventory.products p
+                LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.batch_status = :active_status
+                WHERE p.product_id = :product_id AND p.org_id = :org_id
+                ORDER BY b.created_at DESC
+                LIMIT 1
+            """), {
+                "product_id": item['product_id'], 
+                "org_id": str(org_id),
+                "active_status": BatchStatus.ACTIVE.value
+            }).fetchone()
             
             if product:
                 # CORRECT: quantity is what customer PAYS for
@@ -281,21 +269,9 @@ class OrderService:
             return False
     
     @staticmethod
-    def generate_invoice_number(db: Session) -> str:
-        """Generate unique invoice number"""
-        # Format: INV-YYYY-MM-XXXXX
-        today = date.today()
-        prefix = f"INV-{today.strftime('%Y-%m')}"
-        
-        # Get the next sequence number for this month
-        result = db.execute(text("""
-            SELECT COUNT(*) + 1 as next_num
-            FROM sales.invoices
-            WHERE invoice_number LIKE :prefix || '%'
-        """), {"prefix": prefix})
-        
-        next_num = result.scalar() or 1
-        return f"{prefix}-{next_num:05d}"
+    def generate_invoice_number(db: Session, org_id: UUID) -> str:
+        """Generate unique invoice number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "invoice", str(org_id))
     
     @staticmethod
     def process_return(db: Session, order_id: int, return_request: ReturnRequest) -> Dict[str, Any]:
@@ -308,7 +284,7 @@ class OrderService:
         if not order:
             return {"success": False, "message": "Order not found"}
         
-        if order.order_status not in ['delivered', 'invoiced']:
+        if order.order_status not in [OrderStatus.DELIVERED.value, OrderStatus.INVOICED.value]:
             return {"success": False, "message": "Only delivered orders can be returned"}
         
         # Calculate return amount
@@ -372,10 +348,10 @@ class OrderService:
         # Update order status
         db.execute(text("""
             UPDATE sales.orders
-            SET order_status = 'returned',
+            SET order_status = :new_status,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :order_id
-        """), {"order_id": order_id})
+        """), {"order_id": order_id, "new_status": OrderStatus.RETURNED.value})
         
         # Process refund based on method
         if return_request.refund_method == "credit_note":
@@ -400,13 +376,18 @@ class OrderService:
         # Overall stats
         stats = db.execute(text("""
             SELECT 
-                COUNT(*) FILTER (WHERE order_status = 'pending') as pending_orders,
-                COUNT(*) FILTER (WHERE order_status = 'processing') as processing_orders,
-                COUNT(*) FILTER (WHERE order_status = 'delivered') as delivered_orders,
+                COUNT(*) FILTER (WHERE order_status = :pending) as pending_orders,
+                COUNT(*) FILTER (WHERE order_status = :processing) as processing_orders,
+                COUNT(*) FILTER (WHERE order_status = :delivered) as delivered_orders,
                 COUNT(*) as total_orders
             FROM sales.orders
             WHERE org_id = :org_id
-        """), {"org_id": org_id}).fetchone()
+        """), {
+            "org_id": org_id,
+            "pending": OrderStatus.PENDING.value,
+            "processing": OrderStatus.PROCESSING.value,
+            "delivered": OrderStatus.DELIVERED.value
+        }).fetchone()
         
         # Today's stats
         today_stats = db.execute(text("""

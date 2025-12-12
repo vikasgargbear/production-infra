@@ -5,7 +5,7 @@ import {
   Database, Users, Package, FileText, Search, Loader2, X
 } from 'lucide-react';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const DataValidationEngine = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('rules');

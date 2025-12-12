@@ -12,6 +12,10 @@ import logging
 
 from .product_service import ProductService
 from .inventory_service import InventoryService
+from .document_number_service import DocumentNumberService
+from ...core.constants import (
+    POStatus, GRNStatus, InvoicePaymentStatus, SupplierInvoiceStatus
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,99 +35,48 @@ class PurchaseService:
     ) -> Tuple[int, int]:
         """
         Resolve user_id and branch_id with proper fallbacks.
-        
-        Returns:
-            Tuple of (user_id, branch_id)
+        Raises ValueError if no valid user/branch found.
         """
         # Resolve user_id
         resolved_user_id = user_id
         if not resolved_user_id:
-            # Try to get any active user from the org
             user_result = db.execute(text("""
                 SELECT user_id FROM master.org_users 
                 WHERE org_id = :org_id AND is_active = true
                 ORDER BY user_id LIMIT 1
             """), {"org_id": org_id}).fetchone()
-            resolved_user_id = user_result.user_id if user_result else 1
+            if not user_result:
+                raise ValueError(f"No active user found for org {org_id}")
+            resolved_user_id = user_result.user_id
         
         # Resolve branch_id
         resolved_branch_id = branch_id
         if resolved_branch_id is None:
-            # Try to get default branch for the org
             result = db.execute(text("""
                 SELECT branch_id FROM master.org_branches 
                 WHERE org_id = :org_id AND is_active = true
                 ORDER BY branch_id LIMIT 1
             """), {"org_id": org_id}).fetchone()
-            resolved_branch_id = result.branch_id if result else 1
+            if not result:
+                raise ValueError(f"No active branch found for org {org_id}")
+            resolved_branch_id = result.branch_id
         
-        logger.info(f"Resolved user_id={resolved_user_id}, branch_id={resolved_branch_id} for org={org_id}")
         return resolved_user_id, resolved_branch_id
     
     @staticmethod
-    def generate_purchase_number(db: Session, org_id: str, prefix: str = "PO") -> str:
-        """
-        Generate next purchase order number for organization.
-        
-        Args:
-            db: Database session
-            org_id: Organization ID
-            prefix: Number prefix (default: "PO")
-        
-        Returns:
-            Generated purchase number (e.g., "PO-2024-001")
-        """
-        year = datetime.now().year
-        
-        # Get last number for this year
-        result = db.execute(text("""
-            SELECT po_number FROM procurement.purchase_orders
-            WHERE org_id = :org_id 
-                AND po_number LIKE :pattern
-            ORDER BY purchase_order_id DESC
-            LIMIT 1
-        """), {
-            "org_id": org_id,
-            "pattern": f"{prefix}-{year}-%"
-        }).fetchone()
-        
-        if result:
-            # Extract sequence number and increment
-            last_num = result.po_number.split('-')[-1]
-            next_num = int(last_num) + 1
-        else:
-            next_num = 1
-        
-        return f"{prefix}-{year}-{next_num:04d}"
+    def generate_purchase_number(db: Session, org_id: str) -> str:
+        """Generate purchase order number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "purchase_order", org_id)
     
     @staticmethod
-    def generate_invoice_number(db: Session, org_id: str, prefix: str = "INV") -> str:
-        """
-        Generate next supplier invoice number.
-        
-        Returns:
-            Generated invoice number (e.g., "INV-2024-001")
-        """
-        year = datetime.now().year
-        
-        result = db.execute(text("""
-            SELECT invoice_number FROM procurement.supplier_invoices
-            WHERE org_id = :org_id 
-                AND invoice_number LIKE :pattern
-            ORDER BY supplier_invoice_id DESC
-            LIMIT 1
-        """), {
-            "org_id": org_id,
-            "pattern": f"{prefix}-{year}-%"
-        }).fetchone()
-        
-        if result:
-            last_num = result.invoice_number.split('-')[-1]
-            next_num = int(last_num) + 1
-        else:
-            next_num = 1
-        
-        return f"{prefix}-{year}-{next_num:04d}"
+    def generate_invoice_number(db: Session, org_id: str) -> str:
+        """Generate supplier invoice number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "supplier_invoice", org_id)
+    
+    @staticmethod
+    def generate_grn_number(db: Session, org_id: str) -> str:
+        """Generate GRN number using DocumentNumberService."""
+        return DocumentNumberService.generate_number(db, "grn", org_id)
     
     @staticmethod
     def create_purchase_order(
@@ -155,7 +108,7 @@ class PurchaseService:
             # Generate PO number
             po_number = purchase_data.get("po_number")
             if not po_number:
-                po_number = PurchaseService.generate_purchase_number(db, org_id, "PO")
+                po_number = PurchaseService.generate_purchase_number(db, org_id)
             
             # Create purchase order
             result = db.execute(text("""
@@ -166,7 +119,7 @@ class PurchaseService:
                 ) VALUES (
                     :org_id, :branch_id, :po_number, :po_date,
                     :supplier_id, :supplier_name, :expected_delivery_date,
-                    'pending', :notes, :created_by, CURRENT_TIMESTAMP
+                    :po_status, :notes, :created_by, CURRENT_TIMESTAMP
                 ) RETURNING purchase_order_id
             """), {
                 "org_id": org_id,
@@ -177,7 +130,8 @@ class PurchaseService:
                 "supplier_name": purchase_data.get("supplier_name"),
                 "expected_delivery_date": purchase_data.get("expected_delivery_date"),
                 "notes": purchase_data.get("notes"),
-                "created_by": created_by
+                "created_by": created_by,
+                "po_status": POStatus.PENDING.value
             })
             
             purchase_order_id = result.scalar()
@@ -219,7 +173,7 @@ class PurchaseService:
             # Generate invoice number if not provided
             invoice_number = invoice_data.get("invoice_number")
             if not invoice_number:
-                invoice_number = PurchaseService.generate_invoice_number(db, org_id, "SINV")
+                invoice_number = PurchaseService.generate_invoice_number(db, org_id)
             
             # Create supplier invoice
             result = db.execute(text("""
@@ -232,7 +186,7 @@ class PurchaseService:
                     :org_id, :branch_id, :invoice_number, :invoice_date,
                     :supplier_id, :po_id, :due_date,
                     :subtotal, :tax_amount, :total_amount,
-                    'unpaid', :notes, :created_by, CURRENT_TIMESTAMP
+                    :payment_status, :notes, :created_by, CURRENT_TIMESTAMP
                 ) RETURNING supplier_invoice_id
             """), {
                 "org_id": org_id,
@@ -246,7 +200,8 @@ class PurchaseService:
                 "tax_amount": invoice_data.get("tax_amount", 0),
                 "total_amount": invoice_data.get("total_amount", 0),
                 "notes": invoice_data.get("notes"),
-                "created_by": created_by
+                "created_by": created_by,
+                "payment_status": InvoicePaymentStatus.UNPAID.value
             })
             
             invoice_id = result.scalar()
@@ -290,7 +245,7 @@ class PurchaseService:
             if not purchase:
                 raise ValueError(f"Purchase order {purchase_id} not found")
             
-            if purchase.po_status == "received":
+            if purchase.po_status == POStatus.RECEIVED.value:
                 raise ValueError("Purchase already received")
             
             batches_created = 0
@@ -346,16 +301,17 @@ class PurchaseService:
                 })
             
             # Update purchase status
-            grn_number = f"GRN-{purchase.po_number}"
+            grn_number = PurchaseService.generate_grn_number(db, org_id)
             db.execute(text("""
                 UPDATE procurement.purchase_orders 
-                SET po_status = 'received',
+                SET po_status = :po_status,
                     grn_number = :grn_number,
                     grn_date = CURRENT_DATE
                 WHERE purchase_order_id = :purchase_id
             """), {
                 "grn_number": grn_number,
-                "purchase_id": purchase_id
+                "purchase_id": purchase_id,
+                "po_status": POStatus.RECEIVED.value
             })
             
             db.commit()

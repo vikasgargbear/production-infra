@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Trash2, AlertCircle, CheckCircle, Info } from 'lucide-react';
-import { purchasesApi } from '../../../services/api/modules/purchases.api';
+import { purchasesApi } from '../../../services/api';
 import { debounce } from 'lodash';
 
 /**

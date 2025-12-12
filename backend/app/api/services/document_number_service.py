@@ -43,6 +43,12 @@ DOCUMENT_CONFIGS = {
         "column": "grn_number",
         "id_column": "grn_id"
     },
+    "supplier_invoice": {
+        "prefix": "PINV",
+        "table": "procurement.supplier_invoices",
+        "column": "supplier_invoice_number",
+        "id_column": "supplier_invoice_id"
+    },
     "sales_order": {
         "prefix": "SO",
         "table": "sales.sales_orders",
@@ -115,6 +121,12 @@ DOCUMENT_CONFIGS = {
         "column": "adjustment_number",
         "id_column": "adjustment_id"
     },
+    "adjustment": {
+        "prefix": "ADJ",
+        "table": "inventory.stock_movements",
+        "column": "reference_number",
+        "id_column": "movement_id"
+    },
     # New document types added for service consolidation
     "stock_receipt": {
         "prefix": "SR",
@@ -145,6 +157,12 @@ DOCUMENT_CONFIGS = {
         "table": "inventory.stock_counts",
         "column": "count_reference",
         "id_column": "count_id"
+    },
+    "product": {
+        "prefix": "PROD",
+        "table": "inventory.products",
+        "column": "product_code",
+        "id_column": "product_id"
     }
 }
 
@@ -240,11 +258,8 @@ class DocumentNumberService:
             
         except Exception as e:
             logger.error(f"Error generating {document_type} number: {e}")
-            # Fallback to timestamp-based generation
-            timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-            fallback_number = f"{config['prefix']}-{year_prefix}{timestamp:08d}"
-            logger.warning(f"Using fallback number: {fallback_number}")
-            return fallback_number
+            # SECURITY: No fallback - proper error must be raised
+            raise ValueError(f"Failed to generate {document_type} number: {e}")
     
     @staticmethod
     def generate_batch_number(product_code: Optional[str] = None) -> str:

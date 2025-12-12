@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { searchCache, smartSearch } from '../../../../utils/searchCache';
 import DataTransformer from '../../../../services/dataTransformer';
-import { invoicesApi } from '../../../../services/api/modules/invoices.api';
+import { invoicesApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator, { DOC_TYPES } from '../../../../services/documentNumberGenerator';
 import localInvoiceService from '../../../../services/invoice/localInvoiceService';

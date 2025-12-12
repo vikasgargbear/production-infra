@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import { Card, Button, Badge, BaseModal } from '../global';
 import { theme, classes } from '../../config/theme.config';
-import { productsApi } from '../../services/api/modules/products.api';
-import { batchesApi } from '../../services/api/modules/batches.api';
-import { invoicesApi } from '../../services/api/modules/invoices.api';
+import { productsApi } from '../../services/api';
+import { batchesApi } from '../../services/api';
+import { invoicesApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface NarcoticEntry {

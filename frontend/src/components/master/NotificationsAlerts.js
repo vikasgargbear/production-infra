@@ -5,7 +5,7 @@ import {
   Users, TrendingUp, ShoppingCart, Filter, Save,
   Mail, MessageSquare, Smartphone, Monitor, Loader2, RefreshCw
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const NotificationsAlerts = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('rules');

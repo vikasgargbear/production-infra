@@ -14,7 +14,7 @@ from ...services.document_number_service import DocumentNumberService
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
+from ....core.constants import JournalEntryStatus
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +78,7 @@ async def generate_journal_number(db: TenantAwareSession = Depends(get_tenant_aw
         }
     except Exception as e:
         logger.error(f"Error generating journal number: {str(e)}")
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"JV-{current_year:02d}{timestamp:08d}"
-        return {
-            "journal_number": fallback_number,
-            "generated_at": datetime.now().isoformat(),
-            "fallback": True
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to generate journal number: {str(e)}")
 
 @router.get("/chart-of-accounts")
 @with_tenant_context
@@ -139,18 +132,7 @@ async def get_chart_of_accounts(
         
     except Exception as e:
         logger.error(f"Error getting chart of accounts: {str(e)}")
-        # Return basic accounts as fallback
-        return {
-            "accounts": [
-                {"account_code": "1101", "account_name": "Cash in Hand", "account_type": "asset"},
-                {"account_code": "1102", "account_name": "Bank - Current Account", "account_type": "asset"},
-                {"account_code": "1201", "account_name": "Accounts Receivable", "account_type": "asset"},
-                {"account_code": "2101", "account_name": "Accounts Payable", "account_type": "liability"},
-                {"account_code": "4001", "account_name": "Sales Revenue", "account_type": "income"},
-                {"account_code": "5001", "account_name": "Purchase Expense", "account_type": "expense"}
-            ],
-            "total": 6
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to get chart of accounts: {str(e)}")
 
 @router.post("", response_model=dict)
 @with_tenant_context
@@ -491,13 +473,13 @@ async def delete_journal_entry(
         if not entry:
             raise HTTPException(status_code=404, detail="Journal entry not found")
         
-        if entry.entry_status == 'cancelled':
+        if entry.entry_status == JournalEntryStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Journal entry is already cancelled")
         
         # Update journal entry status
         update_query = """
             UPDATE financial.journal_entries
-            SET entry_status = 'cancelled',
+            SET entry_status = :cancelled_status,
                 cancellation_reason = :reason,
                 cancelled_at = CURRENT_TIMESTAMP
             WHERE journal_id = :journal_id
@@ -505,7 +487,8 @@ async def delete_journal_entry(
         
         db.execute(text(update_query), {
             "journal_id": journal_id,
-            "reason": reason
+            "reason": reason,
+            "cancelled_status": JournalEntryStatus.CANCELLED.value
         })
         
         # TenantAwareSession auto-commits

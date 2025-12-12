@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from ...services.document_number_service import DocumentNumberService
+from ...services.gst_service import GSTService
 from datetime import datetime
 from decimal import Decimal
 
@@ -357,7 +358,7 @@ async def create_direct_purchase_entry(
     try:
         # For Purchase Entry, we create a completed PO (since there's no separate supplier_invoice table)
         # This represents goods already received with bill
-        po_number = f"BILL-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+        po_number = DocumentNumberService.generate_number(db, "supplier_invoice", str(context.org_id))
         
         # Create purchase order marked as completed (represents bill entry)
         po_result = db.execute(text("""
@@ -376,7 +377,7 @@ async def create_direct_purchase_entry(
             ) RETURNING purchase_order_id
         """), {
             "org_id": context.org_id,
-            "branch_id": context.branch_id or 1,  # Fallback to 1 for backward compatibility
+            "branch_id": context.branch_id,  # SECURITY: No fallback - branch must be set
             "po_number": po_number,
             "po_date": purchase_data.get("purchase_date", datetime.now().date()),
             "supplier_id": purchase_data.get("supplier_id"),
@@ -568,7 +569,7 @@ async def create_purchase_entry(
         # Generate invoice number if not provided
         invoice_number = purchase_data.get("invoice_number")
         if not invoice_number:
-            invoice_number = f"PINV-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            invoice_number = DocumentNumberService.generate_number(db, "supplier_invoice", str(context.org_id))
         
         invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
         
@@ -594,19 +595,22 @@ async def create_purchase_entry(
                     ORDER BY user_id LIMIT 1
                 """), {"org_id": context.org_id}).fetchone()
                 created_by = user_result.user_id if user_result else 1
-            else:
-                created_by = 1  # Ultimate fallback
+        if not created_by:
+            raise HTTPException(status_code=400, detail="User context required for purchase entry")
         
         # Get branch_id from JWT token (authentication context)
         branch_id = context.branch_id
         if branch_id is None:
-            # Fallback for backward compatibility with old tokens
+            # Try to get default branch for org
             result = db.execute(text("""
                 SELECT branch_id FROM master.org_branches 
                 WHERE org_id = :org_id AND is_active = true
                 ORDER BY branch_id LIMIT 1
             """), {"org_id": context.org_id}).fetchone()
-            branch_id = result.branch_id if result else 1
+            if result:
+                branch_id = result.branch_id
+            else:
+                raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         
         # Create supplier invoice directly (not purchase order)
@@ -742,14 +746,14 @@ async def create_purchase_entry(
             tax_amount = taxable_amount * tax_percent / 100
             total_price = taxable_amount + tax_amount
             
-            # Determine GST split (CGST/SGST or IGST based on same state)
-            cgst_percent = tax_percent / 2
-            sgst_percent = tax_percent / 2
-            igst_percent = 0
-            
-            cgst_amount = taxable_amount * cgst_percent / 100
-            sgst_amount = taxable_amount * sgst_percent / 100
-            igst_amount = 0
+            # Use GSTService for consistent GST split
+            gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
+            cgst_percent = gst["cgst_percent"]
+            sgst_percent = gst["sgst_percent"]
+            igst_percent = gst["igst_percent"]
+            cgst_amount = gst["cgst_amount"]
+            sgst_amount = gst["sgst_amount"]
+            igst_amount = gst["igst_amount"]
             
             # Generate batch number if not provided
             batch_number = item.get("batch_number")
@@ -899,7 +903,7 @@ async def create_purchase_with_items(
     
     try:
         # Generate purchase number
-        purchase_number = f"PO-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        purchase_number = DocumentNumberService.generate_number(db, "purchase_order", str(context.org_id))
         
         # Get supplier name first
         supplier_name = None
@@ -923,19 +927,22 @@ async def create_purchase_with_items(
                     ORDER BY user_id LIMIT 1
                 """), {"org_id": context.org_id}).fetchone()
                 created_by = user_result.user_id if user_result else 1
-            else:
-                created_by = 1  # Ultimate fallback
+        if not created_by:
+            raise HTTPException(status_code=400, detail="User context required for purchase order")
         
         # Get branch_id from JWT token (authentication context)
         branch_id = context.branch_id
         if branch_id is None:
-            # Fallback for backward compatibility with old tokens
+            # Try to get default branch for org
             result = db.execute(text("""
                 SELECT branch_id FROM master.org_branches 
                 WHERE org_id = :org_id AND is_active = true
                 ORDER BY branch_id LIMIT 1
             """), {"org_id": context.org_id}).fetchone()
-            branch_id = result.branch_id if result else 1
+            if result:
+                branch_id = result.branch_id
+            else:
+                raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         
         # Create purchase header
@@ -1159,15 +1166,14 @@ async def create_purchase_with_items(
             )
             
             # Also create supplier invoice item
-            # Determine GST split (CGST/SGST or IGST based on same state)
-            # For now, assuming same state (CGST/SGST)
-            cgst_percent = tax_percent / 2
-            sgst_percent = tax_percent / 2
-            igst_percent = 0
-            
-            cgst_amount = taxable_amount * cgst_percent / 100
-            sgst_amount = taxable_amount * sgst_percent / 100
-            igst_amount = 0
+            # Use GSTService for consistent GST split
+            gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
+            cgst_percent = gst["cgst_percent"]
+            sgst_percent = gst["sgst_percent"]
+            igst_percent = gst["igst_percent"]
+            cgst_amount = gst["cgst_amount"]
+            sgst_amount = gst["sgst_amount"]
+            igst_amount = gst["igst_amount"]
             
             db.execute(
                 text("""

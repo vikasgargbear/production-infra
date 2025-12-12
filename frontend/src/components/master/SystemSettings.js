@@ -4,7 +4,7 @@ import {
   Store, Receipt, Package, FileText, Bell, 
   Shield, Database, Globe, Calculator, Loader2
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const SystemSettings = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('general');

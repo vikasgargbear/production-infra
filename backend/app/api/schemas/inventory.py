@@ -77,18 +77,33 @@ class StockMovementBase(BaseModel):
     """Base stock movement model"""
     product_id: int = Field(..., gt=0)
     batch_id: Optional[int] = None
-    movement_type: str = Field(..., pattern=r"^(purchase|sale|return|adjustment|transfer)$")
+    movement_type: str = Field(..., description="Type: purchase, sale, return, adjustment, transfer, writeoff")
+    movement_direction: Optional[str] = Field(None, description="Direction: in or out")
     movement_date: date = Field(default_factory=date.today)
-    quantity: int = Field(..., description="Positive for IN, negative for OUT")
+    quantity: int = Field(..., description="Positive quantity")
+    
+    # Pack details
+    pack_type: Optional[str] = Field(None, description="Pack type: UNIT, STRIP, BOX, etc.")
+    base_quantity: Optional[int] = Field(None, description="Quantity in base units")
+    
+    # Costing
+    unit_cost: Optional[Decimal] = Field(None, ge=0, description="Cost per unit")
+    total_cost: Optional[Decimal] = Field(None, ge=0, description="Total cost")
     
     # Reference info
-    reference_type: Optional[str] = Field(None, pattern=r"^(order|purchase|adjustment|transfer)$")
+    reference_type: Optional[str] = Field(None, description="Reference type: order, invoice, purchase, adjustment, transfer")
     reference_id: Optional[int] = None
+    reference_number: Optional[str] = Field(None, max_length=50, description="Document number")
+    
+    # Location
+    location_id: Optional[int] = Field(None, description="Branch or warehouse ID")
+    transfer_type: Optional[str] = Field(None, description="Transfer type for moves")
     
     # Additional details
     reason: Optional[str] = Field(None, max_length=200)
     notes: Optional[str] = Field(None, max_length=500)
     performed_by: Optional[str] = Field(None, max_length=100)
+    created_by: Optional[int] = Field(None, description="User ID who created the movement")
 
 
 class StockMovementCreate(StockMovementBase):

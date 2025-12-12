@@ -1,19 +1,23 @@
 """
 Customer Outstanding API endpoints
 Automatically syncs with invoices
+
+MODERNIZED: Uses TenantAwareSession + PermissionChecker + OrgContext
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime, date
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel
 from decimal import Decimal
+import logging
 
-from ...core.database import get_db
-from ...core.auth import get_current_user
-from ...utils.org_utils import get_org_id_from_header
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
+from ...core.permissions import PermissionChecker
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/customer-outstanding", tags=["Customer Outstanding"])
 
@@ -39,118 +43,129 @@ class CustomerOutstandingResponse(BaseModel):
         from_attributes = True
 
 @router.get("/", response_model=List[CustomerOutstandingResponse])
+@with_tenant_context
 async def get_customer_outstanding(
     customer_id: Optional[int] = None,
     status: Optional[str] = None,
     aging_bucket: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    org_id: UUID4 = Depends(get_org_id_from_header)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get customer outstanding records with filters"""
-    
-    query = """
-        SELECT 
-            co.*,
-            c.customer_name
-        FROM financial.customer_outstanding co
-        LEFT JOIN parties.customers c ON c.customer_id = co.customer_id
-        WHERE co.org_id = :org_id
-    """
-    
-    params = {"org_id": str(org_id)}
-    
-    if customer_id:
-        query += " AND co.customer_id = :customer_id"
-        params["customer_id"] = customer_id
-    
-    if status:
-        query += " AND co.status = :status"
-        params["status"] = status
-    
-    if aging_bucket:
-        query += " AND co.aging_bucket = :aging_bucket"
-        params["aging_bucket"] = aging_bucket
-    
-    query += " ORDER BY co.days_overdue DESC, co.outstanding_amount DESC"
-    
-    result = db.execute(text(query), params).fetchall()
-    
-    return [
-        CustomerOutstandingResponse(
-            outstanding_id=row.outstanding_id,
-            customer_id=row.customer_id,
-            customer_name=row.customer_name,
-            document_type=row.document_type,
-            document_id=row.document_id,
-            document_number=row.document_number,
-            document_date=row.document_date,
-            original_amount=row.original_amount,
-            outstanding_amount=row.outstanding_amount,
-            paid_amount=row.paid_amount,
-            due_date=row.due_date,
-            days_overdue=row.days_overdue,
-            aging_bucket=row.aging_bucket,
-            status=row.status,
-            created_at=row.created_at,
-            updated_at=row.updated_at
-        )
-        for row in result
-    ]
+    try:
+        query = """
+            SELECT 
+                co.*,
+                c.customer_name
+            FROM financial.customer_outstanding co
+            LEFT JOIN parties.customers c ON c.customer_id = co.customer_id
+            WHERE co.org_id = :org_id
+        """
+        
+        params = {"org_id": str(context.org_id)}
+        
+        if customer_id:
+            query += " AND co.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+        
+        if status:
+            query += " AND co.status = :status"
+            params["status"] = status
+        
+        if aging_bucket:
+            query += " AND co.aging_bucket = :aging_bucket"
+            params["aging_bucket"] = aging_bucket
+        
+        query += " ORDER BY co.days_overdue DESC, co.outstanding_amount DESC"
+        
+        result = db.execute(text(query), params).fetchall()
+        
+        return [
+            CustomerOutstandingResponse(
+                outstanding_id=row.outstanding_id,
+                customer_id=row.customer_id,
+                customer_name=row.customer_name,
+                document_type=row.document_type,
+                document_id=row.document_id,
+                document_number=row.document_number,
+                document_date=row.document_date,
+                original_amount=row.original_amount,
+                outstanding_amount=row.outstanding_amount,
+                paid_amount=row.paid_amount,
+                due_date=row.due_date,
+                days_overdue=row.days_overdue,
+                aging_bucket=row.aging_bucket,
+                status=row.status,
+                created_at=row.created_at,
+                updated_at=row.updated_at
+            )
+            for row in result
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching customer outstanding: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/summary")
+@with_tenant_context
 async def get_outstanding_summary(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    org_id: UUID4 = Depends(get_org_id_from_header)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get summary of customer outstanding"""
-    
-    query = """
-        SELECT 
-            COUNT(*) as total_records,
-            COUNT(DISTINCT customer_id) as total_customers,
-            SUM(outstanding_amount) as total_outstanding,
-            SUM(CASE WHEN status = 'open' THEN outstanding_amount ELSE 0 END) as open_amount,
-            SUM(CASE WHEN status = 'partial' THEN outstanding_amount ELSE 0 END) as partial_amount,
-            SUM(CASE WHEN aging_bucket = 'CURRENT' THEN outstanding_amount ELSE 0 END) as current_amount,
-            SUM(CASE WHEN aging_bucket = '1-30' THEN outstanding_amount ELSE 0 END) as days_1_30,
-            SUM(CASE WHEN aging_bucket = '31-60' THEN outstanding_amount ELSE 0 END) as days_31_60,
-            SUM(CASE WHEN aging_bucket = '61-90' THEN outstanding_amount ELSE 0 END) as days_61_90,
-            SUM(CASE WHEN aging_bucket = 'OVER_90' THEN outstanding_amount ELSE 0 END) as over_90_days
-        FROM financial.customer_outstanding
-        WHERE org_id = :org_id
-        AND status != 'paid'
-        AND document_type = 'INVOICE'
-    """
-    
-    result = db.execute(text(query), {"org_id": str(org_id)}).fetchone()
-    
-    return {
-        "total_records": result.total_records or 0,
-        "total_customers": result.total_customers or 0,
-        "total_outstanding": float(result.total_outstanding or 0),
-        "open_amount": float(result.open_amount or 0),
-        "partial_amount": float(result.partial_amount or 0),
-        "aging": {
-            "current": float(result.current_amount or 0),
-            "1-30": float(result.days_1_30 or 0),
-            "31-60": float(result.days_31_60 or 0),
-            "61-90": float(result.days_61_90 or 0),
-            "over_90": float(result.over_90_days or 0)
+    try:
+        query = """
+            SELECT 
+                COUNT(*) as total_records,
+                COUNT(DISTINCT customer_id) as total_customers,
+                SUM(outstanding_amount) as total_outstanding,
+                SUM(CASE WHEN status = 'open' THEN outstanding_amount ELSE 0 END) as open_amount,
+                SUM(CASE WHEN status = 'partial' THEN outstanding_amount ELSE 0 END) as partial_amount,
+                SUM(CASE WHEN aging_bucket = 'CURRENT' THEN outstanding_amount ELSE 0 END) as current_amount,
+                SUM(CASE WHEN aging_bucket = '1-30' THEN outstanding_amount ELSE 0 END) as days_1_30,
+                SUM(CASE WHEN aging_bucket = '31-60' THEN outstanding_amount ELSE 0 END) as days_31_60,
+                SUM(CASE WHEN aging_bucket = '61-90' THEN outstanding_amount ELSE 0 END) as days_61_90,
+                SUM(CASE WHEN aging_bucket = 'OVER_90' THEN outstanding_amount ELSE 0 END) as over_90_days
+            FROM financial.customer_outstanding
+            WHERE org_id = :org_id
+            AND status != 'paid'
+            AND document_type = 'INVOICE'
+        """
+        
+        result = db.execute(text(query), {"org_id": str(context.org_id)}).fetchone()
+        
+        return {
+            "total_records": result.total_records or 0,
+            "total_customers": result.total_customers or 0,
+            "total_outstanding": float(result.total_outstanding or 0),
+            "open_amount": float(result.open_amount or 0),
+            "partial_amount": float(result.partial_amount or 0),
+            "aging": {
+                "current": float(result.current_amount or 0),
+                "1-30": float(result.days_1_30 or 0),
+                "31-60": float(result.days_31_60 or 0),
+                "61-90": float(result.days_61_90 or 0),
+                "over_90": float(result.over_90_days or 0)
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Error fetching outstanding summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/sync")
+@with_tenant_context
 async def sync_outstanding(
     invoice_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    org_id: UUID4 = Depends(get_org_id_from_header)
+    _: dict = Depends(PermissionChecker("finance", "edit")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Sync customer outstanding with invoices"""
     
     try:
+        org_id = str(context.org_id)
+        
         if invoice_id:
             # Sync specific invoice
             query = """
@@ -196,7 +211,7 @@ async def sync_outstanding(
                     days_overdue = EXCLUDED.days_overdue,
                     updated_at = CURRENT_TIMESTAMP
             """
-            db.execute(text(query), {"invoice_id": invoice_id, "org_id": str(org_id)})
+            db.execute(text(query), {"invoice_id": invoice_id, "org_id": org_id})
         else:
             # Sync all invoices
             query = """
@@ -241,7 +256,7 @@ async def sync_outstanding(
                 )
                 ON CONFLICT (org_id, document_type, document_id) DO NOTHING
             """
-            db.execute(text(query), {"org_id": str(org_id)})
+            db.execute(text(query), {"org_id": org_id})
         
         db.commit()
         
@@ -251,7 +266,7 @@ async def sync_outstanding(
             FROM financial.customer_outstanding 
             WHERE org_id = :org_id AND document_type = 'INVOICE'
         """
-        result = db.execute(text(count_query), {"org_id": str(org_id)}).fetchone()
+        result = db.execute(text(count_query), {"org_id": org_id}).fetchone()
         
         return {
             "success": True,
@@ -261,68 +276,73 @@ async def sync_outstanding(
         
     except Exception as e:
         db.rollback()
+        logger.error(f"Error syncing outstanding: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/customer/{customer_id}")
+@with_tenant_context
 async def get_customer_ledger(
     customer_id: int,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-    org_id: UUID4 = Depends(get_org_id_from_header)
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get customer ledger with all outstanding documents"""
-    
-    query = """
-        SELECT 
-            co.*,
-            c.customer_name,
-            c.phone,
-            c.email,
-            c.credit_limit,
-            c.credit_days
-        FROM financial.customer_outstanding co
-        JOIN parties.customers c ON c.customer_id = co.customer_id
-        WHERE co.org_id = :org_id 
-        AND co.customer_id = :customer_id
-        AND co.status != 'paid'
-        ORDER BY co.document_date DESC
-    """
-    
-    result = db.execute(text(query), {
-        "org_id": str(org_id),
-        "customer_id": customer_id
-    }).fetchall()
-    
-    if not result:
+    try:
+        query = """
+            SELECT 
+                co.*,
+                c.customer_name,
+                c.primary_phone as phone,
+                c.primary_email as email,
+                c.credit_limit,
+                c.credit_days
+            FROM financial.customer_outstanding co
+            JOIN parties.customers c ON c.customer_id = co.customer_id
+            WHERE co.org_id = :org_id 
+            AND co.customer_id = :customer_id
+            AND co.status != 'paid'
+            ORDER BY co.document_date DESC
+        """
+        
+        result = db.execute(text(query), {
+            "org_id": str(context.org_id),
+            "customer_id": customer_id
+        }).fetchall()
+        
+        if not result:
+            return {
+                "customer_id": customer_id,
+                "outstanding_records": [],
+                "total_outstanding": 0
+            }
+        
+        customer_info = result[0] if result else None
+        
         return {
             "customer_id": customer_id,
-            "outstanding_records": [],
-            "total_outstanding": 0
+            "customer_name": customer_info.customer_name if customer_info else None,
+            "phone": customer_info.phone if customer_info else None,
+            "email": customer_info.email if customer_info else None,
+            "credit_limit": float(customer_info.credit_limit) if customer_info and customer_info.credit_limit else None,
+            "credit_days": customer_info.credit_days if customer_info else None,
+            "outstanding_records": [
+                {
+                    "document_type": row.document_type,
+                    "document_number": row.document_number,
+                    "document_date": row.document_date,
+                    "original_amount": float(row.original_amount),
+                    "paid_amount": float(row.paid_amount),
+                    "outstanding_amount": float(row.outstanding_amount),
+                    "due_date": row.due_date,
+                    "days_overdue": row.days_overdue,
+                    "aging_bucket": row.aging_bucket,
+                    "status": row.status
+                }
+                for row in result
+            ],
+            "total_outstanding": sum(float(row.outstanding_amount) for row in result)
         }
-    
-    customer_info = result[0] if result else None
-    
-    return {
-        "customer_id": customer_id,
-        "customer_name": customer_info.customer_name if customer_info else None,
-        "phone": customer_info.phone if customer_info else None,
-        "email": customer_info.email if customer_info else None,
-        "credit_limit": float(customer_info.credit_limit) if customer_info and customer_info.credit_limit else None,
-        "credit_days": customer_info.credit_days if customer_info else None,
-        "outstanding_records": [
-            {
-                "document_type": row.document_type,
-                "document_number": row.document_number,
-                "document_date": row.document_date,
-                "original_amount": float(row.original_amount),
-                "paid_amount": float(row.paid_amount),
-                "outstanding_amount": float(row.outstanding_amount),
-                "due_date": row.due_date,
-                "days_overdue": row.days_overdue,
-                "aging_bucket": row.aging_bucket,
-                "status": row.status
-            }
-            for row in result
-        ],
-        "total_outstanding": sum(float(row.outstanding_amount) for row in result)
-    }
+    except Exception as e:
+        logger.error(f"Error fetching customer ledger: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

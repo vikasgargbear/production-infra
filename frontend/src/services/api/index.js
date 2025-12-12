@@ -1,147 +1,236 @@
-// Central API export file - CLEAN VERSION
+// Central API export file - ORGANIZED BY DOMAIN
 // All API imports should come from this file for consistency
 
 // Import base utilities
 import apiClient, { apiHelpers } from './apiClient';
 import * as dataUtils from './utils/dataUtils';
 
-// Import the reliable JavaScript wrapper APIs (these have .search() methods)
-import { 
-  customerAPI, 
-  productAPI, 
-  supplierAPI,
-  invoiceAPI,
-  ordersAPI,
-  purchasesAPI,
-  paymentAPI,
-  challansAPI,
-  salesOrdersAPI,
-  employeesAPI
-} from './apiClientExports';
+// =========================================================================
+// ANALYTICS
+// =========================================================================
+import { dashboardApi } from './modules/analytics/dashboard.api';
+import reportsApi from './modules/analytics/reports.api';
+import { collectionCenterApi } from './modules/analytics/collectionCenter.api';
+import { customerOutstandingApi } from './modules/analytics/customerOutstanding.api';
 
-// Import remaining JavaScript modules
-import { authApi } from './modules/auth.api';
-import { batchesApi } from './modules/batches.api';
-import { challansApi as challansApiModule } from './modules/challans.api';
-import { customersApi as customersApiModule } from './modules/customers.api';
-import { suppliersApi as suppliersApiModule } from './modules/suppliers.api';
-import { productsApi as productsApiModule } from './modules/products.api';
-import { deliveryApi } from './modules/delivery.api';
-import { ledgerApi } from './modules/ledger.api';
-import { notesApi } from './modules/notes.api';
-import { purchasesApi } from './modules/purchases.api';
-import { returnsApi } from './modules/returns.api';
-import { stockApi } from './modules/stock.api';
-import { salesApi } from './modules/sales.api';
-import { usersApi } from './modules/users.api';
-import { dashboardApi } from './modules/dashboard.api';
-import { inventoryMovementsApi } from './modules/inventoryMovements.api';
-import { orderItemsApi } from './modules/orderItems.api';
-import reportsApi from './modules/reports.api';
-import settingsApi from './modules/settings.api';
-import utilsApi, { apiUtils } from './modules/utils.api';
-import organizationsApi from './modules/organizations.api';
-import partyLedgerApi from './partyLedgerApi';
-import { companyAPI, DEFAULT_COMPANY_INFO } from './company.api';
-import { bankAccountsAPI } from './bankAccounts.api';
-import { journalApi } from './modules/journal.api';
-import { expensesApi } from './modules/expenses.api';
-import { metadataApi } from './modules/metadata.api';
-import { gstApi, clearGSTCache } from './modules/gst.api';
+// =========================================================================
+// AUTH
+// =========================================================================
+import { authApi } from './modules/auth/auth.api';
+import { usersApi } from './modules/auth/users.api';
+import { roleManagementApi } from './modules/auth/roleManagement.api';
 
-// Re-export everything for easy access
+// =========================================================================
+// COMPLIANCE
+// =========================================================================
+import { gstApi } from './modules/compliance/gst.api';
+import { taxEntriesApi } from './modules/compliance/taxEntries.api';
+import { complianceApi } from './modules/compliance/compliance.api';
+
+// =========================================================================
+// FINANCE
+// =========================================================================
+import { ledgerApi, partyLedgerApi } from './modules/finance/ledger.api';
+import { paymentsApi } from './modules/finance/payments.api';
+import { paymentAllocationApi } from './modules/finance/paymentAllocation.api';
+import { journalApi } from './modules/finance/journal.api';
+import { expensesApi } from './modules/finance/expenses.api';
+import { notesApi } from './modules/finance/notes.api';
+import { calculationsApi } from './modules/finance/calculations.api';
+
+// =========================================================================
+// INVENTORY
+// =========================================================================
+import { stockApi } from './modules/inventory/stock.api';
+import { batchesApi } from './modules/inventory/batches.api';
+import { inventoryMovementsApi } from './modules/inventory/inventoryMovements.api';
+import { conversionsApi } from './modules/inventory/conversions.api';
+
+// =========================================================================
+// MASTER
+// =========================================================================
+import { customersApi } from './modules/master/customers.api';
+import { suppliersApi } from './modules/master/suppliers.api';
+import { productsApi } from './modules/master/products.api';
+import { employeesApi } from './modules/master/employees.api';
+import { bankAccountsApi } from './modules/master/bankAccounts.api';
+
+// =========================================================================
+// ORG
+// =========================================================================
+import { companyApi } from './modules/org/company.api';
+import organizationsApi from './modules/org/organizations.api';
+import { branchesApi } from './modules/org/branches.api';
+import { departmentsApi } from './modules/org/departments.api';
+
+// =========================================================================
+// PURCHASE
+// =========================================================================
+import { purchasesApi } from './modules/purchase/purchases.api';
+import { grnApi } from './modules/purchase/grn.api';
+import { supplierInvoicesApi } from './modules/purchase/supplierInvoices.api';
+
+// =========================================================================
+// SALES
+// =========================================================================
+import { invoicesApi } from './modules/sales/invoices.api';
+import { ordersApi } from './modules/sales/orders.api';
+import { salesOrdersApi } from './modules/sales/salesOrders.api';
+import { challansApi } from './modules/sales/challans.api';
+import { quickSaleApi } from './modules/sales/quickSale.api';
+import { returnsApi } from './modules/sales/returns.api';
+import { orderItemsApi } from './modules/sales/orderItems.api';
+import { loyaltyPointsApi } from './modules/sales/loyaltyPoints.api';
+import { schemesDiscountsApi } from './modules/sales/schemesDiscounts.api';
+
+// =========================================================================
+// SETTINGS
+// =========================================================================
+import settingsApi from './modules/settings/settings.api';
+import { metadataApi } from './modules/settings/metadata.api';
+import { setupApi } from './modules/settings/setup.api';
+import utilsApi from './modules/settings/utils.api';
+
+// =========================================================================
+// EXPORTS
+// =========================================================================
+
 export {
   // API Client
   apiClient,
   apiHelpers,
-  
-  // Primary APIs with search methods (from TypeScript wrapper)
-  customerAPI,
-  productAPI,
-  // supplierAPI exported below as suppliersApi to avoid duplicate
-  invoiceAPI,
-  ordersAPI,
-  purchasesAPI,
-  paymentAPI,
-  challansAPI,
-  salesOrdersAPI,
-  employeesAPI,
-  
-  // JavaScript module APIs
-  authApi,
-  batchesApi,
-  deliveryApi,
-  ledgerApi,
-  notesApi,
-  purchasesApi,
-  returnsApi,
-  stockApi,
-  salesApi,
-  usersApi,
+
+  // Analytics
   dashboardApi,
-  inventoryMovementsApi,
-  orderItemsApi,
   reportsApi,
-  settingsApi,
-  utilsApi,
-  apiUtils,
-  organizationsApi,
+  collectionCenterApi,
+  customerOutstandingApi,
+
+  // Auth
+  authApi,
+  usersApi,
+  roleManagementApi,
+
+  // Compliance
+  gstApi,
+  taxEntriesApi,
+  complianceApi,
+
+  // Finance
+  ledgerApi,
   partyLedgerApi,
-  companyAPI,
-  bankAccountsAPI,
-  DEFAULT_COMPANY_INFO,
+  paymentsApi,
+  paymentAllocationApi,
   journalApi,
   expensesApi,
+  notesApi,
+  calculationsApi,
+
+  // Inventory
+  stockApi,
+  batchesApi,
+  inventoryMovementsApi,
+  conversionsApi,
+
+  // Master
+  customersApi,
+  suppliersApi,
+  productsApi,
+  employeesApi,
+  bankAccountsApi,
+
+  // Org
+  companyApi,
+  organizationsApi,
+  branchesApi,
+  departmentsApi,
+
+  // Purchase
+  purchasesApi,
+  grnApi,
+  supplierInvoicesApi,
+
+  // Sales
+  invoicesApi,
+  ordersApi,
+  salesOrdersApi,
+  challansApi,
+  quickSaleApi,
+  returnsApi,
+  orderItemsApi,
+  loyaltyPointsApi,
+  schemesDiscountsApi,
+
+  // Settings
+  settingsApi,
   metadataApi,
-  gstApi,
-  clearGSTCache,
-  
-  // Aliases for backward compatibility
-  customerAPI as customersApiOld,
-  customersApiModule as customersApi,
-  productsApiModule as productsApi,  // Use the full module with CRUD methods
-  suppliersApiModule as suppliersApi,
-  supplierAPI, // Export supplierAPI here only once
-  invoiceAPI as invoicesApi,
-  purchasesAPI as purchasesAPIAlias,  // Renamed to avoid conflict with modules/purchases.api
-  purchasesAPI as purchaseApi,
-  ordersAPI as ordersApi,
-  paymentAPI as paymentsApi,
-  challansApiModule as challansApi,  // Use the module version which has getAll
-  batchesApi as batchAPI,
-  partyLedgerApi as partyLedgerAPI,
-  salesOrdersAPI as salesOrdersAPIAlias,
-  
+  setupApi,
+  utilsApi,
+
   // Utilities
   dataUtils,
 };
 
-// API object with all modules grouped (for named export)
+// =========================================================================
+// BACKWARD COMPATIBILITY ALIASES
+// Legacy export names used by some components
+// =========================================================================
+export const invoiceAPI = invoicesApi;
+export const ordersAPI = ordersApi;
+export const purchasesAPI = purchasesApi;
+export const paymentAPI = paymentsApi;
+export const challansAPI = challansApi;
+export const salesOrdersAPI = salesOrdersApi;
+export const customerAPI = customersApi;
+export const productAPI = productsApi;
+export const supplierAPI = suppliersApi;
+export const employeesAPI = employeesApi;
+export const bankAccountsAPI = bankAccountsApi;
+export const batchAPI = batchesApi;
+export const companyAPI = companyApi;
+export const partyLedgerAPI = partyLedgerApi;
+
+// Utility functions for backward compatibility
+export const clearGSTCache = () => {
+  // Cache handling moved to service layer - this is a no-op for compatibility
+  console.debug('GST cache cleared (no-op in new architecture)');
+};
+
+// Singular name aliases (some components use singular)
+export const purchaseApi = purchasesApi;
+export const invoiceApi = invoicesApi;
+
+// API object with all modules grouped by domain
 const apiModules = {
-  auth: authApi,
-  customers: customersApiModule,
-  products: productsApiModule,  // Use the full module with CRUD methods
-  suppliers: supplierAPI,
-  invoices: invoiceAPI,
-  purchases: purchasesAPI,
-  challans: challansAPI,
-  orders: ordersAPI,
-  payments: paymentAPI,
-  reports: reportsApi,
-  settings: settingsApi,
-  utils: utilsApi,
-  returns: returnsApi,
-  ledger: ledgerApi,
-  notes: notesApi,
-  stock: stockApi,
-  sales: salesApi,
-  salesOrders: salesOrdersAPI,
-  organizations: organizationsApi.organizations,
-  features: organizationsApi.features,
-  partyLedger: partyLedgerApi,
-  bankAccounts: bankAccountsAPI,
-  metadata: metadataApi,
-  employees: employeesAPI,
+  // Analytics
+  analytics: { dashboard: dashboardApi, reports: reportsApi, collectionCenter: collectionCenterApi, customerOutstanding: customerOutstandingApi },
+
+  // Auth
+  auth: { auth: authApi, users: usersApi, roles: roleManagementApi },
+
+  // Compliance
+  compliance: { gst: gstApi, taxEntries: taxEntriesApi, compliance: complianceApi },
+
+  // Finance
+  finance: { ledger: ledgerApi, partyLedger: partyLedgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, journal: journalApi, expenses: expensesApi, notes: notesApi, calculations: calculationsApi },
+
+  // Inventory
+  inventory: { stock: stockApi, batches: batchesApi, movements: inventoryMovementsApi, conversions: conversionsApi },
+
+  // Master
+  master: { customers: customersApi, suppliers: suppliersApi, products: productsApi, employees: employeesApi, bankAccounts: bankAccountsApi },
+
+  // Org
+  org: { company: companyApi, organizations: organizationsApi, branches: branchesApi, departments: departmentsApi },
+
+  // Purchase
+  purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },
+
+  // Sales
+  sales: { invoices: invoicesApi, orders: ordersApi, salesOrders: salesOrdersApi, challans: challansApi, quickSale: quickSaleApi, returns: returnsApi, orderItems: orderItemsApi, loyaltyPoints: loyaltyPointsApi, schemesDiscounts: schemesDiscountsApi },
+
+  // Settings
+  settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi }
 };
 
 // For backward compatibility: export the raw axios instance as default

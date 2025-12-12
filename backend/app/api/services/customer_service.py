@@ -11,18 +11,189 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
+import re
 
 from ..schemas.customer import (
     CustomerLedgerEntry, CustomerLedgerResponse, OutstandingInvoice,
     CustomerOutstandingResponse, PaymentRecord,
-    PaymentResponse
+    PaymentResponse, CustomerCreate, CustomerResponse
 )
+from .gst_service import GSTService
+from .document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
+
+# Constants
+DEFAULT_LEDGER_DAYS = 365  # Default date range for ledger queries
+DEFAULT_CREDIT_LIMIT = Decimal("0.00")
+DEFAULT_CREDIT_DAYS = 0
+CUSTOMER_TYPES = ["retail", "wholesale", "hospital", "clinic", "pharmacy"]
+PAYMENT_MODES = ["cash", "cheque", "bank_transfer", "upi", "card"]
 
 
 class CustomerService:
     """Service class for customer-related business logic"""
+    
+    # --- Helper Methods ---
+    
+    @staticmethod
+    def _get_customer_org_id(db: Session, customer_id: int) -> Optional[UUID]:
+        """Get org_id for a customer - reduces duplicate subqueries"""
+        result = db.execute(text(
+            "SELECT org_id FROM parties.customers WHERE customer_id = :id"
+        ), {"id": customer_id}).scalar()
+        return UUID(str(result)) if result else None
+    
+    @staticmethod
+    def _get_default_user_id(db: Session, org_id: UUID) -> Optional[int]:
+        """Get default active user for an org"""
+        result = db.execute(text("""
+            SELECT user_id FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true 
+            LIMIT 1
+        """), {"org_id": str(org_id)}).scalar()
+        return result
+    
+    @staticmethod
+    def _get_default_branch_id(db: Session, org_id: UUID) -> Optional[int]:
+        """Get default branch for an org"""
+        result = db.execute(text("""
+            SELECT branch_id FROM master.org_branches 
+            WHERE org_id = :org_id 
+            LIMIT 1
+        """), {"org_id": str(org_id)}).scalar()
+        return result
+    
+    @staticmethod
+    def _get_default_payment_method_id(db: Session, org_id: UUID, method_code: str = "cash") -> int:
+        """Get payment method ID, with fallback"""
+        result = db.execute(text("""
+            SELECT payment_method_id FROM financial.payment_methods 
+            WHERE org_id = :org_id AND LOWER(method_code) = LOWER(:method_code) 
+            LIMIT 1
+        """), {"org_id": str(org_id), "method_code": method_code}).scalar()
+        
+        if not result:
+            # Try to get any cash method as fallback
+            result = db.execute(text("""
+                SELECT payment_method_id FROM financial.payment_methods 
+                WHERE org_id = :org_id 
+                LIMIT 1
+            """), {"org_id": str(org_id)}).scalar()
+        
+        return result  # Return None if not found - caller handles
+    
+    # --- Validation Methods ---
+    
+    @staticmethod
+    def validate_customer_data(customer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate customer data including GSTIN and PAN.
+        Uses GSTService for GSTIN validation.
+        """
+        errors = []
+        validated_data = customer_data.copy()
+        
+        # Validate GSTIN using GSTService
+        gst_number = customer_data.get("gst_number") or customer_data.get("gstin")
+        if gst_number:
+            if not GSTService.validate_gstin(gst_number):
+                errors.append("Invalid GSTIN format")
+            else:
+                # Extract and store state code
+                state_code = GSTService.extract_state_code(gst_number)
+                if state_code:
+                    validated_data["gst_state_code"] = state_code
+                    validated_data["gst_state_name"] = GSTService.get_state_name(state_code)
+        
+        # Validate PAN format
+        pan = customer_data.get("pan_number")
+        if pan and not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", pan):
+            errors.append("Invalid PAN format")
+        
+        # Validate phone numbers
+        phone = customer_data.get("primary_phone")
+        if phone and not re.match(r"^[0-9]{10}$", phone):
+            errors.append("Invalid phone number format (must be 10 digits)")
+        
+        # Validate customer type
+        customer_type = customer_data.get("customer_type")
+        if customer_type and customer_type not in CUSTOMER_TYPES:
+            errors.append(f"Invalid customer type. Must be one of: {', '.join(CUSTOMER_TYPES)}")
+        
+        # Validate credit limit and days
+        if customer_data.get("credit_limit") and customer_data["credit_limit"] < 0:
+            errors.append("Credit limit cannot be negative")
+        
+        if customer_data.get("credit_days") and (customer_data["credit_days"] < 0 or customer_data["credit_days"] > 365):
+            errors.append("Credit days must be between 0 and 365")
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "data": validated_data
+        }
+    
+    @staticmethod
+    def check_duplicate_customer(
+        db: Session, 
+        org_id: UUID,
+        gst_number: Optional[str] = None,
+        primary_phone: Optional[str] = None,
+        customer_name: Optional[str] = None,
+        exclude_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Check for duplicate customers by GSTIN, phone, or name"""
+        duplicates = []
+        
+        # Check GSTIN duplicate
+        if gst_number:
+            query = """
+                SELECT customer_id, customer_name, gst_number 
+                FROM parties.customers 
+                WHERE org_id = :org_id AND gst_number = :gst_number
+            """
+            params = {"org_id": str(org_id), "gst_number": gst_number}
+            if exclude_id:
+                query += " AND customer_id != :exclude_id"
+                params["exclude_id"] = exclude_id
+            
+            result = db.execute(text(query), params).fetchone()
+            if result:
+                duplicates.append({
+                    "field": "gst_number",
+                    "customer_id": result.customer_id,
+                    "customer_name": result.customer_name,
+                    "message": f"GSTIN already exists for customer: {result.customer_name}"
+                })
+        
+        # Check phone duplicate
+        if primary_phone:
+            query = """
+                SELECT customer_id, customer_name, primary_phone 
+                FROM parties.customers 
+                WHERE org_id = :org_id AND primary_phone = :phone
+            """
+            params = {"org_id": str(org_id), "phone": primary_phone}
+            if exclude_id:
+                query += " AND customer_id != :exclude_id"
+                params["exclude_id"] = exclude_id
+            
+            result = db.execute(text(query), params).fetchone()
+            if result:
+                duplicates.append({
+                    "field": "primary_phone",
+                    "customer_id": result.customer_id,
+                    "customer_name": result.customer_name,
+                    "message": f"Phone number already exists for customer: {result.customer_name}"
+                })
+        
+        return {
+            "has_duplicates": len(duplicates) > 0,
+            "duplicates": duplicates
+        }
+    
+    # --- CRUD Methods ---
     
     @staticmethod
     def generate_customer_code(db: Session, customer_name: str) -> str:
@@ -41,6 +212,199 @@ class CustomerService:
         
         next_num = result.scalar() or 1
         return f"{prefix}{next_num:04d}"
+    
+    @staticmethod
+    def get_customer(
+        db: Session, 
+        customer_id: int,
+        org_id: UUID
+    ) -> Optional[Dict[str, Any]]:
+        """Get customer by ID with full details including outstanding"""
+        result = db.execute(text("""
+            SELECT c.*,
+                   COALESCE(
+                       (SELECT SUM(outstanding_amount) 
+                        FROM financial.customer_outstanding 
+                        WHERE customer_id = c.customer_id AND org_id = c.org_id AND status != 'closed'),
+                       0
+                   ) as current_outstanding
+            FROM parties.customers c
+            WHERE c.customer_id = :customer_id AND c.org_id = :org_id
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
+        
+        row = result.fetchone()
+        if not row:
+            return None
+        
+        return dict(row._mapping)
+    
+    @staticmethod
+    def create_customer(
+        db: Session, 
+        customer_data: Dict[str, Any],
+        org_id: UUID,
+        user_id: int
+    ) -> Dict[str, Any]:
+        """Create a new customer with validation"""
+        # Validate data using centralized validation
+        validation = CustomerService.validate_customer_data(customer_data)
+        if not validation["valid"]:
+            raise ValueError(f"Validation failed: {', '.join(validation['errors'])}")
+        
+        # Use validated data with enriched fields (e.g., gst_state_code)
+        data = validation["data"]
+        
+        # Check for duplicates
+        duplicate_check = CustomerService.check_duplicate_customer(
+            db, org_id,
+            gst_number=data.get("gst_number"),
+            primary_phone=data.get("primary_phone")
+        )
+        if duplicate_check["has_duplicates"]:
+            raise ValueError(duplicate_check["duplicates"][0]["message"])
+        
+        # Generate customer code if not provided
+        customer_code = data.get("customer_code")
+        if not customer_code:
+            customer_code = CustomerService.generate_customer_code(db, data["customer_name"])
+        
+        # Insert customer
+        result = db.execute(text("""
+            INSERT INTO parties.customers (
+                org_id, customer_code, customer_name, customer_type,
+                primary_phone, secondary_phone, primary_email,
+                contact_person_name, contact_person_phone, contact_person_email,
+                address_line1, address_line2, area, city, state, pincode,
+                gst_number, pan_number, drug_license_number, drug_license_validity,
+                credit_limit, credit_days, credit_rating, payment_terms,
+                discount_percent, business_type, is_active,
+                internal_notes, created_at, updated_at, created_by, updated_by
+            ) VALUES (
+                :org_id, :customer_code, :customer_name, :customer_type,
+                :primary_phone, :secondary_phone, :primary_email,
+                :contact_person_name, :contact_person_phone, :contact_person_email,
+                :address_line1, :address_line2, :area, :city, :state, :pincode,
+                :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
+                :credit_limit, :credit_days, :credit_rating, :payment_terms,
+                :discount_percent, :business_type, :is_active,
+                :internal_notes, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :user_id, :user_id
+            )
+            RETURNING customer_id
+        """), {
+            "org_id": str(org_id),
+            "customer_code": customer_code,
+            "customer_name": data["customer_name"],
+            "customer_type": data.get("customer_type", "retail"),
+            "primary_phone": data["primary_phone"],
+            "secondary_phone": data.get("secondary_phone"),
+            "primary_email": data.get("primary_email"),
+            "contact_person_name": data.get("contact_person_name"),
+            "contact_person_phone": data.get("contact_person_phone"),
+            "contact_person_email": data.get("contact_person_email"),
+            "address_line1": data.get("address_line1"),
+            "address_line2": data.get("address_line2"),
+            "area": data.get("area"),
+            "city": data.get("city"),
+            "state": data.get("state"),
+            "pincode": data.get("pincode"),
+            "gst_number": data.get("gst_number"),
+            "pan_number": data.get("pan_number"),
+            "drug_license_number": data.get("drug_license_number"),
+            "drug_license_validity": data.get("drug_license_validity"),
+            "credit_limit": data.get("credit_limit", DEFAULT_CREDIT_LIMIT),
+            "credit_days": data.get("credit_days", DEFAULT_CREDIT_DAYS),
+            "credit_rating": data.get("credit_rating", "NEW"),
+            "payment_terms": data.get("payment_terms", "CASH"),
+            "discount_percent": data.get("discount_percent", Decimal("0.00")),
+            "business_type": data.get("business_type", "retail_pharmacy"),
+            "is_active": data.get("is_active", True),
+            "internal_notes": data.get("internal_notes"),
+            "user_id": user_id
+        })
+        
+        customer_id = result.scalar()
+        db.commit()
+        
+        logger.info(f"Created customer {customer_code} (ID: {customer_id}) for org {org_id}")
+        
+        return {
+            "customer_id": customer_id,
+            "customer_code": customer_code,
+            "customer_name": data["customer_name"],
+            "message": "Customer created successfully"
+        }
+    
+    @staticmethod
+    def update_customer(
+        db: Session,
+        customer_id: int,
+        update_data: Dict[str, Any],
+        org_id: UUID,
+        user_id: int
+    ) -> Dict[str, Any]:
+        """Update customer with validation"""
+        # Check customer exists
+        existing = CustomerService.get_customer(db, customer_id, org_id)
+        if not existing:
+            raise ValueError(f"Customer {customer_id} not found")
+        
+        # Validate update data
+        validation = CustomerService.validate_customer_data(update_data)
+        if not validation["valid"]:
+            raise ValueError(f"Validation failed: {', '.join(validation['errors'])}")
+        
+        data = validation["data"]
+        
+        # Check for duplicates (excluding current customer)
+        if data.get("gst_number") or data.get("primary_phone"):
+            duplicate_check = CustomerService.check_duplicate_customer(
+                db, org_id,
+                gst_number=data.get("gst_number"),
+                primary_phone=data.get("primary_phone"),
+                exclude_id=customer_id
+            )
+            if duplicate_check["has_duplicates"]:
+                raise ValueError(duplicate_check["duplicates"][0]["message"])
+        
+        # Build dynamic update query
+        update_fields = []
+        params = {"customer_id": customer_id, "org_id": str(org_id), "user_id": user_id}
+        
+        updatable_fields = [
+            "customer_name", "customer_type", "primary_phone", "secondary_phone",
+            "primary_email", "contact_person_name", "contact_person_phone",
+            "address_line1", "address_line2", "area", "city", "state", "pincode",
+            "gst_number", "pan_number", "drug_license_number", "drug_license_validity",
+            "credit_limit", "credit_days", "credit_rating", "payment_terms",
+            "discount_percent", "business_type", "is_active", "internal_notes"
+        ]
+        
+        for field in updatable_fields:
+            if field in data and data[field] is not None:
+                update_fields.append(f"{field} = :{field}")
+                params[field] = data[field]
+        
+        if not update_fields:
+            return {"message": "No fields to update", "customer_id": customer_id}
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        update_fields.append("updated_by = :user_id")
+        
+        query = f"""
+            UPDATE parties.customers 
+            SET {', '.join(update_fields)}
+            WHERE customer_id = :customer_id AND org_id = :org_id
+        """
+        
+        db.execute(text(query), params)
+        db.commit()
+        
+        logger.info(f"Updated customer {customer_id} for org {org_id}")
+        
+        return {
+            "customer_id": customer_id,
+            "message": "Customer updated successfully"
+        }
     
     @staticmethod
     def validate_credit_limit(db: Session, customer_id: int, order_amount: Decimal, org_id: "UUID" = None) -> Dict[str, Any]:
@@ -180,9 +544,9 @@ class CustomerService:
         to_date: Optional[date] = None
     ) -> CustomerLedgerResponse:
         """Get customer ledger with all transactions"""
-        # Set date range
+        # Set date range (use constant instead of hardcoded value)
         if not from_date:
-            from_date = date.today() - timedelta(days=365)
+            from_date = date.today() - timedelta(days=DEFAULT_LEDGER_DAYS)
         if not to_date:
             to_date = date.today()
         
@@ -386,12 +750,30 @@ class CustomerService:
     @staticmethod
     def record_payment(db: Session, payment_data: PaymentRecord) -> PaymentResponse:
         """Record customer payment and allocate to invoices"""
-        # Generate payment reference if not provided
-        if not payment_data.reference_number:
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            payment_data.reference_number = f"PAY{timestamp}"
+        # Get customer org_id first using helper method
+        org_id = CustomerService._get_customer_org_id(db, payment_data.customer_id)
+        if not org_id:
+            raise ValueError(f"Customer {payment_data.customer_id} not found")
         
-        # Create payment record in financial.payments table
+        # Get customer name
+        customer_name = db.execute(text(
+            "SELECT customer_name FROM parties.customers WHERE customer_id = :id"
+        ), {"id": payment_data.customer_id}).scalar()
+        
+        # Generate payment reference using DocumentNumberService if not provided
+        if not payment_data.reference_number:
+            payment_data.reference_number = DocumentNumberService.generate_number(
+                db, "payment", str(org_id)
+            )
+        
+        # Get defaults using helper methods (eliminates hardcoded values)
+        branch_id = CustomerService._get_default_branch_id(db, org_id)
+        user_id = CustomerService._get_default_user_id(db, org_id)
+        payment_method_id = CustomerService._get_default_payment_method_id(
+            db, org_id, payment_data.payment_mode
+        )
+        
+        # Create payment record with resolved values (no subqueries)
         db.execute(text("""
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_type, party_type, party_id, party_name,
@@ -399,32 +781,22 @@ class CustomerService:
                 payment_method_id, reference_number, narration,
                 payment_status, created_at, created_by
             ) VALUES (
-                (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
-                (SELECT branch_id FROM master.org_branches 
-                 WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id) 
-                 LIMIT 1),
-                'receipt', 'customer', :customer_id,
-                (SELECT customer_name FROM parties.customers WHERE customer_id = :customer_id),
+                :org_id, :branch_id, 'receipt', 'customer', :customer_id, :customer_name,
                 :reference, :payment_date, :amount,
-                COALESCE(
-                    (SELECT payment_method_id FROM financial.payment_methods 
-                     WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
-                     AND LOWER(method_code) = LOWER(:payment_mode) LIMIT 1),
-                    32  -- Fallback to CASH if method not found
-                ),
-                :reference, :notes,
-                'cleared', CURRENT_TIMESTAMP,
-                (SELECT user_id FROM master.org_users 
-                 WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
-                 AND is_active = true LIMIT 1)
+                :payment_method_id, :reference, :notes,
+                'cleared', CURRENT_TIMESTAMP, :user_id
             )
         """), {
+            "org_id": str(org_id),
+            "branch_id": branch_id,
             "customer_id": payment_data.customer_id,
+            "customer_name": customer_name,
             "payment_date": payment_data.payment_date,
             "amount": payment_data.amount,
-            "payment_mode": payment_data.payment_mode,
+            "payment_method_id": payment_method_id,
             "reference": payment_data.reference_number,
-            "notes": payment_data.notes
+            "notes": payment_data.notes,
+            "user_id": user_id
         })
         
         # Get the created payment ID and org_id from financial.payments
@@ -461,24 +833,21 @@ class CustomerService:
                     # Allocate min of remaining payment or invoice outstanding
                     allocation_amount = min(remaining_amount, invoice_result.outstanding_amount)
                     
-                    # Create allocation record
+                    # Create allocation record (use pre-fetched user_id)
                     db.execute(text("""
                         INSERT INTO financial.payment_allocations (
                             payment_id, reference_type, reference_id, 
                             reference_number, allocated_amount, created_by
                         ) VALUES (
                             :payment_id, 'INVOICE', :invoice_id,
-                            :invoice_number, :amount,
-                            (SELECT user_id FROM master.org_users 
-                             WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
-                             AND is_active = true LIMIT 1)
+                            :invoice_number, :amount, :user_id
                         )
                     """), {
                         "payment_id": payment_id,
                         "invoice_id": invoice_id,
                         "invoice_number": invoice_result.document_number,
                         "amount": allocation_amount,
-                        "customer_id": payment_data.customer_id
+                        "user_id": user_id
                     })
                     
                     remaining_amount -= allocation_amount
@@ -503,24 +872,21 @@ class CustomerService:
                     
                 allocation_amount = min(remaining_amount, invoice.outstanding_amount)
                 
-                # Create allocation record
+                # Create allocation record (use pre-fetched user_id)
                 db.execute(text("""
                     INSERT INTO financial.payment_allocations (
                         payment_id, reference_type, reference_id, 
                         reference_number, allocated_amount, created_by
                     ) VALUES (
                         :payment_id, 'INVOICE', :invoice_id,
-                        :invoice_number, :amount,
-                        (SELECT user_id FROM master.org_users 
-                         WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
-                         AND is_active = true LIMIT 1)
+                        :invoice_number, :amount, :user_id
                     )
                 """), {
                     "payment_id": payment_id,
                     "invoice_id": invoice.document_id,
                     "invoice_number": invoice.document_number,
                     "amount": allocation_amount,
-                    "customer_id": payment_data.customer_id
+                    "user_id": user_id
                 })
                 
                 remaining_amount -= allocation_amount

@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
 from ...services.document_number_service import DocumentNumberService
+from ...services.inventory_service import InventoryService
+from ...schemas.inventory import StockMovementCreate
 from datetime import date, datetime
+from decimal import Decimal
 
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
@@ -139,58 +142,31 @@ async def create_stock_adjustment(
         # Use module-level type mapping
         movement_type = ADJUSTMENT_TYPE_MAPPING.get(adjustment_data.get("adjustment_type"), "stock_adjustment")
         
-        # Create inventory movement
-        movement_id = db.execute(
-            text("""
-                INSERT INTO inventory.inventory_movements (
-                    org_id, movement_date, movement_type, movement_direction,
-                    product_id, batch_id, quantity, location_id,
-                    unit_cost, total_cost,
-                    reference_type, reference_number,
-                    reason, created_by
-                ) VALUES (
-                    :org_id, :movement_date, :movement_type, :movement_direction,
-                    :product_id, :batch_id, :quantity, :location_id,
-                    :unit_cost, :total_cost,
-                    'adjustment', :reference_number,
-                    :reason, :created_by
-                ) RETURNING movement_id
-            """),
-            {
-                "org_id": str(context.org_id),
-                "movement_date": adjustment_data.get("adjustment_date", datetime.utcnow()),
-                "movement_type": movement_type,
-                "movement_direction": "in" if quantity_adjusted > 0 else "out",
-                "product_id": batch.product_id,
-                "batch_id": adjustment_data.get("batch_id"),
-                "quantity": abs(quantity_adjusted),
-                "unit_cost": float(batch.unit_cost) if batch.unit_cost else 0,
-                "total_cost": abs(quantity_adjusted) * float(batch.unit_cost) if batch.unit_cost else 0,
-                "location_id": adjustment_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
-                "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
-                "reason": adjustment_data.get("reason"),
-                "created_by": context.user_id
-            }
-        ).scalar()
-        
-        # Update batch quantity
-        new_quantity = batch.quantity_available + quantity_adjusted
-        db.execute(
-            text("""
-                UPDATE inventory.batches 
-                SET quantity_available = :new_quantity
-                WHERE batch_id = :batch_id
-            """),
-            {
-                "new_quantity": new_quantity,
-                "batch_id": adjustment_data.get("batch_id")
-            }
+        # Use InventoryService for stock movement (handles both movement record and batch update)
+        movement_data = StockMovementCreate(
+            org_id=context.org_id,
+            product_id=batch.product_id,
+            batch_id=adjustment_data.get("batch_id"),
+            movement_type=movement_type,
+            movement_direction="in" if quantity_adjusted > 0 else "out",
+            movement_date=adjustment_data.get("adjustment_date", date.today()),
+            quantity=abs(quantity_adjusted),
+            unit_cost=Decimal(str(batch.unit_cost)) if batch.unit_cost else Decimal("0"),
+            total_cost=Decimal(str(abs(quantity_adjusted) * float(batch.unit_cost))) if batch.unit_cost else Decimal("0"),
+            location_id=adjustment_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
+            reference_type="adjustment",
+            reference_number=adjustment_data.get("reference_number") or DocumentNumberService.generate_number(db, "adjustment", str(context.org_id)),
+            reason=adjustment_data.get("reason"),
+            created_by=context.user_id
         )
         
-        # TenantAwareSession auto-commits on success
+        movement_result = InventoryService.record_stock_movement(db, movement_data)
+        
+        # Calculate new quantity for response
+        new_quantity = batch.quantity_available + quantity_adjusted
         
         return {
-            "movement_id": movement_id,
+            "movement_id": movement_result.movement_id,
             "message": "Stock adjustment created successfully",
             "old_quantity": batch.quantity_available,
             "new_quantity": new_quantity,
@@ -239,50 +215,26 @@ async def process_physical_count(
             
             # Only adjust if there's a difference
             if difference != 0:
-                movement_id = db.execute(
-                    text("""
-                        INSERT INTO inventory.inventory_movements (
-                            org_id, movement_date, movement_type, movement_direction,
-                            product_id, batch_id, quantity, location_id,
-                            reference_type, reference_number,
-                            reason, created_by
-                        ) VALUES (
-                            :org_id,
-                            :movement_date, 'stock_count', :movement_direction,
-                            :product_id, :batch_id, :quantity, :location_id,
-                            'physical_count', :reference_number,
-                            :reason, :created_by
-                        ) RETURNING movement_id
-                    """),
-                    {
-                        "org_id": str(context.org_id),
-                        "movement_date": count_data.get("count_date", datetime.utcnow()),
-                        "movement_direction": "in" if difference > 0 else "out",
-                        "product_id": batch.product_id,
-                        "batch_id": batch_id,
-                        "quantity": abs(difference),
-                        "location_id": context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
-                        "reference_number": count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
-                        "reason": f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
-                        "created_by": context.user_id
-                    }
-                ).scalar()
-                
-                # Update batch quantity
-                db.execute(
-                    text("""
-                        UPDATE inventory.batches 
-                        SET quantity_available = :new_quantity
-                        WHERE batch_id = :batch_id
-                    """),
-                    {
-                        "new_quantity": counted_quantity,
-                        "batch_id": batch_id
-                    }
+                # Use InventoryService for stock movement
+                movement_data = StockMovementCreate(
+                    org_id=context.org_id,
+                    product_id=batch.product_id,
+                    batch_id=batch_id,
+                    movement_type="stock_count",
+                    movement_direction="in" if difference > 0 else "out",
+                    movement_date=count_data.get("count_date", date.today()),
+                    quantity=abs(difference),
+                    location_id=context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
+                    reference_type="physical_count",
+                    reference_number=count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
+                    reason=f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
+                    created_by=context.user_id
                 )
                 
+                movement_result = InventoryService.record_stock_movement(db, movement_data)
+                
                 adjustments_created.append({
-                    "movement_id": movement_id,
+                    "movement_id": movement_result.movement_id,
                     "batch_id": batch_id,
                     "system_quantity": system_quantity,
                     "counted_quantity": counted_quantity,
@@ -330,47 +282,36 @@ async def expire_batches(
         adjustments_created = []
         
         for batch in expired_batches:
-            # Create expiry movement
-            movement_id = db.execute(
-                text("""
-                    INSERT INTO inventory.inventory_movements (
-                        org_id, movement_date, movement_type, movement_direction,
-                        product_id, batch_id, quantity, location_id,
-                        reference_type, reference_number,
-                        reason, created_by
-                    ) VALUES (
-                        :org_id,
-                        CURRENT_DATE, 'stock_expiry', 'out',
-                        :product_id, :batch_id, :quantity, :location_id,
-                        'expiry', :reference_number,
-                        :reason, :created_by
-                    ) RETURNING movement_id
-                """),
-                {
-                    "org_id": str(context.org_id),
-                    "product_id": batch.product_id,
-                    "batch_id": batch.batch_id,
-                    "quantity": batch.quantity_available,
-                    "location_id": context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
-                    "reference_number": f"EXP-{batch.batch_number}",
-                    "reason": f"Batch expired on {batch.expiry_date}",
-                    "created_by": context.user_id
-                }
-            ).scalar()
+            # Use InventoryService for expiry movement
+            movement_data = StockMovementCreate(
+                org_id=context.org_id,
+                product_id=batch.product_id,
+                batch_id=batch.batch_id,
+                movement_type="stock_expiry",
+                movement_direction="out",
+                movement_date=date.today(),
+                quantity=batch.quantity_available,
+                location_id=context.primary_branch_id or get_default_branch_id(db, str(context.org_id)),
+                reference_type="expiry",
+                reference_number=f"EXP-{batch.batch_number}",
+                reason=f"Batch expired on {batch.expiry_date}",
+                created_by=context.user_id
+            )
             
-            # Update batch
+            movement_result = InventoryService.record_stock_movement(db, movement_data)
+            
+            # Update batch status (additional business logic not in service)
             db.execute(
                 text("""
                     UPDATE inventory.batches 
-                    SET quantity_available = 0,
-                        batch_status = 'expired'
+                    SET batch_status = 'expired'
                     WHERE batch_id = :batch_id
                 """),
                 {"batch_id": batch.batch_id}
             )
             
             adjustments_created.append({
-                "movement_id": movement_id,
+                "movement_id": movement_result.movement_id,
                 "batch_id": batch.batch_id,
                 "batch_number": batch.batch_number,
                 "product_name": batch.product_name,

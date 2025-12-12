@@ -6,7 +6,7 @@
 
 import offlineDB from './offlineDatabase';
 import { productAPI } from '../api';
-import { customersApi } from '../api/modules/customers.api';
+import { customersApi } from '../api';
 
 class LocalFirstService {
   constructor() {

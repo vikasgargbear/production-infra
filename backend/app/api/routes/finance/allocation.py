@@ -13,7 +13,7 @@ from decimal import Decimal
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
+from ....core.constants import InvoiceStatus, PaymentRecordStatus, PartyType, InvoicePaymentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def allocate_payment(
             raise HTTPException(status_code=404, detail="Invoice not found")
         
         # Verify customer matches
-        if payment_check.party_type == 'customer' and payment_check.party_id != invoice_check.customer_id:
+        if payment_check.party_type == PartyType.CUSTOMER.value and payment_check.party_id != invoice_check.customer_id:
             raise HTTPException(
                 status_code=400, 
                 detail="Payment and invoice belong to different customers"
@@ -441,10 +441,13 @@ async def get_unallocated_payments(
             WHERE org_id = :org_id
             AND allocation_status != 'full'
             AND unallocated_amount > 0
-            AND payment_status != 'cancelled'
+            AND payment_status != :cancelled_status
         """
         
-        params = {"org_id": str(context.org_id)}
+        params = {
+            "org_id": str(context.org_id),
+            "cancelled_status": PaymentRecordStatus.CANCELLED.value
+        }
         
         if party_id:
             query += " AND party_id = :party_id"
@@ -498,11 +501,14 @@ async def get_unpaid_invoices(
                 final_amount - allocated_amount as due_amount,
                 payment_status
             FROM sales.invoices
-            WHERE invoice_status != 'cancelled'
-            AND payment_status != 'paid'
+            WHERE invoice_status != :cancelled_status
+            AND payment_status != :paid_status
         """
         
-        params = {}
+        params = {
+            "cancelled_status": InvoiceStatus.CANCELLED.value,
+            "paid_status": InvoicePaymentStatus.PAID.value
+        }
         
         if customer_id:
             query += " AND customer_id = :customer_id"

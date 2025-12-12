@@ -64,37 +64,58 @@ async def create_customer(
     - **credit_days**: Payment terms in days (default: 0)
     """
     try:
+        customer_data = customer.dict()
+        
+        # Validate customer data using service (GSTIN, PAN, phone validation)
+        validation = CustomerService.validate_customer_data(customer_data)
+        if not validation["valid"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Validation failed: {', '.join(validation['errors'])}"
+            )
+        
+        # Use validated and enriched data
+        validated_data = validation["data"]
+        
+        # Check for duplicate customers (GSTIN and phone)
+        duplicate_check = CustomerService.check_duplicate_customer(
+            db, context.org_id,
+            gst_number=validated_data.get("gst_number"),
+            primary_phone=validated_data.get("primary_phone")
+        )
+        if duplicate_check["has_duplicates"]:
+            raise HTTPException(
+                status_code=409,  # Conflict
+                detail=duplicate_check["duplicates"][0]["message"]
+            )
+        
         # Generate customer code
         customer_code = CustomerService.generate_customer_code(db, customer.customer_name)
-        
-        # Create customer - check if area column exists
-        customer_data = customer.dict()
-        customer_data["customer_code"] = customer_code
         
         # Map schema fields to database columns - NO ALIASING, direct database names
         mapped_data = {
             "org_id": str(context.org_id),
             "customer_code": customer_code,
-            "customer_name": customer_data.get("customer_name"),
-            "customer_type": customer_data.get("customer_type"),
-            "business_type": customer_data.get("business_type", "retail_pharmacy"),
-            "primary_phone": customer_data.get("primary_phone"),
-            "primary_email": customer_data.get("primary_email"),
-            "secondary_phone": customer_data.get("secondary_phone"),
-            "whatsapp_number": customer_data.get("whatsapp_number", customer_data.get("secondary_phone")),
-            "contact_person_name": customer_data.get("contact_person_name"),
-            "contact_person_phone": customer_data.get("contact_person_phone"),
-            "contact_person_email": customer_data.get("contact_person_email"),
-            "gst_number": customer_data.get("gst_number"),
-            "pan_number": customer_data.get("pan_number"),
-            "drug_license_number": customer_data.get("drug_license_number"),
-            "drug_license_validity": customer_data.get("drug_license_validity"),
-            "credit_limit": customer_data.get("credit_limit", 0),
-            "credit_days": customer_data.get("credit_days", 0),
-            "credit_rating": customer_data.get("credit_rating", "NEW"),
-            "payment_terms": customer_data.get("payment_terms", "CASH"),
-            "internal_notes": customer_data.get("internal_notes"),
-            "is_active": customer_data.get("is_active", True)
+            "customer_name": validated_data.get("customer_name"),
+            "customer_type": validated_data.get("customer_type"),
+            "business_type": validated_data.get("business_type", "retail_pharmacy"),
+            "primary_phone": validated_data.get("primary_phone"),
+            "primary_email": validated_data.get("primary_email"),
+            "secondary_phone": validated_data.get("secondary_phone"),
+            "whatsapp_number": validated_data.get("whatsapp_number", validated_data.get("secondary_phone")),
+            "contact_person_name": validated_data.get("contact_person_name"),
+            "contact_person_phone": validated_data.get("contact_person_phone"),
+            "contact_person_email": validated_data.get("contact_person_email"),
+            "gst_number": validated_data.get("gst_number"),
+            "pan_number": validated_data.get("pan_number"),
+            "drug_license_number": validated_data.get("drug_license_number"),
+            "drug_license_validity": validated_data.get("drug_license_validity"),
+            "credit_limit": validated_data.get("credit_limit", 0),
+            "credit_days": validated_data.get("credit_days", 0),
+            "credit_rating": validated_data.get("credit_rating", "NEW"),
+            "payment_terms": validated_data.get("payment_terms", "CASH"),
+            "internal_notes": validated_data.get("internal_notes"),
+            "is_active": validated_data.get("is_active", True)
         }
         
         # Create customer with correct column names
@@ -423,25 +444,54 @@ async def update_customer(
         if not exists:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
-        # Build update query - use database field names directly (NO ALIASING)
-        update_fields = []
-        params = {"id": customer_id}
+        # Get update data
+        update_data = customer_update.dict(exclude_unset=True)
         
-        for field, value in customer_update.dict(exclude_unset=True).items():
-            if value is not None:
-                update_fields.append(f"{field} = :{field}")
-                params[field] = value
-        
-        if update_fields:
-            update_fields.append("updated_at = CURRENT_TIMESTAMP")
-            query = f"""
-                UPDATE parties.customers 
-                SET {', '.join(update_fields)}
-                WHERE customer_id = :id
-            """
+        # Validate update data using CustomerService
+        if update_data:
+            validation = CustomerService.validate_customer_data(update_data)
+            if not validation["valid"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Validation failed: {', '.join(validation['errors'])}"
+                )
             
-            db.execute(text(query), params)
-            db.commit()
+            # Use validated data
+            validated_data = validation["data"]
+            
+            # Check for duplicates (excluding current customer)
+            if validated_data.get("gst_number") or validated_data.get("primary_phone"):
+                duplicate_check = CustomerService.check_duplicate_customer(
+                    db, context.org_id,
+                    gst_number=validated_data.get("gst_number"),
+                    primary_phone=validated_data.get("primary_phone"),
+                    exclude_id=customer_id
+                )
+                if duplicate_check["has_duplicates"]:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=duplicate_check["duplicates"][0]["message"]
+                    )
+        
+            # Build update query - use database field names directly (NO ALIASING)
+            update_fields = []
+            params = {"id": customer_id}
+            
+            for field, value in validated_data.items():
+                if value is not None:
+                    update_fields.append(f"{field} = :{field}")
+                    params[field] = value
+            
+            if update_fields:
+                update_fields.append("updated_at = CURRENT_TIMESTAMP")
+                query = f"""
+                    UPDATE parties.customers 
+                    SET {', '.join(update_fields)}
+                    WHERE customer_id = :id
+                """
+                
+                db.execute(text(query), params)
+                db.commit()
         
         # Return updated customer
         return await get_customer(customer_id, context, db)

@@ -81,7 +81,7 @@ export const getMovementSign = (movementType) => {
 };
 
 // API
-export { stockApi } from '../../services/api/modules/stock.api';
+export { stockApi } from '../../services/api';
 
 // Data Transformer
 export { stockDataTransformer } from '../../services/api/utils/stockDataTransformer';

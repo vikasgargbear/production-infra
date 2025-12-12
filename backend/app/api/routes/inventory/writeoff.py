@@ -163,7 +163,7 @@ async def create_stock_writeoff(
         
         # Generate writeoff ID and number
         writeoff_id = str(uuid.uuid4())
-        writeoff_number = f"WO-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        writeoff_number = DocumentNumberService.generate_number(db, "writeoff", org_id)
         
         # Check if ITC reversal is required
         requires_itc_reversal = WRITE_OFF_GST_ACTIONS.get(request.reason, "itc_reversal") == "itc_reversal"

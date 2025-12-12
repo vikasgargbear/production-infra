@@ -2,7 +2,7 @@
 Sale Return API Router
 Handles returns of sold items with inventory and ledger adjustments
 
-PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
+MODERNIZED: Uses TenantAwareSession + centralized schemas from schemas/returns.py
 """
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
@@ -17,32 +17,19 @@ import uuid
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
+from ....core.constants import ReturnStatus, StockMovementType
 from ...services.document_number_service import DocumentNumberService
+from ...services.gst_service import GSTService
+from ...services.inventory_service import InventoryService
+from ...services.return_service import ReturnService
+from ...schemas.inventory import StockMovementCreate
+from ...schemas.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
 from ....utils.branch_utils import get_default_branch_id
+from datetime import date
 
-# Pydantic models for request validation
-class ReturnItem(BaseModel):
-    product_id: int
-    invoice_item_id: Optional[int] = None
-    batch_id: Optional[int] = None
-    batch_no: Optional[str] = None
-    return_quantity: float
-    quantity: Optional[float] = None  # Alias for return_quantity
-    rate: float
-    tax_percent: float = 0
-    discount_percent: float = 0
-    unit: str = "PCS"
-    return_reason: Optional[str] = None
-
-class SaleReturnCreate(BaseModel):
-    customer_id: int
-    invoice_id: Optional[int] = None
-    return_date: str
-    return_reason: str
-    return_method: str = "credit_note"
-    return_category: str = "QUALITY"
-    notes: Optional[str] = ""
-    items: List[ReturnItem]
+# Note: Schema classes moved to schemas/returns.py
+# - ReturnItem (now SalesReturnItem)
+# - SaleReturnCreate (now SalesReturnCreate)
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +50,7 @@ async def generate_sales_return_number(
         return {"return_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate sales return number: {e}")
-        # Use service's fallback mechanism  
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"SRN-{current_year:02d}{timestamp:08d}"
-        return {"return_number": fallback_number}
+        raise HTTPException(status_code=500, detail=f"Failed to generate return number: {str(e)}")
 
 @router.get("/")
 @with_tenant_context
@@ -487,18 +470,20 @@ async def create_sale_return(
             discount_amount = (base_amount * discount_percent) / 100
             taxable_amount = base_amount - discount_amount
             
-            # Calculate tax on discounted amount
-            item_tax = (taxable_amount * tax_percent) / 100
-            
-            # For intra-state, split tax into CGST and SGST
-            # TODO: Check if inter-state based on customer state vs org state
-            item_cgst = item_tax / 2
-            item_sgst = item_tax / 2
+            # Use GSTService for consistent tax calculations
+            # TODO: Determine gst_type based on customer state vs org state
+            gst_type = "CGST/SGST"  # Default to intra-state
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            item_tax = gst_components["total_tax_amount"]
+            item_cgst = gst_components["cgst_amount"]
+            item_sgst = gst_components["sgst_amount"]
+            item_igst = gst_components["igst_amount"]
             
             subtotal += taxable_amount  # Subtotal is the taxable amount after discount
             tax_amount += item_tax
             cgst_amount += item_cgst
             sgst_amount += item_sgst
+            igst_amount += item_igst
             total_amount += taxable_amount + item_tax
             
         # SECURITY FIX: Get branch_id and created_by from authenticated context
@@ -637,78 +622,41 @@ async def create_sale_return(
                             detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
                         )
             
-            # Calculate return value after discount
-            base_value = return_qty * unit_price
-            discount_amount = base_value * discount_percent / 100
-            return_value = base_value - discount_amount
+            # Calculate return value using ReturnService (eliminates inline calculation)
+            return_calc = ReturnService.calculate_return_value(
+                return_qty, unit_price, discount_percent, tax_percent
+            )
+            return_value = return_calc["return_value"]
             
-            # Calculate tax
-            item_tax_amount = return_value * tax_percent / 100
+            # Calculate tax using GSTService for consistency
+            gst = GSTService.calculate_gst_components(return_value, tax_percent, "CGST/SGST")
+            item_tax_amount = gst["total_tax_amount"]
             
-            # Get batch_id from batch_number if not provided
-            batch_id = item.get("batch_id")
-            batch_number = item.get("batch_no") or item.get("batch_number")
+            # Resolve batch using ReturnService (eliminates ~30 lines of inline code)
+            batch_id, batch_number = ReturnService.resolve_batch(
+                db,
+                product_id=item["product_id"],
+                batch_number=item.get("batch_no") or item.get("batch_number"),
+                batch_id=item.get("batch_id"),
+                source_item_id=invoice_item_id,
+                source_type="sales_invoice"
+            )
             
-            # If this is from invoice and we don't have batch info, get from invoice_item
-            if invoice_item_id and not batch_number and not batch_id:
-                invoice_batch = db.execute(
-                    text("""
-                        SELECT batch_number, batch_id
-                        FROM sales.invoice_items
-                        WHERE invoice_item_id = :invoice_item_id
-                    """),
-                    {"invoice_item_id": invoice_item_id}
-                ).fetchone()
-                
-                if invoice_batch:
-                    batch_number = invoice_batch.batch_number or invoice_batch[0]
-                    batch_id = invoice_batch.batch_id or invoice_batch[1]
-            
-            # If we have batch_number but no batch_id, look it up
-            if batch_number and not batch_id:
-                batch_result = db.execute(
-                    text("""
-                        SELECT batch_id 
-                        FROM inventory.batches 
-                        WHERE batch_number = :batch_number 
-                        AND product_id = :product_id
-                        LIMIT 1
-                    """),
-                    {
-                        "batch_number": batch_number,
-                        "product_id": item["product_id"]
-                    }
-                ).fetchone()
-                
-                if batch_result:
-                    batch_id = batch_result.batch_id
-            
-            # Determine disposition and quantities based on return reason and restock flag
+            # Determine disposition using ReturnService (eliminates ~20 lines of inline code)
             item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
-            
-            # Check for explicit restock flag from frontend
             should_restock = item.get("restock", None)
             
-            # Define reason categories that result in damaged/unsaleable items
-            damaged_reasons = [
-                "damaged", "broken", "expired", "expiry", "quality issue", "defective", 
-                "contaminated", "leaking", "melted", "manufacturing defect"
-            ]
+            disposition, is_damaged = ReturnService.determine_disposition(
+                item_return_reason, explicit_restock=should_restock
+            )
             
-            # Check if the reason indicates damaged/unsaleable items
-            is_damaged = any(reason in item_return_reason.lower() for reason in damaged_reasons)
-            
-            # Use explicit restock flag if provided, otherwise determine from reason
-            if should_restock is False or is_damaged:
-                # Items are damaged/not restockable
+            # Set quantities based on disposition
+            if is_damaged or should_restock is False:
                 damaged_qty = float(return_qty)
                 saleable_qty = 0
-                disposition = item.get("disposition", "DESTROY" if is_damaged else "QUARANTINE")
             else:
-                # Items are saleable and can be restocked
                 damaged_qty = 0
                 saleable_qty = float(return_qty)
-                disposition = item.get("disposition", "RESTOCK")
             
             # Insert return item using correct schema
             db.execute(
@@ -808,7 +756,7 @@ async def create_sale_return(
                     )
                 # Note: Items in quarantine need manual batch assignment later
             
-            # Track inventory movement for return
+            # Track inventory movement for return using InventoryService
             if batch_id or item["product_id"]:
                 movement_quantity = float(return_qty)
                 movement_type = 'RETURN' if saleable_qty > 0 else 'RETURN_DAMAGED'
@@ -818,34 +766,26 @@ async def create_sale_return(
                 if invoice_id:
                     movement_note = f"Return #{return_number} from Invoice ID: {invoice_id}"
                 
-                db.execute(
-                    text("""
-                        INSERT INTO inventory.inventory_movements (
-                            org_id, movement_type, movement_date, movement_direction,
-                            product_id, batch_id, quantity, base_quantity,
-                            location_id, reference_type, reference_id, reference_number,
-                            reason, notes, created_by
-                        ) VALUES (
-                            :org_id, :movement_type, CURRENT_TIMESTAMP, 'IN',
-                            :product_id, :batch_id, :quantity, :quantity,
-                            :location_id, 'SALES_RETURN', :return_id, :return_number,
-                            :reason, :notes, :created_by
-                        )
-                    """),
-                    {
-                        "org_id": org_id,
-                        "movement_type": movement_type,
-                        "product_id": item["product_id"],
-                        "batch_id": batch_id,
-                        "quantity": movement_quantity,
-                        "return_id": return_id,
-                        "return_number": return_number,
-                        "reason": item_return_reason,
-                        "notes": movement_note,
-                        "created_by": created_by,
-                        "location_id": branch_id  # Uses org's default location from get_default_branch_id
-                    }
+                # Use InventoryService for stock movement
+                movement_data = StockMovementCreate(
+                    org_id=uuid.UUID(org_id) if isinstance(org_id, str) else org_id,
+                    product_id=item["product_id"],
+                    batch_id=batch_id,
+                    movement_type=movement_type,
+                    movement_direction="in",
+                    movement_date=date.today(),
+                    quantity=int(movement_quantity),
+                    base_quantity=int(movement_quantity),
+                    location_id=branch_id,
+                    reference_type="SALES_RETURN",
+                    reference_id=return_id,
+                    reference_number=return_number,
+                    reason=item_return_reason,
+                    notes=movement_note,
+                    created_by=created_by
                 )
+                
+                InventoryService.record_stock_movement(db, movement_data)
                 
         # TODO: Update party ledger when table is available
         # For now, we'll skip ledger updates to avoid errors
@@ -953,7 +893,7 @@ async def cancel_sale_return(
         if not sale_return:
             raise HTTPException(status_code=404, detail="Sale return not found")
             
-        if sale_return.return_status == "cancelled":
+        if sale_return.return_status == ReturnStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Return already cancelled")
             
         # Get return items to reverse inventory
@@ -984,11 +924,11 @@ async def cancel_sale_return(
         db.execute(
             text("""
                 UPDATE sale_returns 
-                SET return_status = 'cancelled',
+                SET return_status = :cancelled_status,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE return_id = :return_id
             """),
-            {"return_id": return_id}
+            {"return_id": return_id, "cancelled_status": ReturnStatus.CANCELLED.value}
         )
         
         db.commit()

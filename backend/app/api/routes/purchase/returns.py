@@ -18,7 +18,12 @@ from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, Te
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
 from ...services.document_number_service import DocumentNumberService
+from ...services.gst_service import GSTService
+from ...services.inventory_service import InventoryService
+from ...services.return_service import ReturnService
+from ...schemas.inventory import StockMovementCreate
 from ....utils.branch_utils import get_default_branch_id
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +192,7 @@ async def create_purchase_return(
         ).fetchone()
         
         if supplier and supplier.gst_number:
-            debit_note_no = f"DN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            debit_note_no = DocumentNumberService.generate_number(db, "debit_note", org_id)
         
         # Calculate totals
         subtotal = Decimal("0")
@@ -211,14 +216,15 @@ async def create_purchase_return(
             taxable_value = base_value - discount_amount
             
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            item_tax = taxable_value * tax_percent / 100
+            
+            # Use GSTService for consistent tax calculations
+            gst = GSTService.calculate_gst_components(taxable_value, tax_percent, "CGST/SGST")
+            item_tax = gst["total_tax_amount"]
             
             subtotal += taxable_value
             tax_amount += item_tax
-            
-            # Assume CGST/SGST split
-            cgst_amount += item_tax / 2
-            sgst_amount += item_tax / 2
+            cgst_amount += gst["cgst_amount"]
+            sgst_amount += gst["sgst_amount"]
             
             item_total = taxable_value + item_tax
             total_amount += item_total
@@ -314,99 +320,54 @@ async def create_purchase_return(
                             detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
                         )
             
-            # Calculate values
+            # Calculate base value
             base_value = return_qty * unit_price
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             
             # Check if tax_percent was explicitly provided by frontend
-            # Frontend can explicitly set tax_percent=0 to indicate "no GST return"
             tax_percent_provided = "tax_percent" in item and item["tax_percent"] is not None
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
             
-            # If tax_percent NOT explicitly provided, fetch from supplier invoice/GRN
-            if invoice_item_id and not tax_percent_provided:
-                invoice_item_details = db.execute(
-                    text("""
-                        SELECT 
-                            COALESCE(sii.cgst_percent, 0) + COALESCE(sii.sgst_percent, 0) + COALESCE(sii.igst_percent, 0) as gst_percent,
-                            sii.discount_percent
-                        FROM procurement.supplier_invoice_items sii
-                        WHERE sii.invoice_item_id = :invoice_item_id
-                    """),
-                    {"invoice_item_id": invoice_item_id}
-                ).fetchone()
-                
-                if invoice_item_details and invoice_item_details.gst_percent:
-                    tax_percent = Decimal(str(invoice_item_details.gst_percent))
-                    logger.info(f"Fetched tax_percent {tax_percent}% from supplier invoice item {invoice_item_id}")
-                elif grn_item_id:
-                    # Fallback to GRN item
-                    grn_tax = db.execute(
-                        text("""
-                            SELECT tax_percent FROM procurement.grn_items WHERE grn_item_id = :grn_item_id
-                        """),
-                        {"grn_item_id": grn_item_id}
-                    ).fetchone()
-                    if grn_tax and grn_tax.tax_percent:
-                        tax_percent = Decimal(str(grn_tax.tax_percent))
-                        logger.info(f"Fetched tax_percent {tax_percent}% from GRN item {grn_item_id}")
+            # If tax_percent NOT explicitly provided, use ReturnService to fetch from source
+            if not tax_percent_provided:
+                tax_percent = ReturnService.resolve_tax_from_supplier_invoice(
+                    db, invoice_item_id, grn_item_id, tax_percent_explicitly_provided=tax_percent_provided
+                )
             
-            discount_amount = base_value * discount_percent / 100
-            return_value = base_value - discount_amount
+            # Calculate return value using ReturnService
+            return_calc = ReturnService.calculate_return_value(
+                return_qty, unit_price, discount_percent, tax_percent
+            )
+            return_value = return_calc["return_value"]
             
-            item_tax_amount = return_value * tax_percent / 100
+            # Use GSTService for consistent tax calculations
+            gst = GSTService.calculate_gst_components(return_value, tax_percent, "CGST/SGST")
+            item_tax_amount = gst["total_tax_amount"]
             
-            # Get batch information
-            batch_id = item.get("batch_id")
-            batch_number = item.get("batch_number")
+            # Resolve batch using ReturnService
+            batch_id, batch_number = ReturnService.resolve_batch(
+                db,
+                product_id=item["product_id"],
+                batch_number=item.get("batch_number"),
+                batch_id=item.get("batch_id"),
+                source_item_id=grn_item_id,
+                source_type="grn"
+            )
             
-            # If GRN item, get batch info from there
-            if grn_item_id and not batch_number:
-                grn_batch = db.execute(
-                    text("""
-                        SELECT batch_number, batch_id
-                        FROM procurement.grn_items
-                        WHERE grn_item_id = :grn_item_id
-                    """),
-                    {"grn_item_id": grn_item_id}
-                ).fetchone()
-                
-                if grn_batch:
-                    batch_number = grn_batch.batch_number
-                    batch_id = grn_batch.batch_id
-            
-            # If we have batch_number but no batch_id, look it up
-            if batch_number and not batch_id:
-                batch_result = db.execute(
-                    text("""
-                        SELECT batch_id 
-                        FROM inventory.batches 
-                        WHERE batch_number = :batch_number 
-                        AND product_id = :product_id
-                        LIMIT 1
-                    """),
-                    {
-                        "batch_number": batch_number,
-                        "product_id": item["product_id"]
-                    }
-                ).fetchone()
-                
-                if batch_result:
-                    batch_id = batch_result.batch_id
-            
-            # Determine disposition
+            # Determine disposition using ReturnService
             item_return_reason = item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
-            damaged_reasons = ["damaged", "broken", "expired", "expiry", "quality issue", "defective"]
-            is_damaged = any(reason in item_return_reason.lower() for reason in damaged_reasons)
+            disposition, is_damaged = ReturnService.determine_disposition(item_return_reason)
+            
+            # For purchase returns, override disposition to RETURN_TO_SUPPLIER if not damaged
+            if not is_damaged:
+                disposition = "RETURN_TO_SUPPLIER"
             
             if is_damaged:
                 damaged_qty = float(return_qty)
                 saleable_qty = 0
-                disposition = "DESTROY"
             else:
                 damaged_qty = 0
                 saleable_qty = float(return_qty)
-                disposition = "RETURN_TO_SUPPLIER"
             
             # Insert return item
             db.execute(
@@ -461,39 +422,31 @@ async def create_purchase_return(
                     }
                 )
             
-            # Track inventory movement
+            # Track inventory movement using InventoryService
             if batch_id or item["product_id"]:
                 movement_type = 'PURCHASE_RETURN'
                 movement_note = f"Purchase Return #{return_number} to {supplier.supplier_name}"
                 
-                db.execute(
-                    text("""
-                        INSERT INTO inventory.inventory_movements (
-                            org_id, movement_type, movement_date, movement_direction,
-                            product_id, batch_id, quantity, base_quantity,
-                            location_id, reference_type, reference_id, reference_number,
-                            reason, notes, created_by
-                        ) VALUES (
-                            :org_id, :movement_type, CURRENT_TIMESTAMP, 'OUT',
-                            :product_id, :batch_id, :quantity, :quantity,
-                            :location_id, 'PURCHASE_RETURN', :return_id, :return_number,
-                            :reason, :notes, :created_by
-                        )
-                    """),
-                    {
-                        "org_id": org_id,
-                        "movement_type": movement_type,
-                        "product_id": item["product_id"],
-                        "batch_id": batch_id,
-                        "quantity": float(return_qty),
-                        "return_id": return_id,
-                        "return_number": return_number,
-                        "reason": item_return_reason,
-                        "notes": movement_note,
-                        "created_by": user_id,
-                        "location_id": branch_id  # Uses org's default location from get_default_branch_id
-                    }
+                # Use InventoryService for stock movement
+                movement_data = StockMovementCreate(
+                    org_id=uuid.UUID(org_id) if isinstance(org_id, str) else org_id,
+                    product_id=item["product_id"],
+                    batch_id=batch_id,
+                    movement_type=movement_type,
+                    movement_direction="out",
+                    movement_date=date.today(),
+                    quantity=int(float(return_qty)),
+                    base_quantity=int(float(return_qty)),
+                    location_id=branch_id,
+                    reference_type="PURCHASE_RETURN",
+                    reference_id=return_id,
+                    reference_number=return_number,
+                    reason=item_return_reason,
+                    notes=movement_note,
+                    created_by=user_id
                 )
+                
+                InventoryService.record_stock_movement(db, movement_data)
         
         db.commit()
         

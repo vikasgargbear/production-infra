@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { productAPI } from '../../services/api/apiClientExports';
+import { productsApi as productAPI } from '../../services/api';
 import { useCallback } from 'react';
 import { Product, ProductCreateInput } from '../../types/models/product';
 
@@ -39,7 +39,7 @@ export function useProductSearch(
 ) {
   return useQuery<ApiResponse<Product[]>>(
     productKeys.search(query, params),
-    () => productAPI.search(query, { 
+    () => productAPI.search(query, {
       limit: params?.limit || 50,
       category: params?.category,
       manufacturer: params?.manufacturer
@@ -78,7 +78,7 @@ export function useCreateProduct(
   options?: UseMutationOptions<ApiResponse<Product>, unknown, ProductCreateInput>
 ) {
   const queryClient = useQueryClient();
-  
+
   return useMutation(
     (data: ProductCreateInput) => productAPI.create(data),
     {

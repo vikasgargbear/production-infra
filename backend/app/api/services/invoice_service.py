@@ -9,6 +9,12 @@ from sqlalchemy import text
 import logging
 from uuid import UUID
 
+from .document_number_service import DocumentNumberService
+from .gst_service import GSTService
+from ...core.constants import (
+    InvoiceType, InvoiceStatus, InvoicePaymentStatus, OrderStatus
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,49 +25,28 @@ class InvoiceService:
     def generate_invoice_for_order(db: Session, order_id: int, invoice_date: date, org_id: UUID) -> Dict[str, Any]:
         """Generate a comprehensive invoice for an order"""
         
-        # Check if area column exists
-        area_exists = db.execute(text("""
-            SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.columns 
-                WHERE table_name = 'customers' 
-                AND column_name = 'area'
-            )
-        """)).scalar()
-        
-        # Get order details with customer info
-        if area_exists:
-            order = db.execute(text("""
-                SELECT 
-                    o.*,
-                    c.customer_name, c.customer_code,
-                    c.gst_number, c.pan_number,
-                    'Address not in customers table' as address_line1, NULL as address_line2, NULL as area, 'City not in customers table' as city, 'State not in customers table' as state, NULL as pincode,
-                    c.primary_phone, c.primary_email,
-                    c.credit_days
-                FROM sales.orders o
-                JOIN parties.customers c ON o.customer_id = c.customer_id
-                WHERE o.order_id = :order_id AND o.org_id = :org_id
-            """), {"order_id": order_id, "org_id": org_id}).fetchone()
-        else:
-            order = db.execute(text("""
-                SELECT 
-                    o.*,
-                    c.customer_name, c.customer_code,
-                    c.gst_number, c.pan_number,
-                    'Address not in customers table' as address_line1, NULL as address_line2, NULL as area, 'City not in customers table' as city, 'State not in customers table' as state, NULL as pincode,
-                    c.primary_phone, c.primary_email,
-                    c.credit_days
-                FROM sales.orders o
-                JOIN parties.customers c ON o.customer_id = c.customer_id
-                WHERE o.order_id = :order_id AND o.org_id = :org_id
-            """), {"order_id": order_id, "org_id": org_id}).fetchone()
+        # Get order with customer and address info (use addresses table)
+        order = db.execute(text("""
+            SELECT 
+                o.*,
+                c.customer_name, c.customer_code,
+                c.gst_number, c.pan_number,
+                c.primary_phone, c.primary_email,
+                c.credit_days,
+                a.address_line1, a.address_line2, a.city, a.state_name as state, a.pincode
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN master.addresses a ON a.entity_type = 'customer' 
+                AND a.entity_id = c.customer_id 
+                AND a.is_default = true
+            WHERE o.order_id = :order_id AND o.org_id = :org_id
+        """), {"order_id": order_id, "org_id": str(org_id)}).fetchone()
         
         if not order:
             raise ValueError(f"Order {order_id} not found")
         
-        # Generate invoice number
-        invoice_number = InvoiceService.generate_invoice_number(db)
+        # Generate invoice number using DocumentNumberService
+        invoice_number = DocumentNumberService.generate_number(db, "invoice", str(org_id))
         
         # Prepare customer addresses
         billing_address = InvoiceService.format_address(order)
@@ -70,13 +55,25 @@ class InvoiceService:
         # Calculate due date based on credit days
         due_date = invoice_date + timedelta(days=order.credit_days or 0)
         
-        # Calculate GST amounts
-        gst_details = InvoiceService.calculate_gst_breakup(
-            order.subtotal_amount, 
-            order.discount_amount, 
-            order.tax_amount,
-            order.state == "Maharashtra"  # Same state for CGST/SGST
-        )
+        # Get org state for intra-state check
+        org_state = db.execute(text("""
+            SELECT state_code FROM master.branches 
+            WHERE org_id = :org_id AND is_primary = true
+            LIMIT 1
+        """), {"org_id": str(org_id)}).scalar()
+        
+        # Determine if same state for CGST/SGST vs IGST
+        customer_state = GSTService.extract_state_code(order.gst_number) if order.gst_number else None
+        is_same_state = org_state == customer_state if org_state and customer_state else True
+        
+        # Calculate GST amounts using GSTService pattern
+        taxable_amount = (order.subtotal_amount or Decimal("0")) - (order.discount_amount or Decimal("0"))
+        gst_details = {
+            "taxable_amount": taxable_amount,
+            "cgst_amount": order.tax_amount / 2 if is_same_state else Decimal("0"),
+            "sgst_amount": order.tax_amount / 2 if is_same_state else Decimal("0"),
+            "igst_amount": order.tax_amount if not is_same_state else Decimal("0")
+        }
         
         # Create invoice record
         invoice_data = {
@@ -98,9 +95,9 @@ class InvoiceService:
             "total_tax_amount": order.tax_amount,
             "round_off_amount": order.round_off_amount or Decimal("0"),
             "total_amount": order.final_amount,
-            "payment_status": "unpaid",
+            "payment_status": InvoicePaymentStatus.UNPAID.value,
             "paid_amount": Decimal("0"),
-            "invoice_type": "tax_invoice",
+            "invoice_type": InvoiceType.TAX_INVOICE.value,
             "notes": f"Thank you for your business!",
             "created_at": datetime.now(),
             "updated_at": datetime.now()
@@ -132,12 +129,12 @@ class InvoiceService:
         invoice_id = result.scalar()
         
         # Copy order items to invoice items
-        InvoiceService.copy_order_items_to_invoice(db, order_id, invoice_id)
+        InvoiceService.copy_order_items_to_invoice(db, order_id, invoice_id, is_same_state)
         
         # Update order status and invoice details
         db.execute(text("""
             UPDATE sales.orders
-            SET order_status = 'invoiced',
+            SET order_status = :order_status,
                 invoice_number = :invoice_number,
                 invoice_date = :invoice_date,
                 updated_at = CURRENT_TIMESTAMP
@@ -145,7 +142,8 @@ class InvoiceService:
         """), {
             "order_id": order_id,
             "invoice_number": invoice_number,
-            "invoice_date": invoice_date
+            "invoice_date": invoice_date,
+            "order_status": OrderStatus.INVOICED.value
         })
         
         return {
@@ -160,24 +158,7 @@ class InvoiceService:
             "pdf_url": None  # Will be generated separately
         }
     
-    @staticmethod
-    def generate_invoice_number(db: Session) -> str:
-        """Generate unique invoice number"""
-        # Format: INV-YYYY-MM-XXXXX
-        today = date.today()
-        prefix = f"INV-{today.strftime('%Y-%m')}"
-        
-        # Get the next sequence number for this month
-        result = db.execute(text("""
-            SELECT COUNT(*) + 1 as next_num
-            FROM sales.invoices
-            WHERE invoice_number LIKE :prefix || '%'
-        """), {"prefix": prefix})
-        
-        next_num = result.scalar() or 1
-        # Start from 10000 to make numbers appear larger
-        display_num = 10000 + next_num - 1
-        return f"{prefix}-{display_num:05d}"
+    # generate_invoice_number removed - use DocumentNumberService.generate_number(db, "invoice", org_id)
     
     @staticmethod
     def format_address(customer_row) -> str:
@@ -197,32 +178,10 @@ class InvoiceService:
         
         return ", ".join(address_parts)
     
-    @staticmethod
-    def calculate_gst_breakup(subtotal: Decimal, discount: Decimal, 
-                            total_tax: Decimal, is_same_state: bool) -> Dict[str, Decimal]:
-        """Calculate CGST/SGST or IGST based on location"""
-        taxable_amount = subtotal - discount
-        
-        if is_same_state:
-            # Split into CGST and SGST
-            cgst_amount = total_tax / 2
-            sgst_amount = total_tax / 2
-            igst_amount = Decimal("0")
-        else:
-            # All tax as IGST
-            cgst_amount = Decimal("0")
-            sgst_amount = Decimal("0")
-            igst_amount = total_tax
-        
-        return {
-            "taxable_amount": taxable_amount,
-            "cgst_amount": cgst_amount,
-            "sgst_amount": sgst_amount,
-            "igst_amount": igst_amount
-        }
+    # calculate_gst_breakup removed - logic is inlined in generate_invoice_for_order
     
     @staticmethod
-    def copy_order_items_to_invoice(db: Session, order_id: int, invoice_id: int):
+    def copy_order_items_to_invoice(db: Session, order_id: int, invoice_id: int, is_same_state: bool = True):
         """Copy order items to invoice items table"""
         db.execute(text("""
             INSERT INTO sales.invoice_items (
@@ -248,7 +207,7 @@ class InvoiceService:
         """), {
             "invoice_id": invoice_id,
             "order_id": order_id,
-            "is_same_state": True  # Simplified for now
+            "is_same_state": is_same_state
         })
     
     @staticmethod

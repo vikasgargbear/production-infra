@@ -97,7 +97,7 @@ export const groupByAgingBucket = (transactions: Transaction[], referenceDate: D
 };
 
 // API
-export { ledgerApi } from '../../services/api/modules/ledger.api';
+export { ledgerApi } from '../../services/api';
 
 // Component interfaces
 interface LedgerComponents {

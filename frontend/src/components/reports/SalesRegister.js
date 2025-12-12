@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
+import {
+  FileText,
+  Download,
+  Calendar,
   Search,
   Filter,
   X,
@@ -10,7 +10,7 @@ import {
   Users,
   Package
 } from 'lucide-react';
-import { salesApi, customersApi, productsApi } from '../../services/api';
+import { invoicesApi, customersApi, productsApi } from '../../services/api';
 import * as XLSX from 'xlsx';
 
 const SalesRegister = ({ open, onClose }) => {
@@ -52,7 +52,7 @@ const SalesRegister = ({ open, onClose }) => {
     setLoading(true);
     try {
       const [salesResponse, customersResponse, productsResponse] = await Promise.all([
-        salesApi.getAll(),
+        invoicesApi.getAll(),
         customersApi.getAll(),
         productsApi.getAll()
       ]);
@@ -92,26 +92,26 @@ const SalesRegister = ({ open, onClose }) => {
 
     // Date filter
     if (filters.startDate) {
-      filtered = filtered.filter(sale => 
+      filtered = filtered.filter(sale =>
         new Date(sale.invoice_date || sale.created_at) >= new Date(filters.startDate)
       );
     }
     if (filters.endDate) {
-      filtered = filtered.filter(sale => 
+      filtered = filtered.filter(sale =>
         new Date(sale.invoice_date || sale.created_at) <= new Date(filters.endDate + 'T23:59:59')
       );
     }
 
     // Customer filter
     if (filters.customer) {
-      filtered = filtered.filter(sale => 
+      filtered = filtered.filter(sale =>
         sale.customerName.toLowerCase().includes(filters.customer.toLowerCase())
       );
     }
 
     // Invoice number filter
     if (filters.invoiceNo) {
-      filtered = filtered.filter(sale => 
+      filtered = filtered.filter(sale =>
         (sale.invoice_no || '').toLowerCase().includes(filters.invoiceNo.toLowerCase())
       );
     }
@@ -519,11 +519,10 @@ const SalesRegister = ({ open, onClose }) => {
                             ₹{(sale.netAmount || 0).toFixed(2)}
                           </td>
                           <td className="py-3 px-4 text-sm text-center">
-                            <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${
-                              sale.payment_status === 'paid' 
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
+                            <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${sale.payment_status === 'paid'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                              }`}>
                               {sale.payment_status || 'Pending'}
                             </span>
                           </td>

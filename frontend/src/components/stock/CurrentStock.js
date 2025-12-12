@@ -6,8 +6,8 @@ import {
   HelpCircle, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import apiClient from '../../services/api/apiClient';
-import { productsApi } from '../../services/api/modules/products.api';
-import { stockApi } from '../../services/api/modules/stock.api';
+import { productsApi } from '../../services/api';
+import { stockApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ModuleHeader } from '../global';
 import ProductEditModal from '../global/modals/ProductEditModal';

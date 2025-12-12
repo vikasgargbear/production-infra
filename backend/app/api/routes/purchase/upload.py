@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["purchase-upload"])
 
-def _check_supplier_in_result(extracted_data: dict, db: Session):
+def _check_supplier_in_result(extracted_data: dict, db: TenantAwareSession):
     """
     Check if supplier exists and add supplier info to result
     """
@@ -572,7 +572,7 @@ async def create_purchase_from_parsed(
             ).scalar()
         
         # 2. Create purchase order
-        purchase_number = f"PO-{datetime.now().strftime('%Y%m%d-%H%M')}"
+        purchase_number = DocumentNumberService.generate_number(db, "purchase_order", str(context.org_id))
         
         purchase_id = db.execute(
             text("""

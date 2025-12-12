@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircle, Share2, Calendar, Building2, Plus, Upload } from 'lucide-react';
 import { suppliersApi } from '../../services/api';
-import { purchasesApi } from '../../services/api/modules/purchases.api';
+import { purchasesApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
 import { 
   EnhancedGlobalDocumentFlow,

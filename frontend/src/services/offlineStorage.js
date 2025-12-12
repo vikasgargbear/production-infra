@@ -260,7 +260,7 @@ class OfflineStorageService {
   async syncStockAdjustment(data) {
     try {
       // Import the stock API dynamically to avoid circular dependencies
-      const { stockApi } = await import('./api/modules/stock.api.js');
+      const { stockApi } = await import('./api/modules/inventory/stock.api.js');
       const response = await stockApi.createAdjustment(data);
       return response.success;
     } catch (error) {
@@ -316,7 +316,7 @@ class OfflineStorageService {
   async syncPaymentRecord(data) {
     try {
       // Import the payments API dynamically to avoid circular dependencies
-      const { paymentsApi } = await import('./api/modules/payments.api.js');
+      const { paymentsApi } = await import('./api/modules/finance/payments.api.js');
       const response = await paymentsApi.createPayment(data);
       return response.success;
     } catch (error) {
@@ -330,7 +330,7 @@ class OfflineStorageService {
   async syncBatchUpdate(data) {
     try {
       // Import the stock API dynamically to avoid circular dependencies
-      const { stockApi } = await import('./api/modules/stock.api.js');
+      const { stockApi } = await import('./api/modules/inventory/stock.api.js');
       const response = await stockApi.updateBatch(data.batch_id, data.updates);
       return response.success;
     } catch (error) {
@@ -344,7 +344,7 @@ class OfflineStorageService {
   async syncInvoiceCreate(data) {
     try {
       // Import the invoices API dynamically to avoid circular dependencies
-      const { invoicesApi } = await import('./api/modules/invoices.api.js');
+      const { invoicesApi } = await import('./api/modules/sales/invoices.api.js');
       const response = await invoicesApi.createInvoice(data);
       return response.success;
     } catch (error) {

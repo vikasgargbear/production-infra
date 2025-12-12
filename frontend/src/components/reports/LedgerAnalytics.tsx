@@ -26,7 +26,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
-import { ledgerApi } from '../../services/api/modules/ledger.api';
+import { ledgerApi } from '../../services/api';
 import { DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import {

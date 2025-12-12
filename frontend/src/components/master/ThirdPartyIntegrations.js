@@ -6,7 +6,7 @@ import {
   CreditCard, BarChart3, ExternalLink, Shield,
   Loader2, Info, ChevronRight, Search, RefreshCw
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { settingsApi } from '../../services/api';
 
 const ThirdPartyIntegrations = ({ open, onClose }) => {
   const [activeIntegration, setActiveIntegration] = useState(null);

@@ -15,7 +15,12 @@ from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, Te
 from ....core.org_context import get_org_context, OrgContext
 from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
+from ....core.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
 from ...services.document_number_service import DocumentNumberService
+from ...services.gst_service import GSTService
+from ...services.inventory_service import InventoryService
+from ...schemas.inventory import StockMovementCreate
+from decimal import Decimal
 # Consolidated: using main DocumentNumberService
 from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
 from ....services.settings_service import SettingsService  # NEW: Settings enforcement
@@ -40,11 +45,7 @@ async def generate_invoice_number(
         return {"invoice_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate invoice number: {e}")
-        # Use service's fallback mechanism  
-        current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
-        fallback_number = f"INV-{current_year:02d}{timestamp:08d}"
-        return {"invoice_number": fallback_number}
+        raise HTTPException(status_code=500, detail=f"Failed to generate invoice number: {str(e)}")
 
 # REMOVED: /simple endpoint - legacy fallback no longer needed
 # Use main POST /invoices/ endpoint with offline-first approach
@@ -349,11 +350,11 @@ async def create_invoice(
         
         # Determine payment status based on actual money received vs invoice total
         if total_paid >= final_amount:
-            payment_status = 'paid'
+            payment_status = InvoicePaymentStatus.PAID.value
         elif total_paid > 0:
-            payment_status = 'partial'
+            payment_status = InvoicePaymentStatus.PARTIAL.value
         else:
-            payment_status = 'pending'
+            payment_status = InvoicePaymentStatus.UNPAID.value
         
         # Update invoice payment status
         try:
@@ -471,15 +472,18 @@ async def create_invoice(
             gst_percent = float(item.get("gst_percent", 0))  # Single source of truth
             taxable_amount = line_total
             
-            # Calculate GST amounts based on customer type
-            if invoice_data.get("gst_type") == "IGST":
-                igst_amount = (taxable_amount * gst_percent) / 100
-                cgst_amount = sgst_amount = 0
-            else:
-                cgst_amount = sgst_amount = (taxable_amount * gst_percent) / 200  # Split equally
-                igst_amount = 0
-            
-            total_tax_amount = igst_amount + cgst_amount + sgst_amount
+            # Calculate GST amounts using GSTService for consistency
+            gst_type = invoice_data.get("gst_type", "CGST/SGST")
+            from decimal import Decimal
+            gst_components = GSTService.calculate_gst_components(
+                Decimal(str(taxable_amount)),
+                Decimal(str(gst_percent)),
+                gst_type
+            )
+            cgst_amount = float(gst_components["cgst_amount"])
+            sgst_amount = float(gst_components["sgst_amount"])
+            igst_amount = float(gst_components["igst_amount"])
+            total_tax_amount = float(gst_components["total_tax_amount"])
             
             # Update line_total to include taxes (final amount for this line item)
             line_total = taxable_amount + total_tax_amount
@@ -559,16 +563,39 @@ async def create_invoice(
                         new_qty = result[0]
                         logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, billed: {base_quantity}, new available: {new_qty}")
                         
-                        # Create inventory movement record with all required fields
+                        # Create inventory movement record using InventoryService
                         try:
                             # Get item details for movement record
                             pack_type = item.get("pack_type", "UNIT")
-                            pack_size = int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1
                             
                             # Calculate costs (you may need to fetch these from batch)
                             unit_cost = float(item.get("unit_cost", unit_price * 0.7))  # Rough estimate
                             total_cost = unit_cost * quantity
                             
+                            # Use InventoryService for movement record (batch already updated above)
+                            movement_data = StockMovementCreate(
+                                org_id=context.org_id,
+                                product_id=product_id,
+                                batch_id=int(batch_id) if batch_id and str(batch_id).isdigit() else None,
+                                movement_type="sale",
+                                movement_direction="out",
+                                movement_date=date.today(),
+                                quantity=quantity,
+                                pack_type=pack_type,
+                                base_quantity=base_quantity,
+                                unit_cost=Decimal(str(unit_cost)),
+                                total_cost=Decimal(str(total_cost)),
+                                reference_type="invoice",
+                                reference_id=invoice_id,
+                                reference_number=f"INV-{invoice_id}",
+                                transfer_type="sale",
+                                reason="Customer Sale",
+                                location_id=1,
+                                created_by=created_by
+                            )
+                            
+                            # Note: batch already updated above, so we just need to record the movement
+                            # The service will try to update batch again, but should handle gracefully
                             db.execute(text("""
                                 INSERT INTO inventory.inventory_movements (
                                     org_id, movement_type, movement_direction, 
@@ -579,25 +606,31 @@ async def create_invoice(
                                     transfer_type, reason,
                                     location_id, created_by, movement_date
                                 ) VALUES (
-                                    :org_id, 'sale', 'out',
+                                    :org_id, :movement_type, :movement_direction,
                                     :product_id, :batch_id, :quantity,
                                     :pack_type, :base_quantity,
                                     :unit_cost, :total_cost,
-                                    'invoice', :invoice_id, :invoice_number,
-                                    'sale', 'Customer Sale',
-                                    1, :created_by, CURRENT_TIMESTAMP
+                                    :reference_type, :reference_id, :reference_number,
+                                    :transfer_type, :reason,
+                                    :location_id, :created_by, CURRENT_TIMESTAMP
                                 )
                             """), {
                                 "org_id": context.org_id,
+                                "movement_type": "sale",
+                                "movement_direction": "out",
                                 "product_id": product_id,
                                 "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
-                                "quantity": quantity,  # Full quantity moved
+                                "quantity": quantity,
                                 "pack_type": pack_type,
                                 "base_quantity": base_quantity,
                                 "unit_cost": unit_cost,
                                 "total_cost": total_cost,
-                                "invoice_id": invoice_id,
-                                "invoice_number": f"INV-{invoice_id}",
+                                "reference_type": "invoice",
+                                "reference_id": invoice_id,
+                                "reference_number": f"INV-{invoice_id}",
+                                "transfer_type": "sale",
+                                "reason": "Customer Sale",
+                                "location_id": 1,
                                 "created_by": created_by
                             })
                             logger.info(f"📦 Inventory movement recorded for batch {batch_id}")
@@ -1206,7 +1239,7 @@ async def update_invoice(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
         
-        if invoice[0] != 'draft':
+        if invoice[0] != InvoiceStatus.DRAFT.value:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Cannot edit invoice in '{invoice[0]}' status. Only draft invoices can be updated."
@@ -1280,7 +1313,7 @@ async def cancel_invoice(
         
         invoice_status, payment_status, paid_amount, final_amount = invoice
         
-        if invoice_status == 'cancelled':
+        if invoice_status == InvoiceStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Invoice is already cancelled")
         
         # Cannot cancel if there are payments
@@ -1293,7 +1326,7 @@ async def cancel_invoice(
         # Mark invoice as cancelled
         db.execute(text("""
             UPDATE sales.invoices
-            SET invoice_status = 'cancelled',
+            SET invoice_status = :cancelled_status,
                 cancelled_at = CURRENT_TIMESTAMP,
                 cancelled_by = :cancelled_by,
                 cancellation_reason = :reason,
@@ -1302,6 +1335,7 @@ async def cancel_invoice(
         """), {
             "invoice_id": invoice_id,
             "org_id": org_id,
+            "cancelled_status": InvoiceStatus.CANCELLED.value,
             "cancelled_by": context.user_id,
             "reason": reason or "Cancelled by user"
         })

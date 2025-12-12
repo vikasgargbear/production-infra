@@ -60,7 +60,7 @@ export const validateChequeDetails = (paymentMode: string, chequeDetails?: Chequ
 };
 
 // API
-export { paymentsApi } from '../../services/api/modules/payments.api';
+export { paymentsApi } from '../../services/api';
 
 // Data Transformer
 export { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
