@@ -393,9 +393,9 @@ async def get_note_print_data(
         # Get organization details
         org_query = """
             SELECT * FROM master.organizations 
-            WHERE org_id: str = Depends(get_org_id_string)
+            WHERE org_id = :org_id
         """
-        organization = db.execute(text(org_query)).first()
+        organization = db.execute(text(org_query), {"org_id": context.org_id}).first()
         
         # Get note with all details
         note_data = await get_note_detail(note_id, db)
