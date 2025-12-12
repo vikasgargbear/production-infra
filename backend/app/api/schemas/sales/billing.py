@@ -86,6 +86,28 @@ class InvoiceItemBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InvoiceItemCreate(BaseModel):
+    """Lightweight item schema for invoice creation - backend calculates totals"""
+    
+    product_id: int = Field(..., gt=0, description="Product ID")
+    batch_id: Optional[int] = Field(None, description="Batch ID for inventory deduction")
+    batch_number: Optional[str] = Field(None, max_length=50)
+    
+    quantity: Decimal = Field(..., gt=0, description="Quantity")
+    free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    unit_price: Decimal = Field(..., ge=0, description="Unit price")
+    mrp: Optional[Decimal] = Field(None, ge=0, description="MRP - fetched from product if not provided")
+    
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    gst_percent: Optional[Decimal] = Field(None, ge=0, le=28, description="GST rate - fetched from product if not provided")
+    
+    # Optional overrides
+    hsn_code: Optional[str] = Field(None, max_length=8)
+    uom: Optional[str] = Field(None, max_length=20)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 # =============================================================================
 # INVOICE SCHEMAS
 # =============================================================================
@@ -93,7 +115,8 @@ class InvoiceItemBase(BaseModel):
 class InvoiceBase(BaseModel):
     """Base invoice model"""
     
-    order_id: int = Field(..., gt=0, description="Source order ID")
+    order_id: Optional[int] = Field(None, gt=0, description="Source order ID (optional for direct invoices)")
+    challan_id: Optional[int] = Field(None, gt=0, description="Source challan ID")
     invoice_date: date = Field(default_factory=date.today)
     due_date: Optional[date] = None
     
@@ -102,9 +125,8 @@ class InvoiceBase(BaseModel):
     customer_name: str
     customer_gstin: Optional[str] = Field(
         None, 
-        min_length=15, 
-        max_length=15,
-        description="Customer GSTIN"
+        pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$",
+        description="Customer GSTIN (15 chars)"
     )
     
     # Billing address
@@ -145,12 +167,91 @@ class InvoiceBase(BaseModel):
 
 
 class InvoiceCreate(BaseModel):
-    """Schema for creating invoice from order"""
+    """Schema for creating invoice from order (quick conversion)"""
     
     order_id: int = Field(..., gt=0)
     invoice_date: Optional[date] = None
     payment_terms_days: Optional[int] = Field(None, ge=0, le=365)
     notes: Optional[str] = Field(None, max_length=1000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvoiceCreateRequest(BaseModel):
+    """Full request for creating invoice (direct or from order)"""
+    
+    customer_id: int = Field(..., gt=0, description="Customer ID")
+    order_id: Optional[int] = Field(None, gt=0, description="Source order ID")
+    challan_id: Optional[int] = Field(None, gt=0, description="Source challan ID")
+    
+    invoice_date: date = Field(default_factory=date.today)
+    due_date: Optional[date] = None
+    
+    items: List[InvoiceItemCreate] = Field(..., min_length=1, description="Invoice line items")
+    
+    # Discounts
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    
+    # Optional details
+    billing_address_id: Optional[int] = None
+    shipping_address_id: Optional[int] = None
+    payment_terms: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=1000)
+    
+    # Transport (for E-way bill)
+    vehicle_number: Optional[str] = Field(None, max_length=20)
+    transporter_name: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v, info):
+        invoice_date = info.data.get("invoice_date")
+        if v and invoice_date and v < invoice_date:
+            raise ValueError("Due date must be after invoice date")
+        return v
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvoiceUpdate(BaseModel):
+    """Update draft invoice (only for unpaid invoices)"""
+    
+    invoice_date: Optional[date] = None
+    due_date: Optional[date] = None
+    payment_terms: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=1000)
+    terms_conditions: Optional[str] = Field(None, max_length=2000)
+    
+    # Address updates
+    billing_address_id: Optional[int] = None
+    shipping_address_id: Optional[int] = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvoiceFilter(BaseModel):
+    """Query filter for invoice list"""
+    
+    customer_id: Optional[int] = None
+    status: Optional[InvoiceStatus] = None
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    min_amount: Optional[Decimal] = Field(None, ge=0)
+    max_amount: Optional[Decimal] = Field(None, ge=0)
+    overdue_only: bool = False
+    unpaid_only: bool = False
+    search: Optional[str] = Field(None, max_length=100, description="Search invoice number or customer name")
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvoiceCancelRequest(BaseModel):
+    """Request to cancel/void an invoice"""
+    
+    reason: str = Field(..., min_length=1, max_length=500, description="Cancellation reason")
+    create_credit_note: bool = Field(default=False, description="Create credit note for customer")
+    reverse_inventory: bool = Field(default=True, description="Return items to inventory")
 
     model_config = ConfigDict(str_strip_whitespace=True)
 

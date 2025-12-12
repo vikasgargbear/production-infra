@@ -201,6 +201,24 @@ class SupplierInvoiceListResponse(BaseModel):
     invoices: List[SupplierInvoiceSummary] = Field(default_factory=list)
 
 
+class SupplierInvoiceFilter(BaseModel):
+    """Query filter for supplier invoice list"""
+    
+    supplier_id: Optional[int] = None
+    status: Optional[SupplierInvoiceStatus] = None
+    payment_status: Optional[PaymentStatus] = None
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+    min_amount: Optional[Decimal] = Field(None, ge=0)
+    max_amount: Optional[Decimal] = Field(None, ge=0)
+    overdue_only: bool = False
+    itc_eligible: Optional[bool] = None
+    gstr2a_matched: Optional[bool] = None
+    search: Optional[str] = Field(None, max_length=100, description="Search invoice number or supplier name")
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 # =============================================================================
 # PAYMENT SCHEMAS
 # =============================================================================

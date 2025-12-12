@@ -31,6 +31,7 @@ from .supplier_invoice import (
     # Invoice
     SupplierInvoiceBase, SupplierInvoiceCreate, SupplierInvoiceUpdate,
     SupplierInvoiceResponse, SupplierInvoiceSummary, SupplierInvoiceListResponse,
+    SupplierInvoiceFilter,
     # Payment
     SupplierPaymentCreate, SupplierPaymentResponse,
     # Aging
