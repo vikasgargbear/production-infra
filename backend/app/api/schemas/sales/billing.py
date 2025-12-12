@@ -186,8 +186,8 @@ class InvoiceCreateRequest(BaseModel):
     discount_percent: float = Field(default=0, ge=0, le=100)
     discount_amount: float = Field(default=0, ge=0)
     
-    # Delivery
-    delivery_charges: float = Field(default=0, ge=0)
+    # Delivery/Freight
+    freight_charges: float = Field(default=0, ge=0)  # DB column name
     delivery_type: Optional[str] = Field(default="PICKUP")
     
     # Payment

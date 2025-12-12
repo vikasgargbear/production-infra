@@ -15,9 +15,9 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   // Network Status
   const { isOnline } = useNetworkStatus();
 
-  // Core State
+  // Core State - using canonical backend names
   const [invoice, setInvoice] = useState({
-    invoice_no: `DRAFT-${getTodayBusinessDate().replace(/-/g, '')}`, // Temporary draft number (company timezone)
+    invoice_number: `DRAFT-${getTodayBusinessDate().replace(/-/g, '')}`, // Backend canonical name
     invoice_date: getTodayBusinessDate(), // ✅ Uses company timezone
     due_date: getDaysFromToday(30), // ✅ 30 days from today in company timezone
     items: [],
@@ -28,7 +28,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     delivery_type: 'PICKUP',
     transport_company: '',
     vehicle_number: '',
-    delivery_charges: 0,
+    freight_charges: 0,  // Backend canonical name (was delivery_charges)
     discount_amount: 0,
     discount_percent: 0,
     discount_type: 'percentage',
@@ -48,10 +48,10 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     ack_no: '',
     ack_date: '',
     qr_code: '',
-    eway_bill_number: '',
+    e_way_bill_number: '',  // Backend canonical name (was eway_bill_number)
     eway_bill_date: '',
     eway_bill_valid_upto: '',
-    net_amount: 0,
+    final_amount: 0,  // Backend canonical name (was net_amount)
     totals: null
   });
 
@@ -385,8 +385,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         const newItem = {
           ...transformedProduct,
           quantity: 1,  // Default quantity
-          discount: 0,
-          discount_percent: 0,
+          discount_percent: 0,  // Canonical backend name
           free_quantity: 0
         };
 
@@ -491,7 +490,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         throw new Error('Please add at least one item');
       }
 
-      // Prepare clean invoice data for backend
+      // Prepare clean invoice data for backend - using canonical backend names
       const invoiceData = {
         customer_id: selectedCustomer.customer_id || selectedCustomer.id,
         invoice_date: invoice.invoice_date || getTodayBusinessDate(),
@@ -501,15 +500,15 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           batch_id: item.batch_id,
           quantity: parseFloat(item.quantity) || 0,
           free_quantity: parseFloat(item.free_quantity) || 0,
-          unit_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,  // Backend uses unit_price
+          unit_price: parseFloat(item.unit_price || item.sale_price || item.rate) || 0,  // Canonical name
           mrp: parseFloat(item.mrp) || 0,
-          discount_percent: parseFloat(item.discount_percent || item.discount) || 0,
-          gst_percent: parseFloat(item.gst_percent || item.tax_percent) || 0
+          discount_percent: parseFloat(item.discount_percent) || 0,  // Canonical name
+          gst_percent: parseFloat(item.gst_percent) || 0  // Canonical name
         })),
         discount_type: invoice.discount_type || 'percentage',
         discount_percent: parseFloat(invoice.discount_percent) || 0,
         discount_amount: parseFloat(invoice.discount_amount) || 0,
-        delivery_charges: parseFloat(invoice.delivery_charges) || 0,
+        freight_charges: parseFloat(invoice.freight_charges) || 0,  // Canonical name (was delivery_charges)
         delivery_type: invoice.delivery_type || 'PICKUP',
         payment_mode: invoice.payment_mode || 'cash',
         payment_status: invoice.payment_status || 'pending',

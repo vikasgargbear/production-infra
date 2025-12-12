@@ -51,28 +51,28 @@ class EnterpriseCalculator {
    */
   static calculateItem(item, options = {}) {
     const gstType = options.gst_type || 'CGST/SGST';
-    
-    // Parse inputs once - CRITICAL FIX: ALWAYS use quantity for billing
-    const rate = parseFloat(item.sale_price || item.rate || item.selling_price || item.unit_price) || 0;
+
+    // Parse inputs - unit_price is canonical, fallback to legacy names
+    const unit_price = parseFloat(item.unit_price || item.sale_price || item.rate || item.selling_price) || 0;
     const quantity = parseFloat(item.quantity) || 0;
     const baseQuantity = quantity; // base_quantity = billable quantity (always same as quantity)
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 0;
-    
+
     // PRODUCTION LOGIC: Use quantity for billing calculations
     // Free items are truly FREE and don't affect pricing
-    const subtotal = rate * baseQuantity;
+    const subtotal = unit_price * baseQuantity;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;
     const gstAmount = (taxableAmount * gstPercent) / 100;
     const totalAmount = taxableAmount + gstAmount;
-    
+
     // GST breakdown
     const cgstAmount = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
     const sgstAmount = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
     const igstAmount = gstType === 'IGST' ? gstAmount : 0;
-    
+
     // Return enriched item with all calculations
     return {
       ...item,
@@ -80,9 +80,10 @@ class EnterpriseCalculator {
       base_quantity: baseQuantity,
       free_quantity: freeQuantity,
       total_quantity: baseQuantity + freeQuantity,
-      
-      // Amounts
-      rate: this.round(rate),
+
+      // Amounts - use canonical name unit_price
+      unit_price: this.round(unit_price),
+      rate: this.round(unit_price),  // Legacy alias
       subtotal: this.round(subtotal),
       discount_percent: discountPercent,
       discount_amount: this.round(discountAmount),
@@ -93,12 +94,12 @@ class EnterpriseCalculator {
       sgst_amount: this.round(sgstAmount),
       igst_amount: this.round(igstAmount),
       total_amount: this.round(totalAmount),
-      
+
       // Aliases for different modules
       line_total: this.round(totalAmount),
       calculated_total: this.round(totalAmount),
       tax_amount: this.round(gstAmount),
-      
+
       // Legacy support
       discountAmount: this.round(discountAmount),
       taxableAmount: this.round(taxableAmount),
@@ -109,7 +110,7 @@ class EnterpriseCalculator {
       igst: this.round(igstAmount)
     };
   }
-  
+
   /**
    * Calculate totals from items array - used by all modules
    * @param {Array} items - Array of items to sum
@@ -125,11 +126,11 @@ class EnterpriseCalculator {
     let cgstTotal = 0;
     let sgstTotal = 0;
     let igstTotal = 0;
-    
+
     // Calculate each item and aggregate
     const calculatedItems = items.map(item => {
       const calculated = this.calculateItem(item, options);
-      
+
       // Aggregate totals
       grossAmount += calculated.subtotal;
       totalDiscount += calculated.discount_amount;
@@ -138,20 +139,20 @@ class EnterpriseCalculator {
       cgstTotal += calculated.cgst_amount;
       sgstTotal += calculated.sgst_amount;
       igstTotal += calculated.igst_amount;
-      
+
       return calculated;
     });
-    
+
     // Additional charges
     const deliveryCharges = parseFloat(options.delivery_charges) || 0;
     const additionalDiscount = parseFloat(options.additional_discount) || 0;
-    
+
     // Final calculations
     const netAmount = taxableAmount + totalGst + deliveryCharges - additionalDiscount;
     const finalAmount = Math.round(netAmount);
     const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
-    
-    
+
+
     return {
       items: calculatedItems,
       totals: {
@@ -168,7 +169,7 @@ class EnterpriseCalculator {
         net_amount: this.round(netAmount),
         round_off: this.round(roundOff),
         final_amount: finalAmount,
-        
+
         // Aliases for different modules
         subtotal_amount: this.round(taxableAmount),
         discount_amount: this.round(totalDiscount),
@@ -178,7 +179,7 @@ class EnterpriseCalculator {
       }
     };
   }
-  
+
   /**
    * Calculate invoice - uses base methods
    */
@@ -190,7 +191,7 @@ class EnterpriseCalculator {
       rate: i.unit_price,
       total: i.quantity * i.unit_price
     })));
-    
+
     // Calculate additional discount from percentage or amount
     let additionalDiscount = 0;
     if (invoiceData.discount_type === 'percentage' && invoiceData.discount_percent) {
@@ -207,18 +208,18 @@ class EnterpriseCalculator {
       additionalDiscount = invoiceData.discount_amount;
       console.log('🧮 [CALCULATOR] Fixed discount:', additionalDiscount);
     }
-    
+
     const result = this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
       delivery_charges: invoiceData.delivery_charges,
       additional_discount: additionalDiscount  // Apply invoice-level discount (in addition to item discounts)
     });
-    
+
     console.log('🧮 [CALCULATOR] Calculated result:', result);
-    
+
     return result;
   }
-  
+
   /**
    * Calculate challan - uses base methods
    */
@@ -228,7 +229,7 @@ class EnterpriseCalculator {
       delivery_charges: challanData.delivery_charges
     });
   }
-  
+
   /**
    * Calculate sales order - uses base methods
    */
@@ -238,25 +239,25 @@ class EnterpriseCalculator {
       delivery_charges: orderData.delivery_charges
     });
   }
-  
+
   /**
    * Debounced calculation for real-time updates
    */
   static debounceTimeouts = new Map();
-  
+
   static calculateDebounced(data, callback, delay = 300, type = 'invoice') {
     const key = `calc_${type}`;
-    
+
     // Clear previous timeout
     if (this.debounceTimeouts.has(key)) {
       clearTimeout(this.debounceTimeouts.get(key));
     }
-    
+
     // Set new timeout
     const timeoutId = setTimeout(() => {
       try {
         let result;
-        switch(type) {
+        switch (type) {
           case 'invoice':
             result = this.calculateInvoice(data);
             break;
@@ -275,17 +276,17 @@ class EnterpriseCalculator {
       }
       this.debounceTimeouts.delete(key);
     }, delay);
-    
+
     this.debounceTimeouts.set(key, timeoutId);
   }
-  
+
   /**
    * Round to 2 decimal places
    */
   static round(value, decimals = 2) {
     return Math.round((value + Number.EPSILON) * Math.pow(10, decimals)) / Math.pow(10, decimals);
   }
-  
+
   /**
    * Format currency for display
    */

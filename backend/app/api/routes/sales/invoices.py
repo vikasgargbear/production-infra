@@ -121,7 +121,7 @@ async def create_invoice(
                 billing_address_id=None  # Frontend sends address string, not ID
             )
         
-        freight_charges = invoice_data.delivery_charges
+        freight_charges = invoice_data.freight_charges  # Canonical name from schema
         insurance_charges = 0.0
         other_charges = 0.0
         invoice_discount = float(invoice_data.discount_amount)

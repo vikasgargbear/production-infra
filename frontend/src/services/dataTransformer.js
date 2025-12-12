@@ -26,7 +26,7 @@ class DataTransformer {
       // GST standardized to gst_percent across backend and frontend
       gst_percent: parseFloat(product.gst_percent ?? 0),
       tax_rate: parseFloat(product.gst_percent ?? 0), // Alias for compatibility
-      manufacturer: product.manufacturer ||  '',
+      manufacturer: product.manufacturer || '',
       // CRITICAL: Preserve batch fields if they exist (from BatchSelector)
       ...(product.batch_id && {
         batch_id: product.batch_id,
@@ -36,8 +36,8 @@ class DataTransformer {
         manufacturing_date: product.manufacturing_date,
         available_quantity: product.available_quantity || product.quantity_available,
         mrp: parseFloat(product.mrp || 0),
-        sale_price: parseFloat(product.sale_price || 0),
-        rate: parseFloat(product.rate || product.sale_price || 0)
+        unit_price: parseFloat(product.unit_price || product.sale_price || product.rate || 0),
+        rate: parseFloat(product.unit_price || product.sale_price || product.rate || 0)  // Legacy alias
       })
     };
 
@@ -49,24 +49,24 @@ class DataTransformer {
           // Add batch-specific fields
           requires_batch: product.requires_batch || true,
         };
-      
+
       case 'search':
         return {
           ...base,
           // Minimal fields for search results
-          display_name: `${base.product_name} - ₹${base.sale_price}`,
+          display_name: `${base.product_name} - ₹${base.unit_price}`,
           search_text: `${base.product_name} ${base.hsn_code} ${base.manufacturer}`.toLowerCase()
         };
-      
+
       case 'invoice':
         // CRITICAL: For invoice context, preserve ALL batch and pricing fields
         return {
           ...base,
-          // Preserve any additional fields that might be needed
-          ...(product.rate && { rate: parseFloat(product.rate) }),
-          ...(product.sale_price && !base.batch_id && { sale_price: parseFloat(product.sale_price) })
+          // Preserve any additional fields that might be needed - use unit_price as canonical
+          ...(product.unit_price && { unit_price: parseFloat(product.unit_price) }),
+          ...(product.rate && !base.batch_id && { rate: parseFloat(product.rate) })
         };
-      
+
       default:
         return base;
     }
@@ -125,7 +125,7 @@ class DataTransformer {
           display_name: `${base.name}${base.city ? ' - ' + base.city : ''}`,
           search_text: `${base.name} ${base.phone} ${base.city} ${base.gst_number}`.toLowerCase()
         };
-      
+
       default:
         return base;
     }
@@ -137,7 +137,7 @@ class DataTransformer {
   static transformCustomer(customer, context = 'default') {
     const base = {
       customer_id: String(customer.customer_id || ''),
-      customer_name: customer.customer_name ||  '',
+      customer_name: customer.customer_name || '',
       primary_phone: customer.primary_phone || '',
       primary_email: customer.primary_email || '',
       gst_number: customer.gst_number || '',
@@ -145,11 +145,11 @@ class DataTransformer {
       drug_license_number: customer.drug_license_number || '',
       fssai_number: customer.fssai_number || '',
       secondary_phone: customer.secondary_phone || '',
-      credit_limit: parseFloat(customer.credit_limit ||  0),
+      credit_limit: parseFloat(customer.credit_limit || 0),
       credit_days: parseInt(customer.credit_days || 0),
       customer_type: customer.customer_type || 'retail',
       credit_rating: customer.credit_rating || 'A',
-      discount_group_id : customer.discount_group_id || null,
+      discount_group_id: customer.discount_group_id || null,
       loyalty_tier: customer.loyalty_tier || 'bronze',
       loyalty_points: parseInt(customer.loyalty_points || 0),
       payment_terms: customer.payment_terms || 'Credit',
@@ -167,9 +167,9 @@ class DataTransformer {
       base.pincode = defaultAddress.pincode || '';
     } else {
       // Fallback for list view or old data without addresses
-      base.address =  '';
-      base.city =  '';
-      base.state =  '';
+      base.address = '';
+      base.city = '';
+      base.state = '';
       base.pincode = '';
     }
 
@@ -182,7 +182,7 @@ class DataTransformer {
           // Format display name
           display_name: base.gst_number ? `${base.customer_name} (GST: ${base.gst_number})` : base.customer_name
         };
-      
+
       case 'search':
         return {
           ...base,
@@ -190,7 +190,7 @@ class DataTransformer {
           display_name: `${base.customer_name}${base.city ? ' - ' + base.city : ''}`,
           search_text: `${base.customer_name} ${base.primary_phone} ${base.city} ${base.gst_number}`.toLowerCase()
         };
-      
+
       default:
         return base;
     }
@@ -208,10 +208,10 @@ class DataTransformer {
       manufacturing_date: batch.manufacturing_date || '',
       quantity_available: parseInt(batch.quantity_available || 0),
       quantity_returned: parseInt(batch.quantity_returned || 0),
-      quantity_reserved: parseInt(batch.quantity_reserved ||  0),
+      quantity_reserved: parseInt(batch.quantity_reserved || 0),
       // IMPORTANT: Backend sends mrp_per_unit, sale_price_per_unit, cost_per_unit
       mrp: parseFloat(batch.mrp_per_unit || batch.mrp || 0),
-      sale_price: parseFloat(batch.sale_price_per_unit || batch.sale_price || 0),
+      unit_price: parseFloat(batch.sale_price_per_unit || batch.unit_price || batch.sale_price || 0),
       purchase_price: parseFloat(batch.cost_per_unit || batch.purchase_price || 0),
       // Pack information
       packages_per_box: batch.packages_per_box || null,
@@ -229,19 +229,19 @@ class DataTransformer {
     if (product) {
       base.product_id = product.product_id || batch.product_id;
       base.product_name = product.product_name || '';
-      base.manufacturer = product.manufacturer ||  '';
+      base.manufacturer = product.manufacturer || '';
       base.hsn_code = product.hsn_code || '';
       // Inherit GST from product if batch doesn't have it
       base.gst_percent = parseFloat(product.gst_percent || 0);
       // Display string for dropdown: "Product Name | Batch# | Exp: Date | ₹Price"
-      base.display_name = `${base.product_name} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
+      base.display_name = `${base.product_name} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.unit_price}`;
     } else {
       // Fallback: use batch's own product info from backend (backend sends these via subquery)
       base.product_id = batch.product_id;
       base.product_name = batch.product_name;
       base.hsn_code = batch.hsn_code;
       base.gst_percent = parseFloat(batch.gst_rate || 0);
-      base.display_name = `${batch.product_name || ''} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
+      base.display_name = `${batch.product_name || ''} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.unit_price}`;
     }
 
     return base;
@@ -253,9 +253,9 @@ class DataTransformer {
    */
   static _getExpiryStatus(expiryDate) {
     if (!expiryDate) return 'unknown';
-    
+
     const days = differenceInDays(new Date(expiryDate), new Date());
-    
+
     if (days < 0) return 'expired';
     if (days <= 30) return 'expiring_soon';
     if (days <= 90) return 'expiring_warning';
@@ -271,31 +271,31 @@ class DataTransformer {
       org_id: invoice.org_id || localStorage.getItem('orgId'),
       customer_id: String(invoice.customer_id),
       order_date: invoice.invoice_date || DateFormatter.getInvoiceDate(),
-      
+
       // Amounts - ensure proper number formatting
       gross_amount: this.formatNumber(invoice.gross_amount),
       discount: this.formatNumber(invoice.discount_amount),
       tax_amount: this.formatNumber(invoice.gst_amount),
       final_amount: this.formatNumber(invoice.net_amount),
-      
+
       // Status fields
       payment_status: invoice.payment_mode === 'CREDIT' ? 'pending' : 'paid',
       status: 'placed',
       payment_mode: invoice.payment_mode || 'CASH',
       delivery_type: invoice.delivery_type || 'PICKUP',
-      
+
       // Optional fields
       ...(invoice.delivery_charges && { delivery_charges: this.formatNumber(invoice.delivery_charges) }),
       ...(invoice.vehicle_number && { vehicle_number: invoice.vehicle_number }),
       ...(invoice.lr_number && { lr_number: invoice.lr_number }),
       ...(invoice.transport_company && { transport_company: invoice.transport_company }),
-      
+
       // Shipping details
       is_same_address: invoice.is_same_address !== false,
       ...(invoice.shipping_contact_name && { shipping_contact_name: invoice.shipping_contact_name }),
       ...(invoice.shipping_address && { shipping_address: invoice.shipping_address }),
       ...(invoice.shipping_phone && { shipping_phone: invoice.shipping_phone }),
-      
+
       // Transform items
       items: invoice.items.map(item => this.transformInvoiceItemForAPI(item))
     };
@@ -306,15 +306,15 @@ class DataTransformer {
    */
   static transformInvoiceItemForAPI(item) {
     const quantity = parseInt(item.quantity) || 0;
-    const price = this.formatNumber(item.sale_price || item.rate);
+    const price = this.formatNumber(item.unit_price || item.sale_price || item.rate);  // unit_price is primary
     const discountPercent = this.formatNumber(item.discount_percent || 0);
     const taxPercent = this.formatNumber(item.gst_percent || 0);
-    
+
     // Calculate tax amount
     const discountAmount = (price * quantity * discountPercent) / 100;
     const taxableAmount = (price * quantity) - discountAmount;
     const taxAmount = (taxableAmount * taxPercent) / 100;
-    
+
     return {
       product_id: String(item.product_id),
       batch_id: item.batch_id ? String(item.batch_id) : null,
@@ -343,7 +343,8 @@ class DataTransformer {
       customer_details: apiData.customer || {},
       items: (apiData.items || apiData.order_items || []).map(item => ({
         ...item,
-        sale_price: item.price || item.unit_price || item.rate,
+        unit_price: item.unit_price || item.price || item.sale_price || item.rate,  // Canonical name
+        rate: item.unit_price || item.price || item.sale_price || item.rate,  // Legacy alias
         quantity: item.quantity,
         gst_percent: item.gst_percent || item.tax_percent || 0,
         discount_percent: item.discount_percent || 0
@@ -372,7 +373,7 @@ class DataTransformer {
    */
   static transformSearchResults(results, type) {
     if (!Array.isArray(results)) return [];
-    
+
     switch (type) {
       case 'products':
         return results.map(item => this.transformProduct(item, 'search'));
@@ -459,7 +460,7 @@ class DataTransformer {
       account_holder_name: supplierData.account_holder_name || null,
       // Payment terms - handle dropdown or custom value
       payment_terms: supplierData.payment_terms || null,
-      payment_days: supplierData.payment_terms === 'custom' 
+      payment_days: supplierData.payment_terms === 'custom'
         ? parseInt(supplierData.payment_days || 30)
         : parseInt(supplierData.payment_terms || 30),
       credit_days: parseInt(supplierData.credit_days || 0),
@@ -472,7 +473,7 @@ class DataTransformer {
       internal_notes: supplierData.notes || null,
       org_id: supplierData.org_id
     };
-    
+
     return result;
   }
 }
