@@ -211,7 +211,7 @@ async def create_invoice(
             "taxable": taxable_amount,
             "cgst": total_cgst,
             "sgst": total_sgst,
-            "tax": tax_amount,
+            "tax": total_tax,
             "final": final_amount,
             "created_by": created_by,
             "created_at": created_at  # ✅ Use original timestamp if provided
@@ -309,7 +309,7 @@ async def create_invoice(
             "igst": invoice_data.get("igst_amount", 0),
             "cgst": total_cgst,
             "sgst": total_sgst,
-            "tax": tax_amount,
+            "tax": total_tax,
             "freight": freight_charges,
             "insurance": insurance_charges,
             "other": other_charges,
