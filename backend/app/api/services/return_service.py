@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from .inventory_service import InventoryService
-from ..schemas.inventory import StockMovementCreate
+from ..schemas.inventory.inventory import StockMovementCreate
 from ...core.constants import ReturnStatus, DispositionType
 
 logger = logging.getLogger(__name__)

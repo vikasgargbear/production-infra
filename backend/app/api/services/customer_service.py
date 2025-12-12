@@ -13,7 +13,7 @@ from sqlalchemy import text
 import logging
 import re
 
-from ..schemas.customer import (
+from ..schemas.master.customer import (
     CustomerLedgerEntry, CustomerLedgerResponse, OutstandingInvoice,
     CustomerOutstandingResponse, PaymentRecord,
     PaymentResponse, CustomerCreate, CustomerResponse

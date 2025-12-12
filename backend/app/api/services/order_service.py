@@ -16,7 +16,7 @@ from ...core.constants import (
     BusinessLimits, StockMovementType
 )
 
-from ..schemas.order import (
+from ..schemas.sales.order import (
     ReturnRequest
 )
 

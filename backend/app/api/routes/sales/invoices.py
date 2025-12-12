@@ -21,6 +21,10 @@ from ...services.gst_service import GSTService
 from ...services.inventory_service import InventoryService
 from ...services.invoice_service import InvoiceService
 from ...schemas.inventory.inventory import StockMovementCreate
+from ...schemas.sales.billing import (
+    InvoiceCreateRequest, InvoiceItemCreate, 
+    InvoiceCancelRequest, InvoiceResponse, InvoiceSummary
+)
 from decimal import Decimal
 # Consolidated: using main DocumentNumberService
 from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
@@ -54,30 +58,23 @@ async def generate_invoice_number(
 @router.post("/")
 @with_tenant_context
 async def create_invoice(
-    invoice_data: dict,
+    invoice_data: InvoiceCreateRequest,
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """
-    Create invoice using only columns that exist in the database
+    Create invoice with Pydantic validation
     
-    Required fields:
-    - customer_id: int
-    - items: list of {product_id, quantity, unit_price}
-    
-    Optional fields:
-    - invoice_date: date string (defaults to today)
-    - discount_amount: decimal (defaults to 0)
+    Uses InvoiceCreateRequest schema for input validation.
+    Backend calculates tax amounts, totals, and generates invoice number.
     """
     try:
         # Get org_id from context
         org_id = str(context.org_id)
         
-        # REMOVED: db.rollback() - unnecessary, creates issues with transaction state
-        
-        # Extract customer_id early for use throughout the function
-        customer_id = invoice_data.get("customer_id")
+        # Extract validated fields from Pydantic model
+        customer_id = invoice_data.customer_id
         if not customer_id:
             return JSONResponse(
                 status_code=400,
@@ -111,23 +108,23 @@ async def create_invoice(
         order_number = f"ORD-{order_num:06d}"
         
         # Step 3: Calculate totals from items using InvoiceService (DRY)
-        items = invoice_data.get("items", [])
+        # Convert Pydantic items to dicts for service compatibility
+        items = [item.model_dump() for item in invoice_data.items]
         
         # Determine GST type (CGST/SGST vs IGST) based on org state vs customer state
         # Use frontend-provided value if available, otherwise auto-detect
-        gst_type = invoice_data.get("gst_type")
-        if not gst_type:
-            gst_type = GSTService.determine_gst_type(
-                db=db,
-                org_id=context.org_id,
-                customer_id=customer_id,
-                billing_address_id=invoice_data.get("billing_address_id")
-            )
+        gst_type = None  # Will be auto-detected
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=context.org_id,
+            customer_id=customer_id,
+            billing_address_id=invoice_data.billing_address_id
+        )
         
-        freight_charges = float(invoice_data.get("freight_charges", 0))
-        insurance_charges = float(invoice_data.get("insurance_charges", 0))
-        other_charges = float(invoice_data.get("other_charges", 0))
-        invoice_discount = float(invoice_data.get("discount_amount", 0))
+        freight_charges = 0.0  # Can be added to schema later
+        insurance_charges = 0.0
+        other_charges = 0.0
+        invoice_discount = float(invoice_data.discount_amount)
         
         # Use service method for consistent calculations
         totals = InvoiceService.calculate_invoice_totals(
@@ -150,37 +147,12 @@ async def create_invoice(
         round_off_amount = totals["round_off_amount"]
         final_amount = totals["final_amount"]
         
-        # CRITICAL FIX: Use invoice_date from frontend (for offline sync)
-        # This preserves the actual invoice creation date, not the sync date
-        invoice_date_str = invoice_data.get("invoice_date")
-        if invoice_date_str:
-            try:
-                # Parse ISO format date string from frontend
-                if 'T' in invoice_date_str:
-                    # Full timestamp format
-                    invoice_date = datetime.fromisoformat(invoice_date_str.replace('Z', '+00:00')).date()
-                else:
-                    # Date only format (YYYY-MM-DD)
-                    invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
-                logger.info(f"Using invoice_date from frontend: {invoice_date}")
-            except Exception as e:
-                logger.warning(f"Failed to parse invoice_date '{invoice_date_str}': {e}. Using today.")
-                invoice_date = date.today()
-        else:
-            invoice_date = date.today()
-            logger.info(f"No invoice_date provided, using today: {invoice_date}")
+        # SIMPLIFIED: Pydantic model handles date validation - use directly
+        invoice_date = invoice_data.invoice_date
+        logger.info(f"Using invoice_date: {invoice_date}")
         
-        # CRITICAL FIX: Use created_at from frontend if provided (for offline sync)
-        created_at_str = invoice_data.get("created_at")
-        if created_at_str:
-            try:
-                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                logger.info(f"Using created_at from frontend: {created_at}")
-            except Exception as e:
-                logger.warning(f"Failed to parse created_at '{created_at_str}': {e}. Using CURRENT_TIMESTAMP.")
-                created_at = None  # Will use CURRENT_TIMESTAMP
-        else:
-            created_at = None  # Will use CURRENT_TIMESTAMP
+        # For offline sync, use current timestamp
+        created_at = None  # Will use CURRENT_TIMESTAMP in SQL
         
         # Step 4: Create order (using ONLY columns that exist)
         order_create = db.execute(text("""
