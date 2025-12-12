@@ -153,9 +153,7 @@ api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Ac
 api.include_router(orders.router, tags=["Orders"])
 api.include_router(sales_orders.router, tags=["Sales Orders"])
 api.include_router(invoices.router, tags=["Invoices"])
-api.include_router(sales.router, prefix="/sales", tags=["Sales"])
 api.include_router(challan.router, prefix="/challan", tags=["Challan"])
-api.include_router(quick_sale.router, tags=["Quick Sale"])
 api.include_router(sale_returns.router, prefix="/sale-returns", tags=["Sale Returns"])
 
 # --- Purchase ---
