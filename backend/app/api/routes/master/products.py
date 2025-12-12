@@ -19,7 +19,7 @@ from ....core.org_context import get_org_context, OrgContext
 from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
 from ...services.product_service import ProductService  # Service layer
-from ...schemas.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
+from ...schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
 
 # Supplier-specific imports
-from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
+from ...schemas.master.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
 
 logger = logging.getLogger(__name__)
 

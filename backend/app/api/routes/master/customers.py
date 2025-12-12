@@ -20,7 +20,7 @@ from ....core.api_utils import handle_error  # Shared error handler
 from ....core.permissions import PermissionChecker  # RBAC
 
 # Customer-specific imports
-from ...schemas.customer import (
+from ...schemas.master.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
     PaymentRecord, PaymentResponse

@@ -16,7 +16,7 @@ from ....core.permissions import PermissionChecker
 from ....core.constants import OrderStatus, PaymentStatus
 from ...services.document_number_service import DocumentNumberService
 from ...services.gst_service import GSTService
-from ...schemas.order import (
+from ...schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
 )

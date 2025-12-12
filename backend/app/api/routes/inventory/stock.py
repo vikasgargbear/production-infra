@@ -13,7 +13,7 @@ import logging
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.api_utils import handle_error
-from ...schemas.inventory import (
+from ...schemas.inventory.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
     CurrentStock, ExpiryAlert,

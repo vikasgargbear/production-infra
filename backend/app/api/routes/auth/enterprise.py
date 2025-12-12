@@ -16,7 +16,7 @@ from ....services.auth import (
     OrganizationDisabledError,
     RateLimitExceededError
 )
-from ...schemas.auth_schemas import (
+from ...schemas.auth.auth_schemas import (
     LoginRequest,
     LoginResponse,
     RefreshTokenRequest,

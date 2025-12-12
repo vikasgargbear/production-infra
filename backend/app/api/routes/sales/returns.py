@@ -22,8 +22,8 @@ from ...services.document_number_service import DocumentNumberService
 from ...services.gst_service import GSTService
 from ...services.inventory_service import InventoryService
 from ...services.return_service import ReturnService
-from ...schemas.inventory import StockMovementCreate
-from ...schemas.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
+from ...schemas.inventory.inventory import StockMovementCreate
+from ...schemas.sales.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
 from ....utils.branch_utils import get_default_branch_id
 from datetime import date
 

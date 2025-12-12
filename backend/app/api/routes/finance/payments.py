@@ -21,7 +21,7 @@ from ....core.permissions import PermissionChecker  # RBAC
 from ....core.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
 from ...services.payment_service import PaymentService
 from ...services.document_number_service import DocumentNumberService
-from ...schemas.billing import (
+from ...schemas.sales.billing import (
     GeneralPaymentCreate, InvoicePaymentCreate, 
     PaymentListResponse, PaymentSummaryResponse, PaymentResponse
 )

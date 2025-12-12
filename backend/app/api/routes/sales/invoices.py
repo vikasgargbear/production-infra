@@ -20,7 +20,7 @@ from ...services.document_number_service import DocumentNumberService
 from ...services.gst_service import GSTService
 from ...services.inventory_service import InventoryService
 from ...services.invoice_service import InvoiceService
-from ...schemas.inventory import StockMovementCreate
+from ...schemas.inventory.inventory import StockMovementCreate
 from decimal import Decimal
 # Consolidated: using main DocumentNumberService
 from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers

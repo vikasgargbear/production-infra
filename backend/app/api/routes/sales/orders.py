@@ -15,7 +15,7 @@ import logging
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker  # RBAC
-from ...schemas.order import (
+from ...schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
 )
