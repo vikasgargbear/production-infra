@@ -128,7 +128,7 @@ const InvoicePreviewEnterprise = ({
                 <div className="flex items-start space-x-3">
                   {companyInfo?.logo ? (
                     <img 
-                      src={companyInfo.logo} 
+                      src={companyInfo?.logo} 
                       alt={companyInfo?.name || 'Company'} 
                       className="w-20 h-20 object-contain rounded-lg flex-shrink-0"
                     />
@@ -138,10 +138,10 @@ const InvoicePreviewEnterprise = ({
                     </div>
                   )}
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">{companyInfo.name || 'Your Company Name'}</h2>
-                    <p className="text-sm text-gray-600 mt-1">{companyInfo.address || 'Company Address'}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo.gstin || ''}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo.drugLicense || ''}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{companyInfo?.name || 'Your Company Name'}</h2>
+                    <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || 'Company Address'}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gstin || ''}</p>
+                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drugLicense || ''}</p>
                   </div>
                 </div>
               </div>
