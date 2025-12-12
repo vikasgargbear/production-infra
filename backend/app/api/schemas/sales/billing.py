@@ -3,162 +3,233 @@ Billing and GST schemas for enterprise pharma system
 Handles invoice generation, GST calculations, and payment tracking
 """
 from typing import Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from datetime import datetime, date
 from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
 
+# =============================================================================
+# ENUMS
+# =============================================================================
+
 class InvoiceStatus(str, Enum):
+    """Invoice lifecycle status"""
     DRAFT = "draft"
     GENERATED = "generated"
     SENT = "sent"
     PAID = "paid"
     PARTIALLY_PAID = "partially_paid"
+    OVERDUE = "overdue"
     CANCELLED = "cancelled"
 
 
 class PaymentMode(str, Enum):
+    """Payment modes"""
     CASH = "cash"
     CARD = "card"
     BANK_TRANSFER = "bank_transfer"
     UPI = "upi"
     CHEQUE = "cheque"
+    NEFT = "neft"
+    RTGS = "rtgs"
     CREDIT = "credit"
 
 
 class GSTType(str, Enum):
+    """GST calculation type"""
     CGST_SGST = "cgst_sgst"  # Within state
     IGST = "igst"  # Inter-state
 
 
+# =============================================================================
+# INVOICE ITEM SCHEMAS
+# =============================================================================
+
 class InvoiceItemBase(BaseModel):
     """Base invoice item model"""
-    product_id: int = Field(..., gt=0)
-    product_name: str
-    hsn_code: Optional[str] = Field(None, max_length=10)
-    batch_id: Optional[int] = None
-    batch_number: Optional[str] = None
     
-    # Quantities and pricing
-    quantity: int = Field(..., gt=0)
-    unit_price: Decimal = Field(..., ge=0)
-    mrp: Decimal = Field(..., ge=0)
+    product_id: int = Field(..., gt=0, description="Product ID")
+    product_name: str = Field(..., description="Product name")
+    product_code: Optional[str] = Field(None, max_length=50)
+    hsn_code: Optional[str] = Field(None, max_length=8, description="HSN/SAC code")
+    
+    batch_id: Optional[int] = None
+    batch_number: Optional[str] = Field(None, max_length=50)
+    expiry_date: Optional[date] = None
+    
+    # Quantities
+    quantity: Decimal = Field(..., gt=0, description="Quantity")
+    free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    unit_price: Decimal = Field(..., ge=0, description="Unit price")
+    mrp: Decimal = Field(..., ge=0, description="MRP per unit")
+    uom: Optional[str] = Field(None, max_length=20, description="Unit of measure")
     
     # Discounts
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
     
     # Tax
-    gst_percent: Decimal = Field(..., ge=0, le=28)
+    gst_percent: Decimal = Field(..., ge=0, le=28, description="GST rate")
+    cgst_percent: Decimal = Field(default=Decimal("0"), ge=0, le=14)
+    sgst_percent: Decimal = Field(default=Decimal("0"), ge=0, le=14)
+    igst_percent: Decimal = Field(default=Decimal("0"), ge=0, le=28)
     cgst_amount: Decimal = Field(default=Decimal("0"), ge=0)
     sgst_amount: Decimal = Field(default=Decimal("0"), ge=0)
     igst_amount: Decimal = Field(default=Decimal("0"), ge=0)
     
     # Totals
-    taxable_amount: Decimal = Field(..., ge=0)
-    total_amount: Decimal = Field(..., ge=0)
+    taxable_amount: Decimal = Field(..., ge=0, description="Taxable value")
+    total_amount: Decimal = Field(..., ge=0, description="Line total with tax")
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# INVOICE SCHEMAS
+# =============================================================================
 
 class InvoiceBase(BaseModel):
     """Base invoice model"""
-    order_id: int = Field(..., gt=0)
+    
+    order_id: int = Field(..., gt=0, description="Source order ID")
     invoice_date: date = Field(default_factory=date.today)
     due_date: Optional[date] = None
     
-    # Customer details
+    # Customer
     customer_id: int = Field(..., gt=0)
     customer_name: str
-    customer_gstin: Optional[str] = Field(None, pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
+    customer_gstin: Optional[str] = Field(
+        None, 
+        min_length=15, 
+        max_length=15,
+        description="Customer GSTIN"
+    )
     
     # Billing address
-    billing_name: str
-    billing_address: str
-    billing_city: str
-    billing_state: str
-    billing_pincode: str = Field(..., pattern=r"^[0-9]{6}$")
-    billing_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
+    billing_name: str = Field(..., max_length=200)
+    billing_address: str = Field(..., max_length=500)
+    billing_city: str = Field(..., max_length=100)
+    billing_state: str = Field(..., max_length=100)
+    billing_pincode: str = Field(..., pattern=r"^\d{6}$")
+    billing_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
     
     # Shipping address
-    shipping_name: Optional[str] = None
-    shipping_address: Optional[str] = None
-    shipping_city: Optional[str] = None
-    shipping_state: Optional[str] = None
-    shipping_pincode: Optional[str] = Field(None, pattern=r"^[0-9]{6}$")
+    shipping_name: Optional[str] = Field(None, max_length=200)
+    shipping_address: Optional[str] = Field(None, max_length=500)
+    shipping_city: Optional[str] = Field(None, max_length=100)
+    shipping_state: Optional[str] = Field(None, max_length=100)
+    shipping_pincode: Optional[str] = Field(None, pattern=r"^\d{6}$")
     
     # GST details
-    gst_type: GSTType
-    place_of_supply: str  # State code
+    gst_type: GSTType = Field(..., description="CGST/SGST or IGST")
+    place_of_supply: str = Field(..., description="State code (e.g., 27)")
     is_reverse_charge: bool = Field(default=False)
     
-    # Additional info
-    payment_terms: Optional[str] = None
-    notes: Optional[str] = Field(None, max_length=500)
-    terms_conditions: Optional[str] = None
-    
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
+    # Additional
+    payment_terms: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=1000)
+    terms_conditions: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, v, info):
         """Ensure due date is after invoice date"""
-        if v and 'invoice_date' in values and v < values['invoice_date']:
-            raise ValueError('Due date must be after invoice date')
+        invoice_date = info.data.get("invoice_date")
+        if v and invoice_date and v < invoice_date:
+            raise ValueError("Due date must be after invoice date")
         return v
+
+    model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 
 
 class InvoiceCreate(BaseModel):
     """Schema for creating invoice from order"""
+    
     order_id: int = Field(..., gt=0)
     invoice_date: Optional[date] = None
     payment_terms_days: Optional[int] = Field(None, ge=0, le=365)
-    notes: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class InvoiceResponse(InvoiceBase):
     """Schema for invoice response"""
+    
     invoice_id: int
     invoice_number: str
     org_id: UUID
     
-    # Items
-    items: List[InvoiceItemBase]
+    items: List[InvoiceItemBase] = Field(default_factory=list)
     
     # Amounts
-    subtotal_amount: Decimal
-    discount_amount: Decimal
-    taxable_amount: Decimal
-    cgst_amount: Decimal
-    sgst_amount: Decimal
-    igst_amount: Decimal
-    total_tax_amount: Decimal
-    round_off_amount: Decimal
-    total_amount: Decimal
+    subtotal_amount: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    taxable_amount: Decimal = Decimal("0")
+    cgst_amount: Decimal = Decimal("0")
+    sgst_amount: Decimal = Decimal("0")
+    igst_amount: Decimal = Decimal("0")
+    total_tax_amount: Decimal = Decimal("0")
+    round_off_amount: Decimal = Decimal("0")
+    total_amount: Decimal = Decimal("0")
     
     # Payment status
-    invoice_status: InvoiceStatus
-    paid_amount: Decimal = Field(default=Decimal("0"))
-    balance_amount: Decimal
+    invoice_status: InvoiceStatus = InvoiceStatus.DRAFT
+    paid_amount: Decimal = Decimal("0")
+    balance_amount: Decimal = Decimal("0")
     
-    # E-Invoice details
-    irn: Optional[str] = None
-    ack_number: Optional[str] = None
+    # E-Invoice
+    irn: Optional[str] = Field(None, description="Invoice Reference Number")
+    ack_number: Optional[str] = Field(None, description="Acknowledgement number")
     ack_date: Optional[datetime] = None
-    qr_code: Optional[str] = None
+    qr_code: Optional[str] = Field(None, description="E-invoice QR code data")
+    e_way_bill_number: Optional[str] = None
     
     created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        from_attributes = True
+    updated_at: Optional[datetime] = None
+    created_by: Optional[int] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InvoiceSummary(BaseModel):
+    """Lightweight invoice for lists"""
+    
+    invoice_id: int
+    invoice_number: str
+    invoice_date: date
+    customer_name: str
+    total_amount: Decimal
+    paid_amount: Decimal
+    balance_amount: Decimal
+    invoice_status: InvoiceStatus
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InvoiceListResponse(BaseModel):
+    """Paginated invoice list"""
+    
+    total: int
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=20, ge=1, le=1000)
+    invoices: List[InvoiceSummary] = Field(default_factory=list)
+
+
+# =============================================================================
+# PAYMENT SCHEMAS
+# =============================================================================
 
 class PaymentCreate(BaseModel):
-    """Schema for recording payment"""
+    """Schema for recording payment against invoice"""
+    
     invoice_id: int = Field(..., gt=0)
     payment_date: date = Field(default_factory=date.today)
-    amount: Decimal = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0, description="Payment amount")
     payment_mode: PaymentMode
     
-    # Payment details
     transaction_reference: Optional[str] = Field(None, max_length=100)
     bank_name: Optional[str] = Field(None, max_length=100)
     cheque_number: Optional[str] = Field(None, max_length=50)
@@ -166,9 +237,12 @@ class PaymentCreate(BaseModel):
     
     notes: Optional[str] = Field(None, max_length=500)
 
+    model_config = ConfigDict(str_strip_whitespace=True)
+
 
 class PaymentResponse(BaseModel):
     """Schema for payment response"""
+    
     payment_id: int
     invoice_id: int
     invoice_number: str
@@ -185,144 +259,168 @@ class PaymentResponse(BaseModel):
     
     notes: Optional[str] = None
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
+    created_by: Optional[int] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GeneralPaymentCreate(BaseModel):
+    """Schema for general payment (advance or against multiple invoices)"""
+    
+    payment_number: Optional[str] = None
+    payment_date: date = Field(default_factory=date.today)
+    customer_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    payment_type: str = Field(..., description="advance_payment, invoice_payment, regular_payment, adjustment_entry")
+    amount: Decimal = Field(..., gt=0)
+    payment_mode: str = Field(..., description="cash, cheque, upi, bank_transfer, credit_adjustment")
+    reference_number: Optional[str] = Field(None, max_length=100)
+    bank_name: Optional[str] = Field(None, max_length=100)
+    payment_status: str = Field(default="completed")
+    cleared_date: Optional[date] = None
+    branch_id: Optional[int] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class InvoicePaymentCreate(BaseModel):
+    """Schema for recording payment against specific invoice"""
+    
+    invoice_id: int
+    payment_date: date = Field(default_factory=date.today)
+    payment_mode: str = Field(..., description="cash, cheque, online, card, upi, neft, rtgs")
+    amount: Decimal = Field(..., gt=0)
+    transaction_reference: Optional[str] = Field(None, max_length=100)
+    bank_name: Optional[str] = Field(None, max_length=100)
+    cheque_number: Optional[str] = Field(None, max_length=50)
+    cheque_date: Optional[date] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class PaymentListResponse(BaseModel):
+    """Paginated payment list"""
+    
+    total: int
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=20, ge=1, le=1000)
+    payments: List[PaymentResponse] = Field(default_factory=list)
+
+
+class PaymentSummaryResponse(BaseModel):
+    """Payment summary statistics"""
+    
+    total_payments: int = 0
+    invoices_paid: int = 0
+    total_collected: Decimal = Decimal("0")
+    payment_modes: dict = Field(default_factory=dict)
+    pending: dict = Field(default_factory=dict)
+
+
+# =============================================================================
+# GST REPORT SCHEMAS
+# =============================================================================
 
 class GSTReportRequest(BaseModel):
     """Schema for GST report request"""
+    
     from_date: date
     to_date: date
-    report_type: str = Field(..., pattern=r"^(gstr1|gstr3b)$")
-    
-    @validator('to_date')
-    def validate_date_range(cls, v, values):
+    report_type: str = Field(..., description="gstr1, gstr3b, gstr2a")
+
+    @field_validator("to_date")
+    @classmethod
+    def validate_date_range(cls, v, info):
         """Ensure to_date is after from_date"""
-        if 'from_date' in values and v < values['from_date']:
-            raise ValueError('To date must be after from date')
+        from_date = info.data.get("from_date")
+        if from_date and v < from_date:
+            raise ValueError("To date must be after from date")
         return v
 
 
 class GSTR1Summary(BaseModel):
     """GSTR-1 summary for outward supplies"""
+    
     period: str  # MM-YYYY
     
     # B2B supplies
-    b2b_invoices: int
-    b2b_taxable_value: Decimal
-    b2b_cgst: Decimal
-    b2b_sgst: Decimal
-    b2b_igst: Decimal
+    b2b_invoices: int = 0
+    b2b_taxable_value: Decimal = Decimal("0")
+    b2b_cgst: Decimal = Decimal("0")
+    b2b_sgst: Decimal = Decimal("0")
+    b2b_igst: Decimal = Decimal("0")
     
     # B2C supplies
-    b2c_invoices: int
-    b2c_taxable_value: Decimal
-    b2c_cgst: Decimal
-    b2c_sgst: Decimal
-    b2c_igst: Decimal
+    b2c_invoices: int = 0
+    b2c_taxable_value: Decimal = Decimal("0")
+    b2c_cgst: Decimal = Decimal("0")
+    b2c_sgst: Decimal = Decimal("0")
+    b2c_igst: Decimal = Decimal("0")
     
-    # Nil rated supplies
-    nil_rated_supplies: Decimal
-    exempted_supplies: Decimal
+    # Exempt/Nil
+    nil_rated_supplies: Decimal = Decimal("0")
+    exempted_supplies: Decimal = Decimal("0")
     
-    # Total
-    total_invoices: int
-    total_taxable_value: Decimal
-    total_tax: Decimal
+    # Totals
+    total_invoices: int = 0
+    total_taxable_value: Decimal = Decimal("0")
+    total_tax: Decimal = Decimal("0")
 
 
 class GSTR3BSummary(BaseModel):
     """GSTR-3B summary for monthly return"""
+    
     period: str  # MM-YYYY
     
     # Outward supplies
-    outward_taxable_supplies: Decimal
-    outward_zero_rated: Decimal
-    outward_exempted: Decimal
+    outward_taxable_supplies: Decimal = Decimal("0")
+    outward_zero_rated: Decimal = Decimal("0")
+    outward_exempted: Decimal = Decimal("0")
     
     # Inward supplies
-    inward_supplies_from_isd: Decimal
-    all_other_itc: Decimal
+    inward_supplies_from_isd: Decimal = Decimal("0")
+    all_other_itc: Decimal = Decimal("0")
     
     # Tax payable
-    cgst_payable: Decimal
-    sgst_payable: Decimal
-    igst_payable: Decimal
-    cess_payable: Decimal
+    cgst_payable: Decimal = Decimal("0")
+    sgst_payable: Decimal = Decimal("0")
+    igst_payable: Decimal = Decimal("0")
+    cess_payable: Decimal = Decimal("0")
     
     # Interest and late fee
-    interest: Decimal
-    late_fee: Decimal
+    interest: Decimal = Decimal("0")
+    late_fee: Decimal = Decimal("0")
     
-    # Total tax payable
-    total_tax_payable: Decimal
+    total_tax_payable: Decimal = Decimal("0")
 
 
-class InvoiceSummary(BaseModel):
+# =============================================================================
+# DASHBOARD SCHEMAS
+# =============================================================================
+
+class InvoiceDashboard(BaseModel):
     """Invoice summary for dashboard"""
-    total_invoices: int
-    total_amount: Decimal
-    paid_amount: Decimal
-    outstanding_amount: Decimal
-    overdue_amount: Decimal
+    
+    total_invoices: int = 0
+    total_amount: Decimal = Decimal("0")
+    paid_amount: Decimal = Decimal("0")
+    outstanding_amount: Decimal = Decimal("0")
+    overdue_amount: Decimal = Decimal("0")
     
     # By status
-    draft_count: int
-    generated_count: int
-    paid_count: int
-    partially_paid_count: int
-    cancelled_count: int
+    draft_count: int = 0
+    generated_count: int = 0
+    paid_count: int = 0
+    partially_paid_count: int = 0
+    cancelled_count: int = 0
     
-    # This month
-    current_month_invoices: int
-    current_month_amount: Decimal
-    current_month_collected: Decimal
+    # Current month
+    current_month_invoices: int = 0
+    current_month_amount: Decimal = Decimal("0")
+    current_month_collected: Decimal = Decimal("0")
 
 
-class GeneralPaymentCreate(BaseModel):
-    """Schema for creating a general payment (advance or against multiple invoices)"""
-    org_id: Optional[str] = None  # Will be provided via header
-    payment_number: Optional[str] = None
-    payment_date: date = Field(default_factory=date.today)
-    customer_id: Optional[int] = None
-    supplier_id: Optional[int] = None
-    payment_type: str = Field(..., pattern="^(advance_payment|invoice_payment|regular_payment|adjustment_entry)$")
-    amount: Decimal = Field(..., gt=0)
-    payment_mode: str = Field(..., pattern="^(cash|cheque|upi|bank_transfer|credit_adjustment)$")
-    reference_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    payment_status: str = Field(default="completed")
-    cleared_date: Optional[date] = None
-    branch_id: Optional[int] = None
-    created_by: Optional[int] = None
-    approved_by: Optional[int] = None
-    notes: Optional[str] = None
-
-
-class InvoicePaymentCreate(BaseModel):
-    """Schema for recording a payment against invoice"""
-    invoice_id: int
-    payment_date: date = Field(default_factory=date.today)
-    payment_mode: str = Field(..., pattern="^(cash|cheque|online|card|upi|neft|rtgs)$")
-    amount: Decimal = Field(..., gt=0)
-    transaction_reference: Optional[str] = None
-    bank_name: Optional[str] = None
-    cheque_number: Optional[str] = None
-    cheque_date: Optional[date] = None
-    notes: Optional[str] = None
-
-
-class PaymentListResponse(BaseModel):
-    """Schema for payment list"""
-    payments: List[dict]
-    total: int
-
-
-class PaymentSummaryResponse(BaseModel):
-    """Schema for payment summary"""
-    total_payments: int
-    invoices_paid: int
-    total_collected: Decimal
-    payment_modes: dict
-    pending: dict
+# Legacy alias
+InvoiceSummary_Dashboard = InvoiceDashboard
