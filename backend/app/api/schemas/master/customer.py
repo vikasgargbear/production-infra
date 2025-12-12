@@ -1,272 +1,433 @@
 """
-Customer schemas for the enterprise pharma system
+Customer schemas for enterprise pharma system
 Handles GST-compliant customer management with credit limits
 """
-from typing import Optional, List
-from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Annotated
+from pydantic import BaseModel, Field, field_validator, ConfigDict, EmailStr
 from datetime import datetime, date
 from decimal import Decimal
 import re
 from uuid import UUID
 
 
+# =============================================================================
+# CUSTOMER SCHEMAS
+# =============================================================================
+
 class CustomerBase(BaseModel):
-    """Base customer model with common fields"""
-    customer_name: str = Field(..., min_length=1, max_length=200)
-    customer_code: Optional[str] = Field(None, max_length=50)
-    contact_person_name: Optional[str] = Field(None, max_length=100, description="Contact person name")
-    contact_person_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$", description="Contact person phone")
-    contact_person_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="Contact person email")
-    primary_phone: str = Field(..., pattern=r"^[0-9]{10}$", description="10-digit mobile number")
-    secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    primary_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="Primary email address")
+    """Base customer model with common fields for create/update"""
     
-    # Address fields (optional - stored in separate table)
-    address_line1: Optional[str] = Field(None, max_length=200, description="Building/House number and street")
-    address_line2: Optional[str] = Field(None, max_length=200, description="Additional address details")
+    customer_name: str = Field(
+        ..., 
+        min_length=1, 
+        max_length=200,
+        description="Legal business or individual name",
+        examples=["ABC Medical Store", "Dr. Sharma Clinic"]
+    )
+    customer_code: Optional[str] = Field(
+        None, 
+        max_length=50,
+        description="Unique customer code (auto-generated if not provided)",
+        examples=["CUST-001"]
+    )
+    customer_type: str = Field(
+        ...,
+        description="Type: retail, wholesale, hospital, clinic, pharmacy, distributor",
+        examples=["retail", "wholesale", "pharmacy"]
+    )
+    business_type: Optional[str] = Field(
+        default="retail_pharmacy", 
+        max_length=100, 
+        description="Business classification"
+    )
+    
+    # Contact - Primary
+    primary_phone: str = Field(
+        ..., 
+        pattern=r"^\d{10}$",
+        description="10-digit mobile number (required)",
+        examples=["9876543210"]
+    )
+    secondary_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    whatsapp_number: Optional[str] = Field(None, pattern=r"^\d{10}$", description="WhatsApp number")
+    primary_email: Optional[EmailStr] = Field(None, description="Primary email address")
+    
+    # Contact Person
+    contact_person_name: Optional[str] = Field(None, max_length=100, description="Contact person name")
+    contact_person_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    contact_person_email: Optional[EmailStr] = None
+    
+    # Address (for inline creation - stored in separate table)
+    address_line1: Optional[str] = Field(None, max_length=255, description="Street address")
+    address_line2: Optional[str] = Field(None, max_length=255, description="Additional address")
     area: Optional[str] = Field(None, max_length=100, description="Area/Locality name")
     city: Optional[str] = Field(None, max_length=100)
     state: Optional[str] = Field(None, max_length=100)
-    pincode: Optional[str] = Field(None, pattern=r"^[0-9]{6}$", description="6-digit pincode")
+    pincode: Optional[str] = Field(None, pattern=r"^\d{6}$", description="6-digit PIN code")
     
-    # GST and Tax details
-    gst_number: Optional[str] = Field(None, pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$", description="15-character GSTIN")
-    pan_number: Optional[str] = Field(None, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", description="10-character PAN")
-    drug_license_number: Optional[str] = Field(None, max_length=50, description="Drug License number (e.g., 20B-MH-12345)")
+    # GST & Tax Details
+    gst_number: Optional[str] = Field(
+        None,
+        min_length=15,
+        max_length=15,
+        description="15-digit GST Identification Number",
+        examples=["27AAPFU0939F1ZV"]
+    )
+    pan_number: Optional[str] = Field(
+        None,
+        min_length=10,
+        max_length=10,
+        description="10-character PAN number",
+        examples=["AAPFU0939F"]
+    )
+    
+    # Pharma Compliance
+    drug_license_number: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Drug license number (20B/21B)",
+        examples=["20B-MH-12345"]
+    )
     drug_license_validity: Optional[date] = Field(None, description="Drug license expiry date")
+    fssai_number: Optional[str] = Field(None, max_length=20, description="FSSAI license number")
     
-    # Business details
-    customer_type: str = Field(..., pattern=r"^(retail|wholesale|hospital|clinic|pharmacy)$")
-    business_type: Optional[str] = Field(default="retail_pharmacy", max_length=100, description="Type of business")
-    credit_limit: Decimal = Field(default=Decimal("0.00"), ge=0)
-    credit_days: int = Field(default=0, ge=0, le=365)
-    credit_rating: Optional[str] = Field(default="NEW", max_length=50)
-    payment_terms: Optional[str] = Field(default="CASH", max_length=100)
-    discount_percent: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
+    # Credit Management
+    credit_limit: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        description="Maximum credit amount allowed"
+    )
+    credit_days: int = Field(
+        default=0,
+        ge=0,
+        le=365,
+        description="Credit period in days"
+    )
+    credit_rating: Optional[str] = Field(
+        default="NEW",
+        max_length=50,
+        description="Credit rating: NEW, A, B, C, D, BLACKLIST"
+    )
+    payment_terms: Optional[str] = Field(
+        default="CASH",
+        max_length=100,
+        description="Payment terms: CASH, NET15, NET30, NET45, NET60"
+    )
+    discount_percent: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        le=100,
+        description="Default discount percentage"
+    )
     
     # Status
-    is_active: bool = Field(default=True)
-    internal_notes: Optional[str] = Field(None, max_length=500, description="Internal notes about customer")
+    is_active: bool = Field(default=True, description="Whether customer is active")
+    internal_notes: Optional[str] = Field(None, max_length=1000, description="Internal notes")
     
-    @validator('gst_number')
-    def validate_gst_number(cls, v):
-        """Validate GSTIN format"""
-        if v and not re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$", v):
-            raise ValueError('Invalid GSTIN format. Expected: 27XXXXX1234X1ZX')
+    # Validators
+    @field_validator("gst_number")
+    @classmethod
+    def validate_gst_number(cls, v: Optional[str]) -> Optional[str]:
+        """Validate GSTIN format: 2 digits state + 10 chars PAN + 1 entity + 1 Z + 1 checksum"""
+        if v is None or v == "":
+            return None
+        v = v.upper().strip()
+        pattern = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"
+        if not re.match(pattern, v):
+            raise ValueError("Invalid GSTIN format. Expected: 27AAPFU0939F1ZV")
         return v
     
-    @validator('pan_number')
-    def validate_pan(cls, v):
-        """Validate PAN format"""
-        if v and not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", v):
-            raise ValueError('Invalid PAN format')
+    @field_validator("pan_number")
+    @classmethod
+    def validate_pan_number(cls, v: Optional[str]) -> Optional[str]:
+        """Validate PAN format: 5 letters + 4 digits + 1 letter"""
+        if v is None or v == "":
+            return None
+        v = v.upper().strip()
+        pattern = r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"
+        if not re.match(pattern, v):
+            raise ValueError("Invalid PAN format. Expected: AAPFU0939F")
         return v
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        str_strip_whitespace=True,
+        validate_assignment=True
+    )
 
 
 class CustomerCreate(CustomerBase):
     """Schema for creating a new customer"""
-    # org_id removed - it comes from authentication token, not request body
     pass
 
 
 class CustomerUpdate(BaseModel):
-    """Schema for updating customer details"""
+    """Schema for updating customer - all fields optional"""
+    
     customer_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    customer_type: Optional[str] = None
+    business_type: Optional[str] = Field(None, max_length=100)
+    
+    primary_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    secondary_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    whatsapp_number: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    primary_email: Optional[EmailStr] = None
+    
     contact_person_name: Optional[str] = Field(None, max_length=100)
-    primary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    primary_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    contact_person_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+    contact_person_email: Optional[EmailStr] = None
     
-    # Address fields
-    address_line1: Optional[str] = Field(None, min_length=1, max_length=200, description="Building/House number and street")
-    address_line2: Optional[str] = Field(None, max_length=200, description="Additional address details")
-    area: Optional[str] = Field(None, max_length=100, description="Area/Locality name")
-    city: Optional[str] = Field(None, min_length=1, max_length=100)
-    state: Optional[str] = Field(None, min_length=1, max_length=100)
-    pincode: Optional[str] = Field(None, pattern=r"^[0-9]{6}$")
+    address_line1: Optional[str] = Field(None, max_length=255)
+    address_line2: Optional[str] = Field(None, max_length=255)
+    area: Optional[str] = Field(None, max_length=100)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=100)
+    pincode: Optional[str] = Field(None, pattern=r"^\d{6}$")
     
-    # Business details
+    gst_number: Optional[str] = Field(None, min_length=15, max_length=15)
+    pan_number: Optional[str] = Field(None, min_length=10, max_length=10)
+    drug_license_number: Optional[str] = Field(None, max_length=50)
+    drug_license_validity: Optional[date] = None
+    fssai_number: Optional[str] = Field(None, max_length=20)
+    
     credit_limit: Optional[Decimal] = Field(None, ge=0)
     credit_days: Optional[int] = Field(None, ge=0, le=365)
+    credit_rating: Optional[str] = Field(None, max_length=50)
+    payment_terms: Optional[str] = Field(None, max_length=100)
     discount_percent: Optional[Decimal] = Field(None, ge=0, le=100)
     
-    # Status
     is_active: Optional[bool] = None
-    internal_notes: Optional[str] = Field(None, max_length=500)
+    internal_notes: Optional[str] = Field(None, max_length=1000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class CustomerResponse(CustomerBase):
-    """Schema for customer response with ALL database fields (enterprise standard)"""
-    customer_id: int
-    org_id: UUID
-    customer_code: str
+    """Schema for customer response with all database fields"""
     
-    # CORE FIELDS (from CustomerBase)
-    # Inherited: customer_name, customer_type, business_type, primary_phone, etc.
+    customer_id: int = Field(..., description="Unique customer ID")
+    org_id: UUID = Field(..., description="Organization ID")
+    customer_code: str = Field(..., description="Unique customer code")
     
-    # ADDITIONAL CONTACT FIELDS (not in base)
-    whatsapp_number: Optional[str] = None
-    
-    # COMPLIANCE FIELDS (additional to base)
-    fssai_number: Optional[str] = None
+    # KYC/Compliance
     kyc_status: Optional[str] = Field(default="pending", description="pending/verified/rejected")
     kyc_verified_date: Optional[date] = None
     kyc_documents: Optional[dict] = None
     
-    # CREDIT MANAGEMENT (additional)
+    # Credit Management (extended)
     current_outstanding: Decimal = Field(default=Decimal("0.00"), description="Current dues")
+    advance_balance: Decimal = Field(default=Decimal("0.00"), description="Unallocated payments")
+    net_balance: Decimal = Field(default=Decimal("0.00"), description="Outstanding - Advance")
     security_deposit: Decimal = Field(default=Decimal("0.00"))
     overdue_interest_rate: Optional[Decimal] = None
     preferred_payment_mode: Optional[str] = None
     
-    # SALES ASSIGNMENT
+    # Sales Assignment
     territory_id: Optional[int] = None
     route_id: Optional[int] = None
     assigned_salesperson_id: Optional[int] = None
     price_list_id: Optional[int] = None
     discount_group_id: Optional[int] = None
     
-    # COMMUNICATION PREFERENCES
+    # Communication Preferences
     prefer_sms: bool = Field(default=False)
     prefer_email: bool = Field(default=False)
     prefer_whatsapp: bool = Field(default=False)
     preferred_delivery_time: Optional[str] = None
     
-    # ANALYTICS (transaction history)
+    # Analytics
     first_transaction_date: Optional[date] = None
     last_transaction_date: Optional[date] = None
     total_business_amount: Decimal = Field(default=Decimal("0.00"))
     total_transactions: int = Field(default=0)
     average_order_value: Decimal = Field(default=Decimal("0.00"))
     
-    # LOYALTY PROGRAM
+    # Loyalty
     loyalty_points: Decimal = Field(default=Decimal("0.00"))
     loyalty_tier: Optional[str] = Field(default="bronze", description="bronze/silver/gold/platinum")
     
-    # STATUS FLAGS
+    # Blacklist
     blacklisted: bool = Field(default=False)
     blacklist_reason: Optional[str] = None
     blacklist_date: Optional[date] = None
     
-    # LEGACY COMPUTED FIELDS (kept for backward compatibility)
-    outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"), description="Alias for current_outstanding")
-    advance_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Unallocated payment amount")
-    net_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Outstanding - Advance")
-    total_business: Optional[Decimal] = Field(default=Decimal("0.00"), description="Alias for total_business_amount")
-    total_orders: Optional[int] = Field(default=0, description="Alias for total_transactions")
-    last_order_date: Optional[date] = Field(default=None, description="Alias for last_transaction_date")
+    # Addresses (from JOIN)
+    addresses: List[dict] = Field(default_factory=list)
     
-    # ADDRESSES (from JOIN)
-    addresses: Optional[List[dict]] = Field(default_factory=list)
-    
-    # METADATA
+    # Metadata
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     created_by: Optional[int] = None
     updated_by: Optional[int] = None
     
-    # BACKWARD COMPATIBILITY: Keep old field names temporarily
-    # These will be populated from the correct database fields
-    email: Optional[str] = Field(default=None, description="Alias for primary_email")
-    gstin: Optional[str] = Field(default=None, description="Alias for gst_number (via parent)")
-    contact_person: Optional[str] = Field(default=None, description="Alias for contact_person_name")
-    notes: Optional[str] = Field(default=None, description="Alias for internal_notes")
-    
-    class Config:
-        from_attributes = True
+    # Backward Compatibility Aliases
+    outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"))
+    total_business: Optional[Decimal] = Field(default=Decimal("0.00"))
+    total_orders: Optional[int] = Field(default=0)
+    last_order_date: Optional[date] = None
+    email: Optional[str] = None
+    gstin: Optional[str] = None
+    contact_person: Optional[str] = None
+    notes: Optional[str] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CustomerSummary(BaseModel):
+    """Lightweight customer for dropdowns/autocomplete"""
+    
+    customer_id: int
+    customer_name: str
+    customer_code: Optional[str] = None
+    primary_phone: Optional[str] = None
+    gst_number: Optional[str] = None
+    credit_limit: Decimal = Decimal("0")
+    current_outstanding: Decimal = Decimal("0")
+    is_active: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# LEDGER & OUTSTANDING SCHEMAS
+# =============================================================================
 
 class CustomerLedgerEntry(BaseModel):
-    """Schema for customer ledger entries"""
+    """Schema for customer ledger entry"""
+    
     transaction_date: date
-    transaction_type: str  # invoice, payment, credit_note, debit_note
+    transaction_type: str = Field(..., description="invoice, payment, credit_note, debit_note")
     reference_number: str
     description: str
     debit_amount: Decimal = Field(default=Decimal("0.00"))
     credit_amount: Decimal = Field(default=Decimal("0.00"))
     running_balance: Decimal
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerLedgerResponse(BaseModel):
     """Schema for customer ledger response"""
+    
     customer_id: int
     customer_name: str
+    from_date: Optional[date] = None
+    to_date: Optional[date] = None
     opening_balance: Decimal
     total_debit: Decimal
     total_credit: Decimal
     closing_balance: Decimal
-    entries: List[CustomerLedgerEntry]
-    
-    class Config:
-        from_attributes = True
+    entries: List[CustomerLedgerEntry] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OutstandingInvoice(BaseModel):
     """Schema for outstanding invoice details"""
-    order_id: int
-    order_number: str
-    order_date: date
+    
+    invoice_id: int
+    invoice_number: str
+    invoice_date: date
+    due_date: Optional[date] = None
     invoice_amount: Decimal
     paid_amount: Decimal
     outstanding_amount: Decimal
-    days_overdue: int
-    
-    class Config:
-        from_attributes = True
+    days_overdue: int = Field(default=0)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerOutstandingResponse(BaseModel):
-    """Schema for customer outstanding response"""
+    """Schema for customer outstanding summary"""
+    
     customer_id: int
     customer_name: str
     credit_limit: Decimal
     credit_days: int
     total_outstanding: Decimal
-    advance_balance: Decimal = Field(default=Decimal("0.00"), description="Total unallocated payments")
+    advance_balance: Decimal = Field(default=Decimal("0.00"), description="Unallocated payments")
     net_balance: Decimal = Field(default=Decimal("0.00"), description="Outstanding - Advance")
     available_credit: Decimal
     overdue_amount: Decimal
-    invoices: List[OutstandingInvoice]
-    
-    class Config:
-        from_attributes = True
+    invoices: List[OutstandingInvoice] = Field(default_factory=list)
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# PAYMENT SCHEMAS
+# =============================================================================
 
 class PaymentRecord(BaseModel):
     """Schema for recording customer payment"""
+    
     customer_id: int
     payment_date: date = Field(default_factory=date.today)
-    amount: Decimal = Field(..., gt=0)
-    payment_mode: str = Field(..., pattern=r"^(cash|cheque|bank_transfer|upi|card)$")
-    reference_number: Optional[str] = Field(None, max_length=100)
+    amount: Decimal = Field(..., gt=0, description="Payment amount")
+    payment_mode: str = Field(
+        ...,
+        description="Payment mode: cash, cheque, bank_transfer, upi, card",
+        examples=["cash", "upi", "bank_transfer"]
+    )
+    reference_number: Optional[str] = Field(None, max_length=100, description="Transaction reference")
+    bank_name: Optional[str] = Field(None, max_length=100, description="Bank name for cheque/transfer")
     notes: Optional[str] = Field(None, max_length=500)
-    
-    # For payment allocation
-    allocate_to_invoices: Optional[List[int]] = Field(None, description="List of order IDs to allocate payment")
-    
+    allocate_to_invoices: Optional[List[int]] = Field(
+        None, 
+        description="List of invoice IDs to allocate payment"
+    )
+
+    @field_validator("payment_mode")
+    @classmethod
+    def validate_payment_mode(cls, v: str) -> str:
+        valid_modes = {"cash", "cheque", "bank_transfer", "upi", "card", "neft", "rtgs", "imps"}
+        if v.lower() not in valid_modes:
+            raise ValueError(f"Invalid payment mode. Must be one of: {', '.join(valid_modes)}")
+        return v.lower()
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
 
 class PaymentResponse(BaseModel):
     """Schema for payment response"""
+    
     payment_id: int
     customer_id: int
+    customer_name: Optional[str] = None
     payment_date: date
     amount: Decimal
     payment_mode: str
-    reference_number: Optional[str]
-    allocated_amount: Decimal
-    unallocated_amount: Decimal
+    reference_number: Optional[str] = None
+    allocated_amount: Decimal = Decimal("0")
+    unallocated_amount: Decimal = Decimal("0")
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
+    created_by: Optional[int] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# LIST RESPONSES
+# =============================================================================
 
 class CustomerListResponse(BaseModel):
-    """Schema for customer list with pagination"""
-    total: int
-    page: int
-    per_page: int
-    customers: List[CustomerResponse]
+    """Paginated customer list response"""
+    
+    total: int = Field(..., description="Total customers matching filter")
+    page: int = Field(..., ge=1)
+    per_page: int = Field(..., ge=1, le=1000)
+    customers: List[CustomerResponse] = Field(default_factory=list)
+
+
+class CustomerSearch(BaseModel):
+    """Customer search/filter parameters"""
+    
+    q: Optional[str] = Field(None, min_length=1, description="Search query")
+    customer_type: Optional[str] = None
+    city: Optional[str] = None
+    has_gstin: Optional[bool] = None
+    is_active: Optional[bool] = True
+    has_outstanding: Optional[bool] = None
+    territory_id: Optional[int] = None
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
