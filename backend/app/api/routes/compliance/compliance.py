@@ -13,7 +13,7 @@ import json
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+from ....core.jwt_auth import get_org_id_string
 
 logger = logging.getLogger(__name__)
 

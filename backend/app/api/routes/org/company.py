@@ -12,6 +12,7 @@ import json
 from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.org_context import get_org_context, OrgContext
 from ....core.permissions import PermissionChecker
+from ....core.jwt_auth import get_org_id_string
 # get_org_id_string replaced with OrgContext  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
