@@ -204,10 +204,10 @@ api.include_router(settings_router, prefix="/settings", tags=["Settings"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])
 api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
-api.include_router(conversions.router, tags=["Document Conversions"])
+# api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
-api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
-api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
+# api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
+# api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
 
 @api.get("/test-connection")
 async def test_connection():
