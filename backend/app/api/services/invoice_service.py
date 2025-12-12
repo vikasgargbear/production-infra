@@ -239,3 +239,249 @@ class InvoiceService:
         invoice_dict["items"] = [dict(item._mapping) for item in items]
         
         return invoice_dict
+
+    # =========================================================================
+    # NEW METHODS - Extracted from invoices.py create_invoice route
+    # =========================================================================
+
+    @staticmethod
+    def calculate_invoice_totals(
+        items: list, 
+        gst_type: str = "CGST/SGST",
+        freight_charges: float = 0,
+        insurance_charges: float = 0,
+        other_charges: float = 0,
+        invoice_discount: float = 0
+    ) -> Dict[str, Any]:
+        """
+        Calculate all invoice totals from item list.
+        
+        Args:
+            items: List of item dicts with quantity, unit_price, discount_percent, gst_percent
+            gst_type: CGST/SGST for intra-state, IGST for inter-state
+            freight_charges: Additional freight charges
+            insurance_charges: Additional insurance charges
+            other_charges: Other additional charges
+            invoice_discount: Overall invoice-level discount
+            
+        Returns:
+            Dict with all calculated totals
+        """
+        from ...utils.invoice_helpers import calculate_line_item
+        
+        subtotal = 0
+        total_discount = 0
+        total_cgst = 0
+        total_sgst = 0
+        total_igst = 0
+        total_tax = 0
+        
+        for item in items:
+            quantity = float(item.get("quantity", 1))
+            unit_price = float(item.get("unit_price", 0))
+            discount_percent = float(item.get("discount_percent", 0))
+            gst_percent = float(item.get("gst_percent", 0))
+            
+            # Use base_quantity for billing (free items not billed)
+            base_quantity = float(item.get("base_quantity", quantity))
+            
+            # Use shared helper for consistent calculations
+            calc = calculate_line_item(base_quantity, unit_price, discount_percent, gst_percent, gst_type)
+            
+            subtotal += calc["subtotal"]
+            total_discount += calc["discount_amount"]
+            total_cgst += calc["cgst_amount"]
+            total_sgst += calc["sgst_amount"]
+            total_igst += calc["igst_amount"]
+            total_tax += calc["total_tax"]
+        
+        # Calculate final amounts
+        taxable_amount = subtotal - total_discount
+        amount_before_round = (
+            taxable_amount + total_tax + 
+            freight_charges + insurance_charges + other_charges - 
+            invoice_discount
+        )
+        final_amount = round(amount_before_round)
+        round_off_amount = final_amount - amount_before_round
+        
+        return {
+            "subtotal": subtotal,
+            "total_discount": total_discount,
+            "taxable_amount": taxable_amount,
+            "total_cgst": total_cgst,
+            "total_sgst": total_sgst,
+            "total_igst": total_igst,
+            "total_tax": total_tax,
+            "freight_charges": freight_charges,
+            "insurance_charges": insurance_charges,
+            "other_charges": other_charges,
+            "invoice_discount": invoice_discount,
+            "round_off_amount": round_off_amount,
+            "final_amount": final_amount
+        }
+
+    @staticmethod
+    def get_customer_details(
+        db: Session, 
+        customer_id: int, 
+        org_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get customer name and address IDs for invoice creation.
+        
+        Returns:
+            Dict with customer_name, billing_address_id, shipping_address_id
+        """
+        # Get customer name
+        cust_result = db.execute(text("""
+            SELECT customer_name FROM parties.customers
+            WHERE customer_id = :customer_id AND org_id = :org_id
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
+        cust = cust_result.fetchone()
+        customer_name = cust[0] if cust else f"Customer {customer_id}"
+        
+        # Get billing address ID
+        billing_addr_result = db.execute(text("""
+            SELECT address_id
+            FROM master.addresses
+            WHERE entity_type = 'customer'
+            AND entity_id = :customer_id
+            AND org_id = :org_id
+            AND address_type = 'billing'
+            AND is_active = true
+            ORDER BY is_default DESC, created_at DESC
+            LIMIT 1
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
+        billing_addr = billing_addr_result.fetchone()
+        billing_address_id = billing_addr[0] if billing_addr else None
+        
+        # Get shipping address ID
+        shipping_addr_result = db.execute(text("""
+            SELECT address_id
+            FROM master.addresses
+            WHERE entity_type = 'customer'
+            AND entity_id = :customer_id
+            AND org_id = :org_id
+            AND address_type = 'shipping'
+            AND is_active = true
+            ORDER BY is_default DESC, created_at DESC
+            LIMIT 1
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
+        shipping_addr = shipping_addr_result.fetchone()
+        shipping_address_id = shipping_addr[0] if shipping_addr else None
+        
+        return {
+            "customer_name": customer_name,
+            "billing_address_id": billing_address_id,
+            "shipping_address_id": shipping_address_id
+        }
+
+    @staticmethod
+    def create_outstanding_record(
+        db: Session,
+        invoice_id: int,
+        invoice_number: str,
+        customer_id: int,
+        invoice_date: date,
+        org_id: str
+    ) -> bool:
+        """
+        Create customer_outstanding record for receivables tracking.
+        
+        Returns:
+            True if record created/updated, False on error
+        """
+        try:
+            # Get the latest invoice data including payment status
+            invoice_data_result = db.execute(text("""
+                SELECT
+                    final_amount,
+                    paid_amount,
+                    credit_amount,
+                    payment_status,
+                    due_date
+                FROM sales.invoices
+                WHERE invoice_id = :invoice_id AND org_id = :org_id
+            """), {"invoice_id": invoice_id, "org_id": str(org_id)})
+            inv_data = invoice_data_result.fetchone()
+            
+            if not inv_data or inv_data[3] == 'paid':
+                return True  # No outstanding needed for fully paid
+            
+            final_amt = float(inv_data[0])
+            paid_amt = float(inv_data[1]) if inv_data[1] else 0
+            credit_amt = float(inv_data[2]) if inv_data[2] else final_amt - paid_amt
+            payment_stat = inv_data[3]
+            due_dt = inv_data[4] or (invoice_date + timedelta(days=7))
+            
+            # Check if outstanding record already exists
+            existing_check = db.execute(text("""
+                SELECT outstanding_id FROM financial.customer_outstanding
+                WHERE org_id = :org_id 
+                AND document_type = 'INVOICE' 
+                AND document_id = :document_id
+            """), {"org_id": org_id, "document_id": invoice_id})
+            
+            if not existing_check.fetchone():
+                # Create new outstanding record
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, 
+                        document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount,
+                        paid_amount, due_date, status, 
+                        days_overdue, aging_bucket
+                    ) VALUES (
+                        :org_id, :customer_id,
+                        'INVOICE', :invoice_id, :invoice_number,
+                        :invoice_date, :original_amount, :outstanding_amount,
+                        :paid_amount, :due_date, :status,
+                        GREATEST(0, CURRENT_DATE - :due_date::date),
+                        CASE 
+                            WHEN CURRENT_DATE <= :due_date::date THEN 'current'
+                            WHEN CURRENT_DATE - :due_date::date BETWEEN 1 AND 30 THEN '0-30'
+                            WHEN CURRENT_DATE - :due_date::date BETWEEN 31 AND 60 THEN '31-60'
+                            WHEN CURRENT_DATE - :due_date::date BETWEEN 61 AND 90 THEN '61-90'
+                            ELSE '90+'
+                        END
+                    )
+                """), {
+                    "org_id": org_id,
+                    "customer_id": customer_id,
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice_number,
+                    "invoice_date": invoice_date,
+                    "original_amount": final_amt,
+                    "outstanding_amount": credit_amt,
+                    "paid_amount": paid_amt,
+                    "due_date": due_dt,
+                    "status": 'partial' if payment_stat == 'partial' else 'open'
+                })
+            else:
+                # Update existing record
+                db.execute(text("""
+                    UPDATE financial.customer_outstanding
+                    SET outstanding_amount = :outstanding_amount,
+                        paid_amount = :paid_amount,
+                        status = :status,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE org_id = :org_id 
+                    AND document_type = 'INVOICE' 
+                    AND document_id = :document_id
+                """), {
+                    "org_id": org_id,
+                    "document_id": invoice_id,
+                    "outstanding_amount": credit_amt,
+                    "paid_amount": paid_amt,
+                    "status": 'partial' if payment_stat == 'partial' else 'open'
+                })
+            
+            db.commit()
+            logger.info(f"✅ Customer outstanding record created/updated for invoice {invoice_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create customer outstanding: {e}")
+            db.rollback()
+            return False

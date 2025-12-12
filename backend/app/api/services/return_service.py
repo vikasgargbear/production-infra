@@ -268,3 +268,62 @@ class ReturnService:
             disposition = "RESTOCK"
         
         return disposition, is_damaged
+
+    @staticmethod
+    def calculate_return_totals(
+        items: list,
+        gst_type: str = "CGST/SGST"
+    ) -> Dict[str, Any]:
+        """
+        Calculate all return totals from items list.
+        
+        Args:
+            items: List of item dicts with return_quantity/quantity, rate, discount_percent, tax_percent
+            gst_type: CGST/SGST for intra-state, IGST for inter-state
+            
+        Returns:
+            Dict with subtotal, tax_amount, cgst_amount, sgst_amount, igst_amount, total_amount
+        """
+        from .gst_service import GSTService
+        
+        subtotal = Decimal("0")
+        tax_amount = Decimal("0")
+        cgst_amount = Decimal("0")
+        sgst_amount = Decimal("0")
+        igst_amount = Decimal("0")
+        total_amount = Decimal("0")
+        
+        for item in items:
+            # Handle both return_quantity and quantity field names
+            qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
+            rate = Decimal(str(item.get("rate", 0)))
+            discount_percent = Decimal(str(item.get("discount_percent", 0)))
+            tax_percent = Decimal(str(item.get("tax_percent", 0)))
+            
+            # Calculate with discount
+            base_amount = qty * rate
+            discount_amount = (base_amount * discount_percent) / 100
+            taxable_amount = base_amount - discount_amount
+            
+            # Use GSTService for consistent tax calculations
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            item_tax = gst_components["total_tax_amount"]
+            item_cgst = gst_components["cgst_amount"]
+            item_sgst = gst_components["sgst_amount"]
+            item_igst = gst_components["igst_amount"]
+            
+            subtotal += taxable_amount
+            tax_amount += item_tax
+            cgst_amount += item_cgst
+            sgst_amount += item_sgst
+            igst_amount += item_igst
+            total_amount += taxable_amount + item_tax
+        
+        return {
+            "subtotal": subtotal,
+            "tax_amount": tax_amount,
+            "cgst_amount": cgst_amount,
+            "sgst_amount": sgst_amount,
+            "igst_amount": igst_amount,
+            "total_amount": total_amount
+        }

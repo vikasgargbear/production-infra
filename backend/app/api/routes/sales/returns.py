@@ -450,41 +450,21 @@ async def create_sale_return(
         if customer.gst_number:
             credit_note_no = f"CN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        # Calculate totals with proper discount handling
-        subtotal = Decimal("0")  # This will be the taxable amount after discounts
-        tax_amount = Decimal("0")
-        cgst_amount = Decimal("0")
-        sgst_amount = Decimal("0")
-        igst_amount = Decimal("0")
-        total_amount = Decimal("0")
+        # Calculate totals using ReturnService (DRY)
+        # Determine GST type automatically based on org state vs customer state
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=context.org_id,
+            customer_id=return_dict["customer_id"]
+        )
+        totals = ReturnService.calculate_return_totals(return_dict["items"], gst_type)
         
-        for item in return_dict["items"]:
-            # Handle both return_quantity and quantity field names
-            qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
-            rate = Decimal(str(item.get("rate", 0)))
-            discount_percent = Decimal(str(item.get("discount_percent", 0)))
-            tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            
-            # Calculate with discount
-            base_amount = qty * rate
-            discount_amount = (base_amount * discount_percent) / 100
-            taxable_amount = base_amount - discount_amount
-            
-            # Use GSTService for consistent tax calculations
-            # TODO: Determine gst_type based on customer state vs org state
-            gst_type = "CGST/SGST"  # Default to intra-state
-            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
-            item_tax = gst_components["total_tax_amount"]
-            item_cgst = gst_components["cgst_amount"]
-            item_sgst = gst_components["sgst_amount"]
-            item_igst = gst_components["igst_amount"]
-            
-            subtotal += taxable_amount  # Subtotal is the taxable amount after discount
-            tax_amount += item_tax
-            cgst_amount += item_cgst
-            sgst_amount += item_sgst
-            igst_amount += item_igst
-            total_amount += taxable_amount + item_tax
+        subtotal = totals["subtotal"]
+        tax_amount = totals["tax_amount"]
+        cgst_amount = totals["cgst_amount"]
+        sgst_amount = totals["sgst_amount"]
+        igst_amount = totals["igst_amount"]
+        total_amount = totals["total_amount"]
             
         # SECURITY FIX: Get branch_id and created_by from authenticated context
         # Previously: Random first user/branch from DB - now uses JWT-verified values
