@@ -14,7 +14,7 @@ import { getTodayBusinessDate, getDaysFromToday, getUTCTimestamp } from '../../.
 export const useInvoiceLogic = (onClose, prefilledData = null) => {
   // Network Status
   const { isOnline } = useNetworkStatus();
-  
+
   // Core State
   const [invoice, setInvoice] = useState({
     invoice_no: `DRAFT-${getTodayBusinessDate().replace(/-/g, '')}`, // Temporary draft number (company timezone)
@@ -107,7 +107,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         // Save to localStorage as backup
         localStorage.setItem('invoice_draft', JSON.stringify(draftData));
         console.log('[Invoice] Auto-saved draft');
-        
+
         // Optional: Show subtle notification
         // toast.info('Draft saved', { autoClose: 1000, position: 'bottom-right' });
       } catch (error) {
@@ -120,14 +120,14 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
   // Load draft on mount - use ref to prevent double execution in StrictMode
   const draftLoadedRef = useRef(false);
-  
+
   useEffect(() => {
     // CRITICAL FIX: Prevent double execution in React StrictMode (dev)
     if (draftLoadedRef.current) {
       return;
     }
     draftLoadedRef.current = true;
-    
+
     // DISABLED: Draft auto-restore removed - will build dedicated draft history UI later
     // const loadDraft = () => {
     //   try {
@@ -140,7 +140,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     //     console.error('[Invoice] Failed to load draft:', error);
     //   }
     // };
-    
+
     // Clean up old drafts silently
     try {
       const savedDraft = localStorage.getItem('invoice_draft');
@@ -174,7 +174,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           const cached = localStorage.getItem(cacheKey);
           const cacheTime = localStorage.getItem(cacheTimeKey);
           const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
-          
+
           // Use cache if less than 10 minutes old
           if (cached && cacheAge < 10 * 60 * 1000) {
             console.log('[Invoice] Using cached employees');
@@ -185,7 +185,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
             if (employeeResponse?.data && Array.isArray(employeeResponse.data)) {
               const employees = employeeResponse.data;
               setEmployees(employees);
-              
+
               // Cache for 10 minutes
               localStorage.setItem(cacheKey, JSON.stringify(employees));
               localStorage.setItem(cacheTimeKey, Date.now().toString());
@@ -204,7 +204,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
             handleCustomerSelect(prefilledData.customer);
           }
           if (prefilledData.items && prefilledData.items.length > 0) {
-            const transformedItems = prefilledData.items.map(item => 
+            const transformedItems = prefilledData.items.map(item =>
               DataTransformer.transformProduct(item, 'invoice')
             );
             setInvoice(prev => ({ ...prev, items: transformedItems }));
@@ -230,8 +230,8 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       return;
     }
 
-    console.log('🧮 Starting calculation with invoice items:', 
-      invoice.items?.map(i => ({ 
+    console.log('🧮 Starting calculation with invoice items:',
+      invoice.items?.map(i => ({
         name: i.product_name || i.name,
         qty: i.quantity,
         rate: i.rate || i.unit_price,
@@ -244,14 +244,14 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         console.error('❌ Calculation error:', error);
         return;
       }
-      
+
       if (result && result.totals) {
         console.log('✅ Calculation result:', {
-          items: result.items?.map(i => ({ 
-            name: i.product_name, 
-            qty: i.quantity, 
+          items: result.items?.map(i => ({
+            name: i.product_name,
+            qty: i.quantity,
             rate: i.rate,
-            line_total: i.line_total 
+            line_total: i.line_total
           })),
           totals: result.totals
         });
@@ -261,7 +261,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           // Enrich items with ONLY calculated values (not user-editable fields)
           const enrichedItems = prev.items.map((item, idx) => {
             const calculatedItem = result.items[idx] || {};
-            
+
             return {
               ...item,
               // ONLY merge calculated/derived fields - NEVER overwrite user inputs
@@ -291,15 +291,15 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         });
       }
     }, 300, 'invoice');
-    
+
     // Use stringified items to prevent infinite loops
     // Only recalculate when actual values change, not object references
   }, [
-    JSON.stringify(invoice.items?.map(i => ({ 
-      quantity: i.quantity, 
-      rate: i.rate, 
+    JSON.stringify(invoice.items?.map(i => ({
+      quantity: i.quantity,
+      rate: i.rate,
       discount: i.discount,
-      gst_percent: i.gst_percent 
+      gst_percent: i.gst_percent
     }))),
     invoice.delivery_charges,
     invoice.discount_amount,
@@ -321,7 +321,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
     setSelectedCustomer(customer);
     const billingAddress = customer.billing_address || customer.address || '';
-    
+
     setInvoice(prev => ({
       ...prev,
       customer_details: customer,
@@ -342,17 +342,17 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     // CRITICAL: If product already has batch_id, it came from BatchSelector
     // and is already properly formatted. Don't transform it!
     // Only transform products from ProductSearch (no batch info)
-    const transformedProduct = product.batch_id 
+    const transformedProduct = product.batch_id
       ? product  // Already has batch fields from BatchSelector - use as-is
       : DataTransformer.transformProduct(product, 'invoice'); // Product search - needs transform
-    
+
     console.log('📦 [ADD ITEM] Transformed product:', transformedProduct);
     console.log('📦 [ADD ITEM] Batch info:', {
       batch_id: transformedProduct.batch_id,
       batch_number: transformedProduct.batch_number,
       expiry_date: transformedProduct.expiry_date
     });
-    
+
     if (!transformedProduct || !transformedProduct.product_name) {
       toast.error('Invalid product data');
       return;
@@ -364,8 +364,8 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       const existingItemIndex = prev.items.findIndex(item => {
         // If both have batch_id, match on both product_id and batch_id
         if (item.batch_id && transformedProduct.batch_id) {
-          return item.product_id === transformedProduct.product_id && 
-                 item.batch_id === transformedProduct.batch_id;
+          return item.product_id === transformedProduct.product_id &&
+            item.batch_id === transformedProduct.batch_id;
         }
         // If no batch tracking, match only on product_id (legacy behavior)
         return item.product_id === transformedProduct.product_id;
@@ -389,16 +389,16 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           discount_percent: 0,
           free_quantity: 0
         };
-        
-        const message = transformedProduct.batch_number 
+
+        const message = transformedProduct.batch_number
           ? `Added ${transformedProduct.product_name} (Batch: ${transformedProduct.batch_number})`
           : `Added ${transformedProduct.product_name}`;
-        
+
         toast.success(message);
-        
-        return { 
-          ...prev, 
-          items: [...prev.items, newItem] 
+
+        return {
+          ...prev,
+          items: [...prev.items, newItem]
         };
       }
     });
@@ -410,20 +410,20 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
   const handleUpdateItem = useCallback((index, field, value) => {
     console.log(`🔄 [UPDATE ITEM] Index: ${index}, Field: ${field}, Value: ${value}`);
-    
+
     setInvoice(prev => {
       const updatedItems = [...prev.items];
       updatedItems[index] = {
         ...updatedItems[index],
         [field]: value
       };
-      
+
       console.log('🔄 [UPDATE ITEM] Updated item:', updatedItems[index]);
-      console.log('🔄 [UPDATE ITEM] All items:', updatedItems.map(i => ({ 
-        name: i.product_name, 
-        qty: i.quantity 
+      console.log('🔄 [UPDATE ITEM] All items:', updatedItems.map(i => ({
+        name: i.product_name,
+        qty: i.quantity
       })));
-      
+
       return { ...prev, items: updatedItems };
     });
   }, []);
@@ -444,7 +444,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       }
 
       if (importData.items && importData.items.length > 0) {
-        const transformedItems = importData.items.map(item => 
+        const transformedItems = importData.items.map(item =>
           DataTransformer.transformProduct(item, 'invoice')
         );
         setInvoice(prev => ({ ...prev, items: transformedItems }));
@@ -501,7 +501,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           batch_id: item.batch_id,
           quantity: parseFloat(item.quantity) || 0,
           free_quantity: parseFloat(item.free_quantity) || 0,
-          sale_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,
+          unit_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,  // Backend uses unit_price
           mrp: parseFloat(item.mrp) || 0,
           discount_percent: parseFloat(item.discount_percent || item.discount) || 0,
           gst_percent: parseFloat(item.gst_percent || item.tax_percent) || 0
@@ -522,48 +522,48 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         notes: invoice.notes || '',
         gst_type: invoice.gst_type || 'CGST/SGST'
       };
-      
+
       console.log('[Invoice] Prepared invoice data:', JSON.stringify(invoiceData, null, 2));
 
       // OFFLINE-FIRST: Check network status
       if (!isOnline) {
         console.log('[Invoice] Saving offline - no internet connection');
-        
+
         // STEP 1: Validate and reserve stock quantities
         const reservationResults = [];
         for (const item of invoiceData.items) {
           if (item.batch_id) {
             const reservation = await offlineDB.reserveBatchQuantity(
-              item.batch_id, 
+              item.batch_id,
               parseFloat(item.quantity) || 0
             );
-            
+
             if (!reservation.success) {
               // Rollback previous reservations
               for (const prevResult of reservationResults) {
                 await offlineDB.clearReservedQuantity(prevResult.batch_id, prevResult.quantity);
               }
-              
+
               // Show error and stop invoice creation
               toast.error(`❌ ${reservation.error}`, { autoClose: 8000 });
               setError(reservation.error);
               setSaving(false);
               return;
             }
-            
+
             reservationResults.push({
               batch_id: item.batch_id,
               quantity: parseFloat(item.quantity) || 0
             });
           }
         }
-        
+
         // STEP 2: Generate local temp ID
         const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
+
         // STEP 3: Generate temporary offline invoice number
         const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false); // false = don't try backend
-        
+
         // STEP 4: Save to IndexedDB with reservation tracking
         await offlineDB.add('invoices', {
           ...invoiceData,
@@ -573,13 +573,13 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           created_offline: true,
           reserved_batches: reservationResults // Track what we reserved
         });
-        
+
         // Show offline success message
         toast.success('✅ Invoice saved offline - Will sync when online', {
           autoClose: 5000,
           icon: '📱'
         });
-        
+
         // Create mock success data for UI
         const createdData = {
           invoiceId: tempId,
@@ -594,10 +594,10 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
         setCreatedInvoiceData(createdData);
         setShowSuccessModal(true);
-        
+
         // Clear draft after successful save
         localStorage.removeItem('invoice_draft');
-        
+
         setSaving(false);
         return;
       }
@@ -606,13 +606,13 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       // Backend will generate the real sequential invoice number
       console.log('[Invoice] Saving online - backend will assign invoice number');
       console.log('[Invoice] Final payload size:', JSON.stringify(invoiceData).length, 'bytes');
-      
+
       const response = await invoicesApi.create(invoiceData);
       console.log('[Invoice] Save successful!');
 
       // invoicesApi.create returns the data directly (not wrapped in {success, data})
       console.log('[Invoice] Backend response:', response);
-      
+
       const createdData = {
         invoiceId: response.invoice_id || response.data?.invoice_id,
         invoiceNumber: response.invoice_number || response.data?.invoice_number, // Real number from backend
@@ -633,10 +633,10 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
       setCreatedInvoiceData(createdData);
       setShowSuccessModal(true);
-      
+
       // Clear draft after successful save
       localStorage.removeItem('invoice_draft');
-      
+
       toast.success('✅ Invoice created successfully');
     } catch (error) {
       console.error('[Invoice] Save failed:', error);
@@ -644,7 +644,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       console.error('[Invoice] Error data:', error.response?.data);
       console.error('[Invoice] Request URL:', error.config?.url);
       console.error('[Invoice] Request method:', error.config?.method);
-      
+
       // Check if it's a stock conflict
       if (error.response?.status === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
         const details = error.response.data.detail;

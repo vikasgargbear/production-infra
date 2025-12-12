@@ -87,25 +87,20 @@ class InvoiceItemBase(BaseModel):
 
 
 class InvoiceItemCreate(BaseModel):
-    """Lightweight item schema for invoice creation - backend calculates totals"""
+    """Item schema for invoice creation - canonical field names"""
     
     product_id: int = Field(..., gt=0, description="Product ID")
     batch_id: Optional[int] = Field(None, description="Batch ID for inventory deduction")
-    batch_number: Optional[str] = Field(None, max_length=50)
     
-    quantity: Decimal = Field(..., gt=0, description="Quantity")
-    free_quantity: Decimal = Field(default=Decimal("0"), ge=0)
-    unit_price: Decimal = Field(..., ge=0, description="Unit price")
-    mrp: Optional[Decimal] = Field(None, ge=0, description="MRP - fetched from product if not provided")
+    quantity: float = Field(..., gt=0, description="Quantity")
+    free_quantity: float = Field(default=0, ge=0)
+    unit_price: float = Field(..., ge=0, description="Unit price")  # Canonical name
+    mrp: float = Field(default=0, ge=0, description="MRP")
     
-    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
-    gst_percent: Optional[Decimal] = Field(None, ge=0, le=28, description="GST rate - fetched from product if not provided")
-    
-    # Optional overrides
-    hsn_code: Optional[str] = Field(None, max_length=8)
-    uom: Optional[str] = Field(None, max_length=20)
+    discount_percent: float = Field(default=0, ge=0, le=100)
+    gst_percent: float = Field(default=0, ge=0, le=28, description="GST rate")
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
 
 # =============================================================================
@@ -178,40 +173,37 @@ class InvoiceCreate(BaseModel):
 
 
 class InvoiceCreateRequest(BaseModel):
-    """Full request for creating invoice (direct or from order)"""
+    """Request schema matching frontend payload structure exactly"""
     
     customer_id: int = Field(..., gt=0, description="Customer ID")
-    order_id: Optional[int] = Field(None, gt=0, description="Source order ID")
-    challan_id: Optional[int] = Field(None, gt=0, description="Source challan ID")
-    
-    invoice_date: date = Field(default_factory=date.today)
-    due_date: Optional[date] = None
+    invoice_date: Optional[str] = Field(None, description="Invoice date (YYYY-MM-DD)")
+    due_date: Optional[str] = Field(None, description="Due date (YYYY-MM-DD)")
     
     items: List[InvoiceItemCreate] = Field(..., min_length=1, description="Invoice line items")
     
     # Discounts
-    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
-    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    discount_type: Optional[str] = Field(default="percentage", description="'percentage' or 'fixed'")
+    discount_percent: float = Field(default=0, ge=0, le=100)
+    discount_amount: float = Field(default=0, ge=0)
     
-    # Optional details
-    billing_address_id: Optional[int] = None
-    shipping_address_id: Optional[int] = None
-    payment_terms: Optional[str] = Field(None, max_length=100)
+    # Delivery
+    delivery_charges: float = Field(default=0, ge=0)
+    delivery_type: Optional[str] = Field(default="PICKUP")
+    
+    # Payment
+    payment_mode: Optional[str] = Field(default="cash")
+    payment_status: Optional[str] = Field(default="pending")
+    payments: Optional[List[dict]] = Field(default_factory=list)
+    
+    # Addresses (strings, not IDs)
+    billing_address: Optional[str] = Field(None, max_length=500)
+    shipping_address: Optional[str] = Field(None, max_length=500)
+    
+    # Other
     notes: Optional[str] = Field(None, max_length=1000)
-    
-    # Transport (for E-way bill)
-    vehicle_number: Optional[str] = Field(None, max_length=20)
-    transporter_name: Optional[str] = Field(None, max_length=100)
+    gst_type: Optional[str] = Field(default="CGST/SGST")
 
-    @field_validator("due_date")
-    @classmethod
-    def validate_due_date(cls, v, info):
-        invoice_date = info.data.get("invoice_date")
-        if v and invoice_date and v < invoice_date:
-            raise ValueError("Due date must be after invoice date")
-        return v
-
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
 
 class InvoiceUpdate(BaseModel):
