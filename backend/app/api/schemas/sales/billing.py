@@ -87,7 +87,7 @@ class InvoiceItemBase(BaseModel):
 
 
 class InvoiceItemCreate(BaseModel):
-    """Item schema for invoice creation - canonical field names"""
+    """Item schema for invoice creation - unit_price is canonical"""
     
     product_id: int = Field(..., gt=0, description="Product ID")
     batch_id: Optional[int] = Field(None, description="Batch ID for inventory deduction")

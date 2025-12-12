@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  X, Package, Calendar, AlertCircle, CheckCircle, 
+import {
+  X, Package, Calendar, AlertCircle, CheckCircle,
   Zap, Shield, Clock, Box, TrendingDown
 } from 'lucide-react';
 import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
@@ -59,7 +59,7 @@ const BatchSelector = ({
   useEffect(() => {
     if (show && product && mode === 'modal') {
       const productId = product.product_id || product.id;
-      
+
       // Only load if we haven't loaded for this product yet
       if (!hasLoadedRef.current || hasLoadedRef.current !== productId) {
         loadBatches();
@@ -85,7 +85,7 @@ const BatchSelector = ({
     if (!product) return;
 
     const productId = product.product_id || product.id;
-    
+
     // PERFORMANCE: Check memory cache FIRST (instant - synchronous, no await)
     const cacheKey = `batches_${productId}`;
     const cachedBatches = searchCache.get(cacheKey);
@@ -102,13 +102,13 @@ const BatchSelector = ({
       const cached = localStorage.getItem(localCacheKey);
       const cacheTime = localStorage.getItem(localCacheTime);
       const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
-      
+
       // Use cache if less than 2 minutes old (batches don't change often in a session)
       if (cached && cacheAge < 2 * 60 * 1000) {
         console.log('[BatchSelector] Using localStorage cache - FAST');
         const batchesData = JSON.parse(cached);
         processBatches(batchesData);
-        
+
         // Also store in memory cache for next time
         searchCache.set(cacheKey, batchesData);
         return;
@@ -116,10 +116,10 @@ const BatchSelector = ({
     } catch (error) {
       console.error('[BatchSelector] Cache read error:', error);
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       // Fetch from API and cache
       console.log('[BatchSelector] Fetching from API for product:', productId);
@@ -127,7 +127,7 @@ const BatchSelector = ({
     } catch (error) {
       console.error('[BatchSelector] Failed to load batches:', error);
       setError('Failed to load batches. Please try again.');
-      
+
       // Create a fallback batch if allowed
       if (allowCreateDefault) {
         const fallbackBatch = createDefaultBatch(product);
@@ -143,14 +143,14 @@ const BatchSelector = ({
     try {
       const response = await batchAPI.getByProduct(productId);
       const batchesData = response.data?.batches || response.data || [];
-      
+
       console.log('[BatchSelector] Fetched', batchesData.length, 'batches from API');
-      
+
       // PERFORMANCE: Triple cache strategy
       // 1. Memory cache (instant access)
       const cacheKey = `batches_${productId}`;
       searchCache.set(cacheKey, batchesData);
-      
+
       // 2. localStorage cache (fast, 2-minute TTL)
       try {
         localStorage.setItem(`batches_${productId}`, JSON.stringify(batchesData));
@@ -158,18 +158,18 @@ const BatchSelector = ({
       } catch (e) {
         console.warn('[BatchSelector] localStorage cache failed:', e);
       }
-      
+
       // 3. IndexedDB cache (offline support, slower but persistent)
       try {
         await offlineDB.storeBatches(batchesData);
       } catch (e) {
         console.warn('[BatchSelector] IndexedDB cache failed:', e);
       }
-      
+
       if (showLoadingState) {
         processBatches(batchesData);
       }
-      
+
       return batchesData;
     } catch (error) {
       console.error('[BatchSelector] Failed to fetch batches:', error);
@@ -181,12 +181,12 @@ const BatchSelector = ({
     // Transform batches using DataTransformer
     let transformedBatches = batchesData.map(batch => {
       const transformed = DataTransformer.transformBatch(batch, product);
-      
+
       // Add offline reservation info
       const reserved = batch.quantity_reserved_offline || 0;
       const available = batch.quantity_available || 0;
       const usable = available - reserved;
-      
+
       return {
         ...transformed,
         quantity_reserved_offline: reserved,
@@ -194,7 +194,7 @@ const BatchSelector = ({
         has_pending_sync: reserved > 0
       };
     });
-    
+
     // Filter batches (use usable quantity, not just available)
     if (filterExpired) {
       transformedBatches = transformedBatches.filter(batch => {
@@ -202,41 +202,41 @@ const BatchSelector = ({
         return daysToExpiry === null || daysToExpiry > 0;
       });
     }
-    
+
     if (minQuantity > 0) {
-      transformedBatches = transformedBatches.filter(batch => 
+      transformedBatches = transformedBatches.filter(batch =>
         batch.quantity_usable >= minQuantity  // Check usable, not available
       );
     }
-    
+
     // Sort batches - CRITICAL: Show expiring soon FIRST (pharmaceutical FEFO)
     transformedBatches.sort((a, b) => {
       switch (sortBy) {
         case 'quantity':
-          return sortOrder === 'asc' 
+          return sortOrder === 'asc'
             ? a.quantity_usable - b.quantity_usable
             : b.quantity_usable - a.quantity_usable;
-        
+
         case 'manufacturing':
           const dateA = new Date(a.manufacturing_date || 0);
           const dateB = new Date(b.manufacturing_date || 0);
           return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        
+
         case 'expiry':
         default:
           // CRITICAL FIX: Sort by days_to_expiry (closest expiry first)
           // This implements FEFO (First Expiry First Out) for pharmaceuticals
           const daysA = a.days_to_expiry ?? 999999;  // Expired/null batches last
           const daysB = b.days_to_expiry ?? 999999;
-          
+
           // Ascending order: Lowest days first (expiring soon on top)
           // Descending order: Highest days first (furthest expiry on top)
           return sortOrder === 'asc' ? daysA - daysB : daysB - daysA;
       }
     });
-    
+
     setBatches(transformedBatches);
-    
+
     // If no batches found, create a default batch
     if (transformedBatches.length === 0 && allowCreateDefault) {
       const defaultBatch = createDefaultBatch(product);
@@ -251,13 +251,13 @@ const BatchSelector = ({
       expiry_date: new Date(Date.now() + INVOICE_CONFIG.BATCH.DEFAULT_BATCH.EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString(),
       quantity_available: INVOICE_CONFIG.BATCH.DEFAULT_BATCH.QUANTITY,
       mrp: product.mrp || 0,
-      sale_price: product.sale_price || product.mrp || 0
+      unit_price: product.unit_price || product.mrp || 0  // Canonical backend name
     }, product);
   };
 
   const handleBatchSelect = (batch) => {
     setSelectedBatch(batch);
-    
+
     const productWithBatch = {
       ...product,
       batch_id: batch.batch_id,
@@ -265,17 +265,17 @@ const BatchSelector = ({
       batch_no: batch.batch_number,
       available_quantity: batch.quantity_available,
       quantity: 1, // Default quantity
-      // IMPORTANT: Use batch-specific pricing
+      // IMPORTANT: Use batch-specific pricing - unit_price is canonical backend name
       mrp: batch.mrp || product.mrp || 0,
-      sale_price: batch.sale_price || product.sale_price || 0,
-      rate: batch.sale_price || product.sale_price || 0,
+      unit_price: batch.unit_price || batch.sale_price || product.unit_price || 0,
+      rate: batch.unit_price || batch.sale_price || product.unit_price || 0,  // Legacy alias
       expiry_date: batch.expiry_date,
       manufacturing_date: batch.manufacturing_date,
       // IMPORTANT: Preserve product GST information (no default - user must enter)
       gst_percent: product.gst_percent || product.gst_rate || product.tax_rate || '',
       tax_rate: product.gst_percent || product.gst_rate || product.tax_rate || ''
     };
-    
+
     setTimeout(() => {
       onBatchSelect(productWithBatch);
       if (mode === 'modal') {
@@ -286,10 +286,10 @@ const BatchSelector = ({
 
   const getExpiryInfo = (expiryDate) => {
     if (!expiryDate) return null;
-    
+
     const daysToExpiry = DateFormatter.daysBetween(new Date(), new Date(expiryDate));
     const status = getExpiryStatusConfig(daysToExpiry);
-    
+
     // Map status to icons
     const iconMap = {
       expired: AlertCircle,
@@ -297,7 +297,7 @@ const BatchSelector = ({
       warning: Clock,
       good: Shield
     };
-    
+
     // Map status to gradients
     const gradientMap = {
       expired: 'from-red-700 to-red-800',
@@ -305,7 +305,7 @@ const BatchSelector = ({
       warning: 'from-amber-500 to-amber-600',
       good: 'from-emerald-500 to-emerald-600'
     };
-    
+
     return {
       ...status,
       icon: iconMap[status.status],
@@ -317,15 +317,15 @@ const BatchSelector = ({
   const defaultRenderBatchInfo = (batch) => {
     const expiryInfo = showExpiryStatus ? getExpiryInfo(batch.expiry_date) : null;
     const isSelected = selectedBatch?.batch_id === batch.batch_id;
-    
+
     return (
       <div
         key={batch.batch_id}
         onClick={() => handleBatchSelect(batch)}
         className={cx(
           'relative group cursor-pointer rounded-lg border-2 transition-all duration-200 bg-white hover:shadow-md mb-2',
-          isSelected 
-            ? 'border-blue-500 shadow-lg bg-blue-50' 
+          isSelected
+            ? 'border-blue-500 shadow-lg bg-blue-50'
             : 'border-gray-200 hover:border-blue-300'
         )}
       >
@@ -338,7 +338,7 @@ const BatchSelector = ({
 
         {/* Table-like grid layout - 12 columns matching header */}
         <div className="grid grid-cols-12 gap-3 p-3 items-center">
-          
+
           {/* Column 1: Batch Number (2 cols) */}
           <div className="col-span-2">
             <div className="flex items-center gap-1">
@@ -375,7 +375,7 @@ const BatchSelector = ({
           {/* Column 3: Mfg Date (2 cols) */}
           <div className="col-span-2">
             <span className="text-sm text-gray-600">
-              {batch.manufacturing_date 
+              {batch.manufacturing_date
                 ? DateFormatter.formatDate(batch.manufacturing_date, 'short')
                 : '-'}
             </span>
@@ -386,8 +386,8 @@ const BatchSelector = ({
             <div className="flex flex-col items-center">
               <span className={cx(
                 "text-base font-bold",
-                (batch.quantity_usable || 0) > 10 ? "text-emerald-600" : 
-                (batch.quantity_usable || 0) > 0 ? "text-amber-600" : "text-red-600"
+                (batch.quantity_usable || 0) > 10 ? "text-emerald-600" :
+                  (batch.quantity_usable || 0) > 0 ? "text-amber-600" : "text-red-600"
               )}>
                 {batch.quantity_usable || batch.quantity_available || 0}
               </span>
@@ -410,8 +410,8 @@ const BatchSelector = ({
           <div className="col-span-1 flex justify-end">
             <div className={cx(
               'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-              isSelected 
-                ? 'bg-blue-500 text-white' 
+              isSelected
+                ? 'bg-blue-500 text-white'
                 : 'bg-gray-100 text-gray-700 group-hover:bg-blue-100 group-hover:text-blue-700'
             )}>
               {isSelected ? '✓' : 'Select'}
@@ -428,8 +428,8 @@ const BatchSelector = ({
             <div className="flex items-center gap-1">
               <AlertCircle size={12} />
               <span>
-                {expiryInfo.status === 'expired' 
-                  ? 'Expired - Cannot be sold' 
+                {expiryInfo.status === 'expired'
+                  ? 'Expired - Cannot be sold'
                   : 'Expiring soon - Prioritize (FEFO)'}
               </span>
             </div>
@@ -479,10 +479,10 @@ const BatchSelector = ({
             <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase text-right">MRP</div>
             <div className="col-span-1 text-xs font-semibold text-gray-700 uppercase text-right">Action</div>
           </div>
-          
+
           {/* Batch List */}
           <div className="space-y-0 max-w-full">
-            {batches.map((batch) => 
+            {batches.map((batch) =>
               renderBatchInfo ? renderBatchInfo(batch) : defaultRenderBatchInfo(batch)
             )}
           </div>
@@ -511,8 +511,8 @@ const BatchSelector = ({
   if (mode === 'dropdown') {
     return (
       <div className={cx('relative', className)} ref={containerRef}>
-        <div className="absolute z-10 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200" 
-             style={{ maxHeight, overflowY: 'auto' }}>
+        <div className="absolute z-10 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200"
+          style={{ maxHeight, overflowY: 'auto' }}>
           <div className="p-4">
             {renderContent()}
           </div>
@@ -536,7 +536,7 @@ const BatchSelector = ({
 
   return (
     <div className={styles.modalOverlay}>
-      <div 
+      <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden"
         tabIndex={-1}
         onKeyDown={handleKeyDown}

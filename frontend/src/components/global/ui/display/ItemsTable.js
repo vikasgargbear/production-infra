@@ -6,8 +6,8 @@ import { Trash2, Plus } from 'lucide-react';
  * A clean, reusable table for displaying line items in invoices, challans, orders etc.
  * Based on the clean InvoiceItemsTable design
  */
-const ItemsTable = ({ 
-  items = [], 
+const ItemsTable = ({
+  items = [],
   onUpdateItem,
   onRemoveItem,
   onAddItem,
@@ -21,7 +21,7 @@ const ItemsTable = ({
   className = '',
   title = 'Items'
 }) => {
-  
+
   const formatCurrency = (amount) => {
     return `${currencySymbol}${(parseFloat(amount) || 0).toFixed(2)}`;
   };
@@ -33,23 +33,23 @@ const ItemsTable = ({
     if (item.line_total !== undefined) return item.line_total; // Invoice calculation
     if (item.total_amount !== undefined) return item.total_amount;
     if (item.itemTotal !== undefined) return item.itemTotal;
-    
+
     const baseQuantity = parseFloat(item.quantity) || 0;  // ALWAYS use quantity as source of truth
-    const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
+    const rate = parseFloat(item.unit_price || item.rate) || 0;  // unit_price is canonical
     const discount = parseFloat(item.discount || item.discount_percent) || 0;
     const tax = parseFloat(item.tax || item.tax_rate || item.gst_percent) || 0;
-    
+
     const subtotal = baseQuantity * rate;
     const discountAmount = (subtotal * discount) / 100;
     const taxableAmount = subtotal - discountAmount;
     const taxAmount = (taxableAmount * tax) / 100;
-    
+
     return taxableAmount + taxAmount;
   };
 
   const columnConfig = {
-    product: { 
-      label: 'Product', 
+    product: {
+      label: 'Product',
       align: 'left',
       render: (item) => (
         <div>
@@ -73,8 +73,8 @@ const ItemsTable = ({
         </div>
       )
     },
-    quantity: { 
-      label: 'Quantity', 
+    quantity: {
+      label: 'Quantity',
       align: 'center',
       render: (item, index) => readOnly ? (
         <span className="text-gray-900 font-medium">{item.quantity}</span>
@@ -89,29 +89,29 @@ const ItemsTable = ({
         />
       )
     },
-    mrp: { 
-      label: 'MRP', 
+    mrp: {
+      label: 'MRP',
       align: 'center',
       render: (item) => (
-        <span 
+        <span
           className="text-gray-900 font-medium"
           title="MRP from product master data (read-only)"
         >
-          {formatCurrency(item.mrp || item.sale_price)}
+          {formatCurrency(item.mrp || item.unit_price)}
         </span>
       )
     },
-    rate: { 
-      label: 'Rate', 
+    rate: {
+      label: 'Rate',
       align: 'center',
       render: (item) => (
         <span className="text-gray-900 font-medium">
-          {formatCurrency(item.rate || item.sale_price || item.unit_price)}
+          {formatCurrency(item.unit_price || item.rate)}
         </span>
       )
     },
-    discount: { 
-      label: 'Discount %', 
+    discount: {
+      label: 'Discount %',
       align: 'center',
       render: (item, index) => readOnly ? (
         <span>{item.discount || item.discount_percent || 0}%</span>
@@ -127,8 +127,8 @@ const ItemsTable = ({
         />
       )
     },
-    free: { 
-      label: 'Free', 
+    free: {
+      label: 'Free',
       align: 'center',
       render: (item, index) => readOnly ? (
         <span>{item.free || item.free_quantity || 0}</span>
@@ -160,11 +160,11 @@ const ItemsTable = ({
         // Parse GST value - handle undefined, null, empty string
         const gstValue = item.gst_percent ?? item.tax_rate ?? item.tax ?? '';
         const gstPercent = gstValue === '' ? '0' : parseFloat(gstValue) || 0;
-        
+
         // GST percentage is read-only - comes from product master data
         // Display with subtle styling to indicate it's from master data
         return (
-          <span 
+          <span
             className="text-gray-900 font-medium"
             title="Tax percentage from product master data (read-only)"
           >
@@ -173,8 +173,8 @@ const ItemsTable = ({
         );
       }
     },
-    total: { 
-      label: 'Total', 
+    total: {
+      label: 'Total',
       align: 'right',
       render: (item) => (
         <span className="font-semibold text-gray-900">
@@ -200,18 +200,17 @@ const ItemsTable = ({
           <thead className="bg-gray-50 border-b">
             <tr>
               {visibleColumns.map((col, index) => (
-                <th 
-                  key={col} 
-                  className={`px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-${columnConfig[col].align} ${
-                    index !== visibleColumns.length - 1 ? 'border-r border-gray-200' : ''
-                  }`}
+                <th
+                  key={col}
+                  className={`px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-${columnConfig[col].align} ${index !== visibleColumns.length - 1 ? 'border-r border-gray-200' : ''
+                    }`}
                 >
                   {columnConfig[col].label}
                 </th>
               ))}
               {showActions && !readOnly && (
                 <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  
+
                 </th>
               )}
             </tr>
@@ -230,8 +229,8 @@ const ItemsTable = ({
               items.map((item, index) => (
                 <tr key={item.id || index} className="hover:bg-gray-50">
                   {visibleColumns.map(col => (
-                    <td 
-                      key={col} 
+                    <td
+                      key={col}
                       className={`px-2 py-4 whitespace-nowrap text-sm text-${columnConfig[col].align}`}
                     >
                       {columnConfig[col].render(item, index)}

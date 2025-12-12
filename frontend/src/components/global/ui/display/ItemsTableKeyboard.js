@@ -7,8 +7,8 @@ import EditableCell from './EditableCell';
  * Supports Tab, Enter, Arrow keys for Excel-like navigation
  * Similar to Marg/Tally billing software experience
  */
-const ItemsTableKeyboard = forwardRef(({ 
-  items = [], 
+const ItemsTableKeyboard = forwardRef(({
+  items = [],
   onUpdateItem,
   onRemoveItem,
   currencySymbol = '₹',
@@ -16,13 +16,13 @@ const ItemsTableKeyboard = forwardRef(({
   productSearchRef, // Ref to product search for auto-focus after last field
   className = ''
 }, ref) => {
-  
+
   // Store refs for all editable fields: { '0-quantity': ref, '0-rate': ref, ... }
   const fieldRefs = useRef({});
-  
+
   // Editable fields in order
   const EDITABLE_FIELDS = ['quantity', 'rate', 'discount', 'free', 'tax'];
-  
+
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
     focusField: (rowIndex, fieldName) => {
@@ -43,7 +43,7 @@ const ItemsTableKeyboard = forwardRef(({
   const focusField = (rowIndex, fieldName) => {
     const key = `${rowIndex}-${fieldName}`;
     const fieldRef = fieldRefs.current[key];
-    
+
     if (fieldRef && fieldRef.focus) {
       setTimeout(() => {
         fieldRef.focus();
@@ -53,18 +53,18 @@ const ItemsTableKeyboard = forwardRef(({
 
   const handleNavigate = (currentRow, currentField, direction) => {
     const currentFieldIndex = EDITABLE_FIELDS.indexOf(currentField);
-    
-    switch(direction) {
+
+    switch (direction) {
       case 'right':
       case 'next':
         // Move to next field in same row
         if (currentFieldIndex < EDITABLE_FIELDS.length - 1) {
           focusField(currentRow, EDITABLE_FIELDS[currentFieldIndex + 1]);
-        } 
+        }
         // Or first field of next row
         else if (currentRow < items.length - 1) {
           focusField(currentRow + 1, EDITABLE_FIELDS[0]);
-        } 
+        }
         // Or back to product search (add next product)
         else {
           if (productSearchRef?.current) {
@@ -74,7 +74,7 @@ const ItemsTableKeyboard = forwardRef(({
           }
         }
         break;
-        
+
       case 'left':
         // Move to previous field in same row
         if (currentFieldIndex > 0) {
@@ -85,21 +85,21 @@ const ItemsTableKeyboard = forwardRef(({
           focusField(currentRow - 1, EDITABLE_FIELDS[EDITABLE_FIELDS.length - 1]);
         }
         break;
-        
+
       case 'down':
         // Move to same field in next row
         if (currentRow < items.length - 1) {
           focusField(currentRow + 1, currentField);
         }
         break;
-        
+
       case 'up':
         // Move to same field in previous row
         if (currentRow > 0) {
           focusField(currentRow - 1, currentField);
         }
         break;
-        
+
       default:
         break;
     }
@@ -112,16 +112,16 @@ const ItemsTableKeyboard = forwardRef(({
   const calculateItemTotal = (item) => {
     // ALWAYS recalculate based on current values for real-time responsiveness
     const baseQuantity = parseFloat(item.quantity) || 0;
-    const rate = parseFloat(item.rate || item.sale_price) || 0;
+    const rate = parseFloat(item.unit_price || item.rate) || 0;  // unit_price is canonical
     const discount = parseFloat(item.discount || item.discount_percent || 0) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || 0) || 0;
-    
+
     const subtotal = baseQuantity * rate;
     const discountAmount = (subtotal * discount) / 100;
     const taxableAmount = subtotal - discountAmount;
     const gstAmount = (taxableAmount * gstPercent) / 100;
     const total = taxableAmount + gstAmount;
-    
+
     return total;
   };
 
@@ -197,15 +197,15 @@ const ItemsTableKeyboard = forwardRef(({
             </tr>
           ) : (
             items.map((item, index) => (
-              <tr 
-                key={item.id || index} 
+              <tr
+                key={item.id || index}
                 className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 {/* Serial Number */}
                 <td className="px-3 py-2 text-sm text-gray-600">
                   {index + 1}
                 </td>
-                
+
                 {/* Product Name */}
                 <td className="px-3 py-2">
                   <div className="text-sm font-medium text-gray-900">
@@ -217,7 +217,7 @@ const ItemsTableKeyboard = forwardRef(({
                     </div>
                   )}
                 </td>
-                
+
                 {/* Batch Number */}
                 <td className="px-3 py-2 text-center">
                   <div className="text-xs text-gray-600">
@@ -229,7 +229,7 @@ const ItemsTableKeyboard = forwardRef(({
                     </div>
                   )}
                 </td>
-                
+
                 {/* Quantity - Editable */}
                 <td className="px-3 py-2">
                   <EditableCell
@@ -247,30 +247,30 @@ const ItemsTableKeyboard = forwardRef(({
                     className="w-20"
                   />
                 </td>
-                
+
                 {/* MRP - Read Only */}
                 <td className="px-3 py-2 text-center">
                   <div className="text-sm text-gray-900 font-medium">
                     {formatCurrency(item.mrp || 0)}
                   </div>
                 </td>
-                
+
                 {/* Rate - Editable */}
                 <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'rate', el)}
-                    value={item.sale_price || item.rate || item.unit_price || 0}
+                    value={item.unit_price || item.rate || 0}
                     type="number"
                     min={0}
                     decimalPlaces={2}
                     prefix={currencySymbol}
                     onChange={(val) => {
-                      // Update sale_price to match what preview expects
-                      onUpdateItem(index, 'sale_price', val);
-                      onUpdateItem(index, 'rate', val); // Also keep rate in sync
+                      // Update unit_price - canonical backend name
+                      onUpdateItem(index, 'unit_price', val);
+                      onUpdateItem(index, 'rate', val); // Legacy alias
                     }}
                     onSave={(val) => {
-                      onUpdateItem(index, 'sale_price', val);
+                      onUpdateItem(index, 'unit_price', val);
                       onUpdateItem(index, 'rate', val);
                     }}
                     onNavigate={(dir) => handleNavigate(index, 'rate', dir)}
@@ -279,7 +279,7 @@ const ItemsTableKeyboard = forwardRef(({
                     className="w-24"
                   />
                 </td>
-                
+
                 {/* Discount % - Editable */}
                 <td className="px-3 py-2 text-center">
                   <EditableCell
@@ -298,7 +298,7 @@ const ItemsTableKeyboard = forwardRef(({
                     className="w-20"
                   />
                 </td>
-                
+
                 {/* Free Quantity - Editable */}
                 <td className="px-3 py-2 text-center">
                   <EditableCell
@@ -314,24 +314,24 @@ const ItemsTableKeyboard = forwardRef(({
                     className="w-16"
                   />
                 </td>
-                
+
                 {/* Tax % - Read-only from product master */}
                 <td className="px-3 py-2 text-center">
-                  <span 
+                  <span
                     className="text-sm text-gray-900 font-medium"
                     title="Tax percentage from product master data (read-only)"
                   >
                     {item.gst_percent || item.tax_rate || 0}%
                   </span>
                 </td>
-                
+
                 {/* Total - Calculated */}
                 <td className="px-3 py-2 text-right">
                   <div className="text-sm font-semibold text-gray-900">
                     {formatCurrency(calculateItemTotal(item))}
                   </div>
                 </td>
-                
+
                 {/* Actions */}
                 {!readOnly && (
                   <td className="px-3 py-2 text-center">
@@ -349,15 +349,15 @@ const ItemsTableKeyboard = forwardRef(({
           )}
         </tbody>
       </table>
-      
+
       {/* Keyboard Navigation Guide */}
       {!readOnly && items.length > 0 && (
         <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-gray-600">
-          <strong className="text-blue-700">Keyboard Navigation:</strong> 
-          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field • 
-          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next • 
-          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">↓↑</kbd> Navigate rows • 
-          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Esc</kbd> Cancel • 
+          <strong className="text-blue-700">Keyboard Navigation:</strong>
+          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field •
+          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next •
+          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">↓↑</kbd> Navigate rows •
+          <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Esc</kbd> Cancel •
           <span className="text-blue-600 font-medium">Last field → Product search</span>
         </div>
       )}
