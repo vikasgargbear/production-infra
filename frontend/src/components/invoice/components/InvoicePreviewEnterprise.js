@@ -5,7 +5,7 @@ import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 const InvoicePreviewEnterprise = ({ 
   invoice, 
   onInvoiceUpdate,
-  companyInfo,
+  companyInfo = {}, // Default to empty object to prevent undefined errors
   showAddresses = true, // Control whether to show Bill To/Ship To sections
   isPrintMode = false // New prop to determine if we're in print/PDF mode
 }) => {
@@ -126,10 +126,10 @@ const InvoicePreviewEnterprise = ({
             <div>
               <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-4 h-full border border-blue-200 print-border print-bg-blue">
                 <div className="flex items-start space-x-3">
-                  {companyInfo.logo ? (
+                  {companyInfo?.logo ? (
                     <img 
                       src={companyInfo.logo} 
-                      alt={companyInfo.name} 
+                      alt={companyInfo?.name || 'Company'} 
                       className="w-20 h-20 object-contain rounded-lg flex-shrink-0"
                     />
                   ) : (

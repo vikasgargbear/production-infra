@@ -66,7 +66,11 @@ apiClient.interceptors.response.use(
 
 // Export apiHelpers for modules that use them
 export const apiHelpers = {
-  get: (url: string, config?: any) => apiClient.get(url, config),
+  get: (url: string, config?: any) => {
+    // CRITICAL FIX: Ensure trailing slash for FastAPI routes
+    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
+    return apiClient.get(urlWithSlash, config);
+  },
   post: (url: string, data?: any, config?: any) => {
     // CRITICAL FIX: Ensure trailing slash for FastAPI routes
     // FastAPI is strict about trailing slashes - /invoices != /invoices/
@@ -74,9 +78,18 @@ export const apiHelpers = {
     console.log('[API] POST to:', urlWithSlash);
     return apiClient.post(urlWithSlash, data, config);
   },
-  put: (url: string, data?: any, config?: any) => apiClient.put(url, data, config),
-  patch: (url: string, data?: any, config?: any) => apiClient.patch(url, data, config),
-  delete: (url: string, config?: any) => apiClient.delete(url, config),
+  put: (url: string, data?: any, config?: any) => {
+    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
+    return apiClient.put(urlWithSlash, data, config);
+  },
+  patch: (url: string, data?: any, config?: any) => {
+    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
+    return apiClient.patch(urlWithSlash, data, config);
+  },
+  delete: (url: string, config?: any) => {
+    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
+    return apiClient.delete(urlWithSlash, config);
+  },
 };
 
 export default apiClient;
