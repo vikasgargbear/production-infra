@@ -3,7 +3,7 @@ Billing and GST schemas for enterprise pharma system
 Handles invoice generation, GST calculations, and payment tracking
 """
 from typing import Optional, List
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, AliasChoices
 from datetime import datetime, date
 from decimal import Decimal
 from uuid import UUID
@@ -87,20 +87,21 @@ class InvoiceItemBase(BaseModel):
 
 
 class InvoiceItemCreate(BaseModel):
-    """Item schema for invoice creation - unit_price is canonical"""
+    """Item schema for invoice creation - accepts both canonical and legacy names"""
     
     product_id: int = Field(..., gt=0, description="Product ID")
     batch_id: Optional[int] = Field(None, description="Batch ID for inventory deduction")
     
     quantity: float = Field(..., gt=0, description="Quantity")
     free_quantity: float = Field(default=0, ge=0)
-    unit_price: float = Field(..., ge=0, description="Unit price")  # Canonical name
+    # Accept both unit_price (canonical) and sale_price (legacy) via AliasChoices
+    unit_price: float = Field(..., ge=0, description="Unit price", validation_alias=AliasChoices('unit_price', 'sale_price'))
     mrp: float = Field(default=0, ge=0, description="MRP")
     
     discount_percent: float = Field(default=0, ge=0, le=100)
     gst_percent: float = Field(default=0, ge=0, le=28, description="GST rate")
 
-    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
 
 
 # =============================================================================
@@ -186,8 +187,8 @@ class InvoiceCreateRequest(BaseModel):
     discount_percent: float = Field(default=0, ge=0, le=100)
     discount_amount: float = Field(default=0, ge=0)
     
-    # Delivery/Freight
-    freight_charges: float = Field(default=0, ge=0)  # DB column name
+    # Delivery/Freight - accept both canonical and legacy names
+    freight_charges: float = Field(default=0, ge=0, validation_alias=AliasChoices('freight_charges', 'delivery_charges'))
     delivery_type: Optional[str] = Field(default="PICKUP")
     
     # Payment
@@ -203,7 +204,7 @@ class InvoiceCreateRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=1000)
     gst_type: Optional[str] = Field(default="CGST/SGST")
 
-    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
 
 
 class InvoiceUpdate(BaseModel):
