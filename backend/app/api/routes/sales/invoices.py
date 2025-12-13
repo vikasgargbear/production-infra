@@ -194,7 +194,8 @@ async def create_invoice(
         billing_address_id = customer_details["billing_address_id"]
         shipping_address_id = customer_details["shipping_address_id"]
         
-        # Calculate due date based on payment terms\n        payment_terms = invoice_data.get(\"payment_terms\", \"cash\")
+        # Calculate due date based on payment terms
+        payment_terms = invoice_data.payment_mode or "cash"  # Use payment_mode from schema
         invoice_date = date.today()
         if payment_terms == "credit":
             due_date = invoice_date + timedelta(days=30)  # 30 days credit
