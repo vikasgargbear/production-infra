@@ -109,7 +109,9 @@ app.add_middleware(
     max_age=3600,
 )
 
-app.router.redirect_slashes = False
+# Enable redirect_slashes so /batches/ redirects to /batches
+# This prevents 405 errors from trailing slash mismatches
+app.router.redirect_slashes = True
 
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
