@@ -409,7 +409,7 @@ async def create_invoice(
             taxable_amount = line_total
             
             # Calculate GST amounts using GSTService for consistency
-            gst_type = invoice_data.get("gst_type", "CGST/SGST")
+            gst_type = invoice_data.gst_type or "CGST/SGST"
             from decimal import Decimal
             gst_components = GSTService.calculate_gst_components(
                 Decimal(str(taxable_amount)),
@@ -595,7 +595,7 @@ async def create_invoice(
                                 "batch_id": batch_id,
                                 "required_quantity": quantity,
                                 "available_quantity": available,
-                                "invoice_number": invoice_data.get("invoice_number", "DRAFT")
+                                "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
                             }
                         )
                         
@@ -609,7 +609,7 @@ async def create_invoice(
         # Triggers are enabled and work correctly
         
         # Calculate total quantity
-        total_qty = sum(float(item.get("quantity", 0)) for item in invoice_data.get("items", []))
+        total_qty = sum(float(item.get("quantity", 0)) for item in items)
         
         # Calculate header totals by summing from actual line items (correct approach)
         try:
@@ -725,7 +725,7 @@ async def create_invoice(
         #    - Provides complete financial history per customer
         
         # Handle legacy payment_mode if no payments array
-        if not payments and invoice_data.get("payment_mode") == "cash":
+        if not payments and invoice_data.payment_mode == "cash":
             payments = [{"method": "cash", "amount": final_amount}]
         
         if payments and total_paid > 0:
@@ -876,16 +876,16 @@ async def create_invoice(
             discount_updated = float(updated[3])
             
             # Check for mismatches between frontend and backend calculations
-            frontend_total = invoice_data.get("final_amount", 0)
+            frontend_total = getattr(invoice_data, 'final_amount', 0) or 0
             if frontend_total and abs(final_amount_updated - frontend_total) > 0.01:
                 logger.warning(f"""
                 Invoice {invoice_id} calculation mismatch detected:
                 Frontend total: {frontend_total}
                 Backend total: {final_amount_updated}
                 Difference: {final_amount_updated - frontend_total}
-                Frontend subtotal: {invoice_data.get('subtotal_amount', 0)}
+                Frontend subtotal: {getattr(invoice_data, 'subtotal_amount', 0) or 0}
                 Backend subtotal: {subtotal_updated}
-                Frontend tax: {invoice_data.get('tax_amount', 0)}
+                Frontend tax: {getattr(invoice_data, 'tax_amount', 0) or 0}
                 Backend tax: {tax_updated}
                 """)
         else:
