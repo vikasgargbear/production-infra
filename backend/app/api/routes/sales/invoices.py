@@ -241,7 +241,7 @@ async def create_invoice(
             "subtotal": subtotal,
             "discount": total_discount,  # Sum of item-level discounts
             "taxable": taxable_amount,
-            "igst": invoice_data.get("igst_amount", 0),
+            "igst": 0,  # IGST calculated by service based on gst_type
             "cgst": total_cgst,
             "sgst": total_sgst,
             "tax": total_tax,
@@ -254,8 +254,8 @@ async def create_invoice(
             "shipping_address_id": shipping_address_id,
             "payment_terms": payment_terms,
             "due_date": due_date,
-            "notes": invoice_data.get("notes"),
-            "bank_account_id": invoice_data.get("bank_account_id"),
+            "notes": invoice_data.notes,
+            "bank_account_id": None,  # Not in current schema
             "created_by": created_by
         })
         invoice_id = invoice_create.scalar()
@@ -264,7 +264,7 @@ async def create_invoice(
         # No need to check or create them on every invoice
         
         # Step 7.6: Calculate total paid amount first (for invoice status)
-        payments = invoice_data.get("payments", [])
+        payments = invoice_data.payments or []
         total_paid = 0
         
         if payments:
@@ -274,8 +274,8 @@ async def create_invoice(
                     total_paid += payment_amount
         
         # If no payments array, check legacy payment_mode field  
-        elif invoice_data.get("payment_mode"):
-            payment_mode = invoice_data.get("payment_mode", "").lower()
+        elif invoice_data.payment_mode:
+            payment_mode = (invoice_data.payment_mode or "").lower()
             if payment_mode == "cash":
                 total_paid = final_amount  # Cash means fully paid
                 # Payment will be created after successful invoice creation
