@@ -89,6 +89,7 @@ async def get_batch(
         raise handle_error(e, "get batch", batch_id)
 
 @router.get("/batches")
+@router.get("/batches/")  # Handle trailing slash
 @with_tenant_context
 async def list_batches(
     product_id: Optional[int] = None,
