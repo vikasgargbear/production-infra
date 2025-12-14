@@ -189,11 +189,11 @@ class DocumentNumberService:
                 raise ValueError(f"Unknown document type: {document_type}")
             
             # Get current year (last 2 digits)
-            current_year = datetime.now().year % 100  # Gets last 2 digits (2025 -> 25)
-            year_prefix = f"{current_year:02d}"
+            now = datetime.now()
+            date_prefix = now.strftime("%Y%m%d")  # Full date: YYYYMMDD (e.g., 20251214)
             
             # Build the pattern for searching existing numbers
-            pattern = f"{config['prefix']}-{year_prefix}%"
+            pattern = f"{config['prefix']}-{date_prefix}%"
             
             # Build query based on whether org_id is provided
             if org_id and "org_id" in get_table_columns(db, config['table']):
@@ -223,35 +223,32 @@ class DocumentNumberService:
             # Calculate next sequence number
             if latest and latest[0]:
                 # Extract sequence number from existing format
-                # Format: PREFIX-YY######## where YY is year and ######## is sequence
+                # Format: PREFIX-YYYYMMDD#### where YYYYMMDD is date and #### is sequence
                 parts = latest[0].split('-')
                 if len(parts) >= 2:
                     try:
-                        # Remove the year prefix (first 2 digits) from the number part
-                        number_with_year = parts[-1]
-                        # Check if it starts with the year prefix
-                        if number_with_year.startswith(year_prefix):
-                            # Extract just the sequence number (remove year prefix)
-                            current_seq = int(number_with_year[len(year_prefix):])
+                        # Remove the date prefix (8 digits) from the number part
+                        number_with_date = parts[-1]
+                        # Check if it starts with the date prefix
+                        if number_with_date.startswith(date_prefix):
+                            # Extract just the sequence number (remove date prefix)
+                            current_seq = int(number_with_date[len(date_prefix):])
                         else:
-                            # Old format or corrupted, extract what we can
-                            current_seq = int(number_with_year) if len(number_with_year) <= 8 else int(number_with_year[-8:])
+                            # Different date or old format, start at 1
+                            current_seq = 0
                         
                         # Increment for next sequence
-                        if current_seq < 10000000:
-                            next_seq = 10000000
-                        else:
-                            next_seq = current_seq + 1
+                        next_seq = current_seq + 1
                     except (ValueError, IndexError):
-                        next_seq = 10000000
+                        next_seq = 1
                 else:
-                    next_seq = 10000000
+                    next_seq = 1
             else:
-                # First document of the year
-                next_seq = 10000000
+                # First document of the day
+                next_seq = 1
             
-            # Generate the document number
-            document_number = f"{config['prefix']}-{year_prefix}{next_seq}"
+            # Generate the document number (4-digit sequence, zero-padded)
+            document_number = f"{config['prefix']}-{date_prefix}{next_seq:04d}"
             
             logger.info(f"Generated {document_type} number: {document_number}")
             return document_number
