@@ -367,8 +367,12 @@ async def create_invoice(
                 base_quantity = float(item["base_quantity"])
             else:
                 base_quantity = float(quantity)  # fallback only if not provided
+            
+            # Get free quantity for inventory deduction
+            free_quantity = float(item.get("free_quantity", 0))
+            total_quantity = base_quantity + free_quantity  # Total for inventory deduction
                 
-            logger.info(f"🔍 BACKEND INPUT: quantity={quantity}, base_quantity={base_quantity}, free_quantity={item.get('free_quantity', 0)}")
+            logger.info(f"🔍 BACKEND INPUT: base_quantity={base_quantity}, free_quantity={free_quantity}, total_quantity={total_quantity}")
             
             # PRODUCTION: Use base_quantity for all billing calculations
             discount_amt = base_quantity * unit_price * discount_percent / 100
@@ -510,7 +514,7 @@ async def create_invoice(
                         AND quantity_available >= :quantity
                         RETURNING quantity_available
                     """), {
-                        "quantity": quantity,  # Deduct full quantity (including free items)
+                        "quantity": total_quantity,  # Deduct full quantity (base + free)
                         "batch_id": batch_id,
                         "org_id": str(org_id)
                     })
@@ -527,7 +531,7 @@ async def create_invoice(
                             
                             # Calculate costs (you may need to fetch these from batch)
                             unit_cost = float(item.get("unit_cost", unit_price * 0.7))  # Rough estimate
-                            total_cost = unit_cost * quantity
+                            total_cost = unit_cost * total_quantity
                             
                             # Use InventoryService for movement record (batch already updated above)
                             movement_data = StockMovementCreate(
@@ -537,7 +541,7 @@ async def create_invoice(
                                 movement_type="sale",
                                 movement_direction="out",
                                 movement_date=date.today(),
-                                quantity=quantity,
+                                quantity=total_quantity,  # Total = base + free
                                 pack_type=pack_type,
                                 base_quantity=base_quantity,
                                 unit_cost=Decimal(str(unit_cost)),
