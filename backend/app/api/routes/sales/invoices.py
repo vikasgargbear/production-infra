@@ -169,6 +169,38 @@ def process_inventory_background(
                 """), {**invoice_totals, "invoice_id": invoice_id})
                 logger.info(f"✅ [BACKGROUND] Updated totals for invoice {invoice_id}")
             
+            # Create customer outstanding record (for party ledger/aging reports)
+            if invoice_totals:
+                try:
+                    # Check if outstanding already exists
+                    check_result = db.execute(text("""
+                        SELECT outstanding_id FROM sales.customer_outstanding
+                        WHERE invoice_id = :invoice_id
+                    """), {"invoice_id": invoice_id})
+                    
+                    if not check_result.fetchone():
+                        db.execute(text("""
+                            INSERT INTO sales.customer_outstanding (
+                                org_id, customer_id, invoice_id, invoice_number,
+                                invoice_date, invoice_amount, outstanding_amount,
+                                due_date, status
+                            ) VALUES (
+                                :org_id, :customer_id, :invoice_id, :invoice_number,
+                                :invoice_date, :amount, :amount,
+                                :invoice_date + INTERVAL '30 days', 'open'
+                            )
+                        """), {
+                            "org_id": org_id,
+                            "customer_id": invoice_totals.get("customer_id"),
+                            "invoice_id": invoice_id,
+                            "invoice_number": invoice_totals.get("invoice_number"),
+                            "invoice_date": invoice_totals.get("invoice_date"),
+                            "amount": invoice_totals.get("final_amount")
+                        })
+                        logger.info(f"✅ [BACKGROUND] Created outstanding record for invoice {invoice_id}")
+                except Exception as outstanding_error:
+                    logger.warning(f"⚠️ [BACKGROUND] Could not create outstanding record: {outstanding_error}")
+            
             db.commit()
             logger.info(f"✅ [BACKGROUND] Completed async processing for invoice {invoice_id}")
             
@@ -736,7 +768,11 @@ async def create_invoice(
             "cgst": total_cgst,
             "sgst": total_sgst,
             "total_tax": total_tax,
-            "final_amount": final_amount
+            "final_amount": final_amount,
+            # For outstanding record creation
+            "customer_id": customer_id,
+            "invoice_number": invoice_number,
+            "invoice_date": invoice_date
         }
         
         # Add background task for inventory processing
