@@ -3,7 +3,7 @@ Invoice API - Sales invoice management
 
 PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from datetime import date, datetime, timedelta
@@ -55,10 +55,137 @@ async def generate_invoice_number(
 # REMOVED: /simple endpoint - legacy fallback no longer needed
 # Use main POST /invoices/ endpoint with offline-first approach
 
+def process_inventory_background(
+    org_id: str,
+    invoice_id: int,
+    batch_deductions: list,
+    movement_records: list,
+    invoice_totals: dict,
+    created_by: int
+):
+    """
+    Background task to process inventory updates after invoice is returned.
+    This runs AFTER the response is sent to the user for faster perceived performance.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    import os
+    
+    try:
+        # Create new DB session for background task (can't reuse request session)
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            logger.error("DATABASE_URL not set for background task")
+            return
+        
+        engine = create_engine(database_url)
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        
+        try:
+            # BULK UPDATE: Batch quantities
+            if batch_deductions:
+                case_parts = []
+                batch_ids_to_update = []
+                update_params = {"org_id": org_id}
+                
+                for i, bd in enumerate(batch_deductions):
+                    case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
+                    batch_ids_to_update.append(bd["batch_id"])
+                    update_params[f"bid_{i}"] = bd["batch_id"]
+                    update_params[f"qty_{i}"] = bd["quantity"]
+                
+                update_params["batch_ids"] = batch_ids_to_update
+                
+                bulk_update_sql = f"""
+                    UPDATE inventory.batches
+                    SET 
+                        quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
+                        last_movement_date = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
+                """
+                db.execute(text(bulk_update_sql), update_params)
+                logger.info(f"✅ [BACKGROUND] Updated {len(batch_deductions)} batch quantities for invoice {invoice_id}")
+            
+            # BULK INSERT: Inventory Movements
+            if movement_records:
+                mv_values_list = []
+                mv_params = {}
+                for i, mv in enumerate(movement_records):
+                    mv_values_list.append(f"""(
+                        :org_id_{i}, 'sale', 'out',
+                        :product_id_{i}, :batch_id_{i}, :quantity_{i},
+                        :pack_type_{i}, :base_quantity_{i},
+                        :unit_cost_{i}, :total_cost_{i},
+                        'invoice', :invoice_id_{i}, :reference_number_{i},
+                        'sale', 'Customer Sale',
+                        1, :created_by_{i}, CURRENT_TIMESTAMP
+                    )""")
+                    mv_params[f"org_id_{i}"] = mv["org_id"]
+                    mv_params[f"product_id_{i}"] = mv["product_id"]
+                    mv_params[f"batch_id_{i}"] = mv["batch_id"]
+                    mv_params[f"quantity_{i}"] = mv["quantity"]
+                    mv_params[f"pack_type_{i}"] = mv["pack_type"]
+                    mv_params[f"base_quantity_{i}"] = mv["base_quantity"]
+                    mv_params[f"unit_cost_{i}"] = mv["unit_cost"]
+                    mv_params[f"total_cost_{i}"] = mv["total_cost"]
+                    mv_params[f"invoice_id_{i}"] = invoice_id
+                    mv_params[f"reference_number_{i}"] = f"INV-{invoice_id}"
+                    mv_params[f"created_by_{i}"] = created_by
+                
+                bulk_mv_sql = f"""
+                    INSERT INTO inventory.inventory_movements (
+                        org_id, movement_type, movement_direction,
+                        product_id, batch_id, quantity,
+                        pack_type, base_quantity,
+                        unit_cost, total_cost,
+                        reference_type, reference_id, reference_number,
+                        transfer_type, reason,
+                        location_id, created_by, movement_date
+                    ) VALUES {", ".join(mv_values_list)}
+                """
+                db.execute(text(bulk_mv_sql), mv_params)
+                logger.info(f"✅ [BACKGROUND] Inserted {len(movement_records)} inventory movements for invoice {invoice_id}")
+            
+            # Update invoice totals (pre-calculated)
+            if invoice_totals:
+                db.execute(text("""
+                    UPDATE sales.invoices
+                    SET 
+                        items_count = :items_count,
+                        total_quantity = :total_qty,
+                        subtotal_amount = :subtotal,
+                        discount_amount = :item_discount,
+                        scheme_discount = :invoice_discount,
+                        taxable_amount = :taxable_amount,
+                        igst_amount = :igst,
+                        cgst_amount = :cgst,
+                        sgst_amount = :sgst,
+                        total_tax_amount = :total_tax,
+                        final_amount = :final_amount,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE invoice_id = :invoice_id
+                """), {**invoice_totals, "invoice_id": invoice_id})
+                logger.info(f"✅ [BACKGROUND] Updated totals for invoice {invoice_id}")
+            
+            db.commit()
+            logger.info(f"✅ [BACKGROUND] Completed async processing for invoice {invoice_id}")
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ [BACKGROUND] Failed async processing for invoice {invoice_id}: {e}")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"❌ [BACKGROUND] Failed to create session for invoice {invoice_id}: {e}")
+
 @router.post("/")
 @with_tenant_context
 async def create_invoice(
     invoice_data: InvoiceCreateRequest,
+    background_tasks: BackgroundTasks,
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
@@ -593,113 +720,38 @@ async def create_invoice(
             logger.info(f"✅ Bulk inserted {len(invoice_items_data)} invoice items")
         
         # =========================================================================
-        # BULK UPDATE: Batch quantities (single query for all batches)
+        # ASYNC: Process batch updates, movements, and totals in BACKGROUND
+        # This runs AFTER the response is sent to user for faster perceived performance
         # =========================================================================
-        if batch_deductions:
-            # Build CASE WHEN for bulk update
-            case_parts = []
-            batch_ids_to_update = []
-            update_params = {"org_id": str(org_id)}
-            
-            for i, bd in enumerate(batch_deductions):
-                case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
-                batch_ids_to_update.append(bd["batch_id"])
-                update_params[f"bid_{i}"] = bd["batch_id"]
-                update_params[f"qty_{i}"] = bd["quantity"]
-            
-            update_params["batch_ids"] = batch_ids_to_update
-            
-            bulk_update_sql = f"""
-                UPDATE inventory.batches
-                SET 
-                    quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
-                    last_movement_date = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
-            """
-            db.execute(text(bulk_update_sql), update_params)
-            logger.info(f"✅ Bulk updated {len(batch_deductions)} batch quantities")
         
-        # =========================================================================
-        # BULK INSERT: Inventory Movements (single query for all movements)
-        # =========================================================================
-        if movement_records:
-            mv_values_list = []
-            mv_params = {}
-            for i, mv in enumerate(movement_records):
-                mv_values_list.append(f"""(
-                    :org_id_{i}, 'sale', 'out',
-                    :product_id_{i}, :batch_id_{i}, :quantity_{i},
-                    :pack_type_{i}, :base_quantity_{i},
-                    :unit_cost_{i}, :total_cost_{i},
-                    'invoice', :invoice_id_{i}, :reference_number_{i},
-                    'sale', 'Customer Sale',
-                    1, :created_by_{i}, CURRENT_TIMESTAMP
-                )""")
-                mv_params[f"org_id_{i}"] = mv["org_id"]
-                mv_params[f"product_id_{i}"] = mv["product_id"]
-                mv_params[f"batch_id_{i}"] = mv["batch_id"]
-                mv_params[f"quantity_{i}"] = mv["quantity"]
-                mv_params[f"pack_type_{i}"] = mv["pack_type"]
-                mv_params[f"base_quantity_{i}"] = mv["base_quantity"]
-                mv_params[f"unit_cost_{i}"] = mv["unit_cost"]
-                mv_params[f"total_cost_{i}"] = mv["total_cost"]
-                mv_params[f"invoice_id_{i}"] = invoice_id
-                mv_params[f"reference_number_{i}"] = f"INV-{invoice_id}"
-                mv_params[f"created_by_{i}"] = created_by
-            
-            bulk_mv_sql = f"""
-                INSERT INTO inventory.inventory_movements (
-                    org_id, movement_type, movement_direction,
-                    product_id, batch_id, quantity,
-                    pack_type, base_quantity,
-                    unit_cost, total_cost,
-                    reference_type, reference_id, reference_number,
-                    transfer_type, reason,
-                    location_id, created_by, movement_date
-                ) VALUES {", ".join(mv_values_list)}
-            """
-            db.execute(text(bulk_mv_sql), mv_params)
-            logger.info(f"✅ Bulk inserted {len(movement_records)} inventory movements")
+        # Prepare invoice totals for background task
+        invoice_totals_data = {
+            "items_count": items_created,
+            "total_qty": sum(float(item.get("base_quantity", item.get("quantity", 0))) + float(item.get("free_quantity", 0)) for item in items),
+            "subtotal": subtotal,
+            "item_discount": total_discount,
+            "invoice_discount": invoice_discount,
+            "taxable_amount": taxable_amount,
+            "igst": total_igst,
+            "cgst": total_cgst,
+            "sgst": total_sgst,
+            "total_tax": total_tax,
+            "final_amount": final_amount
+        }
         
+        # Add background task for inventory processing
+        background_tasks.add_task(
+            process_inventory_background,
+            org_id=str(org_id),
+            invoice_id=invoice_id,
+            batch_deductions=batch_deductions,
+            movement_records=movement_records,
+            invoice_totals=invoice_totals_data,
+            created_by=created_by
+        )
+        logger.info(f"📦 Queued background task for invoice {invoice_id} inventory processing")
         
-        
-        # OPTIMIZED: Use pre-calculated values instead of 10 subqueries
-        try:
-            db.execute(text("""
-                UPDATE sales.invoices
-                SET 
-                    items_count = :items_count,
-                    total_quantity = :total_qty,
-                    subtotal_amount = :subtotal,
-                    discount_amount = :item_discount,
-                    scheme_discount = :invoice_discount,
-                    taxable_amount = :taxable_amount,
-                    igst_amount = :igst,
-                    cgst_amount = :cgst,
-                    sgst_amount = :sgst,
-                    total_tax_amount = :total_tax,
-                    final_amount = :final_amount,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE invoice_id = :invoice_id
-            """), {
-                "items_count": items_created,
-                "total_qty": sum(float(item.get("base_quantity", item.get("quantity", 0))) + float(item.get("free_quantity", 0)) for item in items),
-                "subtotal": subtotal,
-                "item_discount": total_discount,
-                "invoice_discount": invoice_discount,
-                "taxable_amount": taxable_amount,
-                "igst": total_igst,
-                "cgst": total_cgst,
-                "sgst": total_sgst,
-                "total_tax": total_tax,
-                "final_amount": final_amount,
-                "invoice_id": invoice_id
-            })
-        except Exception as update_error:
-            logger.warning(f"Could not update invoice totals: {update_error}")
-        
-        # Commit transaction
+        # Commit transaction (invoice header + items only)
         db.commit()
         
         # Verify invoice was created successfully
