@@ -116,12 +116,37 @@ async def create_invoice(
         # Frontend already sends gst_type: "CGST/SGST" or "IGST" based on customer location
         gst_type = invoice_data.gst_type or "CGST/SGST"
         
-        freight_charges = invoice_data.freight_charges  # Canonical name from schema
+        freight_charges = float(invoice_data.freight_charges or 0)  # Canonical name from schema
         insurance_charges = 0.0
         other_charges = 0.0
-        invoice_discount = float(invoice_data.discount_amount)
         
-        # Use service method for consistent calculations
+        # Calculate invoice-level discount (percent OR fixed amount)
+        discount_type = invoice_data.discount_type or "percentage"
+        discount_percent = float(invoice_data.discount_percent or 0)
+        discount_amount_fixed = float(invoice_data.discount_amount or 0)
+        
+        # First calculate item totals to get taxable_amount (needed for percent-based discount)
+        totals = InvoiceService.calculate_invoice_totals(
+            items=items,
+            gst_type=gst_type,
+            freight_charges=0,  # Add later - not affected by discount
+            insurance_charges=0,
+            other_charges=0,
+            invoice_discount=0  # Calculate separately
+        )
+        
+        # Get taxable amount (after item-level discounts)
+        taxable_amount = totals["taxable_amount"]
+        
+        # Calculate invoice-level discount based on type
+        if discount_type == "percentage" and discount_percent > 0:
+            invoice_discount = taxable_amount * discount_percent / 100
+        else:
+            invoice_discount = discount_amount_fixed
+        
+        logger.info(f"Invoice discount: type={discount_type}, percent={discount_percent}, amount={invoice_discount}")
+        
+        # Recalculate final totals with invoice discount and freight
         totals = InvoiceService.calculate_invoice_totals(
             items=items,
             gst_type=gst_type,
@@ -133,7 +158,7 @@ async def create_invoice(
         
         # Extract calculated values
         subtotal = totals["subtotal"]
-        total_discount = totals["total_discount"]
+        total_discount = totals["total_discount"]  # Item-level discounts
         taxable_amount = totals["taxable_amount"]
         total_cgst = totals["total_cgst"]
         total_sgst = totals["total_sgst"]
