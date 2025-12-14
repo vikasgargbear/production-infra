@@ -476,7 +476,7 @@ async def create_invoice(
                 "batch_number": batch_number or item.get("batch_number"),
                 "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
                 "expiry_date": expiry_date or item.get("expiry_date"),
-                "quantity": float(base_quantity + float(item.get("free_quantity", 0))),  # Total = base + free
+                "quantity": total_quantity,  # Total = base + free (single source of truth)
                 "uom": uom,  # Now guaranteed to have a value
                 "pack_type": pack_type,  # Now guaranteed to have a value
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
@@ -494,7 +494,7 @@ async def create_invoice(
                 "sgst_amount": float(sgst_amount),
                 "total_tax_amount": float(total_tax_amount),
                 "line_total": float(line_total),
-                "free_quantity": float(item.get("free_quantity", 0))
+                "free_quantity": free_quantity  # Already calculated at line 372
             })
             
             invoice_item_id = insert_result.scalar()
