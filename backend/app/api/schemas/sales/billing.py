@@ -101,6 +101,21 @@ class InvoiceItemCreate(BaseModel):
     discount_percent: float = Field(default=0, ge=0, le=100)
     gst_percent: float = Field(default=0, ge=0, le=28, description="GST rate")
 
+    @field_validator('batch_id', mode='before')
+    @classmethod
+    def validate_batch_id(cls, v):
+        """Convert invalid batch_id values (like 'default_130') to None"""
+        if v is None:
+            return None
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            # Handle 'default_XXX' or empty strings
+            if v.isdigit():
+                return int(v)
+            return None  # Convert invalid strings to None
+        return None
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
 
 
