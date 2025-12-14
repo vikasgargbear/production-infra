@@ -125,20 +125,20 @@ async def create_invoice(
         discount_percent = float(invoice_data.discount_percent or 0)
         discount_amount_fixed = float(invoice_data.discount_amount or 0)
         
-        # First calculate item totals to get taxable_amount (needed for percent-based discount)
-        totals = InvoiceService.calculate_invoice_totals(
-            items=items,
-            gst_type=gst_type,
-            freight_charges=0,  # Add later - not affected by discount
-            insurance_charges=0,
-            other_charges=0,
-            invoice_discount=0  # Calculate separately
-        )
+        # OPTIMIZED: Calculate subtotal first (simple loop, no service call)
+        # Then apply invoice discount, then calculate final totals once
+        subtotal = 0.0
+        item_level_discount = 0.0
+        for item in items:
+            base_qty = float(item.get("base_quantity", item.get("quantity", 1)))
+            unit_price = float(item.get("unit_price", 0))
+            disc_pct = float(item.get("discount_percent", 0))
+            subtotal += base_qty * unit_price
+            item_level_discount += base_qty * unit_price * disc_pct / 100
         
-        # Get taxable amount (after item-level discounts)
-        taxable_amount = totals["taxable_amount"]
+        taxable_amount = subtotal - item_level_discount
         
-        # Calculate invoice-level discount based on type
+        # Calculate invoice-level discount based on type (only need taxable_amount)
         if discount_type == "percentage" and discount_percent > 0:
             invoice_discount = taxable_amount * discount_percent / 100
         else:
@@ -146,7 +146,7 @@ async def create_invoice(
         
         logger.info(f"Invoice discount: type={discount_type}, percent={discount_percent}, amount={invoice_discount}")
         
-        # Recalculate final totals with invoice discount and freight
+        # NOW call service ONCE for final calculations (GST, rounding, etc.)
         totals = InvoiceService.calculate_invoice_totals(
             items=items,
             gst_type=gst_type,
@@ -333,6 +333,42 @@ async def create_invoice(
         
         # Note: Triggers handle data correctly now - no need to disable them
         
+        # PERFORMANCE: Batch lookup all products and batches BEFORE item loop (eliminates N+1)
+        product_ids = [int(item.get("product_id")) for item in items]
+        batch_ids = [int(item.get("batch_id")) for item in items if item.get("batch_id") and str(item.get("batch_id")).isdigit()]
+        
+        # Batch fetch product names
+        products_lookup = {}
+        if product_ids:
+            prod_result = db.execute(text("""
+                SELECT product_id, product_name
+                FROM inventory.products
+                WHERE product_id = ANY(:product_ids) AND org_id = :org_id
+            """), {"product_ids": product_ids, "org_id": str(org_id)})
+            products_lookup = {row[0]: row[1] for row in prod_result.fetchall()}
+        
+        # Batch fetch batch details
+        batches_lookup = {}
+        if batch_ids:
+            batch_result = db.execute(text("""
+                SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                FROM inventory.batches
+                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
+            """), {"batch_ids": batch_ids, "org_id": str(org_id)})
+            batches_lookup = {row[0]: {"batch_number": row[1], "mrp": row[2], "mfg_date": row[3], "exp_date": row[4]} for row in batch_result.fetchall()}
+        
+        # For items without batch_id, get FIFO batches in one query
+        products_needing_batches = [int(item.get("product_id")) for item in items if not item.get("batch_id") or not str(item.get("batch_id")).isdigit()]
+        fifo_batches = {}
+        if products_needing_batches:
+            fifo_result = db.execute(text("""
+                SELECT DISTINCT ON (product_id) product_id, batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                FROM inventory.batches
+                WHERE product_id = ANY(:product_ids) AND org_id = :org_id AND quantity_available > 0
+                ORDER BY product_id, expiry_date NULLS LAST, batch_id
+            """), {"product_ids": products_needing_batches, "org_id": str(org_id)})
+            fifo_batches = {row[0]: {"batch_id": row[1], "batch_number": row[2], "mrp": row[3], "mfg_date": row[4], "exp_date": row[5]} for row in fifo_result.fetchall()}
+        
         items_created = 0
         for item in items:
             product_id = int(item.get("product_id"))
@@ -344,15 +380,9 @@ async def create_invoice(
             uom = item.get("uom")
             pack_type = item.get("pack_type")
             
-            # Fetch product name if missing (products table doesn't have uom/pack_type)
+            # OPTIMIZED: Use pre-fetched product lookup (no DB query per item)
             if not product_name:
-                prod_result = db.execute(text("""
-                    SELECT product_name
-                    FROM inventory.products
-                    WHERE product_id = :product_id AND org_id = :org_id
-                """), {"product_id": product_id, "org_id": str(org_id)})
-                prod = prod_result.fetchone()
-                product_name = prod[0] if prod else f"Product {product_id}"
+                product_name = products_lookup.get(product_id, f"Product {product_id}")
             
             # Set default values for uom and pack_type if not provided
             # These are typically stored at batch level or as part of product configuration
@@ -392,41 +422,24 @@ async def create_invoice(
             manufacturing_date = None
             expiry_date = item.get("expiry_date")
             
+            # OPTIMIZED: Use pre-fetched batch lookups (no DB query per item)
             if not batch_id:
-                # Try to get FIFO batch with all details
-                batch_result = db.execute(text("""
-                    SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
-                    FROM inventory.batches
-                    WHERE product_id = :product_id
-                    AND org_id = :org_id
-                    AND quantity_available > 0
-                    ORDER BY expiry_date NULLS LAST, batch_id
-                    LIMIT 1
-                """), {"product_id": product_id, "org_id": str(org_id)})
-                batch = batch_result.fetchone()
-                if batch:
-                    batch_id = batch[0]
-                    batch_number = batch[1]
-                    mrp = float(batch[2]) if batch[2] else mrp
-                    manufacturing_date = batch[3]
-                    expiry_date = batch[4] or expiry_date
+                # Use pre-fetched FIFO batch
+                fifo = fifo_batches.get(product_id)
+                if fifo:
+                    batch_id = fifo["batch_id"]
+                    batch_number = fifo["batch_number"]
+                    mrp = float(fifo["mrp"]) if fifo["mrp"] else mrp
+                    manufacturing_date = fifo["mfg_date"]
+                    expiry_date = fifo["exp_date"] or expiry_date
             else:
-                # Get batch details for provided batch_id
-                try:
-                    batch_result = db.execute(text("""
-                        SELECT batch_number, mrp_per_unit, manufacturing_date, expiry_date
-                        FROM inventory.batches
-                        WHERE batch_id = :batch_id AND org_id = :org_id
-                    """), {"batch_id": batch_id, "org_id": str(org_id)})
-                    batch = batch_result.fetchone()
-                    if batch:
-                        batch_number = batch[0]
-                        mrp = float(batch[1]) if batch[1] else mrp
-                        manufacturing_date = batch[2]
-                        expiry_date = batch[3] or expiry_date
-                except Exception as batch_error:
-                    logger.warning(f"Could not fetch batch {batch_id} details: {batch_error}")
-                    # Continue without batch details rather than failing the entire invoice
+                # Use pre-fetched batch details
+                batch_details = batches_lookup.get(batch_id)
+                if batch_details:
+                    batch_number = batch_details["batch_number"]
+                    mrp = float(batch_details["mrp"]) if batch_details["mrp"] else mrp
+                    manufacturing_date = batch_details["mfg_date"]
+                    expiry_date = batch_details["exp_date"] or expiry_date
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
