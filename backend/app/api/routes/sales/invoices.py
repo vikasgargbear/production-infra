@@ -369,62 +369,49 @@ async def create_invoice(
             """), {"product_ids": products_needing_batches, "org_id": str(org_id)})
             fifo_batches = {row[0]: {"batch_id": row[1], "batch_number": row[2], "mrp": row[3], "mfg_date": row[4], "exp_date": row[5]} for row in fifo_result.fetchall()}
         
-        items_created = 0
+        # =========================================================================
+        # OPTIMIZED: BULK OPERATIONS - Prepare all data first, then bulk INSERT
+        # Before: 3N queries (N items × 3 operations each)
+        # After: 3 queries total (1 bulk INSERT + 1 bulk UPDATE + 1 bulk INSERT)
+        # =========================================================================
+        
+        # Data preparation lists
+        invoice_items_data = []
+        batch_deductions = []  # (batch_id, quantity_to_deduct, product_id)
+        movement_records = []
+        
+        from decimal import Decimal
+        gst_type = invoice_data.gst_type or "CGST/SGST"
+        
         for item in items:
             product_id = int(item.get("product_id"))
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             
-            # Get product details if not provided
-            product_name = item.get("product_name")
-            uom = item.get("uom")
-            pack_type = item.get("pack_type")
+            # Get product details - use pre-fetched lookup
+            product_name = item.get("product_name") or products_lookup.get(product_id, f"Product {product_id}")
+            uom = item.get("uom") or "PCS"
+            pack_type = item.get("pack_type") or "UNIT"
             
-            # OPTIMIZED: Use pre-fetched product lookup (no DB query per item)
-            if not product_name:
-                product_name = products_lookup.get(product_id, f"Product {product_id}")
-            
-            # Set default values for uom and pack_type if not provided
-            # These are typically stored at batch level or as part of product configuration
-            uom = uom or "PCS"  # Default to pieces
-            pack_type = pack_type or "UNIT"  # Default to unit
-            
-            # Basic calculations (triggers will recalculate if needed)
+            # Calculate quantities
             discount_percent = float(item.get("discount_percent", 0))
-            
-            # CRITICAL: Ensure base_quantity is used for billing (NOT quantity)
-            if "base_quantity" in item:
-                base_quantity = float(item["base_quantity"])
-            else:
-                base_quantity = float(quantity)  # fallback only if not provided
-            
-            # Get free quantity for inventory deduction
+            base_quantity = float(item.get("base_quantity", quantity))
             free_quantity = float(item.get("free_quantity", 0))
-            total_quantity = base_quantity + free_quantity  # Total for inventory deduction
-                
-            logger.info(f"🔍 BACKEND INPUT: base_quantity={base_quantity}, free_quantity={free_quantity}, total_quantity={total_quantity}")
+            total_quantity = base_quantity + free_quantity
             
-            # PRODUCTION: Use base_quantity for all billing calculations
-            discount_amt = base_quantity * unit_price * discount_percent / 100
-            logger.info(f"🔍 BACKEND CALCULATION: base_quantity={base_quantity}, unit_price={unit_price}, discount_percent={discount_percent}, discount_amt={discount_amt}")
-            
-            # Get batch_id if not provided (for inventory trigger)
+            # Get batch_id - use pre-fetched lookups
             batch_id = item.get("batch_id")
-            # Filter out invalid batch_id values like 'default_123' or empty strings
             if batch_id and (isinstance(batch_id, str) and ('default' in str(batch_id).lower() or batch_id == '')):
                 batch_id = None
-            # Convert batch_id to integer if it's a valid numeric string
             elif batch_id and str(batch_id).isdigit():
                 batch_id = int(batch_id)
-            # Get batch details including MRP
+            
             batch_number = None
             mrp = item.get("mrp", 0)
             manufacturing_date = None
             expiry_date = item.get("expiry_date")
             
-            # OPTIMIZED: Use pre-fetched batch lookups (no DB query per item)
             if not batch_id:
-                # Use pre-fetched FIFO batch
                 fifo = fifo_batches.get(product_id)
                 if fifo:
                     batch_id = fifo["batch_id"]
@@ -433,7 +420,6 @@ async def create_invoice(
                     manufacturing_date = fifo["mfg_date"]
                     expiry_date = fifo["exp_date"] or expiry_date
             else:
-                # Use pre-fetched batch details
                 batch_details = batches_lookup.get(batch_id)
                 if batch_details:
                     batch_number = batch_details["batch_number"]
@@ -441,14 +427,13 @@ async def create_invoice(
                     manufacturing_date = batch_details["mfg_date"]
                     expiry_date = batch_details["exp_date"] or expiry_date
             
-            # Calculate amounts - use base_quantity for billing (production logic)
-            line_total = (base_quantity * unit_price) - discount_amt
-            gst_percent = float(item.get("gst_percent", 0))  # Single source of truth
-            taxable_amount = line_total
+            # Calculate amounts
+            discount_amt = base_quantity * unit_price * discount_percent / 100
+            line_total_before_tax = (base_quantity * unit_price) - discount_amt
+            gst_percent = float(item.get("gst_percent", 0))
+            taxable_amount = line_total_before_tax
             
-            # Calculate GST amounts using GSTService for consistency
-            gst_type = invoice_data.gst_type or "CGST/SGST"
-            from decimal import Decimal
+            # Calculate GST
             gst_components = GSTService.calculate_gst_components(
                 Decimal(str(taxable_amount)),
                 Decimal(str(gst_percent)),
@@ -458,191 +443,223 @@ async def create_invoice(
             sgst_amount = float(gst_components["sgst_amount"])
             igst_amount = float(gst_components["igst_amount"])
             total_tax_amount = float(gst_components["total_tax_amount"])
-            
-            # Update line_total to include taxes (final amount for this line item)
             line_total = taxable_amount + total_tax_amount
             
-            # Complete INSERT with all important fields (NOTE: invoice_items has batch_number but NOT batch_id)
-            insert_result = db.execute(text("""
-                INSERT INTO sales.invoice_items (
-                    invoice_id, product_id, product_name, hsn_code,
-                    batch_number, manufacturing_date, expiry_date,
-                    quantity, uom, pack_type, pack_size, base_quantity,
-                    mrp, unit_price, discount_percent, discount_amount, taxable_amount,
-                    igst_rate, igst_amount, cgst_rate, cgst_amount, 
-                    sgst_rate, sgst_amount, total_tax_amount, line_total,
-                    free_quantity
-                ) VALUES (
-                    :invoice_id, :product_id, :product_name, :hsn_code,
-                    :batch_number, :manufacturing_date, :expiry_date,
-                    :quantity, :uom, :pack_type, :pack_size, :base_quantity,
-                    :mrp, :unit_price, :discount_percent, :discount_amount, :taxable_amount,
-                    :igst_rate, :igst_amount, :cgst_rate, :cgst_amount,
-                    :sgst_rate, :sgst_amount, :total_tax_amount, :line_total,
-                    :free_quantity
-                ) RETURNING invoice_item_id
-            """), {
+            # Prepare invoice item data
+            invoice_items_data.append({
                 "invoice_id": invoice_id,
                 "product_id": product_id,
                 "product_name": product_name,
                 "hsn_code": item.get("hsn_code"),
                 "batch_number": batch_number or item.get("batch_number"),
                 "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
-                "expiry_date": expiry_date or item.get("expiry_date"),
-                "quantity": total_quantity,  # Total = base + free (single source of truth)
-                "uom": uom,  # Now guaranteed to have a value
-                "pack_type": pack_type,  # Now guaranteed to have a value
+                "expiry_date": expiry_date,
+                "quantity": total_quantity,
+                "uom": uom,
+                "pack_type": pack_type,
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
-                "base_quantity": float(base_quantity),  # Use the corrected variable
-                "mrp": float(mrp),
-                "unit_price": float(unit_price),
-                "discount_percent": float(item.get("discount_percent", 0)),
-                "discount_amount": float(discount_amt),
-                "taxable_amount": float(taxable_amount),
-                "igst_rate": float(gst_percent if igst_amount > 0 else 0),
-                "igst_amount": float(igst_amount),
-                "cgst_rate": float(gst_percent / 2 if cgst_amount > 0 else 0),
-                "cgst_amount": float(cgst_amount),
-                "sgst_rate": float(gst_percent / 2 if sgst_amount > 0 else 0),
-                "sgst_amount": float(sgst_amount),
-                "total_tax_amount": float(total_tax_amount),
-                "line_total": float(line_total),
-                "free_quantity": free_quantity  # Already calculated at line 372
+                "base_quantity": base_quantity,
+                "mrp": float(mrp) if mrp else 0,
+                "unit_price": unit_price,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amt,
+                "taxable_amount": taxable_amount,
+                "igst_rate": gst_percent if igst_amount > 0 else 0,
+                "igst_amount": igst_amount,
+                "cgst_rate": gst_percent / 2 if cgst_amount > 0 else 0,
+                "cgst_amount": cgst_amount,
+                "sgst_rate": gst_percent / 2 if sgst_amount > 0 else 0,
+                "sgst_amount": sgst_amount,
+                "total_tax_amount": total_tax_amount,
+                "line_total": line_total,
+                "free_quantity": free_quantity
             })
             
-            invoice_item_id = insert_result.scalar()
-            logger.info(f"Created invoice item {invoice_item_id} for product {product_id}")
-            
-            # CRITICAL: Deduct inventory from batch (this was missing!)
+            # Prepare batch deduction and movement record
             if batch_id:
-                try:
-                    inventory_update = db.execute(text("""
-                        UPDATE inventory.batches
-                        SET
-                            quantity_available = quantity_available - :quantity,
-                            last_movement_date = CURRENT_TIMESTAMP,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE batch_id = :batch_id
-                        AND org_id = :org_id
-                        AND quantity_available >= :quantity
-                        RETURNING quantity_available
-                    """), {
-                        "quantity": total_quantity,  # Deduct full quantity (base + free)
-                        "batch_id": batch_id,
-                        "org_id": str(org_id)
-                    })
-                    
-                    result = inventory_update.fetchone()
-                    if result:
-                        new_qty = result[0]
-                        logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, billed: {base_quantity}, new available: {new_qty}")
-                        
-                        # Create inventory movement record using InventoryService
-                        try:
-                            # Get item details for movement record
-                            pack_type = item.get("pack_type", "UNIT")
-                            
-                            # Calculate costs (you may need to fetch these from batch)
-                            unit_cost = float(item.get("unit_cost", unit_price * 0.7))  # Rough estimate
-                            total_cost = unit_cost * total_quantity
-                            
-                            # Use InventoryService for movement record (batch already updated above)
-                            movement_data = StockMovementCreate(
-                                org_id=context.org_id,
-                                product_id=product_id,
-                                batch_id=int(batch_id) if batch_id and str(batch_id).isdigit() else None,
-                                movement_type="sale",
-                                movement_direction="out",
-                                movement_date=date.today(),
-                                quantity=total_quantity,  # Total = base + free
-                                pack_type=pack_type,
-                                base_quantity=base_quantity,
-                                unit_cost=Decimal(str(unit_cost)),
-                                total_cost=Decimal(str(total_cost)),
-                                reference_type="invoice",
-                                reference_id=invoice_id,
-                                reference_number=f"INV-{invoice_id}",
-                                transfer_type="sale",
-                                reason="Customer Sale",
-                                location_id=1,
-                                created_by=created_by
-                            )
-                            
-                            # Note: batch already updated above, so we just need to record the movement
-                            # The service will try to update batch again, but should handle gracefully
-                            db.execute(text("""
-                                INSERT INTO inventory.inventory_movements (
-                                    org_id, movement_type, movement_direction, 
-                                    product_id, batch_id, quantity,
-                                    pack_type, base_quantity,
-                                    unit_cost, total_cost,
-                                    reference_type, reference_id, reference_number,
-                                    transfer_type, reason,
-                                    location_id, created_by, movement_date
-                                ) VALUES (
-                                    :org_id, :movement_type, :movement_direction,
-                                    :product_id, :batch_id, :quantity,
-                                    :pack_type, :base_quantity,
-                                    :unit_cost, :total_cost,
-                                    :reference_type, :reference_id, :reference_number,
-                                    :transfer_type, :reason,
-                                    :location_id, :created_by, CURRENT_TIMESTAMP
-                                )
-                            """), {
-                                "org_id": context.org_id,
-                                "movement_type": "sale",
-                                "movement_direction": "out",
-                                "product_id": product_id,
-                                "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
-                                "quantity": quantity,
-                                "pack_type": pack_type,
-                                "base_quantity": base_quantity,
-                                "unit_cost": unit_cost,
-                                "total_cost": total_cost,
-                                "reference_type": "invoice",
-                                "reference_id": invoice_id,
-                                "reference_number": f"INV-{invoice_id}",
-                                "transfer_type": "sale",
-                                "reason": "Customer Sale",
-                                "location_id": 1,
-                                "created_by": created_by
-                            })
-                            logger.info(f"📦 Inventory movement recorded for batch {batch_id}")
-                        except Exception as movement_error:
-                            logger.warning(f"⚠️ Could not record inventory movement: {movement_error}")
-                            # Don't fail the transaction for movement tracking
-                    else:
-                        # CRITICAL FIX: Fail the invoice if insufficient stock
-                        # Get current available quantity for better error message
-                        stock_check = db.execute(text("""
-                            SELECT quantity_available FROM inventory.batches
-                            WHERE batch_id = :batch_id AND org_id = :org_id
-                        """), {"batch_id": batch_id, "org_id": str(org_id)})
-                        current_stock = stock_check.fetchone()
-                        available = current_stock[0] if current_stock else 0
-                        
-                        error_msg = f"Insufficient stock for product {product_id} (batch {batch_id}): Required {quantity}, Available {available}"
-                        logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
-                        db.rollback()
-                        raise HTTPException(
-                            status_code=409,  # Conflict status
-                            detail={
-                                "error": "INSUFFICIENT_STOCK",
-                                "message": error_msg,
-                                "product_id": product_id,
-                                "batch_id": batch_id,
-                                "required_quantity": quantity,
-                                "available_quantity": available,
-                                "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
-                            }
-                        )
-                        
-                except Exception as inv_error:
-                    logger.error(f"❌ Inventory deduction failed for batch {batch_id}: {inv_error}")
+                batch_deductions.append({
+                    "batch_id": batch_id,
+                    "quantity": total_quantity,
+                    "product_id": product_id,
+                    "base_quantity": base_quantity # For error message
+                })
+                
+                unit_cost = float(item.get("unit_cost", unit_price * 0.7))
+                movement_records.append({
+                    "org_id": context.org_id,
+                    "product_id": product_id,
+                    "batch_id": batch_id,
+                    "quantity": total_quantity,
+                    "pack_type": pack_type,
+                    "base_quantity": base_quantity,
+                    "unit_cost": unit_cost,
+                    "total_cost": unit_cost * total_quantity
+                })
             else:
-                logger.warning(f"⚠️ No batch_id for product {product_id} - inventory not deducted")
+                logger.warning(f"⚠️ No batch_id for product {product_id} - inventory not deducted for this item")
+        
+        items_created = len(invoice_items_data)
+        
+        # =========================================================================
+        # CRITICAL: BULK STOCK CHECK before deduction
+        # =========================================================================
+        if batch_deductions:
+            deduction_batch_ids = [bd["batch_id"] for bd in batch_deductions]
             
-            items_created += 1
+            # Fetch current available quantities for all relevant batches
+            stock_check_result = db.execute(text("""
+                SELECT batch_id, product_id, quantity_available
+                FROM inventory.batches
+                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
+            """), {"batch_ids": deduction_batch_ids, "org_id": str(org_id)})
+            
+            current_stock_map = {row[0]: {"product_id": row[1], "available": row[2]} for row in stock_check_result.fetchall()}
+            
+            for deduction in batch_deductions:
+                batch_id = deduction["batch_id"]
+                required_quantity = deduction["quantity"]
+                product_id = deduction["product_id"]
+                
+                stock_info = current_stock_map.get(batch_id)
+                
+                if not stock_info:
+                    error_msg = f"Batch {batch_id} not found for product {product_id} during stock check."
+                    logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=404,
+                        detail={
+                            "error": "BATCH_NOT_FOUND",
+                            "message": error_msg,
+                            "product_id": product_id,
+                            "batch_id": batch_id,
+                            "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
+                        }
+                    )
+                
+                available_quantity = stock_info["available"]
+                
+                if available_quantity < required_quantity:
+                    error_msg = f"Insufficient stock for product {product_id} (batch {batch_id}): Required {required_quantity}, Available {available_quantity}"
+                    logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=409,  # Conflict status
+                        detail={
+                            "error": "INSUFFICIENT_STOCK",
+                            "message": error_msg,
+                            "product_id": product_id,
+                            "batch_id": batch_id,
+                            "required_quantity": required_quantity,
+                            "available_quantity": available_quantity,
+                            "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
+                        }
+                    )
+            logger.info(f"✅ All stock checks passed for {len(batch_deductions)} items.")
+        
+        # =========================================================================
+        # BULK INSERT: Invoice Items (single query for all items)
+        # =========================================================================
+        if invoice_items_data:
+            values_list = []
+            params = {}
+            for i, item_data in enumerate(invoice_items_data):
+                values_list.append(f"""(
+                    :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
+                    :batch_number_{i}, :manufacturing_date_{i}, :expiry_date_{i},
+                    :quantity_{i}, :uom_{i}, :pack_type_{i}, :pack_size_{i}, :base_quantity_{i},
+                    :mrp_{i}, :unit_price_{i}, :discount_percent_{i}, :discount_amount_{i}, :taxable_amount_{i},
+                    :igst_rate_{i}, :igst_amount_{i}, :cgst_rate_{i}, :cgst_amount_{i},
+                    :sgst_rate_{i}, :sgst_amount_{i}, :total_tax_amount_{i}, :line_total_{i},
+                    :free_quantity_{i}
+                )""")
+                for key, value in item_data.items():
+                    params[f"{key}_{i}"] = value
+            
+            bulk_insert_sql = f"""
+                INSERT INTO sales.invoice_items (
+                    invoice_id, product_id, product_name, hsn_code,
+                    batch_number, manufacturing_date, expiry_date,
+                    quantity, uom, pack_type, pack_size, base_quantity,
+                    mrp, unit_price, discount_percent, discount_amount, taxable_amount,
+                    igst_rate, igst_amount, cgst_rate, cgst_amount,
+                    sgst_rate, sgst_amount, total_tax_amount, line_total,
+                    free_quantity
+                ) VALUES {", ".join(values_list)}
+            """
+            db.execute(text(bulk_insert_sql), params)
+            logger.info(f"✅ Bulk inserted {len(invoice_items_data)} invoice items")
+        
+        # =========================================================================
+        # BULK UPDATE: Batch quantities (single query for all batches)
+        # =========================================================================
+        if batch_deductions:
+            # Build CASE WHEN for bulk update
+            case_parts = []
+            batch_ids_to_update = []
+            update_params = {"org_id": str(org_id)}
+            
+            for i, bd in enumerate(batch_deductions):
+                case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
+                batch_ids_to_update.append(bd["batch_id"])
+                update_params[f"bid_{i}"] = bd["batch_id"]
+                update_params[f"qty_{i}"] = bd["quantity"]
+            
+            update_params["batch_ids"] = batch_ids_to_update
+            
+            bulk_update_sql = f"""
+                UPDATE inventory.batches
+                SET 
+                    quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
+                    last_movement_date = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
+            """
+            db.execute(text(bulk_update_sql), update_params)
+            logger.info(f"✅ Bulk updated {len(batch_deductions)} batch quantities")
+        
+        # =========================================================================
+        # BULK INSERT: Inventory Movements (single query for all movements)
+        # =========================================================================
+        if movement_records:
+            mv_values_list = []
+            mv_params = {}
+            for i, mv in enumerate(movement_records):
+                mv_values_list.append(f"""(
+                    :org_id_{i}, 'sale', 'out',
+                    :product_id_{i}, :batch_id_{i}, :quantity_{i},
+                    :pack_type_{i}, :base_quantity_{i},
+                    :unit_cost_{i}, :total_cost_{i},
+                    'invoice', :invoice_id_{i}, :reference_number_{i},
+                    'sale', 'Customer Sale',
+                    1, :created_by_{i}, CURRENT_TIMESTAMP
+                )""")
+                mv_params[f"org_id_{i}"] = mv["org_id"]
+                mv_params[f"product_id_{i}"] = mv["product_id"]
+                mv_params[f"batch_id_{i}"] = mv["batch_id"]
+                mv_params[f"quantity_{i}"] = mv["quantity"]
+                mv_params[f"pack_type_{i}"] = mv["pack_type"]
+                mv_params[f"base_quantity_{i}"] = mv["base_quantity"]
+                mv_params[f"unit_cost_{i}"] = mv["unit_cost"]
+                mv_params[f"total_cost_{i}"] = mv["total_cost"]
+                mv_params[f"invoice_id_{i}"] = invoice_id
+                mv_params[f"reference_number_{i}"] = f"INV-{invoice_id}"
+                mv_params[f"created_by_{i}"] = created_by
+            
+            bulk_mv_sql = f"""
+                INSERT INTO inventory.inventory_movements (
+                    org_id, movement_type, movement_direction,
+                    product_id, batch_id, quantity,
+                    pack_type, base_quantity,
+                    unit_cost, total_cost,
+                    reference_type, reference_id, reference_number,
+                    transfer_type, reason,
+                    location_id, created_by, movement_date
+                ) VALUES {", ".join(mv_values_list)}
+            """
+            db.execute(text(bulk_mv_sql), mv_params)
+            logger.info(f"✅ Bulk inserted {len(movement_records)} inventory movements")
+        
         
         
         # OPTIMIZED: Use pre-calculated values instead of 10 subqueries
