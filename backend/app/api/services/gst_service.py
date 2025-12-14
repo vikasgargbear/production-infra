@@ -97,22 +97,26 @@ class GSTService:
             str: "CGST/SGST" or "IGST"
         """
         try:
-            # Get company/organization state
-            company_state = db.execute(text("""
-                SELECT state_name
+            # Get company/organization state from branch GST number (first 2 chars = state code)
+            # or from address JSONB field
+            result = db.execute(text("""
+                SELECT 
+                    COALESCE(
+                        address->>'state',
+                        address->>'state_name',
+                        (SELECT gs.state_name FROM (VALUES
+                            ('01','Jammu & Kashmir'),('02','Himachal Pradesh'),('03','Punjab'),
+                            ('04','Chandigarh'),('05','Uttarakhand'),('06','Haryana'),('07','Delhi'),
+                            ('08','Rajasthan'),('09','Uttar Pradesh'),('10','Bihar'),('27','Maharashtra'),
+                            ('29','Karnataka'),('32','Kerala'),('33','Tamil Nadu'),('36','Telangana')
+                        ) AS gs(code, state_name) WHERE gs.code = LEFT(branch_gst_number, 2))
+                    ) as company_state
                 FROM master.org_branches
-                WHERE org_id = :org_id AND is_default = true
+                WHERE org_id = :org_id AND is_default_location = true
                 LIMIT 1
             """), {"org_id": org_id}).scalar()
-
-            # If no company state found, try organization settings
-            if not company_state:
-                company_state = db.execute(text("""
-                    SELECT state_name
-                    FROM master.organizations
-                    WHERE org_id = :org_id
-                    LIMIT 1
-                """), {"org_id": org_id}).scalar()
+            
+            company_state = result
 
             if not company_state:
                 logger.warning(f"Company state not found for org_id={org_id}, defaulting to CGST/SGST")

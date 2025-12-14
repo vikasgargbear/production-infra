@@ -111,15 +111,10 @@ async def create_invoice(
         # Convert Pydantic items to dicts for service compatibility
         items = [item.model_dump() for item in invoice_data.items]
         
-        # Use GST type from frontend or auto-detect
-        gst_type = invoice_data.gst_type
-        if not gst_type or gst_type == "CGST/SGST":
-            gst_type = GSTService.determine_gst_type(
-                db=db,
-                org_id=context.org_id,
-                customer_id=customer_id,
-                billing_address_id=None  # Frontend sends address string, not ID
-            )
+        
+        # Use GST type from frontend directly (auto-detection disabled - org_branches schema issue)
+        # Frontend already sends gst_type: "CGST/SGST" or "IGST" based on customer location
+        gst_type = invoice_data.gst_type or "CGST/SGST"
         
         freight_charges = invoice_data.freight_charges  # Canonical name from schema
         insurance_charges = 0.0
