@@ -205,7 +205,7 @@ async def create_invoice(
                 org_id, branch_id, invoice_number, invoice_date, invoice_type,
                 order_id, customer_id, customer_name,
                 billing_address_id, shipping_address_id,
-                subtotal_amount, discount_amount, taxable_amount,
+                subtotal_amount, discount_amount, scheme_discount, taxable_amount,
                 igst_amount, cgst_amount, sgst_amount, total_tax_amount, 
                 freight_charges, insurance_charges, other_charges, 
                 round_off_amount, final_amount,
@@ -217,7 +217,7 @@ async def create_invoice(
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
                 :order_id, :customer_id, :customer_name,
                 :billing_address_id, :shipping_address_id,
-                :subtotal, :discount, :taxable,
+                :subtotal, :item_discount, :scheme_discount, :taxable,
                 :igst, :cgst, :sgst, :tax,
                 :freight, :insurance, :other, 
                 :round_off, :final,
@@ -235,7 +235,8 @@ async def create_invoice(
             "customer_id": customer_id,
             "customer_name": customer_name,
             "subtotal": subtotal,
-            "discount": total_discount,  # Sum of item-level discounts
+            "item_discount": total_discount,  # Sum of item-level discounts
+            "scheme_discount": invoice_discount,  # Invoice-level discount
             "taxable": taxable_amount,
             "igst": 0,  # IGST calculated by service based on gst_type
             "cgst": total_cgst,

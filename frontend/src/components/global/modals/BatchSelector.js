@@ -272,8 +272,8 @@ const BatchSelector = ({
       expiry_date: batch.expiry_date,
       manufacturing_date: batch.manufacturing_date,
       // IMPORTANT: Preserve product GST information (no default - user must enter)
-      gst_percent: product.gst_percent || product.gst_rate || product.tax_rate || '',
-      tax_rate: product.gst_percent || product.gst_rate || product.tax_rate || ''
+      gst_percent: product.gst_percent || 0,  // Only gst_percent exists in product
+      tax_rate: product.gst_percent || 0  // Legacy alias
     };
 
     setTimeout(() => {
