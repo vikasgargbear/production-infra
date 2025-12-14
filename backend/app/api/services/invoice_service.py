@@ -267,7 +267,7 @@ class InvoiceService:
         Returns:
             Dict with all calculated totals
         """
-        from ...utils.invoice_helpers import calculate_line_item
+        from ..routes.enterprise_calculations import calculate_line_item
         
         subtotal = 0
         total_discount = 0
