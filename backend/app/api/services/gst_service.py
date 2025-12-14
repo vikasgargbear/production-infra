@@ -99,7 +99,7 @@ class GSTService:
         try:
             # Get company/organization state
             company_state = db.execute(text("""
-                SELECT state
+                SELECT state_name
                 FROM master.org_branches
                 WHERE org_id = :org_id AND is_default = true
                 LIMIT 1
