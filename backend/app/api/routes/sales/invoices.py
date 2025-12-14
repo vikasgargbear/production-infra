@@ -475,28 +475,30 @@ async def create_invoice(
                 "free_quantity": free_quantity
             })
             
-            # Prepare batch deduction and movement record
+            # Prepare batch deduction (only if batch exists)
             if batch_id:
                 batch_deductions.append({
                     "batch_id": batch_id,
                     "quantity": total_quantity,
                     "product_id": product_id,
-                    "base_quantity": base_quantity # For error message
+                    "base_quantity": base_quantity
                 })
-                
-                unit_cost = float(item.get("unit_cost", unit_price * 0.7))
-                movement_records.append({
-                    "org_id": context.org_id,
-                    "product_id": product_id,
-                    "batch_id": batch_id,
-                    "quantity": total_quantity,
-                    "pack_type": pack_type,
-                    "base_quantity": base_quantity,
-                    "unit_cost": unit_cost,
-                    "total_cost": unit_cost * total_quantity
-                })
-            else:
-                logger.warning(f"⚠️ No batch_id for product {product_id} - inventory not deducted for this item")
+            
+            # ALWAYS create movement record (even without batch_id for audit trail)
+            unit_cost = float(item.get("unit_cost", unit_price * 0.7))
+            movement_records.append({
+                "org_id": context.org_id,
+                "product_id": product_id,
+                "batch_id": batch_id,  # Can be None for non-batched products
+                "quantity": total_quantity,
+                "pack_type": pack_type,
+                "base_quantity": base_quantity,
+                "unit_cost": unit_cost,
+                "total_cost": unit_cost * total_quantity
+            })
+            
+            if not batch_id:
+                logger.warning(f"⚠️ No batch_id for product {product_id} - movement recorded but no batch deduction")
         
         items_created = len(invoice_items_data)
         
