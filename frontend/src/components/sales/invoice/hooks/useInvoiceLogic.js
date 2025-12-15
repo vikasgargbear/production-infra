@@ -671,8 +671,90 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       console.error('[Invoice] Request URL:', error.config?.url);
       console.error('[Invoice] Request method:', error.config?.method);
 
-      // Check if it's a stock conflict
-      if (error.response?.status === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
+      const errorStatus = error.response?.status;
+
+      // FALLBACK: If backend is unreachable (5xx), save offline instead
+      if (errorStatus >= 500 || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
+        console.log('[Invoice] Backend unreachable, falling back to offline save...');
+        toast.warning('⚠️ Server unavailable - saving locally...', { autoClose: 3000 });
+
+        try {
+          // Prepare invoice data (same as online path)
+          const invoiceData = {
+            customer_id: selectedCustomer.customer_id || selectedCustomer.id,
+            invoice_date: invoice.invoice_date,
+            due_date: invoice.due_date,
+            items: invoice.items.map(item => ({
+              product_id: item.product_id,
+              batch_id: item.batch_id,
+              quantity: parseFloat(item.quantity) || 0,
+              free_quantity: parseFloat(item.free_quantity) || 0,
+              unit_price: parseFloat(item.unit_price || item.sale_price || item.rate) || 0,
+              mrp: parseFloat(item.mrp) || 0,
+              discount_percent: parseFloat(item.discount_percent) || 0,
+              gst_percent: parseFloat(item.gst_percent) || 0
+            })),
+            discount_type: invoice.discount_type || 'percentage',
+            discount_percent: parseFloat(invoice.discount_percent) || 0,
+            discount_amount: parseFloat(invoice.discount_amount) || 0,
+            freight_charges: parseFloat(invoice.freight_charges) || 0,
+            delivery_type: invoice.delivery_type || 'PICKUP',
+            payment_mode: invoice.payment_mode || 'cash',
+            payment_status: invoice.payment_status || 'pending',
+            payments: (invoice.payments || []).map(p => ({
+              method: p.method,
+              amount: parseFloat(p.amount) || 0
+            })),
+            billing_address: invoice.billing_address || '',
+            shipping_address: invoice.shipping_address || '',
+            notes: invoice.notes || '',
+            gst_type: invoice.gst_type || 'CGST/SGST'
+          };
+
+          // Generate offline invoice number
+          const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false);
+
+          const offlineInvoice = {
+            ...invoiceData,
+            invoice_no: offlineInvoiceNo,
+            temp_id: tempId,
+            _localId: tempId,
+            sync_status: 'pending',
+            created_offline: true,
+            fallback_reason: `Backend returned ${errorStatus}`
+          };
+
+          await offlineDB.add('invoices', offlineInvoice);
+          await offlineDB.addToSyncQueue('invoices', tempId, 'create', offlineInvoice);
+
+          toast.success('✅ Invoice saved locally - will sync when server is back', {
+            autoClose: 5000,
+            icon: '📱'
+          });
+
+          const createdData = {
+            invoiceId: tempId,
+            invoiceNumber: offlineInvoiceNo,
+            customerName: selectedCustomer.customer_name || selectedCustomer.name,
+            customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || '',
+            customerEmail: selectedCustomer.email || '',
+            totalAmount: invoiceData.total_amount,
+            items: invoice.items,
+            isOffline: true
+          };
+
+          setCreatedInvoiceData(createdData);
+          setShowSuccessModal(true);
+          localStorage.removeItem('invoice_draft');
+          return;
+        } catch (offlineError) {
+          console.error('[Invoice] Offline fallback also failed:', offlineError);
+          setError('Failed to save both online and offline');
+          toast.error('❌ Save failed - please try again');
+        }
+      } else if (errorStatus === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
+        // Stock conflict
         const details = error.response.data.detail;
         setError(`Insufficient stock: Product ${details.product_id} - Required ${details.required_quantity}, Available ${details.available_quantity}`);
         toast.error(`❌ Insufficient Stock: Only ${details.available_quantity} units available`, {
