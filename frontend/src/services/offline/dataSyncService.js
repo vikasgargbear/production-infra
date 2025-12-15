@@ -36,7 +36,7 @@ class DataSyncService {
 
             // Fetch all data from backend
             const response = await apiClient.get('/sync/full-data');
-            const { products, batches, customers, counts } = response.data;
+            const { products, batches, customers, employees, counts } = response.data;
 
             console.log('[DataSync] Received:', counts);
 
@@ -108,6 +108,22 @@ class DataSyncService {
                 console.log(`[DataSync] Stored ${transformedCustomers.length} customers`);
             }
 
+            // Store employees (for salesperson selection)
+            if (employees && employees.length > 0) {
+                const transformedEmployees = employees.map(e => ({
+                    employee_id: String(e.employee_id),
+                    full_name: e.full_name,
+                    employee_code: e.employee_code,
+                    email: e.email,
+                    phone: e.phone,
+                    designation: e.designation,
+                    is_active: e.is_active
+                }));
+
+                await offlineDB.bulkLoad('employees', transformedEmployees);
+                console.log(`[DataSync] Stored ${transformedEmployees.length} employees`);
+            }
+
             this.lastSyncTime = Date.now();
 
             // Store sync timestamp
@@ -123,7 +139,8 @@ class DataSyncService {
                 counts: {
                     products: products?.length || 0,
                     batches: batches?.length || 0,
-                    customers: customers?.length || 0
+                    customers: customers?.length || 0,
+                    employees: employees?.length || 0
                 }
             };
 

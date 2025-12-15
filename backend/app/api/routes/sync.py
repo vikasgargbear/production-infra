@@ -7,8 +7,8 @@ from sqlalchemy import text
 from typing import Dict, Any
 import logging
 
-from ....core.database import get_db
-from ....core.jwt_auth import get_current_user
+from ...core.database import get_db
+from ...core.jwt_auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +105,36 @@ async def get_full_sync_data(
         customers = [dict(row._mapping) for row in customers_result.fetchall()]
         logger.info(f"[Sync] Fetched {len(customers)} customers for org {org_id}")
         
+        # Get employees (for salesperson selection in invoices)
+        employees_result = db.execute(text("""
+            SELECT 
+                e.employee_id,
+                e.full_name,
+                e.employee_code,
+                e.email,
+                e.phone,
+                e.designation,
+                e.is_active
+            FROM org.employees e
+            WHERE e.org_id = :org_id AND e.is_active = true
+            ORDER BY e.full_name
+            LIMIT 500
+        """), {"org_id": org_id})
+        
+        employees = [dict(row._mapping) for row in employees_result.fetchall()]
+        logger.info(f"[Sync] Fetched {len(employees)} employees for org {org_id}")
+        
         return {
             "products": products,
             "batches": batches,
             "customers": customers,
+            "employees": employees,
             "sync_timestamp": "now",
             "counts": {
                 "products": len(products),
                 "batches": len(batches),
-                "customers": len(customers)
+                "customers": len(customers),
+                "employees": len(employees)
             }
         }
         
