@@ -2,7 +2,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 2;  // Incremented for batches store
+const DB_VERSION = 3;  // Incremented for sync_stats store
 
 // Sync status enum
 export const SYNC_STATUS = {
@@ -91,6 +91,11 @@ class OfflineDatabase {
         // Settings store
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+
+        // Sync Stats store (for tracking sync status)
+        if (!db.objectStoreNames.contains('sync_stats')) {
+          db.createObjectStore('sync_stats', { keyPath: 'key' });
         }
 
         // Batches store (for fast offline batch selection)
