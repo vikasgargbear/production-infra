@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
+import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
@@ -19,7 +19,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
     challan_number: '',
     challan_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0],
+    expected_delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: '',
     customer_name: '',
     customer_details: null,
@@ -70,10 +70,10 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const productSearchRef = useRef(null);
   const itemsTableRef = useRef(null);
   const challanFormRef = useRef(null); // For Enter-as-Tab scoping
-  
+
   // Enable Enter-as-Tab navigation (Marg ERP style)
-  useEnterAsTab({ 
-    containerRef: challanFormRef, 
+  useEnterAsTab({
+    containerRef: challanFormRef,
     enabled: true,
     excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
   });
@@ -85,19 +85,19 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     shouldHandleMainEsc,
     'ChallanFlow-Main'
   );
-  
+
   useEscapeKey(
     () => setShowCreateCustomer(false),
     showCreateCustomer,
     'CustomerModal'
   );
-  
+
   useEscapeKey(
     () => setShowCreateProduct(false),
     showCreateProduct,
     'ProductModal'
   );
-  
+
   useEscapeKey(
     () => setShowImportModal(false),
     showImportModal,
@@ -144,7 +144,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
             break;
         }
       }
-      
+
       // Escape to close modals or go back
       if (e.key === 'Escape') {
         if (showCreateCustomer) setShowCreateCustomer(false);
@@ -181,15 +181,15 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     try {
       // Use the new customer addresses endpoint
       const response = await apiClient.get(`/customers/${customerId}/addresses`);
-      
+
       if (response.data?.success && response.data.data?.length > 0) {
         const addresses = response.data.data;
-        
+
         // Prioritize billing, then shipping, then any default address
         const billingAddr = addresses.find(addr => addr.address_type === 'billing' && addr.is_default);
         const shippingAddr = addresses.find(addr => addr.address_type === 'shipping' && addr.is_default);
         const anyDefaultAddr = addresses.find(addr => addr.is_default);
-        
+
         const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
 
         return {
@@ -199,9 +199,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
           pincode: preferredAddr.pincode || ''
         };
       }
-      
+
       return null;
-      
+
     } catch (error) {
       return null;
     }
@@ -210,11 +210,11 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const generateChallanNumber = async () => {
     try {
       // Use the document number service for consistent numbering
-      const { generateChallanNumber } = await import('../../services/documentNumberService');
+      const { generateChallanNumber } = await import('../../services/offline/documents/documentNumberService');
       const challanNumber = await generateChallanNumber();
-      
-      setChallan(prev => ({ 
-        ...prev, 
+
+      setChallan(prev => ({
+        ...prev,
         challan_number: challanNumber
       }));
     } catch (error) {
@@ -225,9 +225,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       const yearPrefix = year.toString().padStart(2, '0');
       const timestamp = Date.now();
       const uniqueNum = 10000000 + (timestamp % 90000000);
-      
-      setChallan(prev => ({ 
-        ...prev, 
+
+      setChallan(prev => ({
+        ...prev,
         challan_number: `DC-${yearPrefix}${uniqueNum}`
       }));
     }
@@ -235,13 +235,13 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
   // Handle import from invoice/order
   const handleImport = (importData) => {
-    
+
     // Set customer details
     if (importData.customer_id) {
       setSelectedCustomer(importData.customer_details);
       handleCustomerSelect(importData.customer_details);
     }
-    
+
     // Set delivery address
     if (importData.delivery_address) {
       setSameAsBilling(false);
@@ -253,7 +253,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         delivery_pincode: importData.delivery_pincode || ''
       }));
     }
-    
+
     // Set items - ensure they have all required fields
     if (importData.items && importData.items.length > 0) {
       const formattedItems = importData.items.map((item, index) => ({
@@ -283,7 +283,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         };
         return updated;
       });
-      
+
       // Recalculate totals after a small delay
       setTimeout(() => {
         recalculateTotals(formattedItems);
@@ -297,7 +297,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   // Handle customer selection - Auto-populate billing address
   const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
-    
+
     // Handle null customer (when removing selection)
     if (!customer) {
       setChallan(prev => ({
@@ -315,27 +315,27 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       }));
       return;
     }
-    
+
     // Enhanced address building with fallbacks based on actual schema
     // The customer view only returns billing addresses, but some customers only have shipping addresses
-    let address = customer.address || customer.address_line1 || ''; 
+    let address = customer.address || customer.address_line1 || '';
     let city = customer.city || '';
     let state = customer.state || customer.state_name || '';
     let pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
     const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
-    
+
     // Build clean billing address
     let addressParts = [address, city, state, pincode].filter(part => part && part.trim());
     let billingAddress = addressParts.join(', ');
-    
+
     // Debug log to see what customer data we're getting
-    
+
     // If no address data, fetch addresses separately
     // This happens when customers only have shipping addresses (not billing)
     if (!address && !city && customer.customer_id) {
-      
+
       setFetchingAddress(true);
-      
+
       // Fetch address data separately
       const addressData = await fetchCustomerAddress(customer.customer_id);
       if (addressData) {
@@ -344,11 +344,11 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         city = addressData.city;
         state = addressData.state;
         pincode = addressData.pincode;
-        
+
         // Rebuild billing address with fetched data
         const newAddressParts = [address, city, state, pincode].filter(part => part && part.trim());
         billingAddress = newAddressParts.join(', ');
-        
+
         // Update the customer object with fetched address data
         customer = {
           ...customer,
@@ -363,7 +363,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       }
       setFetchingAddress(false);
     }
-    
+
     setChallan(prev => ({
       ...prev,
       customer_id: customer.customer_id || customer.id,
@@ -390,7 +390,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   // Handle product selection
   const handleProductSelect = (product) => {
     const existingItem = challan.items.find(item => item.product_id === product.product_id);
-    
+
     if (existingItem) {
       // Increase quantity if product already exists
       updateItemQuantity(existingItem.id, existingItem.quantity + 1);
@@ -399,7 +399,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       const quantity = 1;
       const unitPrice = product.sale_price || product.mrp || 0;
       const total = quantity * unitPrice;
-      
+
       const newItem = {
         id: Date.now(),
         product_id: product.product_id,
@@ -422,9 +422,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         ...prev,
         items: [...prev.items, newItem]
       }));
-      
+
       recalculateTotals([...challan.items, newItem]);
-      
+
       // Auto-focus quantity field of newly added item for keyboard data entry
       setTimeout(() => {
         if (itemsTableRef.current) {
@@ -441,10 +441,10 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       return;
     }
 
-    const updatedItems = challan.items.map(item => 
+    const updatedItems = challan.items.map(item =>
       item.id === itemId ? { ...item, quantity: newQuantity } : item
     );
-    
+
     setChallan(prev => ({ ...prev, items: updatedItems }));
     recalculateTotals(updatedItems);
   };
@@ -454,24 +454,24 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     const updatedItems = challan.items.map((item, i) => {
       if (i === index) {
         const updatedItem = { ...item, [field]: value };
-        
+
         // Recalculate total when quantity or price changes
         if (field === 'quantity' || field === 'unit_price' || field === 'rate') {
           const quantity = parseFloat(field === 'quantity' ? value : item.quantity) || 0;
           const unitPrice = parseFloat(field === 'unit_price' || field === 'rate' ? value : (item.unit_price || item.rate)) || 0;
           const total = quantity * unitPrice;
-          
+
           updatedItem.total = total;
           updatedItem.line_total = total;
           updatedItem.unit_price = unitPrice;
           updatedItem.rate = unitPrice;
         }
-        
+
         return updatedItem;
       }
       return item;
     });
-    
+
     setChallan(prev => ({ ...prev, items: updatedItems }));
     recalculateTotals(updatedItems);
   };
@@ -491,7 +491,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       const unitPrice = parseFloat(item.unit_price || item.rate || item.sale_price) || 0;
       return sum + (quantity * unitPrice);
     }, 0);
-    
+
     setChallan(prev => ({
       ...prev,
       total_quantity: totalQuantity,
@@ -509,7 +509,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         setSaving(false);
         return;
       }
-      
+
       if (!challan.items || challan.items.length === 0) {
         alert('Please add at least one item');
         setSaving(false);
@@ -535,7 +535,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       }));
 
       // Calculate total amount
-      const totalAmount = apiItems.reduce((sum, item) => 
+      const totalAmount = apiItems.reduce((sum, item) =>
         sum + (item.dispatched_quantity * item.unit_price), 0
       ) + (parseFloat(challan.freight_charges) || 0);
 
@@ -548,7 +548,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         await generateChallanNumber();
         finalChallanNumber = challan.challan_number;
       }
-      
+
       const challanData = {
         challan_number: finalChallanNumber,
         challan_date: challan.challan_date,
@@ -571,7 +571,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       };
 
       const response = await challansApi.create(challanData);
-      
+
       if (response.data) {
         const challanNumber = response.data.challan_number || challan.challan_number || `DC-${response.data.challan_id}`;
         const createdData = {
@@ -589,8 +589,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       let errorMsg = 'Failed to save challan';
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
-          errorMsg = error.response.data.detail.map(err => 
-            typeof err === 'object' ? `${err.loc?.join('.')||'Field'}: ${err.msg}` : err
+          errorMsg = error.response.data.detail.map(err =>
+            typeof err === 'object' ? `${err.loc?.join('.') || 'Field'}: ${err.msg}` : err
           ).join('\n');
         } else {
           errorMsg = error.response.data.detail;
@@ -634,7 +634,7 @@ Expected Delivery: ${challan.expected_delivery_date}
     const printWindow = window.open('', '', 'width=400,height=600');
     const challanDate = new Date(challan.challan_date).toLocaleDateString('en-IN');
     const expectedDeliveryDate = new Date(challan.expected_delivery_date).toLocaleDateString('en-IN');
-    
+
     // Format address helper
     const formatAddress = (addr) => {
       if (!addr) return '';
@@ -754,11 +754,11 @@ Expected Delivery: ${challan.expected_delivery_date}
       </body>
       </html>
     `;
-    
+
     printWindow.document.write(thermalHTML);
     printWindow.document.close();
     printWindow.focus();
-    
+
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
@@ -772,7 +772,7 @@ Expected Delivery: ${challan.expected_delivery_date}
     return (
       <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
-          
+
           {/* Header - Using Global ModuleHeader */}
           <ModuleHeader
             title="Delivery Challan"
@@ -800,7 +800,7 @@ Expected Delivery: ${challan.expected_delivery_date}
           {/* Content - Single Page */}
           <div className="flex-1 overflow-y-auto bg-blue-50" ref={challanFormRef}>
             <div className="max-w-6xl mx-auto px-6 py-6">
-              
+
               {/* Top Section - Dates and Import */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div>
@@ -993,7 +993,7 @@ Expected Delivery: ${challan.expected_delivery_date}
   return (
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Review Challan"
@@ -1018,7 +1018,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
-            
+
             {/* Transport Details Section - Global Tile Style */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
               <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-blue-100">
@@ -1029,67 +1029,67 @@ Expected Delivery: ${challan.expected_delivery_date}
                   Transport Details
                 </h3>
               </div>
-              
+
               <div className="p-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Transport Company</label>
-                  <input
-                    type="text"
-                    value={challan.transport_company}
-                    onChange={(e) => setChallan(prev => ({ ...prev, transport_company: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Company name"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Vehicle Number</label>
-                  <input
-                    type="text"
-                    value={challan.vehicle_number}
-                    onChange={(e) => setChallan(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                    placeholder="KA01AB1234"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Driver Phone</label>
-                  <input
-                    type="tel"
-                    value={challan.driver_phone}
-                    onChange={(e) => setChallan(prev => ({ ...prev, driver_phone: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Phone number"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Freight Charges</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Transport Company</label>
                     <input
-                      type="number"
-                      value={challan.freight_charges || ''}
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value) || 0;
-                        setChallan(prev => ({ 
-                          ...prev, 
-                          freight_charges: value 
-                        }));
-                      }}
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="0"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      value={challan.transport_company}
+                      onChange={(e) => setChallan(prev => ({ ...prev, transport_company: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Company name"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Vehicle Number</label>
+                    <input
+                      type="text"
+                      value={challan.vehicle_number}
+                      onChange={(e) => setChallan(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+                      placeholder="KA01AB1234"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Driver Phone</label>
+                    <input
+                      type="tel"
+                      value={challan.driver_phone}
+                      onChange={(e) => setChallan(prev => ({ ...prev, driver_phone: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Phone number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-2">Freight Charges</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                      <input
+                        type="number"
+                        value={challan.freight_charges || ''}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          setChallan(prev => ({
+                            ...prev,
+                            freight_charges: value
+                          }));
+                        }}
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="0"
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-              </div>
             </div>
-            
+
             {/* Address Section - Using Global Components */}
             {selectedCustomer && (
               <div className="grid grid-cols-2 gap-6 mb-6">
@@ -1105,14 +1105,14 @@ Expected Delivery: ${challan.expected_delivery_date}
                   }}
                   onChange={(addressString) => {
                     // Update billing address in challan state
-                    setChallan(prev => ({ 
-                      ...prev, 
-                      billing_address: addressString 
+                    setChallan(prev => ({
+                      ...prev,
+                      billing_address: addressString
                     }));
                   }}
                   className=""
                 />
-                
+
                 {/* Delivery Address */}
                 <AddressForm
                   customer={selectedCustomer}
@@ -1139,9 +1139,9 @@ Expected Delivery: ${challan.expected_delivery_date}
                   onChange={(addressString) => {
                     // For simplicity, store the formatted string
                     // In production, you'd parse this back to individual fields
-                    setChallan(prev => ({ 
-                      ...prev, 
-                      delivery_address: addressString 
+                    setChallan(prev => ({
+                      ...prev,
+                      delivery_address: addressString
                     }));
                   }}
                   onSave={(addressData) => {
@@ -1160,7 +1160,7 @@ Expected Delivery: ${challan.expected_delivery_date}
             )}
 
             {/* Challan Preview */}
-            <ChallanPreview 
+            <ChallanPreview
               challan={{
                 ...challan,
                 // Ensure customer_details is properly structured without circular refs
@@ -1189,7 +1189,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 logo: localStorage.getItem('companyLogo') || null
               }}
             />
-            
+
             {/* Notes Section - Using compact global component */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
               <NotesSection

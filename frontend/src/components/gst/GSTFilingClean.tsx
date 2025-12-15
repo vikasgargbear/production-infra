@@ -85,19 +85,19 @@ const GSTFilingClean: React.FC<GSTFilingProps> = () => {
             type: 'GSTR-1',
             name: 'GSTR-1',
             description: 'Outward supplies',
-            dueDate: statusResponse.data?.gstr1?.dueDate || '11 Feb 2025',
+            dueDate: statusResponse.data?.gstr1?.dueDate || '',
             status: statusResponse.data?.gstr1?.status || 'pending',
-            taxAmount: summaryResponse.data?.taxPayable || 60000,
-            issues: statusResponse.data?.gstr1?.status === 'pending' ? ['2 items need review'] : []
+            taxAmount: summaryResponse.data?.taxPayable || 0,
+            issues: statusResponse.data?.gstr1?.status === 'pending' ? [] : []
           },
           {
             type: 'GSTR-3B',
             name: 'GSTR-3B',
             description: 'Summary return',
-            dueDate: statusResponse.data?.gstr3b?.dueDate || '20 Feb 2025',
+            dueDate: statusResponse.data?.gstr3b?.dueDate || '',
             status: statusResponse.data?.gstr3b?.status || 'pending',
-            taxAmount: summaryResponse.data?.netPayable || 45000,
-            issues: statusResponse.data?.gstr3b?.status === 'pending' ? ['1 discrepancy found'] : []
+            taxAmount: summaryResponse.data?.netPayable || 0,
+            issues: statusResponse.data?.gstr3b?.status === 'pending' ? [] : []
           }
         ];
 

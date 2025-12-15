@@ -2,7 +2,7 @@
 
 // Service Worker for Pharma ERP - Offline Support
 // Version: Update this when making changes to force update
-const CACHE_VERSION = 'v2'; // Incremented after fixing POST handling
+const CACHE_VERSION = 'v3'; // Bumped to force cache refresh after offline restructure
 const CACHE_NAME = `pharma-erp-${CACHE_VERSION}`;
 const DATA_CACHE_NAME = `pharma-data-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
@@ -62,7 +62,7 @@ self.addEventListener('fetch', (event) => {
               cache.put(request, responseToCache);
             });
           }
-          
+
           // Always return the network response (don't modify it)
           return response;
         })
@@ -76,9 +76,9 @@ self.addEventListener('fetch', (event) => {
               }
               // Return offline response for failed API calls
               return new Response(
-                JSON.stringify({ 
-                  offline: true, 
-                  message: 'You are offline. This data will sync when connection returns.' 
+                JSON.stringify({
+                  offline: true,
+                  message: 'You are offline. This data will sync when connection returns.'
                 }),
                 {
                   headers: { 'Content-Type': 'application/json' },
@@ -87,13 +87,13 @@ self.addEventListener('fetch', (event) => {
               );
             });
           }
-          
+
           // For non-GET requests when offline, return error response
           // Don't try to queue - just fail gracefully
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Network unavailable',
-              message: 'Cannot perform this action while offline. Please check your connection.' 
+              message: 'Cannot perform this action while offline. Please check your connection.'
             }),
             {
               headers: { 'Content-Type': 'application/json' },
@@ -154,7 +154,7 @@ async function queueRequest(method, url, body) {
   const db = await openDB();
   const tx = db.transaction('sync_queue', 'readwrite');
   const store = tx.objectStore('sync_queue');
-  
+
   await store.add({
     method,
     url,
@@ -162,16 +162,16 @@ async function queueRequest(method, url, body) {
     timestamp: new Date().toISOString(),
     attempts: 0
   });
-  
+
   // Register for background sync
   if ('sync' in self.registration) {
     await self.registration.sync.register('sync-queue');
   }
-  
+
   return new Response(
-    JSON.stringify({ 
-      queued: true, 
-      message: 'Request queued. Will sync when online.' 
+    JSON.stringify({
+      queued: true,
+      message: 'Request queued. Will sync when online.'
     }),
     {
       headers: { 'Content-Type': 'application/json' },
@@ -186,7 +186,7 @@ async function syncQueue() {
   const tx = db.transaction('sync_queue', 'readwrite');
   const store = tx.objectStore('sync_queue');
   const requests = await store.getAll();
-  
+
   for (const request of requests) {
     try {
       const response = await fetch(request.url, {
@@ -196,11 +196,11 @@ async function syncQueue() {
         },
         body: JSON.stringify(request.body)
       });
-      
+
       if (response.ok) {
         // Remove from queue if successful
         await store.delete(request.id);
-        
+
         // Notify clients of successful sync
         self.clients.matchAll().then(clients => {
           clients.forEach(client => {
@@ -232,16 +232,16 @@ async function syncQueue() {
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = self.indexedDB.open('PharmaERPSync', 1);
-    
+
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
-    
+
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains('sync_queue')) {
-        const store = db.createObjectStore('sync_queue', { 
-          keyPath: 'id', 
-          autoIncrement: true 
+        const store = db.createObjectStore('sync_queue', {
+          keyPath: 'id',
+          autoIncrement: true
         });
         store.createIndex('timestamp', 'timestamp');
       }

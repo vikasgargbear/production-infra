@@ -285,7 +285,7 @@ async def generate_receipt_number(
             SELECT COALESCE(MAX(
                 CASE 
                     WHEN payment_number ~ :pattern THEN 
-                        CAST(SUBSTRING(payment_number FROM :extract_pattern) AS INTEGER)
+                        CAST(SUBSTRING(payment_number FROM :extract_pattern) AS BIGINT)
                     ELSE 0 
                 END
             ), 0) + 1 as next_number

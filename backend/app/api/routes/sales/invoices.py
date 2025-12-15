@@ -259,7 +259,7 @@ async def create_invoice(
         
         # Step 2: Generate order number
         order_result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '[0-9]+') AS INTEGER)), 0) + 1
+            SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '[0-9]+') AS BIGINT)), 0) + 1
             FROM sales.orders
             WHERE org_id = :org_id
         """), {"org_id": org_id})

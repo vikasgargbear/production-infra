@@ -10,7 +10,7 @@ import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import { APP_CONFIG } from '../../../config/app.config';
 import { componentStyles as styles, cx } from '../../invoice/styles/invoiceStyles';
-import offlineDB from '../../../services/offline/offlineDatabase';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
 
 /**
  * Global Batch Selector Component

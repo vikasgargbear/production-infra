@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Package, RefreshCw, AlertCircle, TrendingUp, TrendingDown, 
+import {
+  Package, RefreshCw, AlertCircle, TrendingUp, TrendingDown,
   Calendar, Filter, Search, Eye, Edit, Trash2, Plus, Download, Printer, MessageCircle,
   CheckCircle, XCircle, Clock, AlertTriangle, Loader2, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { DataTable, StatusBadge, Button, ModuleHeader } from '../global';
 import { stockApi, batchesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import offlineStorage from '../../services/offlineStorage';
+import offlineDB from '../../services/offline/core/offlineDatabase';
 import jsPDF from 'jspdf';
 
 const BatchTracking = ({ open = true, onClose }) => {
@@ -41,7 +41,7 @@ const BatchTracking = ({ open = true, onClose }) => {
   const loadBatches = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await batchesApi.getAll();
 
@@ -57,48 +57,40 @@ const BatchTracking = ({ open = true, onClose }) => {
 
       if (batchesData.length > 0) {
         setBatches(batchesData);
-        
-        // Store data offline for future use
-        await offlineStorage.storeOffline('batches', batchesData, { 
-          critical: true, 
-          persistent: true 
-        });
-        
+
+        // Store data offline (Unified DB)
+        // Store individually for fast lookup
+        await offlineDB.storeBatches(batchesData);
+
         // Calculate stats from real data
         calculateStats(batchesData);
       } else {
         setBatches([]);
         setStats({
-          expiringSoon: 0,
-          nearExpiry: 0,
-          expired: 0,
-          outOfStock: 0,
-          totalBatches: 0,
-          totalValue: 0
+          expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: 0
         });
       }
     } catch (error) {
-      
-      // Try to load from offline storage instead of using mock data
-      const offlineData = await offlineStorage.getOffline('batches', { critical: true });
-      
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max
-        setBatches(offlineData.data);
-        calculateStats(offlineData.data);
-        
-        // Show offline indicator
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load batch data. Please check your connection and try again.');
+
+      // Try to load from offline DB
+      try {
+        const offlineData = await offlineDB.getAll('batches');
+
+        if (offlineData && offlineData.length > 0) {
+          setBatches(offlineData);
+          calculateStats(offlineData);
+
+          // Show offline indicator
+          setError('Currently using offline data. Some information may be outdated.');
+        } else {
+          throw new Error('No offline data');
+        }
+      } catch (dbError) {
+        // No offline data available - show proper error
+        setError('Unable to load batch data. Please check your connection.');
         setBatches([]);
         setStats({
-          expiringSoon: 0,
-          nearExpiry: 0,
-          expired: 0,
-          outOfStock: 0,
-          totalBatches: 0,
-          totalValue: 0
+          expiringSoon: 0, nearExpiry: 0, expired: 0, outOfStock: 0, totalBatches: 0, totalValue: 0
         });
       }
     } finally {
@@ -121,28 +113,28 @@ const BatchTracking = ({ open = true, onClose }) => {
     }
 
     const today = new Date();
-    
+
     const expiringSoonBatches = batchesData.filter(batch => {
       if (!batch.expiry_date) return false;
       const days = Math.floor((new Date(batch.expiry_date) - today) / (1000 * 60 * 60 * 24));
       return days > 0 && days <= 30;
     });
-    
+
     const nearExpiryBatches = batchesData.filter(batch => {
       if (!batch.expiry_date) return false;
       const days = Math.floor((new Date(batch.expiry_date) - today) / (1000 * 60 * 60 * 24));
       return days > 30 && days <= 60;
     });
-    
+
     const expiredBatches = batchesData.filter(batch => {
       if (!batch.expiry_date) return false;
       return new Date(batch.expiry_date) < today;
     });
-    
-    const outOfStockBatches = batchesData.filter(batch => 
+
+    const outOfStockBatches = batchesData.filter(batch =>
       (batch.quantity_available || 0) === 0
     );
-    
+
     const totalValue = batchesData.reduce((sum, batch) => {
       return sum + ((batch.quantity_available || 0) * (batch.cost_price || 0));
     }, 0);
@@ -161,28 +153,26 @@ const BatchTracking = ({ open = true, onClose }) => {
   const loadBatchMovements = async (batchId) => {
     try {
       const response = await stockApi.getBatchMovements(batchId);
-      
+
       if (response?.data && Array.isArray(response.data)) {
         const movementsData = response.data;
         setBatchMovements(movementsData);
-        
-        // Store movements offline
-        await offlineStorage.storeOffline(`batch_movements_${batchId}`, movementsData, { 
-          persistent: true 
-        });
+
+        // Store movements cache
+        await offlineDB.setCache(`batch_movements_${batchId}`, movementsData);
       } else {
         setBatchMovements([]);
       }
     } catch (error) {
-      
-      // Try to load from offline storage
-      const offlineData = await offlineStorage.getOffline(`batch_movements_${batchId}`, { persistent: true });
-      
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for movements
-        setBatchMovements(offlineData.data);
+
+      // Try to load from offline cache
+      const offlineData = await offlineDB.getCache(`batch_movements_${batchId}`, 60); // 1 hour max
+
+      if (offlineData) {
+        setBatchMovements(offlineData);
       } else {
         setBatchMovements([]);
-        setError('Unable to load movement data. Please check your connection and try again.');
+        setError('Unable to load movement data. Please check your connection.');
       }
     }
   };
@@ -191,10 +181,10 @@ const BatchTracking = ({ open = true, onClose }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       await loadBatches();
-      
+
       if (selectedBatch) {
         await loadBatchMovements(selectedBatch.batch_id);
       }
@@ -217,7 +207,7 @@ const BatchTracking = ({ open = true, onClose }) => {
     // Search filter
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
-      const matchesSearch = 
+      const matchesSearch =
         batch.batch_number?.toLowerCase().includes(searchLower) ||
         batch.product_name?.toLowerCase().includes(searchLower) ||
         batch.product_code?.toLowerCase().includes(searchLower) ||
@@ -274,9 +264,9 @@ const BatchTracking = ({ open = true, onClose }) => {
   // Get status color for batch
   const getBatchStatusColor = (batch) => {
     if (!batch.expiry_date) return 'gray';
-    
+
     const days = Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
-    
+
     if (days < 0) return 'red'; // Expired
     if (days <= 30) return 'orange'; // Expiring soon
     if (days <= 60) return 'yellow'; // Near expiry
@@ -287,9 +277,9 @@ const BatchTracking = ({ open = true, onClose }) => {
   // Get status text for batch
   const getBatchStatusText = (batch) => {
     if (!batch.expiry_date) return 'Unknown';
-    
+
     const days = Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
-    
+
     if (days < 0) return 'Expired';
     if (days <= 30) return 'Expiring Soon';
     if (days <= 60) return 'Near Expiry';
@@ -299,19 +289,19 @@ const BatchTracking = ({ open = true, onClose }) => {
 
   // Export functionality
   const exportSelectedPDF = () => {
-    const itemsToExport = selectedIds.size > 0 
+    const itemsToExport = selectedIds.size > 0
       ? filteredBatches.filter(item => selectedIds.has(item.batch_id || item.id))
       : filteredBatches;
-    
+
     if (itemsToExport.length === 0) return;
 
     try {
       const autoTable = require('jspdf-autotable');
-      
+
       const doc = new jsPDF();
       doc.setFontSize(16);
       doc.text('Batch Tracking Report', 20, 20);
-      
+
       const tableData = itemsToExport.map(item => [
         item.batch_number || 'N/A',
         item.product_name || 'N/A',
@@ -331,36 +321,36 @@ const BatchTracking = ({ open = true, onClose }) => {
 
       doc.save('batch-tracking-export.pdf');
     } catch (error) {
-      
+
       const doc = new jsPDF();
       doc.setFontSize(16);
       doc.text('Batch Tracking Report', 20, 20);
-      
+
       let yPos = 40;
       doc.setFontSize(10);
       doc.text('Batch # | Product | Available | Expiry | Status | Value', 20, yPos);
       yPos += 10;
-      
+
       itemsToExport.forEach(item => {
         const rowText = `${item.batch_number} | ${item.product_name} | ${item.quantity_available} | ${new Date(item.expiry_date).toLocaleDateString()} | ${getBatchStatusText(item)} | ${formatCurrency((item.quantity_available || 0) * (item.cost_price || 0))}`;
         doc.text(rowText, 20, yPos);
         yPos += 8;
-        
+
         if (yPos > 270) {
           doc.addPage();
           yPos = 20;
         }
       });
-      
+
       doc.save('batch-tracking-export.pdf');
     }
   };
 
   const printSelected = () => {
-    const itemsToPrint = selectedIds.size > 0 
+    const itemsToPrint = selectedIds.size > 0
       ? filteredBatches.filter(item => selectedIds.has(item.batch_id || item.id))
       : filteredBatches;
-      
+
     const html = `<!DOCTYPE html><html><head><title>Print Batch Tracking</title>
       <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
       </head><body>
@@ -379,18 +369,18 @@ const BatchTracking = ({ open = true, onClose }) => {
   };
 
   const whatsappSelected = () => {
-    const itemsToSend = selectedIds.size > 0 
+    const itemsToSend = selectedIds.size > 0
       ? filteredBatches.filter(item => selectedIds.has(item.batch_id || item.id))
       : filteredBatches;
-      
+
     if (itemsToSend.length === 0) return;
-    
+
     const message = encodeURIComponent(
-      `Batch Tracking Report:\n\n${itemsToSend.map(item => 
+      `Batch Tracking Report:\n\n${itemsToSend.map(item =>
         `${item.batch_number} - ${item.product_name} - Available: ${item.quantity_available} - Expires: ${new Date(item.expiry_date).toLocaleDateString()} - Status: ${getBatchStatusText(item)}`
       ).join('\n')}`
     );
-    
+
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
@@ -402,13 +392,12 @@ const BatchTracking = ({ open = true, onClose }) => {
   }, [open]);
 
   // Clear old offline data periodically
+  // REMOVED: offlineDB handles cache invalidation logic via getCache arguments
+  /*
   useEffect(() => {
-    const interval = setInterval(() => {
-      offlineStorage.clearOldData(24); // Clear data older than 24 hours
-    }, 60 * 60 * 1000); // Check every hour
-
-    return () => clearInterval(interval);
+    // ...
   }, []);
+  */
 
   // Define columns for DataTable
   const columns = [
@@ -487,11 +476,10 @@ const BatchTracking = ({ open = true, onClose }) => {
       render: (value, batch) => {
         const days = Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
         return (
-          <span className={`font-medium ${
-            days < 0 ? 'text-red-600' : 
-            days <= 30 ? 'text-orange-600' : 
-            days <= 60 ? 'text-yellow-600' : 'text-green-600'
-          }`}>
+          <span className={`font-medium ${days < 0 ? 'text-red-600' :
+            days <= 30 ? 'text-orange-600' :
+              days <= 60 ? 'text-yellow-600' : 'text-green-600'
+            }`}>
             {days < 0 ? 'Expired' : `${days} days`}
           </span>
         );
@@ -522,7 +510,7 @@ const BatchTracking = ({ open = true, onClose }) => {
           >
             <Eye className="w-4 h-4" />
           </button>
-          
+
           <button
             onClick={() => {
               setSelectedIds(new Set([batch.batch_id || batch.id]));
@@ -544,7 +532,7 @@ const BatchTracking = ({ open = true, onClose }) => {
           >
             <Download className="w-4 h-4" />
           </button>
-          
+
           <button
             onClick={() => {
               setSelectedIds(new Set([batch.batch_id || batch.id]));
@@ -555,7 +543,7 @@ const BatchTracking = ({ open = true, onClose }) => {
           >
             <MessageCircle className="w-4 h-4" />
           </button>
-          
+
           <button
             className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             title="Edit"
@@ -712,22 +700,22 @@ const BatchTracking = ({ open = true, onClose }) => {
                 {selectedCount > 0 ? (
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
-                    <button 
-                      onClick={exportSelectedPDF} 
+                    <button
+                      onClick={exportSelectedPDF}
                       className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
                     >
                       <Download className="w-4 h-4" />
                       <span>PDF</span>
                     </button>
-                    <button 
-                      onClick={printSelected} 
+                    <button
+                      onClick={printSelected}
                       className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
                     >
                       <Printer className="w-4 h-4" />
                       <span>Print</span>
                     </button>
-                    <button 
-                      onClick={whatsappSelected} 
+                    <button
+                      onClick={whatsappSelected}
                       className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
                     >
                       <MessageCircle className="w-4 h-4" />
@@ -735,7 +723,7 @@ const BatchTracking = ({ open = true, onClose }) => {
                     </button>
                   </div>
                 ) : (
-                  <button 
+                  <button
                     onClick={exportSelectedPDF}
                     className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
                   >
@@ -744,7 +732,7 @@ const BatchTracking = ({ open = true, onClose }) => {
                   </button>
                 )}
               </div>
-              
+
               {/* Summary Stats */}
               <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
                 <div>
@@ -815,7 +803,7 @@ const BatchTracking = ({ open = true, onClose }) => {
                 Close
               </button>
             </div>
-            
+
             {batchMovements.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />

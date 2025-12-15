@@ -3,7 +3,7 @@
  * Provides consistent document number generation across all modules
  */
 
-import { apiClient } from './api';
+import { apiClient } from '../../api';
 
 // Wrapper to safely handle API calls without throwing uncaught errors
 const safeApiCall = async (apiCall) => {
@@ -16,14 +16,14 @@ const safeApiCall = async (apiCall) => {
 };
 
 class DocumentNumberService {
-  
+
   /**
    * Generate Invoice Number - ALWAYS from backend to prevent duplicates
    */
   async generateInvoiceNumber() {
     let retries = 3;
     let lastError = null;
-    
+
     while (retries > 0) {
       try {
         const response = await apiClient.get('/invoices/generate-number');
@@ -39,7 +39,7 @@ class DocumentNumberService {
         }
       }
     }
-    
+
     // Fallback to backend-compatible format: INV-YY######## 
     const now = new Date();
     const year = now.getFullYear() % 100;

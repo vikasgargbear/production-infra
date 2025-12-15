@@ -2,13 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
-import offlineDB from '../../../services/offline/offlineDatabase';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
 import ConflictResolutionModal from '../../sales/ConflictResolutionModal';
 
 const OfflineIndicator = () => {
   const { isOnline, pendingCount, syncStats, forceSync } = useNetworkStatus();
   const totalPending = pendingCount + syncStats.failed + syncStats.conflict;
-  
+
   const [showConflicts, setShowConflicts] = useState(false);
   const [conflicts, setConflicts] = useState([]);
 
@@ -22,10 +22,10 @@ const OfflineIndicator = () => {
   const loadConflicts = async () => {
     try {
       const queue = await offlineDB.getSyncQueue();
-      const conflictItems = queue.filter(item => 
+      const conflictItems = queue.filter(item =>
         item.sync_status === 'conflict' || item.conflict_reason
       );
-      
+
       setConflicts(conflictItems);
     } catch (error) {
       console.error('Failed to load conflicts:', error);
@@ -55,20 +55,18 @@ const OfflineIndicator = () => {
   };
 
   return (
-    <div 
-      className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ${
-        !isOnline ? 'animate-pulse' : ''
-      }`}
+    <div
+      className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ${!isOnline ? 'animate-pulse' : ''
+        }`}
       data-network-indicator
     >
-      <div 
-        className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg border ${
-          !isOnline 
-            ? 'bg-orange-50 border-orange-200 text-orange-700' 
+      <div
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg border ${!isOnline
+            ? 'bg-orange-50 border-orange-200 text-orange-700'
             : totalPending > 0
-            ? 'bg-blue-50 border-blue-200 text-blue-700'
-            : 'bg-green-50 border-green-200 text-green-700'
-        }`}
+              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-green-50 border-green-200 text-green-700'
+          }`}
       >
         {/* Status Icon */}
         {!isOnline ? (

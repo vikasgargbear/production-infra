@@ -1,7 +1,7 @@
 // React Hook for Network Status
 import { useState, useEffect } from 'react';
-import networkMonitor from '../services/offline/networkMonitor';
-import offlineDB from '../services/offline/offlineDatabase';
+import networkMonitor from '../services/offline/core/networkMonitor';
+import offlineDB from '../services/offline/core/offlineDatabase';
 
 export function useNetworkStatus() {
   const [isOnline, setIsOnline] = useState(networkMonitor.isOnline);
@@ -17,7 +17,7 @@ export function useNetworkStatus() {
     // Subscribe to network status changes
     const unsubscribe = networkMonitor.subscribe((status, online) => {
       setIsOnline(online);
-      
+
       // Update sync stats when status changes
       updateSyncStats();
     });
@@ -45,7 +45,7 @@ export function useNetworkStatus() {
 
   const forceSync = async () => {
     if (isOnline) {
-      const { default: syncEngine } = await import('../services/offline/syncEngine');
+      const { default: syncEngine } = await import('../services/offline/sync/syncEngine');
       return syncEngine.startSync();
     }
     return { success: false, message: 'Cannot sync while offline' };

@@ -6,7 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
-import dataSyncService from '../services/offline/dataSyncService';
+import dataSyncService from '../services/offline/sync/dataSyncService';
 
 const AuthContext = createContext(null);
 

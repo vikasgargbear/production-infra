@@ -1,6 +1,6 @@
 // Sync Engine for Offline Support
-import offlineDB from './offlineDatabase';
-import apiClient from '../api/apiClient';
+import offlineDB from '../core/offlineDatabase';
+import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
 class SyncEngine {
@@ -59,20 +59,20 @@ class SyncEngine {
     };
 
     try {
-      
-      
+
+
       // Get all pending items from sync queue
       const pendingItems = await offlineDB.getSyncQueue();
-      
+
       if (pendingItems.length === 0) {
-        
+
         return { ...results, message: 'No items to sync' };
       }
 
       // CRITICAL FIX: Sort items chronologically to maintain order
       // Invoices must sync in order of creation to prevent stock conflicts
       const sortedItems = this.sortItemsChronologically(pendingItems);
-      
+
       console.log(`[SyncEngine] Syncing ${sortedItems.length} items in chronological order`);
 
       // CRITICAL FIX: Process items SEQUENTIALLY to avoid race conditions
@@ -80,7 +80,7 @@ class SyncEngine {
       for (const item of sortedItems) {
         try {
           const syncResult = await this.syncItem(item);
-          
+
           if (syncResult.success) {
             results.synced++;
             // Remove from sync queue
@@ -89,7 +89,7 @@ class SyncEngine {
             results.conflicts++;
             // Mark as conflict for manual resolution
             await offlineDB.markSyncConflict(item.id, syncResult.error);
-            
+
             // Store detailed conflict info for user notification
             results.conflictDetails.push({
               itemType: item.entity_type,
@@ -118,13 +118,13 @@ class SyncEngine {
         conflicts: results.conflicts
       });
 
-      
-      
+
+
       // Show notification if items were synced
       if (results.synced > 0) {
         toast.success(`Synced ${results.synced} items successfully`);
       }
-      
+
       if (results.failed > 0) {
         toast.warning(`${results.failed} items failed to sync`);
       }
@@ -138,10 +138,10 @@ class SyncEngine {
     } catch (error) {
       console.error('[SyncEngine] Sync failed:', error);
       toast.error('Sync failed. Will retry automatically.');
-      
+
       // Schedule retry
       this.scheduleRetry();
-      
+
       return {
         success: false,
         message: error.message,
@@ -156,34 +156,34 @@ class SyncEngine {
   async syncItem(item) {
     try {
       let response;
-      
+
       switch (item.entity_type || item.type) {
         case 'invoices':
         case 'invoice':
           response = await this.syncInvoice(item.data);
           break;
-          
+
         case 'customers':
         case 'customer':
           response = await this.syncCustomer(item.data);
           break;
-          
+
         case 'products':
         case 'product':
           response = await this.syncProduct(item.data);
           break;
-          
+
         case 'payments':
         case 'payment':
           response = await this.syncPayment(item.data);
           break;
-          
+
         default:
           throw new Error(`Unknown sync type: ${item.entity_type || item.type}`);
       }
 
       return { success: true, response };
-      
+
     } catch (error) {
       // Enhanced conflict detection
       if (error.isConflict) {
@@ -202,19 +202,19 @@ class SyncEngine {
           }
         };
       }
-      
+
       // Check if it's a 409 conflict from server
       if (error.response?.status === 409) {
-        return { 
-          success: false, 
-          conflict: true, 
-          error: error.response?.data?.detail?.message || 'Data conflict - please review' 
+        return {
+          success: false,
+          conflict: true,
+          error: error.response?.data?.detail?.message || 'Data conflict - please review'
         };
       }
-      
+
       // Regular error
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: error.message || 'Sync failed'
       };
     }
@@ -226,7 +226,7 @@ class SyncEngine {
       // Get timestamps from the data
       const timeA = a.data?.invoice_date || a.data?.created_at || a.created_at || 0;
       const timeB = b.data?.invoice_date || b.data?.created_at || b.created_at || 0;
-      
+
       // Sort oldest first to maintain chronological order
       return new Date(timeA) - new Date(timeB);
     });
@@ -236,38 +236,38 @@ class SyncEngine {
   async syncInvoice(invoiceData) {
     // Remove local-only fields
     const { _localId, _syncStatus, reserved_batches, ...invoice } = invoiceData;
-    
+
     try {
       let response;
-      
+
       // If it has a server ID, update; otherwise create
       if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
         response = await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
       } else {
         // Create new invoice
         response = await apiClient.post('/invoices', invoice);
-        
+
         // Update local database with server ID
         if (response.data?.invoice_id) {
           await offlineDB.updateLocalId(
-            'invoices', 
-            invoiceData._localId, 
+            'invoices',
+            invoiceData._localId,
             response.data.invoice_id
           );
         }
       }
-      
+
       // SUCCESS: Clear reserved quantities
       if (reserved_batches && Array.isArray(reserved_batches)) {
         for (const reservation of reserved_batches) {
           await offlineDB.clearReservedQuantity(
-            reservation.batch_id, 
+            reservation.batch_id,
             reservation.quantity
           );
         }
         console.log(`✅ Cleared ${reserved_batches.length} batch reservations after successful sync`);
       }
-      
+
       // Update batch quantities from server response if available
       if (response.data?.updated_batches) {
         for (const batchUpdate of response.data.updated_batches) {
@@ -277,7 +277,7 @@ class SyncEngine {
           );
         }
       }
-      
+
       return response;
     } catch (error) {
       // Enhanced error handling for stock conflicts
@@ -295,7 +295,7 @@ class SyncEngine {
           invoiceNumber: details.invoice_number
         };
       }
-      
+
       // Re-throw other errors
       throw error;
     }
@@ -304,20 +304,20 @@ class SyncEngine {
   // Sync customer
   async syncCustomer(customerData) {
     const { _localId, _syncStatus, ...customer } = customerData;
-    
+
     if (customer.customer_id && !customer.customer_id.startsWith('LOCAL_')) {
       return await apiClient.put(`/customers/${customer.customer_id}`, customer);
     } else {
       const response = await apiClient.post('/customers', customer);
-      
+
       if (response.data?.customer_id) {
         await offlineDB.updateLocalId(
-          'customers', 
-          customerData._localId, 
+          'customers',
+          customerData._localId,
           response.data.customer_id
         );
       }
-      
+
       return response;
     }
   }
@@ -325,20 +325,20 @@ class SyncEngine {
   // Sync product
   async syncProduct(productData) {
     const { _localId, _syncStatus, ...product } = productData;
-    
+
     if (product.product_id && !product.product_id.startsWith('LOCAL_')) {
       return await apiClient.put(`/products/${product.product_id}`, product);
     } else {
       const response = await apiClient.post('/products', product);
-      
+
       if (response.data?.product_id) {
         await offlineDB.updateLocalId(
-          'products', 
-          productData._localId, 
+          'products',
+          productData._localId,
           response.data.product_id
         );
       }
-      
+
       return response;
     }
   }
@@ -346,7 +346,7 @@ class SyncEngine {
   // Sync payment
   async syncPayment(paymentData) {
     const { _localId, _syncStatus, ...payment } = paymentData;
-    
+
     if (payment.payment_id && !payment.payment_id.startsWith('LOCAL_')) {
       return await apiClient.put(`/payments/${payment.payment_id}`, payment);
     } else {
@@ -362,7 +362,7 @@ class SyncEngine {
 
     this.retryTimeout = setTimeout(() => {
       if (navigator.onLine && !this.isSyncing) {
-        
+
         this.startSync();
       }
     }, delay);

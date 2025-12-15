@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ModuleHeader from '../ui/ModuleHeader';
-import documentNumberService from '../../../services/documentNumberService';
+import documentNumberService from '../../../services/offline/documents/documentNumberService';
 
 /**
  * GlobalDocumentFlow - Universal layout component for all document flows
@@ -8,34 +8,34 @@ import documentNumberService from '../../../services/documentNumberService';
  * 
  * Supports: Invoice, Purchase, Purchase Order, GRN, Returns, Sales Order, Challan
  */
-const GlobalDocumentFlow = ({ 
+const GlobalDocumentFlow = ({
   children,
-  
+
   // Document Configuration
   documentType = 'invoice', // 'invoice', 'purchase', 'purchase-order', 'grn', 'return', 'sales-order', 'challan'
   title,
   documentNumber,
   status = 'draft',
-  
+
   // Auto-generation
   autoGenerateNumber = true,
   onNumberGenerated,
-  
+
   // Header Configuration  
   icon,
   iconColor,
   onClose,
   additionalActions = [],
-  
+
   // Shortcuts & Help
   shortcutColor = 'blue',
   shortcuts = [],
-  
+
   // Layout
   className = '',
   maxWidth = 'max-w-6xl'
 }) => {
-  
+
   const [generatedNumber, setGeneratedNumber] = useState(documentNumber || '');
   const [isGenerating, setIsGenerating] = useState(autoGenerateNumber && !documentNumber);
 
@@ -49,7 +49,7 @@ const GlobalDocumentFlow = ({
       serviceMethod: 'generateInvoiceNumber'
     },
     'purchase': {
-      title: 'Purchase Entry', 
+      title: 'Purchase Entry',
       icon: 'FileText',
       color: 'green',
       prefix: 'PUR',
@@ -78,7 +78,7 @@ const GlobalDocumentFlow = ({
     },
     'sales-return': {
       title: 'Sales Return',
-      icon: 'RotateCcw', 
+      icon: 'RotateCcw',
       color: 'red',
       prefix: 'SRN',
       serviceMethod: 'generateSalesReturnNumber'
@@ -123,7 +123,7 @@ const GlobalDocumentFlow = ({
           setIsGenerating(false);
         }
       };
-      
+
       generateNumber();
     }
   }, [autoGenerateNumber, documentNumber, documentType, config, onNumberGenerated]);
@@ -161,7 +161,7 @@ const GlobalDocumentFlow = ({
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Consistent across all modules */}
         <ModuleHeader
           title={finalTitle}

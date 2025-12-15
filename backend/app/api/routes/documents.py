@@ -43,7 +43,7 @@ async def generate_document_number(
         
         # Get last number for this document type
         result = db.execute(text("""
-            SELECT MAX(CAST(REGEXP_REPLACE(document_number, '[^0-9]', '', 'g') AS INTEGER)) as last_number
+            SELECT MAX(CAST(REGEXP_REPLACE(document_number, '[^0-9]', '', 'g') AS BIGINT)) as last_number
             FROM (
                 SELECT invoice_number as document_number FROM sales.invoices WHERE org_id = :org_id
                 UNION ALL

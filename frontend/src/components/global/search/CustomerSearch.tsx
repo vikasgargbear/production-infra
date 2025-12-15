@@ -3,7 +3,7 @@ import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building, X } from 'lu
 import { Customer } from '../../../types/models/customer';
 import { debounce } from 'lodash';
 import { AddNewButton } from '../ui';
-import localFirstService from '../../../services/offline/localFirstService';
+import localFirstService from '../../../services/offline/cache/localFirstService';
 
 /**
  * CustomerSearch Component Props
@@ -66,7 +66,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   // Instant search using local-first service
   const performSearch = useCallback(async (query: string) => {
     // // console.log('[CustomerSearch] performSearch called with query:', query);
-    
+
     if (!query || query.length < minSearchLength) {
       // // console.log('[CustomerSearch] Query too short, clearing results');
       setSearchResults([]);
@@ -80,7 +80,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       const results = await localFirstService.searchCustomers(query, { limit: 20 });
       // // console.log('[CustomerSearch] Got results:', results.length, results);
       setSearchResults(results as Customer[]);
-      
+
       // Auto-highlight first result so Enter key works immediately
       if (results.length > 0) {
         // // console.log('[CustomerSearch] Setting highlightedIndex to 0');
@@ -149,7 +149,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // // console.log('[CustomerSearch] Key pressed:', e.key, 'highlightedIndex:', highlightedIndex, 'results:', searchResults.length);
-    
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightedIndex(prev =>
@@ -163,12 +163,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     } else if (e.key === 'Enter') {
       e.preventDefault();
       // // console.log('[CustomerSearch] Enter pressed, highlightedIndex:', highlightedIndex, 'searchResults:', searchResults);
-      
+
       // If we have results and one is highlighted, select it
       if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
         // // console.log('[CustomerSearch] Selecting customer:', searchResults[highlightedIndex]);
         handleCustomerSelect(searchResults[highlightedIndex]);
-      } 
+      }
       // If no results and we have a search query, trigger create customer
       else if (searchResults.length === 0 && searchQuery.length >= minSearchLength && onCreateNew) {
         // // console.log('[CustomerSearch] No results, opening create customer modal');
@@ -223,22 +223,22 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
           )}
         </div>
-        
+
         <div className="text-sm text-gray-600 space-y-0.5 ml-6">
           {/* Contact Person - for B2B customers */}
           {(customer as any).contact_person_name && (
             <p className="flex items-center gap-1">
-              <User className="w-3 h-3" /> 
+              <User className="w-3 h-3" />
               <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
             </p>
           )}
-          
+
           {/* Mobile Number - prioritize contact person phone for B2B */}
           {(() => {
-            const phoneNumber = (customer as any).contact_person_phone || 
-                               customer.phone || 
-                               customer.contact_info?.primary_phone ||
-                               (customer as any).primary_phone;
+            const phoneNumber = (customer as any).contact_person_phone ||
+              customer.phone ||
+              customer.contact_info?.primary_phone ||
+              (customer as any).primary_phone;
             if (phoneNumber) {
               return (
                 <p className="flex items-center gap-1">
@@ -248,12 +248,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             }
             return null;
           })()}
-          
+
           {/* Email */}
           {(() => {
-            const email = (customer as any).contact_person_email || 
-                         customer.email || 
-                         (customer as any).primary_email;
+            const email = (customer as any).contact_person_email ||
+              customer.email ||
+              (customer as any).primary_email;
             if (email) {
               return (
                 <p className="flex items-center gap-1">
@@ -263,21 +263,21 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             }
             return null;
           })()}
-          
+
           {/* Compact Address - City, State only */}
           {(() => {
             // Try to get city and state from multiple possible sources
-            const city = customer.billing_address?.city || 
-                        customer.address_info?.billing_city || 
-                        (customer as any).city || '';
-            const state = customer.billing_address?.state || 
-                         customer.address_info?.billing_state || 
-                         (customer as any).state || '';
-            
+            const city = customer.billing_address?.city ||
+              customer.address_info?.billing_city ||
+              (customer as any).city || '';
+            const state = customer.billing_address?.state ||
+              customer.address_info?.billing_state ||
+              (customer as any).state || '';
+
             if (city || state) {
               return (
                 <p className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> 
+                  <MapPin className="w-3 h-3" />
                   {city}{state ? `, ${state}` : ''}
                 </p>
               );
@@ -286,7 +286,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
           })()}
         </div>
       </div>
-      
+
       {/* GST Status Badge */}
       <div className="ml-3">
         {(customer.gstin || customer.gst_number || (customer as any).gst_number) ? (
@@ -317,11 +317,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               key={customer.customer_id}
               ref={(el) => (resultRefs.current[index] = el)}
               onClick={() => handleCustomerSelect(customer)}
-              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                index === highlightedIndex
+              className={`p-3 border rounded-lg cursor-pointer transition-colors ${index === highlightedIndex
                   ? 'bg-blue-50 border-blue-500 border-2'
                   : 'border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -332,7 +331,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
                     )}
                   </div>
-                  
+
                   <div className="text-sm text-gray-600 mt-1 space-y-0.5">
                     {/* Contact Person for B2B */}
                     {(customer as any).contact_person_name && (
@@ -341,12 +340,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                         <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
                       </p>
                     )}
-                    
+
                     {/* Phone */}
                     {(() => {
-                      const phone = (customer as any).contact_person_phone || 
-                                   customer.phone || 
-                                   (customer as any).primary_phone;
+                      const phone = (customer as any).contact_person_phone ||
+                        customer.phone ||
+                        (customer as any).primary_phone;
                       if (phone) {
                         return (
                           <p className="flex items-center gap-1">
@@ -356,7 +355,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                       }
                       return null;
                     })()}
-                    
+
                     {customer.customer_code && <p>Code: {customer.customer_code}</p>}
                     {(customer.billing_address?.city || customer.address_info?.billing_city) && (
                       <p>City: {customer.billing_address?.city || customer.address_info?.billing_city}</p>
@@ -446,10 +445,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
                     {/* Phone Number */}
                     {(() => {
-                      const phoneNumber = (value as any).contact_person_phone || 
-                                         value.phone || 
-                                         value.contact_info?.primary_phone ||
-                                         (value as any).primary_phone;
+                      const phoneNumber = (value as any).contact_person_phone ||
+                        value.phone ||
+                        value.contact_info?.primary_phone ||
+                        (value as any).primary_phone;
                       if (phoneNumber) {
                         return (
                           <span className="flex items-center gap-1">
@@ -459,20 +458,20 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                       }
                       return null;
                     })()}
-                    
+
                     {/* Compact Address - City, State only */}
                     {(() => {
-                      const city = value.billing_address?.city || 
-                                  value.address_info?.billing_city || 
-                                  (value as any).city || '';
-                      const state = value.billing_address?.state || 
-                                   value.address_info?.billing_state || 
-                                   (value as any).state || '';
-                      
+                      const city = value.billing_address?.city ||
+                        value.address_info?.billing_city ||
+                        (value as any).city || '';
+                      const state = value.billing_address?.state ||
+                        value.address_info?.billing_state ||
+                        (value as any).state || '';
+
                       if (city || state) {
                         return (
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" /> 
+                            <MapPin className="w-3 h-3" />
                             {city}{state ? `, ${state}` : ''}
                           </span>
                         );
@@ -482,7 +481,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   </div>
                 </div>
               </div>
-              
+
               {/* Delete Icon - Vertically Centered Right */}
               {clearable && !disabled && (
                 <div className="flex items-center justify-center min-h-[3rem]">
@@ -548,7 +547,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             </div>
           </div>
         )}
-        
+
         {showDropdown && searchQuery && !value && (
           <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
             <div className="p-3">
@@ -568,9 +567,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
           type="button"
           onClick={() => setShowSearch(true)}
           disabled={disabled}
-          className={`w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors flex items-center justify-center gap-2 ${
-            disabled ? 'opacity-50 cursor-not-allowed' : ''
-          } ${className}`}
+          className={`w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors flex items-center justify-center gap-2 ${disabled ? 'opacity-50 cursor-not-allowed' : ''
+            } ${className}`}
         >
           <User className="w-5 h-5 text-gray-400" />
           <span className="text-gray-600">Select Customer</span>
@@ -607,7 +605,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                 </button>
               </div>
             </div>
-            
+
             <div className="p-4">
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -622,7 +620,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   autoFocus
                 />
               </div>
-              
+
               <div className="max-h-[60vh] overflow-y-auto">
                 {renderSearchResults()}
               </div>

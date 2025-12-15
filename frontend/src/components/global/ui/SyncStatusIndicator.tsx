@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
-import localFirstService from '../../../services/offline/localFirstService';
+import localFirstService from '../../../services/offline/cache/localFirstService';
 
 interface SyncStatus {
   initialized: boolean;
@@ -40,7 +40,7 @@ export const SyncStatusIndicator: React.FC = () => {
     // Listen for sync events
     const unsubscribe = localFirstService.onSyncStatusChange((event: SyncEvent) => {
       setLastSync(event);
-      
+
       // Update status
       const newStatus = localFirstService.getSyncStatus();
       setStatus(newStatus);
@@ -50,7 +50,7 @@ export const SyncStatusIndicator: React.FC = () => {
     const handleOnline = () => {
       setStatus(prev => ({ ...prev, isOnline: true }));
       // Trigger sync when coming online
-      localFirstService.syncNow().catch(() => {});
+      localFirstService.syncNow().catch(() => { });
     };
 
     const handleOffline = () => {
@@ -111,7 +111,7 @@ export const SyncStatusIndicator: React.FC = () => {
 
   const formatLastSyncDetails = () => {
     if (!lastSync) return null;
-    
+
     const parts: string[] = [];
     if (lastSync.productsUpdated !== undefined) {
       parts.push(`${lastSync.productsUpdated} products`);
@@ -119,7 +119,7 @@ export const SyncStatusIndicator: React.FC = () => {
     if (lastSync.customersUpdated !== undefined) {
       parts.push(`${lastSync.customersUpdated} customers`);
     }
-    
+
     return parts.length > 0 ? parts.join(', ') : 'No updates';
   };
 

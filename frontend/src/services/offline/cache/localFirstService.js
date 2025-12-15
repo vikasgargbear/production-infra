@@ -4,9 +4,9 @@
  * Inspired by Marg billing software's instant responsiveness
  */
 
-import offlineDB from './offlineDatabase';
-import { productAPI } from '../api';
-import { customersApi } from '../api';
+import offlineDB from '../core/offlineDatabase';
+import { productAPI } from '../../api';
+import { customersApi } from '../../api';
 
 class LocalFirstService {
   constructor() {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircle, Share2, Calendar, Building2, Plus, Truck, CreditCard } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { 
+import {
   EnhancedGlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
@@ -17,7 +17,7 @@ import {
   MonthYearPicker,
   StandardDatePicker
 } from '../global';
-import documentNumberService from '../../services/documentNumberService';
+import documentNumberService from '../../services/offline/documents/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 
 /**
@@ -34,9 +34,9 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const [createdPOData, setCreatedPOData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const productSearchRef = useRef(null);
-  
+
   // Purchase Order data state
   const [purchaseOrder, setPurchaseOrder] = useState({
     po_no: '',
@@ -73,7 +73,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         setPurchaseOrder(prev => ({ ...prev, po_no: fallbackNumber }));
       }
     };
-    
+
     generateAndSetPONumber();
   }, []);
 
@@ -104,10 +104,10 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         const quantity = parseFloat(item.quantity) || 0;
         const unitPrice = parseFloat(item.unit_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || 0;
-        
+
         const itemTotal = quantity * unitPrice;
         const itemTax = (itemTotal * taxPercent) / 100;
-        
+
         grossTotal += itemTotal;
         taxTotal += itemTax;
       }
@@ -159,12 +159,12 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       manufacturer: product.manufacturer || '',
       total: product.purchase_price || 0
     };
-    
+
     setPurchaseOrder(prev => ({
       ...prev,
       items: [...(prev.items || []), newItem]
     }));
-    
+
     if (productSearchRef.current) {
       setTimeout(() => productSearchRef.current.focus(), 100);
     }
@@ -217,20 +217,20 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       };
 
       const response = await purchaseApi.createPurchaseOrder(poData);
-      
+
       if (response && response.data) {
         const poNumber = response.data.po_no || purchaseOrder.po_no;
-        
+
         setCreatedPOData({
           poNumber: poNumber,
           poId: response.data.po_id || response.data.id,
           supplierName: selectedSupplier?.supplier_name || purchaseOrder.supplier_name,
           totalAmount: purchaseOrder.final_amount
         });
-        
+
         setShowSuccessModal(true);
         toast.success(`Purchase Order ${poNumber} created successfully!`);
-        
+
         searchCache.clear();
       }
     } catch (error) {
@@ -243,15 +243,15 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
 
   const validatePurchaseOrder = () => {
     const errors = {};
-    
+
     if (!selectedSupplier) {
       errors.supplier = 'Supplier is required';
     }
-    
+
     if (!purchaseOrder.items || purchaseOrder.items.length === 0) {
       errors.items = 'At least one item is required';
     }
-    
+
     return Object.keys(errors).length === 0;
   };
 
@@ -364,9 +364,9 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
               total: ((item.quantity || 0) * (item.unit_price || 0) * (1 + ((item.tax_percent || 0) / 100))).toFixed(2)
             }))}
             onUpdateItem={(index, field, value) => {
-              const mappedField = field === 'rate' ? 'unit_price' : 
-                                field === 'tax' ? 'tax_percent' :
-                                field;
+              const mappedField = field === 'rate' ? 'unit_price' :
+                field === 'tax' ? 'tax_percent' :
+                  field;
               handleUpdateItem(index, mappedField, value);
             }}
             onRemoveItem={handleRemoveItem}
@@ -535,7 +535,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
               }
             }}
           />
-          
+
           {/* Totals Section */}
           {purchaseOrder.items?.length > 0 && (
             <div className="mt-4 bg-gray-50 p-4 rounded-lg">
@@ -677,9 +677,9 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       </div>
 
       {/* PO Preview */}
-      <ContentCard 
-        title="Purchase Order Preview" 
-        subtitle={null} 
+      <ContentCard
+        title="Purchase Order Preview"
+        subtitle={null}
         actions={null}
       >
         <div className="bg-white rounded-lg p-6">
@@ -739,7 +739,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
                 const itemTotal = quantity * unitPrice;
                 const itemTax = (itemTotal * taxPercent) / 100;
                 const totalWithTax = itemTotal + itemTax;
-                
+
                 return (
                   <tr key={index} className="border-b border-gray-200">
                     <td className="py-2">{item.product_name}</td>
@@ -794,7 +794,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
                 <li>• Transport Mode: {purchaseOrder.transport_mode || 'By Road'}</li>
               </ul>
             </div>
-            
+
             <div className="p-4 bg-yellow-50 rounded-lg">
               <h4 className="font-medium text-yellow-900 mb-2">Important Notes:</h4>
               <ul className="text-sm text-yellow-800 space-y-1">
@@ -824,25 +824,25 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         documentData={purchaseOrder}
         onDocumentUpdate={setPurchaseOrder}
         onClose={onClose}
-        
+
         // Two-step flow
         currentStep={currentStep}
         onStepChange={setCurrentStep}
-        
+
         // Step content
         createContent={createContent}
         reviewContent={reviewContent}
-        
+
         // Validation & Actions
         canProceedToReview={() => {
-          return !!selectedSupplier && 
-                 purchaseOrder.items && 
-                 purchaseOrder.items.length > 0;
+          return !!selectedSupplier &&
+            purchaseOrder.items &&
+            purchaseOrder.items.length > 0;
         }}
         onSave={handleSavePurchaseOrder}
         onPrint={handlePrint}
         isSaving={saving}
-        
+
         // Footer totals
         footerTotals={{
           itemCount: purchaseOrder.items?.length || 0,
@@ -852,7 +852,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
           freight: purchaseOrder.freight_charges,
           grandTotal: purchaseOrder.final_amount
         }}
-        
+
         // Keyboard shortcuts
         keyboardShortcuts={{
           1: [

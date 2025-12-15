@@ -259,7 +259,7 @@ async def convert_sales_order_to_challan(
         date_part = challan_date.strftime("%Y%m%d")
         
         seq_result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(challan_number FROM '[0-9]+$') AS INTEGER)), 0) + 1
+            SELECT COALESCE(MAX(CAST(SUBSTRING(challan_number FROM '[0-9]+$') AS BIGINT)), 0) + 1
             FROM challans WHERE org_id = :org_id AND challan_number LIKE :pattern
         """), {"org_id": org_id, "pattern": f"DC{date_part}%"}).scalar() or 1
         

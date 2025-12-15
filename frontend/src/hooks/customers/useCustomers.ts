@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOpti
 import { customersApi as customerAPI } from '../../services/api';
 import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
-import localFirstService from '../../services/offline/localFirstService';
+import localFirstService from '../../services/offline/cache/localFirstService';
 
 interface ApiResponse<T> {
   success: boolean;

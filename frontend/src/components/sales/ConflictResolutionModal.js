@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { AlertTriangle, X, Edit, Trash2, Package, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
-import offlineDB from '../../services/offline/offlineDatabase';
-import syncEngine from '../../services/offline/syncEngine';
+import offlineDB from '../../services/offline/core/offlineDatabase';
+import syncEngine from '../../services/offline/sync/syncEngine';
 
 /**
  * ConflictResolutionModal
@@ -19,11 +19,11 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
 
   const handleAdjustQuantity = async (conflict, newQuantity) => {
     setResolving(prev => ({ ...prev, [conflict.itemId]: true }));
-    
+
     try {
       // Get the invoice from offline DB
       const invoice = await offlineDB.get('invoices', conflict.itemId);
-      
+
       if (!invoice) {
         toast.error('Invoice not found in offline storage');
         return;
@@ -31,8 +31,8 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
 
       // Update the item quantity to available amount
       const updatedItems = invoice.items.map(item => {
-        if (item.product_id === conflict.details.productId && 
-            item.batch_id === conflict.details.batchId) {
+        if (item.product_id === conflict.details.productId &&
+          item.batch_id === conflict.details.batchId) {
           return {
             ...item,
             quantity: newQuantity,
@@ -51,7 +51,7 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
       });
 
       toast.success(`Updated quantity to ${newQuantity} - ready to re-sync`);
-      
+
       // Trigger re-sync
       setTimeout(async () => {
         const result = await syncEngine.forceSync();
@@ -59,7 +59,7 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
           onResolved?.();
         }
       }, 500);
-      
+
     } catch (error) {
       console.error('Failed to adjust quantity:', error);
       toast.error('Failed to adjust quantity');
@@ -74,11 +74,11 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
     }
 
     setResolving(prev => ({ ...prev, [conflict.itemId]: true }));
-    
+
     try {
       // Remove from offline DB
       await offlineDB.delete('invoices', conflict.itemId);
-      
+
       // Remove from sync queue
       const queue = await offlineDB.getSyncQueue();
       const queueItem = queue.find(q => q.entity_id === conflict.itemId);
@@ -87,10 +87,10 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
       }
 
       toast.success('Invoice cancelled');
-      
+
       // Refresh conflicts
       onResolved?.();
-      
+
     } catch (error) {
       console.error('Failed to cancel invoice:', error);
       toast.error('Failed to cancel invoice');
@@ -101,12 +101,12 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
 
   const handleKeepForLater = async (conflict) => {
     setResolving(prev => ({ ...prev, [conflict.itemId]: true }));
-    
+
     try {
       // Mark as "hold" status in sync queue
       const queue = await offlineDB.getSyncQueue();
       const queueItem = queue.find(q => q.entity_id === conflict.itemId);
-      
+
       if (queueItem) {
         // Don't retry automatically - user will manually retry when stock arrives
         await offlineDB.markSyncConflict(queueItem.id, 'ON_HOLD: Waiting for stock');
@@ -114,7 +114,7 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
 
       toast.info('Invoice kept for later - you can retry when stock arrives');
       onResolved?.();
-      
+
     } catch (error) {
       console.error('Failed to mark as hold:', error);
       toast.error('Failed to update status');
@@ -151,7 +151,7 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-4">
             {conflicts.map((conflict, index) => (
-              <div 
+              <div
                 key={conflict.itemId || index}
                 className="border border-orange-200 rounded-lg p-4 bg-orange-50/50 hover:bg-orange-50 transition-colors"
               >
@@ -164,7 +164,7 @@ const ConflictResolutionModal = ({ isOpen, onClose, conflicts = [], onResolved }
                         Invoice: {conflict.details?.invoiceNumber || conflict.itemId}
                       </h3>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-gray-600">Product ID:</span>

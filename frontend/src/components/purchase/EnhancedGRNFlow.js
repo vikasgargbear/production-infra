@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer, CheckCircle, CreditCard } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { 
+import {
   EnhancedGlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
@@ -17,7 +17,7 @@ import {
   MonthYearPicker,
   StandardDatePicker
 } from '../global';
-import documentNumberService from '../../services/documentNumberService';
+import documentNumberService from '../../services/offline/documents/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 
 /**
@@ -34,9 +34,9 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
   const [createdGRNData, setCreatedGRNData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const productSearchRef = useRef(null);
-  
+
   // GRN data state
   const [grn, setGrn] = useState({
     grn_no: '',
@@ -75,7 +75,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         setGrn(prev => ({ ...prev, grn_no: fallbackNumber }));
       }
     };
-    
+
     generateAndSetGRNNumber();
   }, []);
 
@@ -106,10 +106,10 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         const receivedQty = parseFloat(item.received_qty) || 0;
         const unitPrice = parseFloat(item.unit_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || 0;
-        
+
         const itemTotal = receivedQty * unitPrice;
         const itemTax = (itemTotal * taxPercent) / 100;
-        
+
         grossTotal += itemTotal;
         taxTotal += itemTax;
       }
@@ -161,12 +161,12 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       quality_status: 'Approved',
       total: product.purchase_price || 0
     };
-    
+
     setGrn(prev => ({
       ...prev,
       items: [...(prev.items || []), newItem]
     }));
-    
+
     if (productSearchRef.current) {
       setTimeout(() => productSearchRef.current.focus(), 100);
     }
@@ -221,20 +221,20 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       };
 
       const response = await purchaseApi.createGRN(grnData);
-      
+
       if (response && response.data) {
         const grnNumber = response.data.grn_no || grn.grn_no;
-        
+
         setCreatedGRNData({
           grnNumber: grnNumber,
           grnId: response.data.grn_id || response.data.id,
           supplierName: selectedSupplier?.supplier_name || grn.supplier_name,
           totalAmount: grn.final_amount
         });
-        
+
         setShowSuccessModal(true);
         toast.success(`GRN ${grnNumber} created successfully!`);
-        
+
         searchCache.clear();
       }
     } catch (error) {
@@ -247,19 +247,19 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
 
   const validateGRN = () => {
     const errors = {};
-    
+
     if (!selectedSupplier) {
       errors.supplier = 'Supplier is required';
     }
-    
+
     if (!grn.supplier_invoice_no) {
       errors.invoice_no = 'Supplier invoice number is required';
     }
-    
+
     if (!grn.items || grn.items.length === 0) {
       errors.items = 'At least one item is required';
     }
-    
+
     return Object.keys(errors).length === 0;
   };
 
@@ -392,10 +392,10 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               total: ((item.received_qty || 0) * (item.unit_price || 0) * (1 + ((item.tax_percent || 0) / 100))).toFixed(2)
             }))}
             onUpdateItem={(index, field, value) => {
-              const mappedField = field === 'rate' ? 'unit_price' : 
-                                field === 'tax' ? 'tax_percent' :
-                                field === 'quantity' ? 'received_qty' :
-                                field;
+              const mappedField = field === 'rate' ? 'unit_price' :
+                field === 'tax' ? 'tax_percent' :
+                  field === 'quantity' ? 'received_qty' :
+                    field;
               handleUpdateItem(index, mappedField, value);
             }}
             onRemoveItem={handleRemoveItem}
@@ -596,10 +596,9 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                   <select
                     value={item.quality_status || 'Approved'}
                     onChange={(e) => handleUpdateItem(index, 'quality_status', e.target.value)}
-                    className={`w-20 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md ${
-                      item.quality_status === 'Approved' ? 'text-green-600' : 
-                      item.quality_status === 'Rejected' ? 'text-red-600' : 'text-yellow-600'
-                    }`}
+                    className={`w-20 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md ${item.quality_status === 'Approved' ? 'text-green-600' :
+                        item.quality_status === 'Rejected' ? 'text-red-600' : 'text-yellow-600'
+                      }`}
                   >
                     <option value="Approved">Approved</option>
                     <option value="Pending">Pending</option>
@@ -647,8 +646,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <input
                 type="text"
                 value={grn.quality_check?.checked_by || ''}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
+                onChange={(e) => setGrn(prev => ({
+                  ...prev,
                   quality_check: { ...prev.quality_check, checked_by: e.target.value }
                 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
@@ -659,8 +658,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Quality Status</label>
               <select
                 value={grn.quality_check?.quality_status || 'Approved'}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
+                onChange={(e) => setGrn(prev => ({
+                  ...prev,
                   quality_check: { ...prev.quality_check, quality_status: e.target.value }
                 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
@@ -674,8 +673,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <StandardDatePicker
                 label="Check Date"
                 value={grn.quality_check?.check_date || new Date().toISOString().split('T')[0]}
-                onChange={(value) => setGrn(prev => ({ 
-                  ...prev, 
+                onChange={(value) => setGrn(prev => ({
+                  ...prev,
                   quality_check: { ...prev.quality_check, check_date: value }
                 }))}
               />
@@ -684,8 +683,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Quality Remarks</label>
               <textarea
                 value={grn.quality_check?.remarks || ''}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
+                onChange={(e) => setGrn(prev => ({
+                  ...prev,
                   quality_check: { ...prev.quality_check, remarks: e.target.value }
                 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
@@ -698,9 +697,9 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       </div>
 
       {/* GRN Preview with Actions */}
-      <ContentCard 
-        title="Goods Receipt Note Preview" 
-        subtitle={null} 
+      <ContentCard
+        title="Goods Receipt Note Preview"
+        subtitle={null}
         actions={
           <div className="flex gap-2">
             <button
@@ -783,7 +782,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                 const itemTotal = receivedQty * unitPrice;
                 const itemTax = (itemTotal * taxPercent) / 100;
                 const totalWithTax = itemTotal + itemTax;
-                
+
                 return (
                   <tr key={index} className="border-b border-gray-200">
                     <td className="py-2">{item.product_name}</td>
@@ -801,11 +800,10 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                     <td className="text-right py-2">{formatCurrency(unitPrice)}</td>
                     <td className="text-right py-2">{taxPercent}%</td>
                     <td className="text-center py-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        item.quality_status === 'Approved' ? 'bg-green-100 text-green-800' :
-                        item.quality_status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.quality_status === 'Approved' ? 'bg-green-100 text-green-800' :
+                          item.quality_status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                        }`}>
                         {item.quality_status || 'Pending'}
                       </span>
                     </td>
@@ -862,26 +860,26 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         documentData={grn}
         onDocumentUpdate={setGrn}
         onClose={onClose}
-        
+
         // Two-step flow
         currentStep={currentStep}
         onStepChange={setCurrentStep}
-        
+
         // Step content
         createContent={createContent}
         reviewContent={reviewContent}
-        
+
         // Validation & Actions
         canProceedToReview={() => {
-          return !!selectedSupplier && 
-                 !!grn.supplier_invoice_no &&
-                 grn.items && 
-                 grn.items.length > 0;
+          return !!selectedSupplier &&
+            !!grn.supplier_invoice_no &&
+            grn.items &&
+            grn.items.length > 0;
         }}
         onSave={handleSaveGRN}
         onPrint={handlePrint}
         isSaving={saving}
-        
+
         // Footer totals
         footerTotals={{
           itemCount: grn.items?.length || 0,
@@ -890,7 +888,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
           tax: grn.tax_amount,
           grandTotal: grn.final_amount
         }}
-        
+
         // Keyboard shortcuts
         keyboardShortcuts={{
           1: [

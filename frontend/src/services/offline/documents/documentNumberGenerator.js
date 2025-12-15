@@ -8,7 +8,7 @@
  * Example: INV-20241027-0001, PO-20241027-0023, DC-20241027-0015
  */
 
-import { apiClient } from './api';
+import { apiClient } from '../../api';
 
 const DB_NAME = 'aaso_document_numbers';
 const DB_VERSION = 1;
@@ -38,7 +38,7 @@ class DocumentNumberGenerator {
 
     // Use IndexedDB for offline persistence
     const { openDB } = await import('idb');
-    
+
     this.db = await openDB(DB_NAME, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains(COUNTERS_STORE)) {
@@ -61,7 +61,7 @@ class DocumentNumberGenerator {
   async loadCounters() {
     await this.initialize();
     const allCounters = await this.db.getAll(COUNTERS_STORE);
-    
+
     for (const counter of allCounters) {
       this.counters.set(counter.key, counter.value);
     }
@@ -136,9 +136,9 @@ class DocumentNumberGenerator {
     try {
       // Use generic documents endpoint for all types
       const endpoint = `/documents/generate-number?type=${docType}`;
-      
+
       const response = await apiClient.get(endpoint);
-      
+
       if (response.data?.number) {
         return response.data.number;
       }
@@ -152,7 +152,7 @@ class DocumentNumberGenerator {
       console.warn(`[DocGen] Backend error for ${docType}:`, error.message);
       return null;
     }
-    
+
     return null;
   }
 
@@ -161,10 +161,10 @@ class DocumentNumberGenerator {
    */
   async updateCounter(key, value) {
     await this.initialize();
-    
+
     const today = this.getTodayString();
     const [type] = key.split('_');
-    
+
     await this.db.put(COUNTERS_STORE, {
       key,
       value,
@@ -182,14 +182,14 @@ class DocumentNumberGenerator {
    */
   async reserveNumber(docNumber) {
     await this.initialize();
-    
+
     const parts = docNumber.split('-');
     if (parts.length !== 3) return;
-    
+
     const [prefix, dateStr, seqStr] = parts;
     const key = `${prefix}_${dateStr}`;
     const sequence = parseInt(seqStr, 10);
-    
+
     // Only update if this sequence is higher than current
     const current = this.counters.get(key) || 0;
     if (sequence > current) {
@@ -249,7 +249,7 @@ class DocumentNumberGenerator {
     const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0].replace(/-/g, '');
 
     const allCounters = await this.db.getAll(COUNTERS_STORE);
-    
+
     for (const counter of allCounters) {
       if (counter.date < cutoffDate) {
         await this.db.delete(COUNTERS_STORE, counter.key);

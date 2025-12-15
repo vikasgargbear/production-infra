@@ -3,7 +3,7 @@ import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircl
 import { suppliersApi } from '../../services/api';
 import { purchasesApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { 
+import {
   EnhancedGlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
@@ -20,7 +20,7 @@ import {
   MonthYearPicker,
   SplitPayment
 } from '../global';
-import documentNumberService from '../../services/documentNumberService';
+import documentNumberService from '../../services/offline/documents/documentNumberService';
 import { PURCHASE_CONFIG, formatCurrency } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
@@ -53,9 +53,9 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const productSearchRef = useRef(null);
-  
+
   // Purchase data state - matching SimplifiedPurchaseEntry structure
   const [purchase, setPurchase] = useState({
     purchase_number: '',
@@ -92,13 +92,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
       } catch (error) {
         const date = new Date();
-        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+        const dateStr = date.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
         const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
         const fallbackNumber = `PUR-${dateStr}${randomNum}`; // Format: PUR-YYMMDD####
         setPurchase(prev => ({ ...prev, purchase_number: fallbackNumber }));
       }
     };
-    
+
     generateAndSetPurchaseNumber();
   }, []);
 
@@ -116,10 +116,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       if (purchase.payment_methods.length === 1 && purchase.payment_methods[0].method === 'cash') {
         setPurchase(prev => ({
           ...prev,
-          payment_methods: [{ 
-            id: '1', 
-            method: 'cash', 
-            amount: prev.final_amount 
+          payment_methods: [{
+            id: '1',
+            method: 'cash',
+            amount: prev.final_amount
           }]
         }));
       }
@@ -149,10 +149,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         // Handle both purchase_price and rate fields
         const purchasePrice = parseFloat(item.purchase_price || item.rate || item.cost) || 0;
         const taxPercent = parseFloat(item.tax_percent || item.tax || item.gst_percent) || 0;
-        
+
         const itemTotal = quantity * purchasePrice;
         const itemTax = (itemTotal * taxPercent) / 100;
-        
+
         grossTotal += itemTotal;
         taxTotal += itemTax;
       }
@@ -160,7 +160,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
     const discountAmount = parseFloat(purchase.discount_amount) || 0;
     const otherCharges = parseFloat(purchase.other_charges) || 0;
-    
+
     const netAmount = grossTotal + taxTotal - discountAmount + otherCharges;
     const roundOff = Math.round(netAmount) - netAmount;
     const finalAmount = Math.round(netAmount);
@@ -226,15 +226,15 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       brand_name: product.brand_name || product.brand || '',
       unit: product.unit || product.uom || 'Strip'
     });
-    
+
     // Open modal instead of directly adding to table
     setShowItemEditModal(true);
   };
 
   // Handle saving item from modal
   const handleSaveItemFromModal = (editedItem) => {
-     // Debug
-     // Debug expiry
+    // Debug
+    // Debug expiry
     setPurchase(prev => {
       const newItems = [...(prev.items || []), editedItem];
       return {
@@ -289,7 +289,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       })),
       isBulkUpload: true // Flag to skip supplier verification in the flow
     };
-    
+
     setExtractedPDFData(bulkData);
     setShowVerificationFlow(true);
     toast.info(`Verify ${products.length} products from bulk upload`);
@@ -374,7 +374,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             } else {
             }
           }
-          
+
           return {
             product_id: productId, // Send null for new products, let backend create them
             product_name: item.product_name || '', // Add product_name as it's required
@@ -399,8 +399,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           };
         }),
         // Handle split payments
-        payment_methods: purchase.payment_methods && purchase.payment_methods.length > 0 
-          ? purchase.payment_methods 
+        payment_methods: purchase.payment_methods && purchase.payment_methods.length > 0
+          ? purchase.payment_methods
           : [{ method: 'cash', amount: purchase.final_amount }],
         payment_mode: purchase.payment_methods && purchase.payment_methods.length > 0
           ? purchase.payment_methods[0].method.toLowerCase()  // Primary payment method
@@ -413,20 +413,20 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       };
 
       const response = await purchasesApi.create(purchaseData);
-      
+
       if (response && response.data) {
         const purchaseNumber = response.data.purchase_number || purchase.purchase_number;
-        
+
         setCreatedPurchaseData({
           purchaseNumber: purchaseNumber,
           purchaseId: response.data.purchase_id || response.data.id,
           supplierName: selectedSupplier?.supplier_name || purchase.supplier_name,
           totalAmount: purchase.final_amount
         });
-        
+
         setShowSuccessModal(true);
         toast.success(`Purchase ${purchaseNumber} created successfully!`);
-        
+
         // Clear search cache after successful save
         searchCache.clear();
       }
@@ -440,15 +440,15 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   const validatePurchase = () => {
     const errors = {};
-    
+
     if (!selectedSupplier) {
       errors.supplier = 'Supplier is required';
     }
-    
+
     if (!purchase.items || purchase.items.length === 0) {
       errors.items = 'At least one item is required';
     }
-    
+
     return Object.keys(errors).length === 0;
   };
 
@@ -470,12 +470,12 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const handlePDFUpload = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
       const response = await purchasesApi.parseInvoice(formData);
       if (response && response.data) {
         const extractedData = response.data;
-        
+
         // Store extracted data and show verification flow
         setExtractedPDFData({
           ...extractedData,
@@ -489,10 +489,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           tax_amount: extractedData.tax_amount || 0,
           final_amount: extractedData.final_amount || extractedData.total_amount || 0
         });
-        
+
         setShowPDFUpload(false); // Close PDF upload modal
         setShowVerificationFlow(true); // Show verification flow
-        
+
         toast.success('PDF parsed! Please verify the extracted information.');
       }
     } catch (error) {
@@ -545,7 +545,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     // Calculate totals
     let grossAmount = 0;
     let taxAmount = 0;
-    
+
     mappedItems.forEach(item => {
       const itemAmount = (item.quantity * item.purchase_price);
       const itemTax = itemAmount * (item.tax_percent / 100);
@@ -579,7 +579,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       payment_terms: verifiedData.payment_terms || 30,
       notes: verifiedData.notes || ''
     }));
-    
+
     // Update supplier state
     if (verifiedData.supplier_id) {
       setSelectedSupplier({
@@ -591,11 +591,11 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         address: verifiedData.supplier_address
       });
     }
-    
+
     // Close verification flow
     setShowVerificationFlow(false);
     setExtractedPDFData(null);
-    
+
     // For bulk/extract method, show success message
     if (verifiedData.isBulkUpload || verifiedData.fromPDFExtract) {
       toast.success('Data verified! Please review and save the purchase entry.');
@@ -685,7 +685,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PRODUCTS</h3>
           </div>
           <div className="flex gap-2">
-            <BulkUploadInline 
+            <BulkUploadInline
               onProductsUploaded={handleBulkUpload}
             />
             <button
@@ -716,7 +716,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
             <span className="ml-auto text-sm text-gray-500">{purchase.items.length} items</span>
           </div>
-          
+
           {/* Simple Purchase Items Table - Standard Layout */}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -744,18 +744,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                   const sellingPrice = parseFloat(item.selling_price) || 0;
                   const discountPercent = parseFloat(item.discount_percent) || 0;
                   const taxPercent = parseFloat(item.tax_percent) || 0;
-                  
+
                   // Calculate amounts
                   const baseAmount = quantity * cost;
                   const discountAmount = (baseAmount * discountPercent) / 100;
                   const discountedAmount = baseAmount - discountAmount;
                   const taxAmount = (discountedAmount * taxPercent) / 100;
                   const totalAmount = discountedAmount + taxAmount;
-                  
+
                   // Format expiry date if exists
                   const expiryDisplay = (() => {
                     if (!item.expiry_date) return '-';
-                    
+
                     // Handle YYYY-MM format from MonthYearPicker
                     if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
                       const parts = item.expiry_date.split('-');
@@ -763,23 +763,23 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                         return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
                       }
                     }
-                    
+
                     // Handle MM/YYYY format
                     if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
                       return item.expiry_date;
                     }
-                    
+
                     // Try to parse as date
                     try {
                       const date = new Date(item.expiry_date);
                       if (!isNaN(date.getTime())) {
                         return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
                       }
-                    } catch (e) {}
-                    
+                    } catch (e) { }
+
                     return item.expiry_date || '-';
                   })();
-                  
+
                   return (
                     <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2 px-3">
@@ -916,7 +916,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 <span className="ml-2 font-semibold text-gray-900">{purchase.purchase_number}</span>
               </div>
             </div>
-            
+
             {/* Supplier Invoice Info with Date - Right Side */}
             <div className="text-right">
               <div className="bg-green-50 px-4 py-3 rounded-lg border border-green-200">
@@ -1004,18 +1004,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 const sellingPrice = parseFloat(item.selling_price) || 0;
                 const discountPercent = parseFloat(item.discount_percent) || 0;
                 const taxPercent = parseFloat(item.tax_percent) || 0;
-                
+
                 // Calculate amounts
                 const baseAmount = quantity * cost;
                 const discountAmount = (baseAmount * discountPercent) / 100;
                 const discountedAmount = baseAmount - discountAmount;
                 const taxAmount = (discountedAmount * taxPercent) / 100;
                 const totalWithTax = discountedAmount + taxAmount;
-                
+
                 // Format expiry date if exists
                 const expiryDisplay = (() => {
                   if (!item.expiry_date) return '-';
-                  
+
                   // Handle YYYY-MM format from MonthYearPicker
                   if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
                     const parts = item.expiry_date.split('-');
@@ -1023,23 +1023,23 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                       return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
                     }
                   }
-                  
+
                   // Handle MM/YYYY format
                   if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
                     return item.expiry_date;
                   }
-                  
+
                   // Try to parse as date
                   try {
                     const date = new Date(item.expiry_date);
                     if (!isNaN(date.getTime())) {
                       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
                     }
-                  } catch (e) {}
-                  
+                  } catch (e) { }
+
                   return item.expiry_date || '-';
                 })();
-                
+
                 return (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-2 px-2">
@@ -1081,12 +1081,12 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                     const quantity = parseFloat(item.quantity) || 0;
                     const cost = parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0;
                     const discountPercent = parseFloat(item.discount_percent) || 0;
-                    
+
                     const baseAmount = quantity * cost;
                     const discountAmount = (baseAmount * discountPercent) / 100;
                     const discountedAmount = baseAmount - discountAmount;
                     const taxAmount = (discountedAmount * taxPercent) / 100;
-                    
+
                     if (taxPercent > 0) {
                       if (!gstBreakdown[taxPercent]) {
                         gstBreakdown[taxPercent] = { taxable: 0, tax: 0 };
@@ -1095,13 +1095,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                       gstBreakdown[taxPercent].tax += taxAmount;
                     }
                   });
-                  
+
                   const gstBands = Object.keys(gstBreakdown).sort((a, b) => a - b);
-                  
+
                   if (gstBands.length === 0) {
                     return <p className="text-xs text-gray-500">No GST applicable</p>;
                   }
-                  
+
                   return gstBands.map(band => (
                     <div key={band} className="flex justify-between text-xs">
                       <span className="text-gray-600">
@@ -1124,7 +1124,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Total Summary - Right Side */}
             <div className="w-64">
               <div className="flex justify-between py-2">
@@ -1159,29 +1159,29 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         documentData={purchase}
         onDocumentUpdate={setPurchase}
         onClose={onClose}
-        
+
         // Two-step flow
         currentStep={currentStep}
         onStepChange={setCurrentStep}
-        
+
         // Step content
         createContent={createContent}
         reviewContent={reviewContent}
-        
+
         // Additional actions for header
         additionalActions={[]}
-        
+
         // Validation & Actions
         canProceedToReview={() => {
-          return !!selectedSupplier && 
-                 purchase.items && 
-                 purchase.items.length > 0;
+          return !!selectedSupplier &&
+            purchase.items &&
+            purchase.items.length > 0;
         }}
         onSave={handleSavePurchase}
         onPrint={handlePrint}
         isSaving={saving}
         saveLabel="Save Purchase"
-        
+
         // Footer totals
         footerTotals={{
           itemCount: purchase.items?.length || 0,
@@ -1191,7 +1191,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           roundOff: purchase.round_off || 0,
           grandTotal: purchase.final_amount || 0
         }}
-        
+
         // Keyboard shortcuts
         keyboardShortcuts={{
           1: [
@@ -1243,7 +1243,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           isOpen={showPDFUpload}
           onClose={() => setShowPDFUpload(false)}
           onDataExtracted={(data) => {
-            
+
             // Store extracted data and show verification flow
             const extractedPDFData = {
               supplier_name: data.supplier_name || data.vendor_name || '',
@@ -1273,11 +1273,11 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               tax_amount: data.tax_amount || 0,
               final_amount: data.grand_total || data.total_amount || 0
             };
-            
+
             setExtractedPDFData(extractedPDFData);
             setShowPDFUpload(false); // Close PDF upload modal
             setShowVerificationFlow(true); // Show verification flow
-            
+
             toast.success('PDF parsed! Please verify the extracted information.');
           }}
         />
@@ -1342,7 +1342,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               // Editing existing item - replace the entire item
               setPurchase(prev => ({
                 ...prev,
-                items: (prev.items || []).map((item, i) => 
+                items: (prev.items || []).map((item, i) =>
                   i === currentEditItem.index ? updatedItem : item
                 )
               }));

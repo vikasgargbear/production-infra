@@ -41,7 +41,7 @@ async def get_full_sync_data(
                 p.product_name,
                 p.product_code,
                 p.hsn_code,
-                p.category,
+                p.category_id,
                 p.mrp_per_unit as mrp,
                 p.sale_price_per_unit as selling_price,
                 p.gst_percent,

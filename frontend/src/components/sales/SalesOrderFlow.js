@@ -28,7 +28,7 @@ import { challansApi as challansApiModule } from '../../services/api';
 import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 import ImportFromDocumentModal from './components/ImportFromDocumentModal';
-import documentNumberService from '../../services/documentNumberService';
+import documentNumberService from '../../services/offline/documents/documentNumberService';
 
 // Function to convert number to words
 const numberToWords = (num) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, AlertCircle } from 'lucide-react';
-import offlineDB from '../../../services/offline/offlineDatabase';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 
 /**
@@ -14,7 +14,7 @@ const OfflineStockIndicator = () => {
 
   useEffect(() => {
     loadPendingBatches();
-    
+
     // Refresh every 10 seconds
     const interval = setInterval(loadPendingBatches, 10000);
     return () => clearInterval(interval);
@@ -34,20 +34,20 @@ const OfflineStockIndicator = () => {
   }
 
   const totalReserved = pendingBatches.reduce(
-    (sum, batch) => sum + (batch.quantity_reserved_offline || 0), 
+    (sum, batch) => sum + (batch.quantity_reserved_offline || 0),
     0
   );
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      <div 
+      <div
         className={`
           bg-white rounded-lg shadow-lg border-2 p-4 min-w-[280px] max-w-[400px]
           ${isOnline ? 'border-amber-400' : 'border-gray-400'}
         `}
       >
         {/* Header */}
-        <div 
+        <div
           className="flex items-center justify-between cursor-pointer"
           onClick={() => setShowDetails(!showDetails)}
         >
@@ -98,7 +98,7 @@ const OfflineStockIndicator = () => {
             </p>
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {pendingBatches.slice(0, 10).map(batch => (
-                <div 
+                <div
                   key={batch.batch_id}
                   className="flex justify-between text-xs bg-gray-50 p-2 rounded"
                 >

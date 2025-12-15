@@ -32,7 +32,7 @@ import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
-import syncEngine from './services/offline/syncEngine';
+import syncEngine from './services/offline/sync/syncEngine';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // OLD AUTH REMOVED - Now using AuthContext

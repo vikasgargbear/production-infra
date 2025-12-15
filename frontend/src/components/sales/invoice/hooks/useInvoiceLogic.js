@@ -4,10 +4,10 @@ import { searchCache, smartSearch } from '../../../../utils/searchCache';
 import DataTransformer from '../../../../services/dataTransformer';
 import { invoicesApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
-import documentNumberGenerator, { DOC_TYPES } from '../../../../services/documentNumberGenerator';
-import localInvoiceService from '../../../../services/invoice/localInvoiceService';
+import documentNumberGenerator, { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
+import localInvoiceService from '../../../../services/offline/documents/localInvoiceService';
 import { customerAPI, productAPI, employeesAPI } from '../../../../services/api';
-import offlineDB from '../../../../services/offline/offlineDatabase';
+import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { getTodayBusinessDate, getDaysFromToday, getUTCTimestamp } from '../../../../utils/indianDateUtils';
 
@@ -560,7 +560,10 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
             if (!reservation.success) {
               // SPECIAL CASE: If batch is missing from cache, we allow saving
               // This handles cases where sync hasn't completed but user needs to sell
-              if (reservation.error && reservation.error.includes('Batch not found')) {
+              const errorMsg = (reservation.error || '').toLowerCase();
+              console.log('[Invoice] Reservation failed:', reservation.error);
+
+              if (errorMsg.includes('batch not found') || errorMsg.includes('not found in cache')) {
                 console.warn(`[Invoice] Batch ${item.batch_id} missing from offline cache. Proceeding anyway.`);
                 // We still track it, but accept we can't decrement local stock
                 reservationResults.push({

@@ -39,7 +39,7 @@ class InvoiceRepository:
                         b.branch_id,
                         u.user_id,
                         COALESCE(
-                            MAX(CAST(SUBSTRING(o.order_number FROM '[0-9]+') AS INTEGER)), 
+                            MAX(CAST(SUBSTRING(o.order_number FROM '[0-9]+') AS BIGINT)), 
                             0
                         ) + 1 as next_order_num
                     FROM master.org_branches b

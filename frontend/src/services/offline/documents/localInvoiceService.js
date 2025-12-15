@@ -6,7 +6,7 @@
  */
 
 import { openDB } from 'idb';
-import { apiClient } from '../api';
+import { apiClient } from '../../api';
 
 const DB_NAME = 'aaso_invoices';
 const DB_VERSION = 1;
@@ -146,7 +146,7 @@ class LocalInvoiceService {
     const tx = this.db.transaction(SYNC_QUEUE_STORE, 'readwrite');
     const store = tx.objectStore(SYNC_QUEUE_STORE);
     const all = await store.getAll();
-    
+
     for (const item of all) {
       if (item.invoice_number === invoiceNumber) {
         await store.delete(item.id);
@@ -177,7 +177,7 @@ class LocalInvoiceService {
     // INSTANT SYNC when connection is restored
     window.addEventListener('online', async () => {
       if (this.syncInProgress) return;
-      
+
       console.log('🌐 Connection restored - syncing invoices...');
       this.syncInProgress = true;
       try {
@@ -230,9 +230,9 @@ class LocalInvoiceService {
    */
   async getAllInvoices(options = {}) {
     await this.initialize();
-    
+
     const { limit = 50, offset = 0, synced = null } = options;
-    
+
     let invoices;
     if (synced !== null) {
       const index = this.db.transaction(INVOICE_STORE).objectStore(INVOICE_STORE).index('synced');
@@ -252,10 +252,10 @@ class LocalInvoiceService {
    */
   async getSyncStatus() {
     await this.initialize();
-    
+
     const allInvoices = await this.db.getAll(INVOICE_STORE);
     const pending = allInvoices.filter(inv => !inv.synced);
-    
+
     return {
       total: allInvoices.length,
       synced: allInvoices.length - pending.length,
@@ -277,15 +277,15 @@ class LocalInvoiceService {
    */
   async clearOldInvoices() {
     await this.initialize();
-    
+
     const allInvoices = await this.db.getAll(INVOICE_STORE);
     const synced = allInvoices.filter(inv => inv.synced);
-    
+
     // Keep only last 100 synced invoices
     if (synced.length > 100) {
       synced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       const toDelete = synced.slice(0, synced.length - 100);
-      
+
       for (const invoice of toDelete) {
         await this.db.delete(INVOICE_STORE, invoice.invoice_number);
       }

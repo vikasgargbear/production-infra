@@ -5,8 +5,8 @@
  * For companies with poor/no WiFi - sync once, work all day offline
  */
 
-import { apiClient } from '../api';
-import offlineDB from './offlineDatabase';
+import { apiClient } from '../../api';
+import offlineDB from '../core/offlineDatabase';
 import { toast } from 'react-toastify';
 
 class DataSyncService {
@@ -35,13 +35,13 @@ class DataSyncService {
             await offlineDB.init();
 
             console.log('[DataSync] Fetching data from backend...');
-            
+
             // Fetch all data from backend
             const response = await apiClient.get('/sync/full-data');
-            
+
             console.log('[DataSync] Response status:', response.status);
             console.log('[DataSync] Response data:', response.data);
-            
+
             const { products, batches, customers, employees, counts } = response.data;
 
             console.log('[DataSync] Received:', counts);
@@ -54,7 +54,7 @@ class DataSyncService {
                     product_name: p.product_name,
                     product_code: p.product_code,
                     hsn_code: p.hsn_code,
-                    category: p.category,
+                    category_id: p.category_id,
                     mrp: p.mrp,
                     selling_price: p.selling_price,
                     gst_percent: p.gst_percent,
@@ -232,9 +232,9 @@ class DataSyncService {
 // Singleton instance
 const dataSyncService = new DataSyncService();
 
-// Expose for debugging
+export default dataSyncService;
+
+// Expose for debugging (must be after export)
 if (typeof window !== 'undefined') {
     window.dataSyncService = dataSyncService;
 }
-
-export default dataSyncService;

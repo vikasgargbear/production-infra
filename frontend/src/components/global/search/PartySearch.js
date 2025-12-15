@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, User, Building2, MapPin, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { customersApi, suppliersApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
+import localFirstService from '../../../services/offline/cache/localFirstService';
 
-const PartySearch = ({ 
-  onSelect, 
-  placeholder = "Search party...", 
+const PartySearch = ({
+  onSelect,
+  placeholder = "Search party...",
   partyType = "customer", // customer, supplier, or all
   disabled = false,
   value = null,
@@ -22,57 +22,38 @@ const PartySearch = ({
   const loadParties = async (searchQuery = '') => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      let response;
-      
-      if (partyType === 'customer') {
-        response = await customersApi.search({ query: searchQuery });
-      } else if (partyType === 'supplier') {
-        response = await suppliersApi.search({ query: searchQuery });
-      } else {
-        // Load both customer and supplier data
-        const [customersResponse, suppliersResponse] = await Promise.all([
-          customersApi.search({ query: searchQuery }),
-          suppliersApi.search({ query: searchQuery })
-        ]);
-        
-        response = {
-          data: [
-            ...(customersResponse.data || []).map(c => ({ ...c, type: 'customer' })),
-            ...(suppliersResponse.data || []).map(s => ({ ...s, type: 'supplier' }))
-          ]
-        };
+      let results = [];
+
+      if (partyType === 'customer' || partyType === 'all') {
+        // Use localFirstService for unified customer search
+        // This handles local cache + cloud fallback automatically
+        const customers = await localFirstService.searchCustomers(searchQuery, { limit: 20 });
+        results = [...results, ...customers.map(c => ({ ...c, type: 'customer' }))];
       }
-      
-      if (response?.data && Array.isArray(response.data)) {
-        const partiesData = response.data;
-        setParties(partiesData);
-        
-        // Store data offline for future use
-        const storageKey = `parties_${partyType}_${searchQuery || 'all'}`;
-        await offlineStorage.storeOffline(storageKey, partiesData, { 
-          persistent: true 
-        });
-      } else {
-        setParties([]);
+
+      if (partyType === 'supplier' || partyType === 'all') {
+        // Suppliers don't have localFirstService support yet, fallback to API
+        try {
+          const response = await suppliersApi.search({ query: searchQuery });
+          const suppliers = response.data || [];
+          results = [...results, ...suppliers.map(s => ({ ...s, type: 'supplier' }))];
+        } catch (err) {
+          console.warn('Supplier search failed:', err);
+          // Don't fail entire search if only supplier search fails
+        }
+      }
+
+      setParties(results);
+
+      if (results.length === 0 && searchQuery) {
+        // No specific error, just no results
       }
     } catch (error) {
-      
-      // Try to load from offline storage instead of using mock data
-      const storageKey = `parties_${partyType}_${searchQuery || 'all'}`;
-      const offlineData = await offlineStorage.getOffline(storageKey, { persistent: true });
-      
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for party data
-        setParties(offlineData.data);
-        
-        // Show offline indicator
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load party data. Please check your connection and try again.');
-        setParties([]);
-      }
+      console.error('Party search failed:', error);
+      setError('Unable to load party data. Please check your connection.');
+      setParties([]);
     } finally {
       setLoading(false);
     }
@@ -82,7 +63,7 @@ const PartySearch = ({
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       await loadParties(searchTerm);
     } catch (error) {
@@ -98,19 +79,19 @@ const PartySearch = ({
       await loadParties();
       return;
     }
-    
+
     await loadParties(query);
   };
 
   // Handle search input change
   const handleSearchChange = (value) => {
     setSearchTerm(value);
-    
+
     // Debounce search
     const timeoutId = setTimeout(() => {
       searchParties(value);
     }, 300);
-    
+
     return () => clearTimeout(timeoutId);
   };
 
@@ -132,7 +113,7 @@ const PartySearch = ({
   // Get balance text
   const getBalanceText = (balance, partyType) => {
     if (!balance || balance === 0) return '₹0';
-    
+
     const absBalance = Math.abs(balance);
     if (partyType === 'customer') {
       return balance > 0 ? `₹${absBalance.toLocaleString()} Dr` : `₹${absBalance.toLocaleString()} Cr`;
@@ -154,13 +135,15 @@ const PartySearch = ({
   }, [isOpen, partyType]);
 
   // Clear old offline data periodically
+  // REMOVED: offlineStorage cleanup handled by localFirstService internally
+  /*
   useEffect(() => {
     const interval = setInterval(() => {
-      offlineStorage.clearOldData(24); // Clear data older than 24 hours
-    }, 60 * 60 * 1000); // Check every hour
-
+     // ...
+    }, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+  */
 
   // Set initial value
   useEffect(() => {
@@ -183,7 +166,7 @@ const PartySearch = ({
           disabled={disabled}
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
-        
+
         {/* Refresh Button */}
         {isOpen && (
           <button
@@ -204,8 +187,8 @@ const PartySearch = ({
           <div className="p-3 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-gray-900">
-                {partyType === 'all' ? 'All Parties' : 
-                 partyType === 'customer' ? 'Customers' : 'Suppliers'}
+                {partyType === 'all' ? 'All Parties' :
+                  partyType === 'customer' ? 'Customers' : 'Suppliers'}
               </h3>
               <span className="text-xs text-gray-500">
                 {parties.length} found
@@ -249,7 +232,7 @@ const PartySearch = ({
                   {parties.map((party) => {
                     const Icon = getPartyIcon(party.type);
                     const balance = party.balance || party.outstanding_balance || 0;
-                    
+
                     return (
                       <div
                         key={party.id || party.party_id}
@@ -260,14 +243,14 @@ const PartySearch = ({
                           <div className="p-2 bg-gray-100 rounded-lg">
                             <Icon className="w-4 h-4 text-gray-600" />
                           </div>
-                          
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <h4 className="text-sm font-medium text-gray-900 mb-1">
                                   {party.name || party.party_name || 'Unnamed Party'}
                                 </h4>
-                                
+
                                 <div className="flex items-center space-x-4 text-xs text-gray-500 mb-2">
                                   {party.gstin && (
                                     <span className="font-mono">{party.gstin}</span>
@@ -276,19 +259,19 @@ const PartySearch = ({
                                     <span>{party.phone}</span>
                                   )}
                                 </div>
-                                
+
                                 {party.address && (
                                   <div className="flex items-center text-xs text-gray-500 mb-2">
                                     <MapPin className="w-3 h-3 mr-1" />
                                     <span>{party.address}</span>
                                   </div>
                                 )}
-                                
+
                                 <div className="flex items-center justify-between">
                                   <span className={`text-xs font-medium ${getBalanceColor(balance)}`}>
                                     {getBalanceText(balance, party.type)}
                                   </span>
-                                  
+
                                   {party.group && (
                                     <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                                       {party.group}
@@ -320,8 +303,8 @@ const PartySearch = ({
 
       {/* Click outside to close */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => setIsOpen(false)}
         />
       )}

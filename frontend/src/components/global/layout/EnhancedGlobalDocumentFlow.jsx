@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ModuleHeader from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
-import documentNumberService from '../../../services/documentNumberService';
+import documentNumberService from '../../../services/offline/documents/documentNumberService';
 import { useToast } from '../ui/feedback/Toast';
 
 /**
@@ -15,55 +15,55 @@ import { useToast } from '../ui/feedback/Toast';
  * - Universal layout and footer
  * - Progress tracking
  */
-const EnhancedGlobalDocumentFlow = ({ 
+const EnhancedGlobalDocumentFlow = ({
   // Document Configuration
   documentType = 'invoice', // 'invoice', 'purchase', 'challan', 'sales-order', etc.
   title,
   documentData,
   onDocumentUpdate,
-  
+
   // Auto-generation
   autoGenerateNumber = true,
-  
+
   // Header Configuration  
   icon,
   iconColor,
   onClose,
   additionalActions = [],
-  
+
   // Two-Step Flow
   currentStep = 1,
   onStepChange,
-  
+
   // Step 1: Create/Edit Content
   createContent,
-  
+
   // Step 2: Review Content
   reviewContent,
-  
+
   // Validation & Actions
   canProceedToReview,
   onSave,
   onPrint,
   isSaving = false,
   saveLabel, // Custom save button label
-  
+
   // Footer Configuration
   footerTotals = {},
-  
+
   // Layout
   className = '',
   maxWidth = 'max-w-6xl',
-  
+
   // Keyboard Shortcuts (per step)
   keyboardShortcuts = {}
 }) => {
   const toast = useToast();
-  
+
   const [generatedNumber, setGeneratedNumber] = useState('');
   const [localStep, setLocalStep] = useState(currentStep);
   const [isGenerating, setIsGenerating] = useState(false);
-  
+
   // Document type configurations
   const documentConfigs = {
     'invoice': {
@@ -76,7 +76,7 @@ const EnhancedGlobalDocumentFlow = ({
       historyType: 'invoice'
     },
     'purchase': {
-      title: 'Purchase Entry', 
+      title: 'Purchase Entry',
       icon: 'FileText',
       color: 'green',
       prefix: 'PUR',
@@ -122,7 +122,7 @@ const EnhancedGlobalDocumentFlow = ({
     },
     'sales-return': {
       title: 'Sales Return',
-      icon: 'RotateCcw', 
+      icon: 'RotateCcw',
       color: 'red',
       prefix: 'SRN',
       serviceMethod: 'generateSalesReturnNumber',
@@ -153,16 +153,16 @@ const EnhancedGlobalDocumentFlow = ({
   const finalTitle = title || config.title;
   const finalColor = config.color;
   const finalIconColor = iconColor || `text-${config.color}-600`;
-  
+
   // Handle step changes
   const handleStepChange = (newStep) => {
     setLocalStep(newStep);
     onStepChange?.(newStep);
   };
-  
+
   // Auto-generate document number - only once on mount
   const [hasGeneratedNumber, setHasGeneratedNumber] = useState(false);
-  
+
   useEffect(() => {
     // Only generate once when component mounts and conditions are met
     if (autoGenerateNumber && !documentData?.documentNumber && !hasGeneratedNumber) {
@@ -170,10 +170,10 @@ const EnhancedGlobalDocumentFlow = ({
         try {
           setIsGenerating(true);
           setHasGeneratedNumber(true); // Mark as generated to prevent re-runs
-          
+
           const serviceMethod = config.serviceMethod;
           let number = null;
-          
+
           // Try to use the service if it exists
           if (documentNumberService && documentNumberService[serviceMethod]) {
             try {
@@ -182,12 +182,12 @@ const EnhancedGlobalDocumentFlow = ({
               // Service failed, use fallback
             }
           }
-          
+
           // Use fallback if service didn't provide a number
           if (!number) {
             number = `${config.prefix}-${Date.now().toString().slice(-8)}`;
           }
-          
+
           setGeneratedNumber(number);
           if (onDocumentUpdate) {
             onDocumentUpdate(prev => ({ ...prev, documentNumber: number }));
@@ -199,7 +199,7 @@ const EnhancedGlobalDocumentFlow = ({
           setIsGenerating(false);
         }
       };
-      
+
       generateNumber();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,10 +219,10 @@ const EnhancedGlobalDocumentFlow = ({
       { key: 'Esc', action: 'Close' }
     ]
   };
-  
+
   const currentShortcuts = keyboardShortcuts[localStep] || defaultShortcuts[localStep] || [];
   const displayNumber = documentData?.documentNumber || generatedNumber || (isGenerating ? 'Generating...' : `${config.prefix}-DRAFT`);
-  
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -233,7 +233,7 @@ const EnhancedGlobalDocumentFlow = ({
           onSave();
         }
       }
-      
+
       // Ctrl+P - Print (step 2 only)
       if (e.ctrlKey && e.key === 'p' && localStep === 2) {
         e.preventDefault();
@@ -241,7 +241,7 @@ const EnhancedGlobalDocumentFlow = ({
           onPrint();
         }
       }
-      
+
       // Escape - Close or go back
       if (e.key === 'Escape') {
         if (localStep === 2) {
@@ -255,7 +255,7 @@ const EnhancedGlobalDocumentFlow = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [localStep, onSave, onPrint, onClose]);
-  
+
   // Handle proceed to review
   const handleProceedToReview = () => {
     if (canProceedToReview?.() === false) {
@@ -264,7 +264,7 @@ const EnhancedGlobalDocumentFlow = ({
     }
     handleStepChange(2);
   };
-  
+
   // Additional actions for header based on step
   const stepActions = localStep === 2 ? [
     {
@@ -279,7 +279,7 @@ const EnhancedGlobalDocumentFlow = ({
   return (
     <div className={`h-full bg-${finalColor}-50`}>
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Consistent across all modules */}
         <ModuleHeader
           title={finalTitle}
@@ -329,17 +329,17 @@ const EnhancedGlobalDocumentFlow = ({
           />
         ) : (
           <DocumentFooter
-              totalItems={footerTotals.itemCount || 0}
-              subtotalAmount={footerTotals.subtotal || 0}
-              taxAmount={footerTotals.tax || 0}
-              roundOffAmount={footerTotals.roundOff || 0}
-              grandTotal={footerTotals.grandTotal || 0}
-              showActionButtons={true}
-              onPrint={onPrint}
-              onSave={onSave}
-              isSaving={isSaving}
-              saveLabel={config.saveLabel || saveLabel || 'Save'}
-            />
+            totalItems={footerTotals.itemCount || 0}
+            subtotalAmount={footerTotals.subtotal || 0}
+            taxAmount={footerTotals.tax || 0}
+            roundOffAmount={footerTotals.roundOff || 0}
+            grandTotal={footerTotals.grandTotal || 0}
+            showActionButtons={true}
+            onPrint={onPrint}
+            onSave={onSave}
+            isSaving={isSaving}
+            saveLabel={config.saveLabel || saveLabel || 'Save'}
+          />
         )}
 
       </div>

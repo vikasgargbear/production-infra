@@ -1,8 +1,9 @@
 // IndexedDB Service for Offline Storage
 import { openDB } from 'idb';
 
-const DB_NAME = 'PharmaERPOfflineV2'; // Renamed to force fresh creation
-const DB_VERSION = 6;  // Incremented to force schema rebuild and fix missing sync_stats
+const DB_NAME = 'PharmaERPOffline';
+const DB_VERSION = 8;
+const LOG_PREFIX = '[OfflineDB]';
 
 // Sync status enum
 export const SYNC_STATUS = {
@@ -20,6 +21,7 @@ class OfflineDatabase {
 
   async init() {
     if (this.db) return this.db;
+    console.log(`${LOG_PREFIX} Initializing database v${DB_VERSION}...`);
 
     this.db = await openDB(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, newVersion, transaction) {
@@ -122,6 +124,11 @@ class OfflineDatabase {
           });
           numbersStore.createIndex('type', 'type');
           numbersStore.createIndex('used', 'used');
+        }
+
+        // App Cache store (Generic Key-Value for consolidation)
+        if (!db.objectStoreNames.contains('app_cache')) {
+          db.createObjectStore('app_cache', { keyPath: 'key' });
         }
       },
     });
@@ -275,7 +282,8 @@ class OfflineDatabase {
     }
 
     // No preallocated numbers available
-    throw new Error(`No preallocated ${type} numbers available. Please connect to internet to get more.`);
+    console.warn(`${LOG_PREFIX} No preallocated ${type} numbers available`);
+    throw new Error(`No preallocated ${type} numbers available.Please connect to internet to get more.`);
   }
 
   // Search operations
@@ -326,21 +334,84 @@ class OfflineDatabase {
   }
 
   async updateSyncStats(stats) {
+    try {
+      const db = await this.init();
+
+      // Check if store exists before accessing
+      if (!db.objectStoreNames.contains('sync_stats')) {
+        console.warn(`${LOG_PREFIX} sync_stats store not found, skipping update`);
+        return stats;
+      }
+
+      const tx = db.transaction('sync_stats', 'readwrite');
+      const store = tx.objectStore('sync_stats');
+
+      // Build clean object - ensure 'key' is first and only keyPath field
+      const updated = {
+        key: 'current', // inline keyPath
+        ...stats,
+        updated_at: new Date().toISOString()
+      };
+
+      // Use put without second argument (inline key in object)
+      await store.put(updated);
+      await tx.done;
+      return updated;
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} updateSyncStats failed:`, error.message);
+      return stats; // Return input to allow sync to continue
+    }
+  }
+
+  // --- GENERIC APP CACHE (Consolidation Layer) ---
+
+  /**
+   * Store data in generic app cache
+   * @param {string} key - Cache key
+   * @param {any} data - Data to cache
+   */
+  async setCache(key, data) {
     const db = await this.init();
-    const tx = db.transaction('sync_stats', 'readwrite');
-    const store = tx.objectStore('sync_stats');
+    await db.put('app_cache', {
+      key,
+      data,
+      timestamp: Date.now()
+    });
+  }
 
-    const existing = await store.get('current') || {};
-    const updated = {
-      key: 'current',  // REQUIRED: inline key for sync_stats store
-      ...existing,
-      ...stats,
-      updated_at: new Date().toISOString()
-    };
+  /**
+   * Get data from generic app cache
+   * @param {string} key - Cache key
+   * @param {number} maxAgeMinutes - Max age in minutes (optional)
+   * @returns {Promise<any|null>} Cached data or null if missing/stale
+   */
+  async getCache(key, maxAgeMinutes = null) {
+    const db = await this.init();
+    const result = await db.get('app_cache', key);
 
-    await store.put(updated);  // No second param - key is in object
-    await tx.done;  // Use .done not .complete for idb library
-    return updated;
+    if (!result) return null;
+
+    if (maxAgeMinutes) {
+      const age = (Date.now() - result.timestamp) / 1000 / 60;
+      if (age > maxAgeMinutes) {
+        // Auto-delete stale data? Optional.
+        return null;
+      }
+    }
+
+    return result.data;
+  }
+
+  /**
+   * Clear generic app cache
+   */
+  async clearCache(key = null) {
+    const db = await this.init();
+    if (key) {
+      await db.delete('app_cache', key);
+    } else {
+      await db.clear('app_cache');
+    }
   }
 
   async getSyncStats() {
@@ -535,7 +606,7 @@ class OfflineDatabase {
       await tx.done;
       return {
         success: false,
-        error: `Insufficient stock. Available: ${usable} (${reserved} pending sync)`,
+        error: `Insufficient stock.Available: ${usable} (${reserved} pending sync)`,
         availableQuantity: usable,
         reservedQuantity: reserved
       };
