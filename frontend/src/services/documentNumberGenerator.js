@@ -134,34 +134,23 @@ class DocumentNumberGenerator {
    */
   async getNumberFromBackend(docType) {
     try {
-      let endpoint = '';
+      // Use generic documents endpoint for all types
+      const endpoint = `/documents/generate-number?type=${docType}`;
       
-      switch (docType) {
-        case DOC_TYPES.INVOICE:
-          endpoint = '/invoices/generate-number';
-          break;
-        case DOC_TYPES.PURCHASE_ORDER:
-          endpoint = '/purchase-orders/generate-number';
-          break;
-        case DOC_TYPES.DELIVERY_CHALLAN:
-          endpoint = '/delivery-challans/generate-number';
-          break;
-        default:
-          // Fallback to generic endpoint
-          endpoint = `/documents/generate-number?type=${docType}`;
-      }
-
       const response = await apiClient.get(endpoint);
       
-      if (response.data?.number || response.data?.invoice_number || response.data?.po_number) {
-        return response.data.number || response.data.invoice_number || response.data.po_number;
+      if (response.data?.number) {
+        return response.data.number;
       }
     } catch (error) {
       // If 404 or endpoint doesn't exist, return null to use local generation
       if (error.response?.status === 404) {
+        console.warn(`[DocGen] Backend endpoint not available for ${docType}, using local generation`);
         return null;
       }
-      throw error;
+      // Don't throw - fallback to local generation
+      console.warn(`[DocGen] Backend error for ${docType}:`, error.message);
+      return null;
     }
     
     return null;

@@ -5,24 +5,18 @@ import useEscapeKey from '../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
 import EnterpriseCalculator from '../../services/enterpriseCalculator';
-
-// Step Components (will memoize for performance)
 import InvoiceItemsStepBase from './invoice/steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './invoice/steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './invoice/steps/InvoicePreviewStep';
+import { useInvoiceLogic } from './invoice/hooks/useInvoiceLogic';
+import { GenericSuccessModal } from '../global';
+import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
+import Toast from '../common/Toast';
 
 // Memoize expensive step components to prevent unnecessary re-renders
 const InvoiceItemsStep = React.memo(InvoiceItemsStepBase);
 const InvoiceDetailsStep = React.memo(InvoiceDetailsStepBase);
 const InvoicePreviewStep = React.memo(InvoicePreviewStepBase);
-
-// Shared Logic
-import { useInvoiceLogic } from './invoice/hooks/useInvoiceLogic';
-
-// Components
-import { GenericSuccessModal } from '../global';
-import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
-import Toast from '../common/Toast';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo } = useCompany();

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { companyAPI, DEFAULT_COMPANY_INFO } from '../services/api';
+import { companyAPI } from '../services/api';
 
 const CompanyContext = createContext();
 
@@ -12,7 +12,7 @@ export const useCompany = () => {
 };
 
 export const CompanyProvider = ({ children }) => {
-  const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY_INFO);
+  const [companyInfo, setCompanyInfo] = useState(null);
   const [orgId, setOrgId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,13 +43,13 @@ export const CompanyProvider = ({ children }) => {
     try {
       // Load from localStorage first (for offline support)
       const cachedCompanyInfo = {
-        name: localStorage.getItem('companyName') || DEFAULT_COMPANY_INFO.name,
-        address: localStorage.getItem('companyAddress') || DEFAULT_COMPANY_INFO.address,
-        phone: localStorage.getItem('companyPhone') || DEFAULT_COMPANY_INFO.phone,
-        email: localStorage.getItem('companyEmail') || DEFAULT_COMPANY_INFO.email,
-        gst: localStorage.getItem('companyGST') || DEFAULT_COMPANY_INFO.gst,
-        drugLicense: localStorage.getItem('companyDrugLicense') || DEFAULT_COMPANY_INFO.drugLicense,
-        state: localStorage.getItem('companyState') || 'Gujarat',
+        name: localStorage.getItem('companyName') || '',
+        address: localStorage.getItem('companyAddress') || '',
+        phone: localStorage.getItem('companyPhone') || '',
+        email: localStorage.getItem('companyEmail') || '',
+        gst: localStorage.getItem('companyGST') || '',
+        drugLicense: localStorage.getItem('companyDrugLicense') || '',
+        state: localStorage.getItem('companyState') || '',
         logo: localStorage.getItem('companyLogo') || null,
         bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
         paymentQR: localStorage.getItem('companyPaymentQR') || null,
@@ -146,8 +146,19 @@ export const CompanyProvider = ({ children }) => {
       
     } catch (error) {
       setError(error);
-      // Set default values if everything fails
-      setCompanyInfo(DEFAULT_COMPANY_INFO);
+      // Set empty values if everything fails
+      setCompanyInfo({
+        name: '',
+        address: '',
+        phone: '',
+        email: '',
+        gst: '',
+        drugLicense: '',
+        state: '',
+        logo: null,
+        bankAccounts: [],
+        fssaiLicense: null
+      });
     } finally {
       setLoading(false);
     }
