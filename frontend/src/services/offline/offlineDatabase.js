@@ -43,8 +43,8 @@ class OfflineDatabase {
 
         // Invoices store
         if (!db.objectStoreNames.contains('invoices')) {
-          const invoiceStore = db.createObjectStore('invoices', { 
-            keyPath: 'temp_id' 
+          const invoiceStore = db.createObjectStore('invoices', {
+            keyPath: 'temp_id'
           });
           invoiceStore.createIndex('invoice_number', 'invoice_number');
           invoiceStore.createIndex('customer_id', 'customer_id');
@@ -55,8 +55,8 @@ class OfflineDatabase {
 
         // Sales Orders store
         if (!db.objectStoreNames.contains('sales_orders')) {
-          const orderStore = db.createObjectStore('sales_orders', { 
-            keyPath: 'temp_id' 
+          const orderStore = db.createObjectStore('sales_orders', {
+            keyPath: 'temp_id'
           });
           orderStore.createIndex('order_number', 'order_number');
           orderStore.createIndex('customer_id', 'customer_id');
@@ -66,8 +66,8 @@ class OfflineDatabase {
 
         // Payments store
         if (!db.objectStoreNames.contains('payments')) {
-          const paymentStore = db.createObjectStore('payments', { 
-            keyPath: 'temp_id' 
+          const paymentStore = db.createObjectStore('payments', {
+            keyPath: 'temp_id'
           });
           paymentStore.createIndex('invoice_id', 'invoice_id');
           paymentStore.createIndex('customer_id', 'customer_id');
@@ -77,9 +77,9 @@ class OfflineDatabase {
 
         // Sync Queue store
         if (!db.objectStoreNames.contains('sync_queue')) {
-          const queueStore = db.createObjectStore('sync_queue', { 
+          const queueStore = db.createObjectStore('sync_queue', {
             keyPath: 'id',
-            autoIncrement: true 
+            autoIncrement: true
           });
           queueStore.createIndex('entity_type', 'entity_type');
           queueStore.createIndex('entity_id', 'entity_id');
@@ -104,9 +104,9 @@ class OfflineDatabase {
 
         // Preallocated Numbers store
         if (!db.objectStoreNames.contains('preallocated_numbers')) {
-          const numbersStore = db.createObjectStore('preallocated_numbers', { 
+          const numbersStore = db.createObjectStore('preallocated_numbers', {
             keyPath: 'id',
-            autoIncrement: true 
+            autoIncrement: true
           });
           numbersStore.createIndex('type', 'type');
           numbersStore.createIndex('used', 'used');
@@ -122,7 +122,7 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    
+
     // Add metadata
     const enrichedData = {
       ...data,
@@ -131,15 +131,15 @@ class OfflineDatabase {
       updated_at: new Date().toISOString(),
       created_offline: !navigator.onLine
     };
-    
+
     const id = await store.add(enrichedData);
     await tx.complete;
-    
+
     // Add to sync queue if offline
     if (!navigator.onLine) {
       await this.addToSyncQueue(storeName, id, 'create');
     }
-    
+
     return id;
   }
 
@@ -150,12 +150,12 @@ class OfflineDatabase {
 
   async getAll(storeName, indexName = null, query = null) {
     const db = await this.init();
-    
+
     if (indexName && query) {
       const index = db.transaction(storeName).store.index(indexName);
       return index.getAll(query);
     }
-    
+
     return db.getAll(storeName);
   }
 
@@ -163,21 +163,21 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    
+
     // Update metadata
     const updatedData = {
       ...data,
       updated_at: new Date().toISOString()
     };
-    
+
     await store.put(updatedData);
     await tx.complete;
-    
+
     // Add to sync queue if offline
     if (!navigator.onLine) {
       await this.addToSyncQueue(storeName, data.id || data.temp_id, 'update');
     }
-    
+
     return updatedData;
   }
 
@@ -185,10 +185,10 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    
+
     await store.delete(key);
     await tx.complete;
-    
+
     // Add to sync queue if offline
     if (!navigator.onLine) {
       await this.addToSyncQueue(storeName, key, 'delete');
@@ -196,19 +196,20 @@ class OfflineDatabase {
   }
 
   // Sync Queue Management
-  async addToSyncQueue(entityType, entityId, action) {
+  async addToSyncQueue(entityType, entityId, action, data = null) {
     const db = await this.init();
     const tx = db.transaction('sync_queue', 'readwrite');
     const store = tx.objectStore('sync_queue');
-    
+
     await store.add({
       entity_type: entityType,
       entity_id: entityId,
       action: action,
+      data: data, // Include actual data for SyncEngine
       created_at: new Date().toISOString(),
       attempts: 0
     });
-    
+
     await tx.complete;
   }
 
@@ -217,17 +218,17 @@ class OfflineDatabase {
     return db.getAll('sync_queue');
   }
 
-  // async removeFromSyncQueue(id) {
-  //   const db = await this.init();
-  //   return db.delete('sync_queue', id);
-  // }
+  async removeFromSyncQueue(id) {
+    const db = await this.init();
+    return db.delete('sync_queue', id);
+  }
 
   // Preallocated Numbers Management
   async addPreallocatedNumbers(type, numbers) {
     const db = await this.init();
     const tx = db.transaction('preallocated_numbers', 'readwrite');
     const store = tx.objectStore('preallocated_numbers');
-    
+
     for (const number of numbers) {
       await store.add({
         type: type,
@@ -236,7 +237,7 @@ class OfflineDatabase {
         allocated_at: new Date().toISOString()
       });
     }
-    
+
     await tx.complete;
   }
 
@@ -245,10 +246,10 @@ class OfflineDatabase {
     const tx = db.transaction('preallocated_numbers', 'readwrite');
     const store = tx.objectStore('preallocated_numbers');
     const index = store.index('type');
-    
+
     // Get first unused number of this type
     const cursor = await index.openCursor(IDBKeyRange.only(type));
-    
+
     while (cursor) {
       if (!cursor.value.used) {
         // Mark as used
@@ -260,7 +261,7 @@ class OfflineDatabase {
       }
       await cursor.continue();
     }
-    
+
     // No preallocated numbers available
     throw new Error(`No preallocated ${type} numbers available. Please connect to internet to get more.`);
   }
@@ -269,9 +270,9 @@ class OfflineDatabase {
   async searchCustomers(query) {
     const db = await this.init();
     const allCustomers = await db.getAll('customers');
-    
+
     const searchTerm = query.toLowerCase();
-    return allCustomers.filter(customer => 
+    return allCustomers.filter(customer =>
       customer.name?.toLowerCase().includes(searchTerm) ||
       customer.phone?.includes(searchTerm) ||
       customer.email?.toLowerCase().includes(searchTerm)
@@ -281,9 +282,9 @@ class OfflineDatabase {
   async searchProducts(query) {
     const db = await this.init();
     const allProducts = await db.getAll('products');
-    
+
     const searchTerm = query.toLowerCase();
-    return allProducts.filter(product => 
+    return allProducts.filter(product =>
       product.name?.toLowerCase().includes(searchTerm) ||
       product.sku?.toLowerCase().includes(searchTerm) ||
       product.barcode?.includes(searchTerm)
@@ -316,14 +317,14 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('sync_stats', 'readwrite');
     const store = tx.objectStore('sync_stats');
-    
+
     const existing = await store.get('current') || {};
     const updated = {
       ...existing,
       ...stats,
       updated_at: new Date().toISOString()
     };
-    
+
     await store.put(updated, 'current');
     await tx.complete;
     return updated;
@@ -332,14 +333,14 @@ class OfflineDatabase {
   async getSyncStats() {
     const db = await this.init();
     const stats = await db.get('sync_stats', 'current') || {};
-    
+
     // Count pending items
     const syncQueue = await this.getSyncQueue();
     const pending = syncQueue.filter(item => item.sync_status === SYNC_STATUS.PENDING).length;
     const syncing = syncQueue.filter(item => item.sync_status === SYNC_STATUS.SYNCING).length;
     const failed = syncQueue.filter(item => item.sync_status === SYNC_STATUS.FAILED).length;
     const conflict = syncQueue.filter(item => item.sync_status === SYNC_STATUS.CONFLICT).length;
-    
+
     return {
       pending,
       syncing,
@@ -361,25 +362,25 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    
+
     // Find item by local ID
     const items = await store.getAll();
     const item = items.find(i => i._localId === localId);
-    
+
     if (item) {
       // Update with server ID
-      const idField = storeName === 'invoices' ? 'invoice_id' : 
-                     storeName === 'customers' ? 'customer_id' :
-                     storeName === 'products' ? 'product_id' : 'id';
-      
+      const idField = storeName === 'invoices' ? 'invoice_id' :
+        storeName === 'customers' ? 'customer_id' :
+          storeName === 'products' ? 'product_id' : 'id';
+
       item[idField] = serverId;
       item.sync_status = SYNC_STATUS.SYNCED;
       item.synced_at = new Date().toISOString();
       delete item._localId;
-      
+
       await store.put(item);
     }
-    
+
     await tx.complete;
   }
 
@@ -388,7 +389,7 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    
+
     for (const item of data) {
       await store.put({
         ...item,
@@ -396,7 +397,7 @@ class OfflineDatabase {
         updated_at: new Date().toISOString()
       });
     }
-    
+
     await tx.complete;
   }
 
@@ -404,7 +405,7 @@ class OfflineDatabase {
   async clearAll() {
     const db = await this.init();
     const storeNames = ['customers', 'products', 'invoices', 'sales_orders', 'payments', 'sync_queue', 'batches'];
-    
+
     for (const storeName of storeNames) {
       const tx = db.transaction(storeName, 'readwrite');
       await tx.objectStore(storeName).clear();
@@ -413,7 +414,7 @@ class OfflineDatabase {
   }
 
   // ====== BATCH OPERATIONS (for offline-first batch selection) ======
-  
+
   /**
    * Get batches for a specific product (fast IndexedDB lookup)
    * @param {string|number} productId - Product ID
@@ -423,10 +424,10 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('batches', 'readonly');
     const index = tx.objectStore('batches').index('product_id');
-    
+
     // Get all batches for this product
     const batches = await index.getAll(String(productId));
-    
+
     return batches || [];
   }
 
@@ -436,25 +437,25 @@ class OfflineDatabase {
    */
   async storeBatches(batches) {
     if (!Array.isArray(batches) || batches.length === 0) return;
-    
+
     const db = await this.init();
     const tx = db.transaction('batches', 'readwrite');
     const store = tx.objectStore('batches');
-    
+
     const timestamp = new Date().toISOString();
-    
+
     for (const batch of batches) {
       // Preserve existing reserved quantity if batch already exists
       const existingBatch = await store.get(batch.batch_id);
       const reservedOffline = existingBatch?.quantity_reserved_offline || 0;
-      
+
       await store.put({
         ...batch,
         quantity_reserved_offline: reservedOffline, // Track offline usage
         updated_at: timestamp  // Track when cached
       });
     }
-    
+
     await tx.done;
   }
 
@@ -467,15 +468,15 @@ class OfflineDatabase {
     const tx = db.transaction('batches', 'readwrite');
     const index = tx.objectStore('batches').index('product_id');
     const store = tx.objectStore('batches');
-    
+
     // Get all batches for this product
     const batches = await index.getAll(String(productId));
-    
+
     // Delete each batch
     for (const batch of batches) {
       await store.delete(batch.batch_id);
     }
-    
+
     await tx.done;
   }
 
@@ -499,36 +500,36 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('batches', 'readwrite');
     const store = tx.objectStore('batches');
-    
+
     const batch = await store.get(String(batchId));
-    
+
     if (!batch) {
       await tx.done;
       return { success: false, error: 'Batch not found in cache', availableQuantity: 0 };
     }
-    
+
     // Calculate usable quantity
     const reserved = batch.quantity_reserved_offline || 0;
     const available = batch.quantity_available || 0;
     const usable = available - reserved;
-    
+
     if (usable < quantity) {
       await tx.done;
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: `Insufficient stock. Available: ${usable} (${reserved} pending sync)`,
         availableQuantity: usable,
         reservedQuantity: reserved
       };
     }
-    
+
     // Reserve the quantity
     batch.quantity_reserved_offline = reserved + quantity;
     await store.put(batch);
     await tx.done;
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       availableQuantity: usable - quantity,
       newReserved: batch.quantity_reserved_offline
     };
@@ -543,15 +544,15 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('batches', 'readwrite');
     const store = tx.objectStore('batches');
-    
+
     const batch = await store.get(String(batchId));
-    
+
     if (batch) {
       const currentReserved = batch.quantity_reserved_offline || 0;
       batch.quantity_reserved_offline = Math.max(0, currentReserved - quantity);
       await store.put(batch);
     }
-    
+
     await tx.done;
   }
 
@@ -564,15 +565,15 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('batches', 'readwrite');
     const store = tx.objectStore('batches');
-    
+
     const batch = await store.get(String(batchId));
-    
+
     if (batch) {
       batch.quantity_available = newQuantity;
       batch.updated_at = new Date().toISOString();
       await store.put(batch);
     }
-    
+
     await tx.done;
   }
 
@@ -585,18 +586,18 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('batches', 'readonly');
     const store = tx.objectStore('batches');
-    
+
     const batch = await store.get(String(batchId));
     await tx.done;
-    
+
     if (!batch) {
       return { available: 0, reserved: 0, usable: 0 };
     }
-    
+
     const available = batch.quantity_available || 0;
     const reserved = batch.quantity_reserved_offline || 0;
     const usable = available - reserved;
-    
+
     return { available, reserved, usable };
   }
 
@@ -607,8 +608,8 @@ class OfflineDatabase {
   async getBatchesWithReservations() {
     const db = await this.init();
     const batches = await db.getAll('batches');
-    
-    return batches.filter(batch => 
+
+    return batches.filter(batch =>
       batch.quantity_reserved_offline && batch.quantity_reserved_offline > 0
     );
   }
@@ -623,9 +624,9 @@ class OfflineDatabase {
       failed: 0,
       conflict: 0
     };
-    
+
     const storeNames = ['invoices', 'sales_orders', 'payments'];
-    
+
     for (const storeName of storeNames) {
       const items = await db.getAll(storeName);
       items.forEach(item => {
@@ -634,10 +635,10 @@ class OfflineDatabase {
         }
       });
     }
-    
+
     const queueItems = await db.getAll('sync_queue');
     stats.pending += queueItems.length;
-    
+
     return stats;
   }
 }

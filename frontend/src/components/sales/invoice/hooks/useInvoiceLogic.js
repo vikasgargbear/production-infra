@@ -564,14 +564,21 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false); // false = don't try backend
 
         // STEP 4: Save to IndexedDB with reservation tracking
-        await offlineDB.add('invoices', {
+        const offlineInvoice = {
           ...invoiceData,
           invoice_no: offlineInvoiceNo, // Use offline-generated number
           temp_id: tempId,
+          _localId: tempId, // For SyncEngine to track
           sync_status: 'pending',
           created_offline: true,
           reserved_batches: reservationResults // Track what we reserved
-        });
+        };
+
+        await offlineDB.add('invoices', offlineInvoice);
+
+        // STEP 5: Add to sync queue for auto-sync when back online
+        await offlineDB.addToSyncQueue('invoices', tempId, 'create', offlineInvoice);
+        console.log('[Invoice] Added to sync queue for auto-sync');
 
         // Show offline success message
         toast.success('✅ Invoice saved offline - Will sync when online', {

@@ -32,6 +32,7 @@ import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import syncEngine from './services/offline/syncEngine';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // OLD AUTH REMOVED - Now using AuthContext
@@ -56,7 +57,7 @@ const AccountingLedgers = lazy(() => import('./components/AccountingLedgers'));
 // const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
 
 // Define types for better TypeScript support
-type TabName = 
+type TabName =
   | 'home'
   | 'sales'
   | 'purchase'
@@ -153,6 +154,20 @@ const AppContent = (): JSX.Element => {
     // OLD AUTH CODE REMOVED
     // AuthContext automatically initializes from token on mount
 
+    // OFFLINE SYNC: Start auto-sync when app loads
+    if (navigator.onLine) {
+      console.log('🔄 [SyncEngine] Starting auto-sync (30s interval)');
+      syncEngine.startAutoSync(30000); // Every 30 seconds
+    }
+
+    // OFFLINE SYNC: Trigger sync when coming back online
+    const handleOnline = () => {
+      console.log('🌐 [SyncEngine] Back online - triggering sync');
+      syncEngine.forceSync();
+    };
+
+    window.addEventListener('online', handleOnline);
+
     // Listen for navigation events from Settings buttons
     const handleNavigate = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -162,7 +177,12 @@ const AppContent = (): JSX.Element => {
     };
 
     window.addEventListener('navigate', handleNavigate as EventListener);
-    return () => window.removeEventListener('navigate', handleNavigate as EventListener);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('navigate', handleNavigate as EventListener);
+      syncEngine.stopAutoSync();
+    };
   }, []);
 
   // Component renderer - removed useCallback to reduce input lag
@@ -279,10 +299,10 @@ const AppContent = (): JSX.Element => {
                 <ToastContainer position="top-right" />
               </div>
             </ErrorBoundary>
-            </ToastProvider>
-          </EscapeKeyProvider>
-        </CompanyProvider>
-      </QueryClientProvider>
+          </ToastProvider>
+        </EscapeKeyProvider>
+      </CompanyProvider>
+    </QueryClientProvider>
   );
 };
 
