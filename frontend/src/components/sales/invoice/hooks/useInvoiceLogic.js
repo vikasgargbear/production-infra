@@ -558,9 +558,24 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
             );
 
             if (!reservation.success) {
-              // Rollback previous reservations
+              // SPECIAL CASE: If batch is missing from cache, we allow saving
+              // This handles cases where sync hasn't completed but user needs to sell
+              if (reservation.error && reservation.error.includes('Batch not found')) {
+                console.warn(`[Invoice] Batch ${item.batch_id} missing from offline cache. Proceeding anyway.`);
+                // We still track it, but accept we can't decrement local stock
+                reservationResults.push({
+                  batch_id: item.batch_id,
+                  quantity: parseFloat(item.quantity) || 0,
+                  skipped_validation: true
+                });
+                continue; // Proceed to next item
+              }
+
+              // Rollback previous reservations for REAL stock errors
               for (const prevResult of reservationResults) {
-                await offlineDB.clearReservedQuantity(prevResult.batch_id, prevResult.quantity);
+                if (!prevResult.skipped_validation) {
+                  await offlineDB.clearReservedQuantity(prevResult.batch_id, prevResult.quantity);
+                }
               }
 
               // Show error and stop invoice creation
