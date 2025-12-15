@@ -48,7 +48,7 @@ async def get_full_sync_data(
                 p.is_active,
                 COALESCE(SUM(ib.quantity_available), 0) as current_stock
             FROM inventory.products p
-            LEFT JOIN inventory.inventory_batches ib ON p.product_id = ib.product_id
+            LEFT JOIN inventory.batches ib ON p.product_id = ib.product_id
             WHERE p.org_id = :org_id AND p.is_active = true
             GROUP BY p.product_id
             ORDER BY p.product_name
@@ -70,7 +70,7 @@ async def get_full_sync_data(
                 ib.mrp,
                 ib.selling_price,
                 ib.cost_per_unit
-            FROM inventory.inventory_batches ib
+            FROM inventory.batches ib
             JOIN inventory.products p ON ib.product_id = p.product_id
             WHERE p.org_id = :org_id 
               AND ib.quantity_available > 0

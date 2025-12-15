@@ -332,13 +332,14 @@ class OfflineDatabase {
 
     const existing = await store.get('current') || {};
     const updated = {
+      key: 'current',  // REQUIRED: inline key for sync_stats store
       ...existing,
       ...stats,
       updated_at: new Date().toISOString()
     };
 
-    await store.put(updated, 'current');
-    await tx.complete;
+    await store.put(updated);  // No second param - key is in object
+    await tx.done;  // Use .done not .complete for idb library
     return updated;
   }
 
