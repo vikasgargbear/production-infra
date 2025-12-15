@@ -35,6 +35,7 @@ async def get_full_sync_data(
     
     try:
         # Get products with current stock
+        # Column names match inventory.products table schema
         products_result = db.execute(text("""
             SELECT 
                 p.product_id,
@@ -42,8 +43,8 @@ async def get_full_sync_data(
                 p.product_code,
                 p.hsn_code,
                 p.category_id,
-                p.mrp_per_unit as mrp,
-                p.sale_price_per_unit as selling_price,
+                p.mrp,
+                p.sale_price as selling_price,
                 p.gst_percent,
                 p.is_active,
                 COALESCE(SUM(ib.quantity_available), 0) as current_stock
