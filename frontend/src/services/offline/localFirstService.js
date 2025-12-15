@@ -27,16 +27,16 @@ class LocalFirstService {
     try {
       console.log('[LocalFirst] Initializing service...');
       await offlineDB.init();
-      
+
       // Check if we need initial seed
       const products = await offlineDB.getAll('products');
       const customers = await offlineDB.getAll('customers');
-      
+
       console.log('[LocalFirst] Current cache - Products:', products.length, 'Customers:', customers.length);
-      
+
       // Only seed if both are empty (first time) or if cache is stale
       const needsSeed = products.length === 0 || customers.length === 0;
-      
+
       if (needsSeed) {
         console.log('[LocalFirst] Cache empty, attempting to seed from API...');
         // Don't await - let it seed in background, app will fallback to cloud search
@@ -46,12 +46,12 @@ class LocalFirstService {
       } else {
         console.log('[LocalFirst] Using existing cache');
       }
-      
+
       this.initialized = true;
-      
+
       // Start background sync
       this.startBackgroundSync();
-      
+
       console.log('[LocalFirst] Service initialized successfully');
     } catch (error) {
       console.error('[LocalFirst] Failed to initialize LocalFirstService:', error);
@@ -66,14 +66,14 @@ class LocalFirstService {
   async seedInitialData() {
     try {
       console.log('[LocalFirst] Seeding initial data...');
-      
+
       // Fetch products - with error handling for auth issues
       try {
-        const productsResponse = await productAPI.list({ limit: 1000 });
+        const productsResponse = await productAPI.list({ limit: 100 });
         const products = productsResponse?.data || productsResponse || [];
-        
+
         console.log('[LocalFirst] Fetched products from cloud:', products.length);
-        
+
         if (products.length > 0) {
           // Transform products to include search fields
           const transformedProducts = products.map(p => ({
@@ -95,7 +95,7 @@ class LocalFirstService {
             _search_code: (p.product_code || p.code || p.sku || '').toLowerCase(),
             _search_hsn: (p.hsn_code || p.hsn || '').toLowerCase(),
           }));
-          
+
           await offlineDB.bulkLoad('products', transformedProducts);
           console.log(`[LocalFirst] Seeded ${transformedProducts.length} products`);
         }
@@ -103,13 +103,13 @@ class LocalFirstService {
         console.error('[LocalFirst] Failed to fetch products - might be auth issue:', error.message);
         // Don't throw - continue with customers
       }
-      
+
       // Fetch customers - with error handling for auth issues
       try {
         console.log('[LocalFirst] Fetching customers from cloud...');
-        const customersResponse = await customersApi.getAll({ limit: 1000 });
+        const customersResponse = await customersApi.getAll({ limit: 100 });
         console.log('[LocalFirst] Raw customers response:', customersResponse);
-        
+
         // Handle different response structures
         let customers = [];
         if (customersResponse?.data?.customers) {
@@ -121,9 +121,9 @@ class LocalFirstService {
         } else if (Array.isArray(customersResponse)) {
           customers = customersResponse;
         }
-        
+
         console.log('[LocalFirst] Fetched customers from cloud:', customers.length);
-        
+
         if (customers.length > 0) {
           // Transform customers to include search fields  
           const transformedCustomers = customers.map(c => ({
@@ -155,7 +155,7 @@ class LocalFirstService {
             _search_phone: (c.phone || c.phone_number || c.primary_phone || '').replace(/\D/g, ''),
             _search_gst: (c.gst_number || c.gstin || '').toLowerCase(),
           }));
-          
+
           await offlineDB.bulkLoad('customers', transformedCustomers);
           console.log(`[LocalFirst] Seeded ${transformedCustomers.length} customers to IndexedDB`);
         }
@@ -163,7 +163,7 @@ class LocalFirstService {
         console.error('[LocalFirst] Failed to fetch customers - might be auth issue:', error.message);
         // Don't throw - allow app to continue with cloud-only search
       }
-      
+
       this.lastSyncTime = Date.now();
       this.notifySyncListeners({ status: 'seeded', timestamp: this.lastSyncTime });
       console.log('[LocalFirst] Initial seed completed (some data may have failed due to auth)');
@@ -179,24 +179,24 @@ class LocalFirstService {
    */
   async searchProducts(query, options = {}) {
     const { limit = 20, forceCloud = false } = options;
-    
+
     // Ensure initialized
     await this.initialize();
-    
+
     if (!query || query.length < 2) {
       return [];
     }
-    
+
     const searchTerm = query.toLowerCase();
-    
+
     // Try local search first (instant) - but don't let it block cloud fallback
     if (!forceCloud) {
       try {
         const allProducts = await offlineDB.getAll('products');
-        
+
         if (allProducts.length > 0) {
           console.log('[LocalFirst] Searching', allProducts.length, 'local products for:', query);
-          
+
           // Multi-field fuzzy search
           const matches = allProducts.filter(product => {
             return (
@@ -207,7 +207,7 @@ class LocalFirstService {
               (product.sku?.toLowerCase().includes(searchTerm) || false)
             );
           });
-          
+
           // Sort by relevance (exact matches first)
           matches.sort((a, b) => {
             const aExact = a._search_name === searchTerm || a._search_code === searchTerm;
@@ -216,17 +216,17 @@ class LocalFirstService {
             if (!aExact && bExact) return 1;
             return 0;
           });
-          
+
           const results = matches.slice(0, limit);
-          
+
           // If we have local results, return them instantly
           if (results.length > 0) {
             console.log('[LocalFirst] Returning', results.length, 'local product results');
             // Trigger background cloud search to update cache
-            this.backgroundCloudSearch('products', query).catch(() => {});
+            this.backgroundCloudSearch('products', query).catch(() => { });
             return results;
           }
-          
+
           console.log('[LocalFirst] No local products matched, falling back to cloud');
         } else {
           console.log('[LocalFirst] No local products cached, using cloud search');
@@ -235,7 +235,7 @@ class LocalFirstService {
         console.error('[LocalFirst] Local product search failed:', error);
       }
     }
-    
+
     // Fallback to cloud search
     console.log('[LocalFirst] Using cloud search for products:', query);
     return this.cloudSearchProducts(query, limit);
@@ -246,25 +246,25 @@ class LocalFirstService {
    */
   async searchCustomers(query, options = {}) {
     const { limit = 20, forceCloud = false } = options;
-    
+
     // Ensure initialized
     await this.initialize();
-    
+
     if (!query || query.length < 2) {
       return [];
     }
-    
+
     const searchTerm = query.toLowerCase();
     const phoneDigits = query.replace(/\D/g, '');
-    
+
     // Try local search first (instant) - but don't let it block cloud fallback
     if (!forceCloud) {
       try {
         const allCustomers = await offlineDB.getAll('customers');
-        
+
         if (allCustomers.length > 0) {
           console.log('[LocalFirst] Searching', allCustomers.length, 'local customers for:', query);
-          
+
           // Multi-field fuzzy search
           const matches = allCustomers.filter(customer => {
             // Only check fields if the search term is meaningful
@@ -273,14 +273,14 @@ class LocalFirstService {
             const gstMatch = customer._search_gst?.includes(searchTerm) || false;
             const nameDirectMatch = customer.name?.toLowerCase().includes(searchTerm) || false;
             const emailMatch = customer.email?.toLowerCase().includes(searchTerm) || false;
-            
+
             const isMatch = nameMatch || phoneMatch || gstMatch || nameDirectMatch || emailMatch;
-            
+
             return isMatch;
           });
-          
+
           console.log('[LocalFirst] Customer search - matches found:', matches.length);
-          
+
           // Sort by relevance
           matches.sort((a, b) => {
             const aExact = a._search_name === searchTerm || a._search_phone === phoneDigits;
@@ -289,17 +289,17 @@ class LocalFirstService {
             if (!aExact && bExact) return 1;
             return 0;
           });
-          
+
           const results = matches.slice(0, limit);
-          
+
           // If we have local results, return them instantly
           if (results.length > 0) {
             console.log('[LocalFirst] Returning', results.length, 'local customer results');
             // Trigger background cloud search to update cache
-            this.backgroundCloudSearch('customers', query).catch(() => {});
+            this.backgroundCloudSearch('customers', query).catch(() => { });
             return results;
           }
-          
+
           console.log('[LocalFirst] No local customers matched, falling back to cloud');
         } else {
           console.log('[LocalFirst] No local customers cached, using cloud search');
@@ -308,7 +308,7 @@ class LocalFirstService {
         console.error('[LocalFirst] Local customer search failed:', error);
       }
     }
-    
+
     // Fallback to cloud search
     console.log('[LocalFirst] Using cloud search for customers:', query);
     return this.cloudSearchCustomers(query, limit);
@@ -322,14 +322,14 @@ class LocalFirstService {
       console.log('[LocalFirst] Searching products via cloud API, query:', query);
       const response = await productAPI.search(query, { limit });
       const results = response?.data || response || [];
-      
+
       console.log('[LocalFirst] Cloud product search returned:', results.length, 'results');
-      
+
       // Update local cache in background
       if (results.length > 0) {
-        this.updateLocalCache('products', results).catch(() => {});
+        this.updateLocalCache('products', results).catch(() => { });
       }
-      
+
       return results;
     } catch (error) {
       console.error('[LocalFirst] Cloud product search failed:', error.message, error);
@@ -346,7 +346,7 @@ class LocalFirstService {
       console.log('[LocalFirst] Calling cloud API for customers, query:', query);
       const response = await customersApi.search(query, { limit });
       console.log('[LocalFirst] Cloud API response:', response);
-      
+
       // Handle different response structures
       let results = [];
       if (response?.data?.customers) {
@@ -358,14 +358,14 @@ class LocalFirstService {
       } else if (Array.isArray(response)) {
         results = response;
       }
-      
+
       console.log('[LocalFirst] Extracted customer results:', results.length);
-      
+
       // Update local cache in background
       if (results.length > 0) {
-        this.updateLocalCache('customers', results).catch(() => {});
+        this.updateLocalCache('customers', results).catch(() => { });
       }
-      
+
       return results;
     } catch (error) {
       console.error('[LocalFirst] Cloud customer search failed:', error.message, error);
@@ -392,7 +392,7 @@ class LocalFirstService {
     try {
       for (const item of items) {
         let transformed;
-        
+
         if (storeName === 'products') {
           transformed = {
             id: item.product_id || item.id,
@@ -430,7 +430,7 @@ class LocalFirstService {
             _search_gst: (item.gst_number || item.gstin || '').toLowerCase(),
           };
         }
-        
+
         if (transformed) {
           await offlineDB.update(storeName, transformed);
         }
@@ -457,36 +457,36 @@ class LocalFirstService {
    */
   async syncInBackground() {
     if (this.syncing) return;
-    
+
     this.syncing = true;
     this.notifySyncListeners({ status: 'syncing' });
-    
+
     try {
       // Fetch latest products
-      const productsResponse = await productAPI.list({ 
-        limit: 1000,
+      const productsResponse = await productAPI.list({
+        limit: 100,
         updated_since: this.lastSyncTime ? new Date(this.lastSyncTime).toISOString() : undefined
       });
       const products = productsResponse?.data || productsResponse || [];
-      
+
       if (products.length > 0) {
         await this.updateLocalCache('products', products);
       }
-      
+
       // Fetch latest customers
-      const customersResponse = await customersApi.getAll({ 
-        limit: 1000,
+      const customersResponse = await customersApi.getAll({
+        limit: 100,
         updated_since: this.lastSyncTime ? new Date(this.lastSyncTime).toISOString() : undefined
       });
       const customers = customersResponse?.data || customersResponse || [];
-      
+
       if (customers.length > 0) {
         await this.updateLocalCache('customers', customers);
       }
-      
+
       this.lastSyncTime = Date.now();
-      this.notifySyncListeners({ 
-        status: 'synced', 
+      this.notifySyncListeners({
+        status: 'synced',
         timestamp: this.lastSyncTime,
         productsUpdated: products.length,
         customersUpdated: customers.length
@@ -523,7 +523,7 @@ class LocalFirstService {
    */
   onSyncStatusChange(callback) {
     this.syncListeners.add(callback);
-    
+
     // Return unsubscribe function
     return () => {
       this.syncListeners.delete(callback);
