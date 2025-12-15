@@ -2,7 +2,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 4;  // Incremented for employees store
+const DB_VERSION = 5;  // Incremented to force schema rebuild
 
 // Sync status enum
 export const SYNC_STATUS = {
