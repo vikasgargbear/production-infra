@@ -445,18 +445,23 @@ class OfflineDatabase {
     const timestamp = new Date().toISOString();
 
     for (const batch of batches) {
+      // IMPORTANT: Convert batch_id to string for consistent key lookup
+      const batchId = String(batch.batch_id);
+
       // Preserve existing reserved quantity if batch already exists
-      const existingBatch = await store.get(batch.batch_id);
+      const existingBatch = await store.get(batchId);
       const reservedOffline = existingBatch?.quantity_reserved_offline || 0;
 
       await store.put({
         ...batch,
+        batch_id: batchId,  // Store as string for consistent lookup
         quantity_reserved_offline: reservedOffline, // Track offline usage
         updated_at: timestamp  // Track when cached
       });
     }
 
     await tx.done;
+    console.log(`[OfflineDB] Stored ${batches.length} batches in IndexedDB`);
   }
 
   /**
