@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from typing import Dict, Any
 import logging
 
+from ....core.database import get_db  # Regular session for auth (no tenant context yet)
 from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....services.auth import (
     AuthService,
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login(
     request_data: LoginRequest,
     req: Request,
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db = Depends(get_db)  # Regular session - no tenant context before auth
 ):
     """
     Authenticate user and return JWT tokens
