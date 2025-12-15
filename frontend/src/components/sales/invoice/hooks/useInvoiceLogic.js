@@ -334,7 +334,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     setTimeout(() => setMessage(''), 3000);
   }, [sameAsShipping]);
 
-  const handleAddItem = useCallback((product) => {
+  const handleAddItem = useCallback(async (product) => {
     if (!product) return;
 
     console.log('📦 [ADD ITEM] Raw product from search:', product);
@@ -352,6 +352,26 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       batch_number: transformedProduct.batch_number,
       expiry_date: transformedProduct.expiry_date
     });
+
+    // OFFLINE SUPPORT: Cache batch in IndexedDB for offline invoice creation
+    if (transformedProduct.batch_id) {
+      try {
+        await offlineDB.storeBatches([{
+          batch_id: transformedProduct.batch_id,
+          product_id: transformedProduct.product_id,
+          batch_number: transformedProduct.batch_number,
+          expiry_date: transformedProduct.expiry_date,
+          manufacturing_date: transformedProduct.manufacturing_date,
+          quantity_available: transformedProduct.quantity_available || transformedProduct.available_qty || 0,
+          mrp: transformedProduct.mrp,
+          selling_price: transformedProduct.selling_price || transformedProduct.unit_price,
+          cost_per_unit: transformedProduct.cost_per_unit || transformedProduct.purchase_price
+        }]);
+        console.log('📦 [ADD ITEM] Batch cached in IndexedDB for offline use');
+      } catch (e) {
+        console.warn('📦 [ADD ITEM] Failed to cache batch:', e);
+      }
+    }
 
     if (!transformedProduct || !transformedProduct.product_name) {
       toast.error('Invalid product data');
