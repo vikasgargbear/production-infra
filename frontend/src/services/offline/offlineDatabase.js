@@ -1,7 +1,7 @@
 // IndexedDB Service for Offline Storage
 import { openDB } from 'idb';
 
-const DB_NAME = 'PharmaERPOffline';
+const DB_NAME = 'PharmaERPOfflineV2'; // Renamed to force fresh creation
 const DB_VERSION = 5;  // Incremented to force schema rebuild
 
 // Sync status enum
@@ -145,7 +145,7 @@ class OfflineDatabase {
     };
 
     const id = await store.add(enrichedData);
-    await tx.complete;
+    await tx.done;
 
     // Add to sync queue if offline
     if (!navigator.onLine) {
@@ -183,7 +183,7 @@ class OfflineDatabase {
     };
 
     await store.put(updatedData);
-    await tx.complete;
+    await tx.done;
 
     // Add to sync queue if offline
     if (!navigator.onLine) {
@@ -199,7 +199,7 @@ class OfflineDatabase {
     const store = tx.objectStore(storeName);
 
     await store.delete(key);
-    await tx.complete;
+    await tx.done;
 
     // Add to sync queue if offline
     if (!navigator.onLine) {
@@ -222,7 +222,7 @@ class OfflineDatabase {
       attempts: 0
     });
 
-    await tx.complete;
+    await tx.done;
   }
 
   async getSyncQueue() {
@@ -250,7 +250,7 @@ class OfflineDatabase {
       });
     }
 
-    await tx.complete;
+    await tx.done;
   }
 
   async getNextPreallocatedNumber(type) {
@@ -268,7 +268,7 @@ class OfflineDatabase {
         cursor.value.used = true;
         cursor.value.used_at = new Date().toISOString();
         await cursor.update(cursor.value);
-        await tx.complete;
+        await tx.done;
         return cursor.value.number;
       }
       await cursor.continue();
@@ -368,7 +368,7 @@ class OfflineDatabase {
     const db = await this.init();
     const tx = db.transaction('sync_queue', 'readwrite');
     await tx.objectStore('sync_queue').clear();
-    await tx.complete;
+    await tx.done;
   }
 
   async updateLocalId(storeName, localId, serverId) {
@@ -394,7 +394,7 @@ class OfflineDatabase {
       await store.put(item);
     }
 
-    await tx.complete;
+    await tx.done;
   }
 
   // Bulk operations for initial data load
@@ -411,7 +411,7 @@ class OfflineDatabase {
       });
     }
 
-    await tx.complete;
+    await tx.done;
   }
 
   // Clear all offline data
@@ -422,7 +422,7 @@ class OfflineDatabase {
     for (const storeName of storeNames) {
       const tx = db.transaction(storeName, 'readwrite');
       await tx.objectStore(storeName).clear();
-      await tx.complete;
+      await tx.done;
     }
   }
 
@@ -630,34 +630,6 @@ class OfflineDatabase {
     return batches.filter(batch =>
       batch.quantity_reserved_offline && batch.quantity_reserved_offline > 0
     );
-  }
-
-  // Get sync statistics
-  async getSyncStats() {
-    const db = await this.init();
-    const stats = {
-      pending: 0,
-      syncing: 0,
-      synced: 0,
-      failed: 0,
-      conflict: 0
-    };
-
-    const storeNames = ['invoices', 'sales_orders', 'payments'];
-
-    for (const storeName of storeNames) {
-      const items = await db.getAll(storeName);
-      items.forEach(item => {
-        if (item.sync_status) {
-          stats[item.sync_status.toLowerCase()]++;
-        }
-      });
-    }
-
-    const queueItems = await db.getAll('sync_queue');
-    stats.pending += queueItems.length;
-
-    return stats;
   }
 }
 

@@ -34,8 +34,14 @@ class DataSyncService {
             // Initialize IndexedDB
             await offlineDB.init();
 
+            console.log('[DataSync] Fetching data from backend...');
+            
             // Fetch all data from backend
             const response = await apiClient.get('/sync/full-data');
+            
+            console.log('[DataSync] Response status:', response.status);
+            console.log('[DataSync] Response data:', response.data);
+            
             const { products, batches, customers, employees, counts } = response.data;
 
             console.log('[DataSync] Received:', counts);

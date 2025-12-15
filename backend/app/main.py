@@ -80,6 +80,7 @@ from .api.routes import metadata
 from .api.routes import enterprise_calculations
 from .api.routes import schemes_discounts
 from .api.routes import loyalty_points
+from .api.routes import documents
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -116,9 +117,9 @@ app.add_middleware(
 # This prevents 405 errors from trailing slash mismatches
 app.router.redirect_slashes = True
 
-@app.options("/{full_path:path}")
-async def options_handler(full_path: str):
-    return {"message": "OK", "status": "preflight_success"}
+# REMOVED: Custom OPTIONS handler - let CORS middleware handle it
+# The custom handler was returning JSON without CORS headers, causing CORS failures
+# FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
 @app.get("/")
 async def root():
@@ -205,6 +206,7 @@ api.include_router(settings_router, prefix="/settings", tags=["Settings"])
 api.include_router(sync_router.router, tags=["Offline Sync"])
 
 # --- Utilities ---
+api.include_router(documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])
 api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
