@@ -56,7 +56,7 @@ class DataSyncService {
                     hsn_code: p.hsn_code,
                     category_id: p.category_id,
                     mrp: p.mrp,
-                    selling_price: p.selling_price,
+                    sale_price: p.sale_price,
                     gst_percent: p.gst_percent,
                     current_stock: p.current_stock,
                     is_active: p.is_active,

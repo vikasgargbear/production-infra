@@ -44,7 +44,7 @@ async def get_full_sync_data(
                 p.hsn_code,
                 p.category_id,
                 p.mrp,
-                p.sale_price as selling_price,
+                p.sale_price,
                 p.gst_percent,
                 p.is_active,
                 COALESCE(SUM(ib.quantity_available), 0) as current_stock
