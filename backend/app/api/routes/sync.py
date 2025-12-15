@@ -8,7 +8,7 @@ from typing import Dict, Any
 import logging
 
 from ...core.database import get_db
-from ...core.jwt_auth import get_current_user
+from ...core.jwt_auth import get_user_context_secure
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/sync", tags=["Offline Sync"])
 @router.get("/full-data")
 async def get_full_sync_data(
     db=Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_user_context_secure)
 ) -> Dict[str, Any]:
     """
     Get all data needed for offline operation.
