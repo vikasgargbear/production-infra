@@ -120,8 +120,8 @@ class DataSyncService {
                     employee_id: String(e.employee_id),
                     full_name: e.full_name,
                     employee_code: e.employee_code,
-                    email: e.email,
-                    phone: e.phone,
+                    personal_email: e.personal_email,
+                    personal_mobile: e.personal_mobile,
                     designation: e.designation,
                     is_active: e.is_active
                 }));

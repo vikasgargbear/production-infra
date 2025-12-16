@@ -121,17 +121,18 @@ async def get_full_sync_data(
         logger.info(f"[Sync] Fetched {len(customers)} customers for org {org_id}")
         
         # Get employees (for salesperson selection in invoices)
+        # Column names from existing API (employees.py line 36-59)
         employees_result = db.execute(text("""
             SELECT 
                 e.employee_id,
                 e.full_name,
                 e.employee_code,
-                e.email,
-                e.phone,
+                e.personal_email,
+                e.personal_mobile,
                 e.designation,
-                e.is_active
+                CASE WHEN e.employment_status = 'active' THEN true ELSE false END as is_active
             FROM master.employees e
-            WHERE e.org_id = :org_id AND e.is_active = true
+            WHERE e.org_id = :org_id AND e.employment_status = 'active'
             ORDER BY e.full_name
             LIMIT 500
         """), {"org_id": org_id})
