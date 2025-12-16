@@ -72,6 +72,7 @@ async def get_full_sync_data(
         logger.info(f"[Sync] Fetched {len(products)} products for org {org_id}")
         
         # Get all active batches with stock
+        # Column names from existing API code (products.py, writeoff.py, orders.py)
         batches_result = db.execute(text("""
             SELECT 
                 ib.batch_id,
@@ -80,8 +81,8 @@ async def get_full_sync_data(
                 ib.expiry_date,
                 ib.manufacturing_date,
                 ib.quantity_available,
-                ib.mrp,
-                ib.selling_price,
+                ib.mrp_per_unit as mrp,
+                ib.sale_price_per_unit as selling_price,
                 ib.cost_per_unit
             FROM inventory.batches ib
             JOIN inventory.products p ON ib.product_id = p.product_id
