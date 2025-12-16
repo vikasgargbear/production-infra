@@ -82,7 +82,7 @@ async def get_full_sync_data(
                 ib.manufacturing_date,
                 ib.quantity_available,
                 ib.mrp_per_unit as mrp,
-                ib.sale_price_per_unit as selling_price,
+                ib.sale_price_per_unit as sale_price,
                 ib.cost_per_unit
             FROM inventory.batches ib
             JOIN inventory.products p ON ib.product_id = p.product_id
@@ -96,8 +96,9 @@ async def get_full_sync_data(
         batches = [dict(row._mapping) for row in batches_result.fetchall()]
         logger.info(f"[Sync] Fetched {len(batches)} batches for org {org_id}")
         
-        # Get customers
-        # Column names from customer_service.py INSERT query (line 273-291)
+        # Get customers with their default/primary address
+        # Column names verified against actual database schema (DATABASE_SCHEMA_COLUMNS.csv)
+        # Address fields are in master.addresses linked via entity_type='customer' and entity_id=customer_id
         customers_result = db.execute(text("""
             SELECT 
                 c.customer_id,
@@ -106,12 +107,27 @@ async def get_full_sync_data(
                 c.primary_phone,
                 c.primary_email,
                 c.gst_number,
-                c.address_line1,
-                c.city,
-                c.state,
                 c.customer_type,
-                c.is_active
+                c.credit_limit,
+                c.credit_days,
+                c.current_outstanding,
+                c.customer_category,
+                c.is_active,
+                -- Address from master.addresses (get default or first address)
+                a.address_line1,
+                a.address_line2,
+                a.city,
+                a.state_name as state,
+                a.state_code,
+                a.pincode
             FROM parties.customers c
+            LEFT JOIN master.addresses a ON a.entity_type = 'customer' 
+                AND a.entity_id = c.customer_id 
+                AND a.is_active = true
+                AND (a.is_default = true OR a.address_id = (
+                    SELECT MIN(a2.address_id) FROM master.addresses a2 
+                    WHERE a2.entity_type = 'customer' AND a2.entity_id = c.customer_id AND a2.is_active = true
+                ))
             WHERE c.org_id = :org_id AND c.is_active = true
             ORDER BY c.customer_name
             LIMIT 5000

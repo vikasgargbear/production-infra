@@ -90,6 +90,7 @@ class DataSyncService {
             }
 
             // Store customers
+            // Updated to match backend query that JOINs customers with master.addresses
             if (customers && customers.length > 0) {
                 const transformedCustomers = customers.map(c => ({
                     id: String(c.customer_id),
@@ -99,10 +100,18 @@ class DataSyncService {
                     primary_phone: c.primary_phone,
                     primary_email: c.primary_email,
                     gst_number: c.gst_number,
+                    customer_type: c.customer_type,
+                    credit_limit: c.credit_limit || 0,
+                    credit_days: c.credit_days || 0,
+                    current_outstanding: c.current_outstanding || 0,
+                    customer_category: c.customer_category,
+                    // Address fields from master.addresses JOIN
                     address_line1: c.address_line1,
+                    address_line2: c.address_line2,
                     city: c.city,
                     state: c.state,
-                    customer_type: c.customer_type,
+                    state_code: c.state_code,
+                    pincode: c.pincode,
                     is_active: c.is_active,
                     // Search fields  
                     _search_name: (c.customer_name || '').toLowerCase(),
