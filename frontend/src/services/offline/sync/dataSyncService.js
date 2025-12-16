@@ -98,8 +98,8 @@ class DataSyncService {
                     customer_code: c.customer_code,
                     primary_phone: c.primary_phone,
                     primary_email: c.primary_email,
-                    gstin: c.gstin,
-                    billing_address: c.billing_address,
+                    gst_number: c.gst_number,
+                    address_line1: c.address_line1,
                     city: c.city,
                     state: c.state,
                     customer_type: c.customer_type,
@@ -107,7 +107,7 @@ class DataSyncService {
                     // Search fields  
                     _search_name: (c.customer_name || '').toLowerCase(),
                     _search_phone: (c.primary_phone || '').replace(/\D/g, ''),
-                    _search_gst: (c.gstin || '').toLowerCase()
+                    _search_gst: (c.gst_number || '').toLowerCase()
                 }));
 
                 await offlineDB.bulkLoad('customers', transformedCustomers);
