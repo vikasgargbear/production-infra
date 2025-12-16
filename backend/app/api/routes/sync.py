@@ -110,7 +110,7 @@ async def get_full_sync_data(
                 c.state,
                 c.customer_type,
                 c.is_active
-            FROM sales.customers c
+            FROM parties.customers c
             WHERE c.org_id = :org_id AND c.is_active = true
             ORDER BY c.customer_name
             LIMIT 5000
@@ -129,7 +129,7 @@ async def get_full_sync_data(
                 e.phone,
                 e.designation,
                 e.is_active
-            FROM org.employees e
+            FROM master.employees e
             WHERE e.org_id = :org_id AND e.is_active = true
             ORDER BY e.full_name
             LIMIT 500
