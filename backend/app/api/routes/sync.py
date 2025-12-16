@@ -97,15 +97,16 @@ async def get_full_sync_data(
         logger.info(f"[Sync] Fetched {len(batches)} batches for org {org_id}")
         
         # Get customers
+        # Column names from existing API (conversions.py line 81, 464-466)
         customers_result = db.execute(text("""
             SELECT 
                 c.customer_id,
                 c.customer_name,
                 c.customer_code,
-                c.phone,
-                c.email,
-                c.gst_number,
-                c.address,
+                c.primary_phone,
+                c.primary_email,
+                c.gstin,
+                c.billing_address,
                 c.city,
                 c.state,
                 c.customer_type,
