@@ -131,16 +131,34 @@ class SyncEngine {
         if (navigator.onLine) {
             this.startSync();
 
-            // Also sync products with batches for offline-first search
+            // Also sync products with batches for offline-first search (with auth check)
             this.syncProductsForOfflineFirst();
         }
     }
 
+    private productSyncInProgress: boolean = false;
+
     /**
      * Sync products with batches for offline-first search
      * Uses the localFirstService for paginated bulk sync
+     * IMPORTANT: Only runs if user is authenticated
      */
     private async syncProductsForOfflineFirst(): Promise<void> {
+        // Prevent concurrent syncs
+        if (this.productSyncInProgress) {
+            console.log('[SyncEngine] Product sync already in progress, skipping...');
+            return;
+        }
+
+        // Check if user is authenticated (has token)
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            console.log('[SyncEngine] User not authenticated, skipping product sync');
+            return;
+        }
+
+        this.productSyncInProgress = true;
+
         try {
             // Dynamic import to avoid circular dependencies
             const { default: localFirstService } = await import('../cache/localFirstService');
@@ -156,9 +174,13 @@ class SyncEngine {
                 } else {
                     console.warn('⚠️ [SyncEngine] Product sync failed:', result.error);
                 }
+            } else {
+                console.log('[SyncEngine] Product data is fresh, skipping sync');
             }
         } catch (error) {
             console.warn('[SyncEngine] Failed to sync products:', error);
+        } finally {
+            this.productSyncInProgress = false;
         }
     }
 

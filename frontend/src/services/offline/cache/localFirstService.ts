@@ -222,6 +222,13 @@ class LocalFirstService {
     } = {}): Promise<{ success: boolean; productsSynced: number; error?: string }> {
         const { fullSync = false, pageSize = 100, onProgress } = options;
 
+        // Check authentication before attempting sync
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            console.log('[LocalFirst] No auth token, skipping product sync');
+            return { success: false, productsSynced: 0, error: 'Not authenticated' };
+        }
+
         if (this.syncing) {
             console.log('[LocalFirst] Sync already in progress, skipping...');
             return { success: false, productsSynced: 0, error: 'Sync already in progress' };
