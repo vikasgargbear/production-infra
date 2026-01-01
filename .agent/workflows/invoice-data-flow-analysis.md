@@ -229,83 +229,125 @@ IndexedDB             ─┘
 
 ---
 
-## ✅ Recommended Optimizations
+## ✅ Implemented Solution (Option A)
 
-### Option A: Single API with Embedded Batches (Recommended)
+We have successfully implemented the **Single API with Embedded Batches** architecture, resolving the `unit_price: 0` bug and optimizing performance.
 
-**New Backend Endpoint:**
-```
-GET /api/products/search-with-batches?query=airpods
-```
+### 🏗️ New Architecture
 
-**Response:**
-```json
-{
-  "products": [
-    {
-      "product_id": 122,
-      "product_name": "Airpods Pro",
-      "gst_percent": 12,
-      "batches": [
-        {
-          "batch_id": 119,
-          "batch_number": "BATCH74760548",
-          "mrp_per_unit": 45,
-          "sale_price_per_unit": 40,
-          "quantity_available": 234,
-          "expiry_date": "2027-07-01"
-        }
-      ]
-    }
-  ]
-}
-```
+#### 1. Backend (`/products/search-with-batches`)
+*   **File:** `backend/app/api/routes/master/products.py`
+*   **Response:** Products now include an embedded `batches` array and a `best_batch` object (calculated by FEFO).
+*   **Naming:** Returns strict canonical field names (`sale_price_per_unit`, `mrp_per_unit`), eliminating ambiguity.
 
-**Benefits:**
-- Single API call for all data
-- BatchSelector uses cached batches (no API call)
-- Consistent field names throughout
+#### 2. Centralized Product Model
+*   **File:** `frontend/src/types/models/product.ts`
+*   **Purpose:** The single source of truth for `Product` and `ProductBatch` types.
+*   **Change:** Updated to include canonical fields (`mrp_per_unit`, `sale_price_per_unit`, `total_stock`) alongside legacy fields for backward compatibility.
 
----
+#### 3. Data Mapper Logic
+*   **File:** `frontend/src/utils/productMapper.ts`
+*   **Purpose:** Handles all data transformation from Raw API -> Application Model.
+*   **Key Logic:**
+    *   Maps `sale_price_per_unit` → `unit_price` correctly.
+    *   Centrally calculates `days_to_expiry` from `expiry_date`.
+    *   Populates legacy aliases (`total_quantity`, `sale_price`) to support older components.
 
-### Option B: Standardize Field Names (Quick Fix)
+### 📂 Useful Files Inventory (Invoice & Product Flow)
 
-1. Keep existing architecture
-2. Add canonical field name mapping at a single point
-3. All components use mapped names
+These are the **critical files** that power the optimized flow. Any file with a similar name (e.g., `.js` version of a `.ts` file) not listed here is likely redundant.
 
-**Implementation:**
-```typescript
-// frontend/src/utils/dataMapper.ts
-export const mapBatchData = (batch: any) => ({
-  batch_id: batch.batch_id,
-  batch_number: batch.batch_number,
-  unit_price: batch.sale_price_per_unit || batch.sale_price || 0,
-  mrp: batch.mrp_per_unit || batch.mrp || 0,
-  // ... other fields
-});
-```
+#### 🖥️ Backend Files
+| File Path | Purpose |
+|-----------|---------|
+| `backend/app/api/routes/master/products.py` | **Primary Endpoint**. Handles `search-with-batches`. |
+| `backend/app/api/routes/inventory/stock.py` | **Stock Management**. Source of truth for raw batch data. |
+| `backend/app/api/routes/sales/invoices.py` | **Invoice Processing**. Handles final invoice submission. |
 
----
+#### 🌐 Frontend Files
 
-## 📊 Implementation Priority
+**1. Data & Logic Layer (The "Brain")**
+| File Path | Purpose |
+|-----------|---------|
+| `frontend/src/types/models/product.ts` | **Type Definitions**. Single source of truth for `Product` & `Batch` interfaces. |
+| `frontend/src/utils/productMapper.ts` | **Data Mapper**. Standardizes API data & calculates expiry. |
+| `frontend/src/services/offline/cache/localFirstService.ts` | **Smart Caching**. Orchestrates offline-first data fetching. |
+| `frontend/src/services/api/modules/master/products.api.js` | **API Client**. Low-level HTTP calls to backend. |
+| `frontend/src/utils/fieldNormalizer.js` | **Tax Logic**. Standardizes GST/Tax calculations. |
 
-| Priority | Task | Effort | Impact |
-|----------|------|--------|--------|
-| 🔴 P0 | Fix `sale_price_per_unit` → `unit_price` mapping | Low | High |
-| 🟠 P1 | Create unified data mapper utility | Medium | High |
-| 🟡 P2 | Add `/products/search-with-batches` endpoint | Medium | Medium |
-| 🟢 P3 | Consolidate cache to single layer (IndexedDB) | High | Medium |
+**2. UI Components (The "Face")**
+| File Path | Purpose |
+|-----------|---------|
+| `frontend/src/components/global/search/ProductSearchSimple.tsx` | **Search Widget**. Entry point for adding items. |
+| `frontend/src/components/global/modals/BatchSelector.tsx` | **Batch Selection**. Modal for choosing specific batches/expiry. |
+| `frontend/src/components/sales/invoice/hooks/useInvoiceLogic.ts` | **Invoice State**. Manages the cart, totals, and item adding logic. |
+
+### 🗑️ Redundant / Obsolete Files (Clean up)
+These files were identified as duplicates or deprecated during this optimization:
+
+| File Path | Status | Action |
+|-----------|--------|--------|
+| `frontend/src/utils/dataMapper.ts` | **Deprecated** | Deleted (Merged into `productMapper.ts`) |
+| `frontend/src/components/sales/invoice/types/invoiceTypes.ts` | **Partial Deprecation** | Keep for `ProductInput` but prefer `product.ts` for entities. |
+| `frontend/src/components/global/modals/BatchSelector.js` | **Duplicate** | **DELETE**. (Use `.tsx` version) |
+| `frontend/src/services/offline/cache/localFirstService.js` | **Duplicate** | **DELETE**. (Use `.ts` version) |
+
 
 ---
 
-## 🎯 Next Steps
+## 🚀 Optimized Data Flow
 
-1. **Immediate:** Fix the `unit_price: 0` bug by ensuring `sale_price_per_unit` is used
-2. **Short-term:** Create standardized data mapper
-3. **Medium-term:** Implement embedded batches API
+```
+User Search
+    │
+    ▼
+productSearchSimple
+    │
+    ▼
+localFirstService.cloudSearchProducts()
+    │
+    ▼
+GET /api/products/search-with-batches  (SINGLE CALL)
+    │
+    ▼
+Backend returns: [ { product, batches: [...] } ]
+    │
+    ▼
+productMapper.mapProductToCanonical()
+    │ 1. Standardizes field names
+    │ 2. Calculates expiry
+    │
+    ▼
+UI Displays Results
+    │
+    ▼
+User Selects Product
+    │
+    ▼
+BatchSelector opens (NO API CALL)
+    │ 1. Uses product.batches (embedded)
+    │ 2. Displays accurate pricing immediately
+    │
+    ▼
+User Selects Batch
+    │
+    ▼
+useInvoiceLogic.handleAddItem()
+    │ 1. Uses canonical batch data
+    │ 2. unit_price = 40 (Correct!)
+```
 
 ---
 
-**Document Author:** AI Assistant  
-**Review Status:** Pending User Review
+**Document Version:** 2.1 (Final)
+**Date:** January 1, 2026
+**Status:** Implementation Complete
+
+### 📝 Latest Optimizations (v2.1)
+1. **Removed Redundant API Calls**: `batchAPI.getByProduct()` no longer called when batches are embedded in product or cached in IndexedDB.
+2. **Simplified Data Model**: Removed `quantity_usable` and `quantity_reserved_offline` - using canonical `quantity_available` for both online/offline.
+3. **Consistent Naming**: 
+   - Interface: `ProductWithBatch` (PascalCase for types)
+   - Variable: `productWithBatch` (camelCase for variables)
+4. **Centralized Merge Logic**: `productMapper.mergeProductAndBatch()` ensures batch pricing always overrides product pricing.
+

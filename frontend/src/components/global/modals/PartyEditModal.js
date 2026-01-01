@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, Save, Loader2, Building, Phone, Mail, 
+import {
+  X, Save, Loader2, Building, Phone, Mail,
   MapPin, CreditCard, Tag, Percent
 } from 'lucide-react';
-import { productAPI, customerAPI, supplierAPI, suppliersApi, customersApi, batchAPI } from '../../../services/api';
+import { customerAPI, supplierAPI, suppliersApi, customersApi } from '../../../services/api';
 
-const PartyEditModal = ({ 
-  isOpen, 
-  onClose, 
+const PartyEditModal = ({
+  isOpen,
+  onClose,
   party = null,
   partyType = 'customer',
   onSave,
@@ -79,8 +79,8 @@ const PartyEditModal = ({
   ];
 
   const availableTags = [
-    'hospital', 'clinic', 'pharmacy', 'distributor', 
-    'manufacturer', 'wholesale', 'retail', 'premium', 
+    'hospital', 'clinic', 'pharmacy', 'distributor',
+    'manufacturer', 'wholesale', 'retail', 'premium',
     'regular', 'chain', 'institution'
   ];
 
@@ -120,7 +120,7 @@ const PartyEditModal = ({
   const handleTagToggle = (tag) => {
     setFormData(prev => ({
       ...prev,
-      tags: prev.tags.includes(tag) 
+      tags: prev.tags.includes(tag)
         ? prev.tags.filter(t => t !== tag)
         : [...prev.tags, tag]
     }));
@@ -148,7 +148,7 @@ const PartyEditModal = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (mode === 'view') {
       onClose();
       return;
@@ -159,9 +159,9 @@ const PartyEditModal = ({
     try {
       setIsSaving(true);
       setError(null);
-      
+
       const api = formData.type === 'supplier' ? suppliersApi : customersApi;
-      
+
       if (party) {
         // Update existing party
         const partyId = party.id || party.customer_id || party.supplier_id || party.party_id;
@@ -170,11 +170,11 @@ const PartyEditModal = ({
         // Create new party
         await api.create(formData);
       }
-      
+
       if (onSave) {
         onSave();
       }
-      
+
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save party. Please try again.');
@@ -465,11 +465,10 @@ const PartyEditModal = ({
                       type="button"
                       onClick={() => handleTagToggle(tag)}
                       disabled={mode === 'view'}
-                      className={`px-3 py-1 rounded-full text-sm ${
-                        formData.tags.includes(tag)
+                      className={`px-3 py-1 rounded-full text-sm ${formData.tags.includes(tag)
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      } disabled:cursor-not-allowed`}
+                        } disabled:cursor-not-allowed`}
                     >
                       {tag}
                     </button>

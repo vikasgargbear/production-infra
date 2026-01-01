@@ -44,16 +44,16 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
         ? Math.ceil((new Date(raw.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : null;
 
-    const mrp = parseFloat(raw.mrp_per_unit || raw.mrp || 0);
-    const salePrice = parseFloat(raw.sale_price_per_unit || raw.sale_price || raw.unit_price || raw.selling_price || 0);
+    const mrp = parseFloat(raw.mrp_per_unit || 0);
+    const salePrice = parseFloat(raw.sale_price_per_unit || 0);
 
     return {
         batch_id: raw.batch_id || raw.id,
         product_id: raw.product_id,
-        batch_number: raw.batch_number || raw.batch_no || '',
+        batch_number: raw.batch_number || '',
         manufacturing_date: raw.manufacturing_date || undefined,
         expiry_date: raw.expiry_date || '',
-        quantity_available: parseFloat(raw.quantity_available || raw.current_stock || raw.stock || 0),
+        quantity_available: parseFloat(raw.quantity_available || 0),
 
         // Canonical Pricing
         mrp_per_unit: mrp,
@@ -81,14 +81,14 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
  * Map raw API product data to standardized Product format
  */
 export function mapProductToCanonical(raw: RawProductInput): Product {
-    const mrp = parseFloat(raw.mrp_per_unit || raw.mrp || 0);
-    const salePrice = parseFloat(raw.sale_price_per_unit || raw.sale_price || 0);
-    const totalStock = parseFloat(raw.total_stock || raw.current_stock || raw.quantity_available || 0);
+    const mrp = parseFloat(raw.mrp_per_unit || 0);
+    const salePrice = parseFloat(raw.sale_price_per_unit || 0);
+    const totalStock = parseFloat(raw.quantity_available || 0);
 
     const product: Product = {
         product_id: raw.product_id || raw.id,
-        product_code: raw.product_code || raw.code || '',
-        product_name: raw.product_name || raw.name || '',
+        product_code: raw.product_code || '',
+        product_name: raw.product_name || '',
         generic_name: raw.generic_name,
         // Required legacy fields
         manufacturer: raw.manufacturer || '',
@@ -96,7 +96,7 @@ export function mapProductToCanonical(raw: RawProductInput): Product {
 
         hsn_code: raw.hsn_code || '',
         gst_percent: parseFloat(raw.gst_percent || raw.tax_rate || 0),
-        category: raw.category_name || raw.category, // Mapped to name if ID not suitable
+        category: raw.category_name || '', // Mapped to name if ID not suitable
 
         // Pricing
         mrp: mrp,
@@ -164,5 +164,39 @@ export function createInvoiceItem(
         quantity: quantity,
         free_quantity: 0,
         discount_percent: 0
+    };
+}
+
+/**
+ * Merge product and batch into a single object for UI selection
+ * overriding product pricing with batch pricing.
+ */
+export function mergeProductAndBatch(product: Product, batch: ProductBatch) {
+    return {
+        ...product,
+        // Batch overrides
+        batch_id: batch.batch_id,
+        batch_number: batch.batch_number,
+        batch_no: batch.batch_number,
+        expiry_date: batch.expiry_date,
+        manufacturing_date: batch.manufacturing_date,
+
+        // Stock from batch
+        available_quantity: batch.quantity_available,
+        quantity_available: batch.quantity_available,
+        quantity: 1,
+
+        // PRICING OVERRIDES (Crucial)
+        mrp_per_unit: batch.mrp_per_unit,
+        sale_price_per_unit: batch.sale_price_per_unit,
+        cost_per_unit: batch.cost_per_unit,
+
+        // Legacy overrides (ensure UI sees batch price)
+        mrp: batch.mrp_per_unit,
+        unit_price: batch.sale_price_per_unit,
+        sale_price: batch.sale_price_per_unit,
+
+        // Keep product tax
+        gst_percent: product.gst_percent
     };
 }

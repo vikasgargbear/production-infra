@@ -201,6 +201,12 @@ class LocalFirstService {
      * Search products locally with instant results
      * Falls back to cloud if not found or data is stale
      */
+    /**
+     * Search products
+     * NETWORK-FIRST strategy (modified based on user feedback): 
+     * If online, hit the API to get fresh pricing/batches. 
+     * If offline or API fails, fall back to local cache.
+     */
     async searchProducts(query: string, options: SearchOptions = {}): Promise<any[]> {
         const { limit = 20, forceCloud = false } = options;
 
@@ -211,70 +217,72 @@ class LocalFirstService {
             return [];
         }
 
-        const searchTerm = query.toLowerCase();
+        const isOnline = navigator.onLine;
 
-        // Try local search first (instant) - but don't let it block cloud fallback
-        if (!forceCloud) {
+        // STRATEGY: Network First (if online)
+        // This ensures pricing/batches are always fresh
+        if (isOnline || forceCloud) {
             try {
-                const allProducts = await offlineDB.getAll('products');
-
-                if (allProducts.length > 0) {
-                    console.log('[LocalFirst] Searching', allProducts.length, 'local products for:', query);
-
-                    // Multi-field fuzzy search
-                    const matches = allProducts.filter((product: any) => {
-                        return (
-                            (product._search_name?.includes(searchTerm) || false) ||
-                            (product._search_code?.includes(searchTerm) || false) ||
-                            (product._search_hsn?.includes(searchTerm) || false) ||
-                            (product.name?.toLowerCase().includes(searchTerm) || false) ||
-                            (product.sku?.toLowerCase().includes(searchTerm) || false)
-                        );
-                    });
-
-                    // Sort by relevance (exact matches first)
-                    matches.sort((a: any, b: any) => {
-                        const aExact = a._search_name === searchTerm || a._search_code === searchTerm;
-                        const bExact = b._search_name === searchTerm || b._search_code === searchTerm;
-                        if (aExact && !bExact) return -1;
-                        if (!aExact && bExact) return 1;
-                        return 0;
-                    });
-
-                    // Deduplicate by product_id to prevent duplicate key warnings
-                    const seen = new Set<string | number>();
-                    const uniqueMatches = matches.filter((product: any) => {
-                        const key = product.product_id || product.id;
-                        if (seen.has(key)) {
-                            console.log('[LocalFirst] Removing duplicate product:', key);
-                            return false;
-                        }
-                        seen.add(key);
-                        return true;
-                    });
-
-                    const results = uniqueMatches.slice(0, limit);
-
-                    // If we have local results, return them instantly
-                    if (results.length > 0) {
-                        console.log('[LocalFirst] Returning', results.length, 'local product results (deduplicated)');
-                        // Trigger background cloud search to update cache
-                        this.backgroundCloudSearch('products', query).catch(() => { });
-                        return results;
-                    }
-
-                    console.log('[LocalFirst] No local products matched, falling back to cloud');
-                } else {
-                    console.log('[LocalFirst] No local products cached, using cloud search');
+                console.log('[LocalFirst] Online detected, attempting cloud search first:', query);
+                const results = await this.cloudSearchProducts(query, limit);
+                if (results && results.length > 0) {
+                    return results;
                 }
+                console.log('[LocalFirst] Cloud search returned empty, checking local cache...');
             } catch (error) {
-                console.error('[LocalFirst] Local product search failed:', error);
+                console.warn('[LocalFirst] Cloud search failed despite being online, falling back to local:', error);
             }
+        } else {
+            console.log('[LocalFirst] Offline detected, skipping cloud search');
         }
 
-        // Fallback to cloud search
-        console.log('[LocalFirst] Using cloud search for products:', query);
-        return this.cloudSearchProducts(query, limit);
+        // FALLBACK: Local Search (Offline or Cloud Failure)
+        const searchTerm = query.toLowerCase();
+
+        try {
+            const allProducts = await offlineDB.getAll('products');
+
+            if (allProducts.length > 0) {
+                console.log('[LocalFirst] Searching', allProducts.length, 'local products for:', query);
+
+                // Multi-field fuzzy search
+                const matches = allProducts.filter((product: any) => {
+                    return (
+                        (product._search_name?.includes(searchTerm) || false) ||
+                        (product._search_code?.includes(searchTerm) || false) ||
+                        (product._search_hsn?.includes(searchTerm) || false) ||
+                        (product.name?.toLowerCase().includes(searchTerm) || false) ||
+                        (product.sku?.toLowerCase().includes(searchTerm) || false)
+                    );
+                });
+
+                // Sort by relevance (exact matches first)
+                matches.sort((a: any, b: any) => {
+                    const aExact = a._search_name === searchTerm || a._search_code === searchTerm;
+                    const bExact = b._search_name === searchTerm || b._search_code === searchTerm;
+                    if (aExact && !bExact) return -1;
+                    if (!aExact && bExact) return 1;
+                    return 0;
+                });
+
+                // Deduplicate by product_id
+                const seen = new Set<string | number>();
+                const uniqueMatches = matches.filter((product: any) => {
+                    const key = product.product_id || product.id;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+
+                const results = uniqueMatches.slice(0, limit);
+                console.log(`[LocalFirst] Returning ${results.length} local results (Fallback)`);
+                return results;
+            }
+        } catch (error) {
+            console.error('[LocalFirst] Local product search failed:', error);
+        }
+
+        return [];
     }
 
     /**

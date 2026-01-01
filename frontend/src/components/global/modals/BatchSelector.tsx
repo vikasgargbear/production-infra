@@ -5,6 +5,7 @@ import { searchCache } from '../../../utils/searchCache';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
+import { mergeProductAndBatch } from '../../../utils/productMapper';
 
 // ==================== HELPERS ====================
 
@@ -50,8 +51,6 @@ interface Batch {
     mrp_per_unit: number;
     cost_per_unit: number;
     days_to_expiry: number | null;
-    quantity_reserved_offline: number;
-    quantity_usable: number;
     has_pending_sync: boolean;
     product_id?: number | string;
     product_name: string;
@@ -165,20 +164,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             return;
         }
 
-        // OFFLINE-FIRST: Load from IndexedDB immediately (instant)
         try {
             const offlineBatches = await offlineDB.getBatchesByProduct(productId as number);
             if (offlineBatches && offlineBatches.length > 0) {
                 console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
                 processBatches(offlineBatches);
                 searchCache.set(cacheKey, offlineBatches); // Promote to memory cache
-
-                // Background refresh from API if online (non-blocking)
-                if (navigator.onLine) {
-                    fetchAndStoreBatches(productId as string | number, false).catch(err => {
-                        console.warn('[BatchSelector] Background API refresh failed:', err);
-                    });
-                }
+                // NOTE: No background API refresh needed - data is fresh from search-with-batches
                 return;
             }
         } catch (offlineError) {
@@ -245,9 +237,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
                 : null;
 
-            const reserved = batch.quantity_reserved_offline || 0;
             const available = parseInt(batch.quantity_available || 0);
-            const usable = available - reserved;
 
             const processed = {
                 batch_id: batch.batch_id,
@@ -259,9 +249,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 mrp_per_unit: parseFloat(batch.mrp_per_unit || 0),
                 cost_per_unit: parseFloat(batch.cost_per_unit || 0),
                 days_to_expiry: daysToExpiry,
-                quantity_reserved_offline: reserved,
-                quantity_usable: usable,
-                has_pending_sync: reserved > 0,
+                has_pending_sync: false,
                 product_id: batch.product_id || product?.product_id,
                 product_name: batch.product_name || product?.product_name || '',
                 gst_percent: batch.gst_percent || product?.gst_percent || 0
@@ -285,7 +273,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
         if (minQuantity > 0) {
             processedBatches = processedBatches.filter(batch =>
-                batch.quantity_usable >= minQuantity
+                batch.quantity_available >= minQuantity
             );
         }
 
@@ -293,8 +281,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             switch (sortBy) {
                 case 'quantity':
                     return sortOrder === 'asc'
-                        ? a.quantity_usable - b.quantity_usable
-                        : b.quantity_usable - a.quantity_usable;
+                        ? a.quantity_available - b.quantity_available
+                        : b.quantity_available - a.quantity_available;
 
                 case 'manufacturing':
                     const dateA = new Date(a.manufacturing_date || 0);
@@ -329,8 +317,6 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             sale_price_per_unit: prod.sale_price_per_unit || prod.unit_price || prod.mrp || 0,
             cost_per_unit: 0,
             days_to_expiry: (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.EXPIRY_DAYS,
-            quantity_usable: (INVOICE_CONFIG as any).BATCH.DEFAULT_BATCH.QUANTITY,
-            quantity_reserved_offline: 0,
             has_pending_sync: false,
             product_id: prod.product_id,
             product_name: prod.product_name || '',
@@ -341,18 +327,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const handleBatchSelect = (batch: Batch): void => {
         setSelectedBatch(batch);
 
-        const productWithBatch: ProductWithBatch = {
-            ...product,
-            batch_id: batch.batch_id,
-            batch_number: batch.batch_number,
-            batch_no: batch.batch_number,
-            available_quantity: batch.quantity_available,
-            quantity: 1,
-            unit_price: batch.sale_price_per_unit || 0,
-            mrp: batch.mrp_per_unit || 0,
-            expiry_date: batch.expiry_date,
-            manufacturing_date: batch.manufacturing_date,
-            gst_percent: product.gst_percent || 0
+        // Use centralized mapper to merge data correctly (ensures batch price > product price)
+        const logicalBatch = mergeProductAndBatch(product as any, batch as any);
+
+        // Ensure UI compatibility (strict strings vs undefined)
+        const productWithBatch = {
+            ...logicalBatch,
+            manufacturing_date: logicalBatch.manufacturing_date || ''
         };
 
         setTimeout(() => {
@@ -456,16 +437,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         <div className="flex flex-col items-center">
                             <span className={cx(
                                 "text-base font-bold",
-                                (batch.quantity_usable || 0) > 10 ? "text-emerald-600" :
-                                    (batch.quantity_usable || 0) > 0 ? "text-amber-600" : "text-red-600"
+                                (batch.quantity_available || 0) > 10 ? "text-emerald-600" :
+                                    (batch.quantity_available || 0) > 0 ? "text-amber-600" : "text-red-600"
                             )}>
-                                {batch.quantity_usable || batch.quantity_available || 0}
+                                {batch.quantity_available || 0}
                             </span>
-                            {batch.has_pending_sync && (
-                                <span className="text-xs text-amber-600">
-                                    {batch.quantity_reserved_offline} pending
-                                </span>
-                            )}
                         </div>
                     </div>
 
