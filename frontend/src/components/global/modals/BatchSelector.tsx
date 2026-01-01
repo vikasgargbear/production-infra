@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, ReactNode } from 'react';
-import {
-    X, Package, Calendar, AlertCircle, CheckCircle,
-    Zap, Shield, Clock, Box, TrendingDown
-} from 'lucide-react';
-import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
+import { X, Package, AlertCircle, CheckCircle, Shield, Clock, Box } from 'lucide-react';
+import { batchAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
-import { APP_CONFIG } from '../../../config/app.config';
-import { theme, classes } from '../../../config/theme.config';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
+
+// ==================== HELPERS ====================
+
+/** Generate consistent cache key for batches */
+const getBatchCacheKey = (productId: string | number): string => `batches_${productId}`;
 
 // Simple class concatenation helper (replaces cx from invoiceStyles)
 const cx = (...classNames: (string | boolean | undefined | null)[]) =>
@@ -147,11 +147,12 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         if (!product) return;
 
         const productId = product.product_id || product.id;
-        const cacheKey = `batches_${productId}`;
+        const cacheKey = getBatchCacheKey(productId);
 
-        // Check in-memory cache first (instant)
+        // LAYER 1: Memory cache (instant)
         const cachedBatches = searchCache.get(cacheKey);
         if (cachedBatches && cachedBatches.length > 0) {
+            console.log('[BatchSelector] Using memory cache (instant)');
             processBatches(cachedBatches);
             return;
         }
@@ -162,7 +163,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             if (offlineBatches && offlineBatches.length > 0) {
                 console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
                 processBatches(offlineBatches);
-                searchCache.set(cacheKey, offlineBatches);
+                searchCache.set(cacheKey, offlineBatches); // Promote to memory cache
 
                 // Background refresh from API if online (non-blocking)
                 if (navigator.onLine) {
@@ -200,15 +201,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             const response = await batchAPI.getByProduct(productId);
             const batchesData = response.data?.batches || response.data || [];
 
-            const cacheKey = `batches_${productId}`;
-            searchCache.set(cacheKey, batchesData);
-
-            try {
-                localStorage.setItem(`batches_${productId}`, JSON.stringify(batchesData));
-                localStorage.setItem(`batches_${productId}_time`, Date.now().toString());
-            } catch (e) {
-                console.warn('[BatchSelector] localStorage cache failed:', e);
-            }
+            // Update caches
+            searchCache.set(getBatchCacheKey(productId), batchesData);
 
             try {
                 await offlineDB.storeBatches(batchesData);
@@ -328,11 +322,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             batch_no: batch.batch_number,
             available_quantity: batch.quantity_available,
             quantity: 1,
-            unit_price: batch.sale_price_per_unit || product?.sale_price_per_unit || 0,
-            mrp: batch.mrp_per_unit || product?.mrp_per_unit || product?.mrp || 0,
+            unit_price: batch.sale_price_per_unit || 0,
+            mrp: batch.mrp_per_unit || 0,
             expiry_date: batch.expiry_date,
             manufacturing_date: batch.manufacturing_date,
-            gst_percent: batch.gst_percent || product?.gst_percent || 0
+            gst_percent: product.gst_percent || 0
         };
 
         setTimeout(() => {
