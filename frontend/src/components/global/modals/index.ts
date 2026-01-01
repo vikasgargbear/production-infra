@@ -10,5 +10,5 @@ export { default as GenericSuccessModal } from './GenericSuccessModal';
 export { default as InvoiceSelector } from './InvoiceSelector';
 export { default as PartyEditModal } from './PartyEditModal';
 export { default as ProductCreationModal } from './ProductCreationModal';
-// ProductEditModal removed - causes circular import with ProductMaster
+export { default as ProductEditModal } from './ProductEditModal';
 export { default as SupplierCreationModal } from './SupplierCreationModal';

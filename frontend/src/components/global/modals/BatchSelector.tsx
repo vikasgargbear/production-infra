@@ -223,7 +223,16 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     };
 
     const processBatches = (batchesData: any[]): void => {
+        console.log('🔍 [BatchSelector] Raw batch data from API/cache:', batchesData);
+
         let processedBatches: Batch[] = batchesData.map(batch => {
+            // DEBUG: Log raw batch pricing
+            console.log(`🔍 [BatchSelector] Batch ${batch.batch_id} raw pricing:`, {
+                sale_price_per_unit: batch.sale_price_per_unit,
+                mrp_per_unit: batch.mrp_per_unit,
+                cost_per_unit: batch.cost_per_unit
+            });
+
             const daysToExpiry = batch.expiry_date
                 ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
                 : null;
@@ -232,7 +241,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             const available = parseInt(batch.quantity_available || 0);
             const usable = available - reserved;
 
-            return {
+            const processed = {
                 batch_id: batch.batch_id,
                 batch_number: batch.batch_number || '',
                 expiry_date: batch.expiry_date || '',
@@ -249,6 +258,14 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 product_name: batch.product_name || product?.product_name || '',
                 gst_percent: batch.gst_percent || product?.gst_percent || 0
             };
+
+            // DEBUG: Log processed batch pricing
+            console.log(`🔍 [BatchSelector] Batch ${batch.batch_id} processed:`, {
+                sale_price_per_unit: processed.sale_price_per_unit,
+                mrp_per_unit: processed.mrp_per_unit
+            });
+
+            return processed;
         });
 
         if (filterExpired) {
