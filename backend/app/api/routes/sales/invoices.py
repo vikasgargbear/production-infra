@@ -257,14 +257,9 @@ async def create_invoice(
             branch_id = branch[0] if branch else None
             logger.warning(f"User {created_by} has no branch assigned - using default")
         
-        # Step 2: Generate order number
-        order_result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '[0-9]+') AS BIGINT)), 0) + 1
-            FROM sales.orders
-            WHERE org_id = :org_id
-        """), {"org_id": org_id})
-        order_num = order_result.scalar() or 1
-        order_number = f"ORD-{order_num:06d}"
+        # Step 2: Generate order number using centralized service
+        from ...services.document_number_service import DocumentNumberService
+        order_number = DocumentNumberService.generate_number(db, "sales_order", str(org_id))
         
         # Step 3: Calculate totals from items using InvoiceService (DRY)
         # Convert Pydantic items to dicts for service compatibility
@@ -279,45 +274,31 @@ async def create_invoice(
         insurance_charges = 0.0
         other_charges = 0.0
         
-        # Calculate invoice-level discount (percent OR fixed amount)
+        # Invoice-level discount parameters (will be calculated by service)
         discount_type = invoice_data.discount_type or "percentage"
         discount_percent = float(invoice_data.discount_percent or 0)
         discount_amount_fixed = float(invoice_data.discount_amount or 0)
         
-        # OPTIMIZED: Calculate subtotal first (simple loop, no service call)
-        # Then apply invoice discount, then calculate final totals once
-        subtotal = 0.0
-        item_level_discount = 0.0
-        for item in items:
-            base_qty = float(item.get("base_quantity", item.get("quantity", 1)))
-            unit_price = float(item.get("unit_price", 0))
-            disc_pct = float(item.get("discount_percent", 0))
-            subtotal += base_qty * unit_price
-            item_level_discount += base_qty * unit_price * disc_pct / 100
+        # GST type from frontend directly (auto-detection disabled)
+        gst_type = invoice_data.gst_type or "CGST/SGST"
         
-        taxable_amount = subtotal - item_level_discount
-        
-        # Calculate invoice-level discount based on type (only need taxable_amount)
-        if discount_type == "percentage" and discount_percent > 0:
-            invoice_discount = taxable_amount * discount_percent / 100
-        else:
-            invoice_discount = discount_amount_fixed
-        
-        logger.info(f"Invoice discount: type={discount_type}, percent={discount_percent}, amount={invoice_discount}")
-        
-        # NOW call service ONCE for final calculations (GST, rounding, etc.)
+        # Call service ONCE for ALL calculations (single source of truth)
+        # Service handles item-level discounts, invoice-level discount, GST, rounding
         totals = InvoiceService.calculate_invoice_totals(
             items=items,
             gst_type=gst_type,
             freight_charges=freight_charges,
             insurance_charges=insurance_charges,
             other_charges=other_charges,
-            invoice_discount=invoice_discount
+            discount_type=discount_type,
+            discount_percent=discount_percent,
+            discount_amount=discount_amount_fixed
         )
         
         # Extract calculated values
         subtotal = totals["subtotal"]
-        total_discount = totals["total_discount"]  # Item-level discounts
+        total_discount = totals["total_discount"]  # Item + Invoice level discounts
+        invoice_discount = totals["invoice_discount"]  # Just invoice-level for DB storage
         taxable_amount = totals["taxable_amount"]
         total_cgst = totals["total_cgst"]
         total_sgst = totals["total_sgst"]
@@ -325,6 +306,9 @@ async def create_invoice(
         total_tax = totals["total_tax"]
         round_off_amount = totals["round_off_amount"]
         final_amount = totals["final_amount"]
+        
+        # Extracted line calculations for inserting later (AVOIDS REDUNDANT RE-CALCULATION)
+        line_item_details = totals.get("line_calculations", [])
         
         # SIMPLIFIED: Pydantic model handles date validation - use directly
         invoice_date = invoice_data.invoice_date
@@ -373,15 +357,19 @@ async def create_invoice(
         billing_address_id = customer_details["billing_address_id"]
         shipping_address_id = customer_details["shipping_address_id"]
         
-        # Calculate due date based on payment terms
-        payment_terms = invoice_data.payment_mode or "cash"  # Use payment_mode from schema
-        invoice_date = date.today()
-        if payment_terms == "credit":
-            due_date = invoice_date + timedelta(days=30)  # 30 days credit
+        # Due date: Use frontend value if provided, otherwise calculate from payment terms
+        payment_terms = invoice_data.payment_mode or "cash"
+        invoice_date_obj = invoice_date if isinstance(invoice_date, date) else date.today()
+        
+        if invoice_data.due_date:
+            # Frontend provided due_date - respect it
+            due_date = invoice_data.due_date
+        elif payment_terms == "credit":
+            due_date = invoice_date_obj + timedelta(days=30)  # Default 30 days for credit
         elif payment_terms == "cash":
-            due_date = invoice_date  # Same day
+            due_date = invoice_date_obj  # Same day for cash
         else:
-            due_date = invoice_date + timedelta(days=7)  # Default 7 days
+            due_date = invoice_date_obj + timedelta(days=7)  # Default 7 days
         
         # Step 7: Create invoice with ALL important fields
         invoice_create = db.execute(text("""
@@ -510,23 +498,23 @@ async def create_invoice(
         batches_lookup = {}
         if batch_ids:
             batch_result = db.execute(text("""
-                SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date, cost_per_unit
                 FROM inventory.batches
                 WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
             """), {"batch_ids": batch_ids, "org_id": str(org_id)})
-            batches_lookup = {row[0]: {"batch_number": row[1], "mrp": row[2], "mfg_date": row[3], "exp_date": row[4]} for row in batch_result.fetchall()}
+            batches_lookup = {row[0]: {"batch_number": row[1], "mrp": row[2], "mfg_date": row[3], "exp_date": row[4], "cost_per_unit": row[5]} for row in batch_result.fetchall()}
         
         # For items without batch_id, get FIFO batches in one query
         products_needing_batches = [int(item.get("product_id")) for item in items if not item.get("batch_id") or not str(item.get("batch_id")).isdigit()]
         fifo_batches = {}
         if products_needing_batches:
             fifo_result = db.execute(text("""
-                SELECT DISTINCT ON (product_id) product_id, batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                SELECT DISTINCT ON (product_id) product_id, batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date, cost_per_unit
                 FROM inventory.batches
                 WHERE product_id = ANY(:product_ids) AND org_id = :org_id AND quantity_available > 0
                 ORDER BY product_id, expiry_date NULLS LAST, batch_id
             """), {"product_ids": products_needing_batches, "org_id": str(org_id)})
-            fifo_batches = {row[0]: {"batch_id": row[1], "batch_number": row[2], "mrp": row[3], "mfg_date": row[4], "exp_date": row[5]} for row in fifo_result.fetchall()}
+            fifo_batches = {row[0]: {"batch_id": row[1], "batch_number": row[2], "mrp": row[3], "mfg_date": row[4], "exp_date": row[5], "cost_per_unit": row[6]} for row in fifo_result.fetchall()}
         
         # =========================================================================
         # OPTIMIZED: BULK OPERATIONS - Prepare all data first, then bulk INSERT
@@ -542,7 +530,7 @@ async def create_invoice(
         from decimal import Decimal
         gst_type = invoice_data.gst_type or "CGST/SGST"
         
-        for item in items:
+        for i, item in enumerate(items):
             product_id = int(item.get("product_id"))
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
@@ -569,6 +557,7 @@ async def create_invoice(
             mrp = item.get("mrp", 0)
             manufacturing_date = None
             expiry_date = item.get("expiry_date")
+            cost_per_unit = 0  # Will be set from batch lookup if available
             
             if not batch_id:
                 fifo = fifo_batches.get(product_id)
@@ -578,6 +567,7 @@ async def create_invoice(
                     mrp = float(fifo["mrp"]) if fifo["mrp"] else mrp
                     manufacturing_date = fifo["mfg_date"]
                     expiry_date = fifo["exp_date"] or expiry_date
+                    cost_per_unit = float(fifo["cost_per_unit"]) if fifo.get("cost_per_unit") else 0
             else:
                 batch_details = batches_lookup.get(batch_id)
                 if batch_details:
@@ -585,26 +575,27 @@ async def create_invoice(
                     mrp = float(batch_details["mrp"]) if batch_details["mrp"] else mrp
                     manufacturing_date = batch_details["mfg_date"]
                     expiry_date = batch_details["exp_date"] or expiry_date
+                    cost_per_unit = float(batch_details["cost_per_unit"]) if batch_details.get("cost_per_unit") else 0
+                else:
+                    cost_per_unit = 0
             
-            # Calculate amounts
-            discount_amt = base_quantity * unit_price * discount_percent / 100
-            line_total_before_tax = (base_quantity * unit_price) - discount_amt
-            gst_percent = float(item.get("gst_percent", 0))
-            taxable_amount = line_total_before_tax
+            # Retrieve Pre-Calculated Data (DRY Principle)
+            # Instead of calling calculate_line_item again, we use the values from the service call above.
+            # This guarantees that the sum of line items EXACTLY matches invoice totals.
+            if i < len(line_item_details):
+                calc = line_item_details[i]
+            else:
+                # Fallback only if index mismatch (should never happen)
+                logger.warning(f"Index mismatch for item {i}, recalculating line item")
+                calc = calculate_line_item(
+                    base_quantity, 
+                    unit_price, 
+                    discount_percent, 
+                    float(item.get("gst_percent", 0)), 
+                    gst_type
+                )
             
-            # Calculate GST
-            gst_components = GSTService.calculate_gst_components(
-                Decimal(str(taxable_amount)),
-                Decimal(str(gst_percent)),
-                gst_type
-            )
-            cgst_amount = float(gst_components["cgst_amount"])
-            sgst_amount = float(gst_components["sgst_amount"])
-            igst_amount = float(gst_components["igst_amount"])
-            total_tax_amount = float(gst_components["total_tax_amount"])
-            line_total = taxable_amount + total_tax_amount
-            
-            # Prepare invoice item data
+            # Prepare invoice item data using calculated values
             invoice_items_data.append({
                 "invoice_id": invoice_id,
                 "product_id": product_id,
@@ -621,16 +612,16 @@ async def create_invoice(
                 "mrp": float(mrp) if mrp else 0,
                 "unit_price": unit_price,
                 "discount_percent": discount_percent,
-                "discount_amount": discount_amt,
-                "taxable_amount": taxable_amount,
-                "igst_rate": gst_percent if igst_amount > 0 else 0,
-                "igst_amount": igst_amount,
-                "cgst_rate": gst_percent / 2 if cgst_amount > 0 else 0,
-                "cgst_amount": cgst_amount,
-                "sgst_rate": gst_percent / 2 if sgst_amount > 0 else 0,
-                "sgst_amount": sgst_amount,
-                "total_tax_amount": total_tax_amount,
-                "line_total": line_total,
+                "discount_amount": calc["discount_amount"],
+                "taxable_amount": calc["taxable_amount"],
+                "igst_rate": float(item.get("gst_percent", 0)) if calc["igst_amount"] > 0 else 0,
+                "igst_amount": calc["igst_amount"],
+                "cgst_rate": float(item.get("gst_percent", 0)) / 2 if calc["cgst_amount"] > 0 else 0,
+                "cgst_amount": calc["cgst_amount"],
+                "sgst_rate": float(item.get("gst_percent", 0)) / 2 if calc["sgst_amount"] > 0 else 0,
+                "sgst_amount": calc["sgst_amount"],
+                "total_tax_amount": calc["total_tax"],
+                "line_total": calc["line_total"],
                 "free_quantity": free_quantity
             })
             
@@ -643,8 +634,8 @@ async def create_invoice(
                     "base_quantity": base_quantity
                 })
             
-            # ALWAYS create movement record (even without batch_id for audit trail)
-            unit_cost = float(item.get("unit_cost", unit_price * 0.7))
+            # Use cost_per_unit from batch (fetched from DB), or 0 if not available
+            unit_cost = cost_per_unit
             movement_records.append({
                 "org_id": context.org_id,
                 "product_id": product_id,

@@ -251,7 +251,10 @@ class InvoiceService:
         freight_charges: float = 0,
         insurance_charges: float = 0,
         other_charges: float = 0,
-        invoice_discount: float = 0
+        # NEW: Accept discount parameters instead of pre-calculated value
+        discount_type: str = "percentage",
+        discount_percent: float = 0,
+        discount_amount: float = 0
     ) -> Dict[str, Any]:
         """
         Calculate all invoice totals from item list.
@@ -262,7 +265,9 @@ class InvoiceService:
             freight_charges: Additional freight charges
             insurance_charges: Additional insurance charges
             other_charges: Other additional charges
-            invoice_discount: Overall invoice-level discount
+            discount_type: "percentage" or "fixed"
+            discount_percent: Invoice-level discount percentage (if type is percentage)
+            discount_amount: Invoice-level discount amount (if type is fixed)
             
         Returns:
             Dict with all calculated totals
@@ -270,45 +275,64 @@ class InvoiceService:
         from ..routes.enterprise_calculations import calculate_line_item
         
         subtotal = 0
-        total_discount = 0
+        total_item_discount = 0
         total_cgst = 0
         total_sgst = 0
         total_igst = 0
         total_tax = 0
         
+        calculated_lines = []
+        
         for item in items:
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
-            discount_percent = float(item.get("discount_percent", 0))
+            item_discount_percent = float(item.get("discount_percent", 0))
             gst_percent = float(item.get("gst_percent", 0))
             
             # Use base_quantity for billing (free items not billed)
             base_quantity = float(item.get("base_quantity", quantity))
             
             # Use shared helper for consistent calculations
-            calc = calculate_line_item(base_quantity, unit_price, discount_percent, gst_percent, gst_type)
+            calc = calculate_line_item(base_quantity, unit_price, item_discount_percent, gst_percent, gst_type)
+            
+            calculated_lines.append(calc)
             
             subtotal += calc["subtotal"]
-            total_discount += calc["discount_amount"]
+            total_item_discount += calc["discount_amount"]
             total_cgst += calc["cgst_amount"]
             total_sgst += calc["sgst_amount"]
             total_igst += calc["igst_amount"]
             total_tax += calc["total_tax"]
         
-        # Calculate final amounts
-        taxable_amount = subtotal - total_discount
+        # Calculate taxable amount after item-level discounts
+        taxable_amount = subtotal - total_item_discount
+        
+        # Calculate invoice-level discount (applied to taxable amount)
+        if discount_type == "percentage" and discount_percent > 0:
+            invoice_discount = taxable_amount * discount_percent / 100
+        else:
+            invoice_discount = discount_amount
+        
+        # Total discount = item-level + invoice-level
+        total_discount = total_item_discount + invoice_discount
+        
+        # Recalculate taxable amount after invoice discount
+        taxable_after_all_discounts = subtotal - total_discount
+        
+        # Final amount calculation
         amount_before_round = (
-            taxable_amount + total_tax + 
-            freight_charges + insurance_charges + other_charges - 
-            invoice_discount
+            taxable_after_all_discounts + total_tax + 
+            freight_charges + insurance_charges + other_charges
         )
         final_amount = round(amount_before_round)
         round_off_amount = final_amount - amount_before_round
         
         return {
             "subtotal": subtotal,
+            "total_item_discount": total_item_discount,
+            "invoice_discount": invoice_discount,
             "total_discount": total_discount,
-            "taxable_amount": taxable_amount,
+            "taxable_amount": taxable_after_all_discounts,
             "total_cgst": total_cgst,
             "total_sgst": total_sgst,
             "total_igst": total_igst,
@@ -316,9 +340,9 @@ class InvoiceService:
             "freight_charges": freight_charges,
             "insurance_charges": insurance_charges,
             "other_charges": other_charges,
-            "invoice_discount": invoice_discount,
             "round_off_amount": round_off_amount,
-            "final_amount": final_amount
+            "final_amount": final_amount,
+            "line_calculations": calculated_lines
         }
 
     @staticmethod
