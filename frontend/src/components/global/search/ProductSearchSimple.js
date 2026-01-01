@@ -3,7 +3,7 @@ import { Search, Package, Plus, X, Loader2 } from 'lucide-react';
 import { productAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import BatchSelector from '../modals/BatchSelector';
-import DataTransformer from '../../../services/dataTransformer';
+
 import searchCache, { smartSearch } from '../../../utils/searchCache';
 import { debounce } from '../../../utils/debounce';
 import localFirstService from '../../../services/offline/cache/localFirstService';
@@ -59,9 +59,17 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
         const results = await localFirstService.searchProducts(query, { limit: 20 });
 
         // Transform results to consistent format
-        const transformedResults = results.map(product =>
-          DataTransformer.transformProduct(product, 'search')
-        );
+        const transformedResults = results.map(product => ({
+          product_id: product.id,
+          product_name: product.name,
+          product_code: product.code || 'N/A',
+          hsn_code: product.hsn || 'N/A',
+          current_stock: product.stock || 0,
+          mrp: product.mrp || 0,
+          sale_price: product.selling_price || product.mrp || 0,
+          gst_percent: product.tax_rate || 0,
+          ...product
+        }));
         setSearchResults(transformedResults);
 
         // Auto-highlight first result so Enter key works immediately
@@ -200,8 +208,8 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                       ref={(el) => (resultRefs.current[index] = el)}
                       onClick={() => handleProductSelect(product)}
                       className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${index === highlightedIndex
-                          ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                          : 'hover:bg-gray-50'
+                        ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                        : 'hover:bg-gray-50'
                         }`}
                     >
                       <div className="flex justify-between items-start">

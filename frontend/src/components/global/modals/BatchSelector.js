@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
-import DataTransformer from '../../../services/dataTransformer';
+
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -180,7 +180,20 @@ const BatchSelector = ({
   const processBatches = (batchesData) => {
     // Transform batches using DataTransformer
     let transformedBatches = batchesData.map(batch => {
-      const transformed = DataTransformer.transformBatch(batch, product);
+      // Map batch data manually since DataTransformer is removed
+      const transformed = {
+        batch_id: batch.id || batch.batch_id,
+        batch_number: batch.batch_number || batch.batch_no,
+        expiry_date: batch.expiry_date,
+        manufacturing_date: batch.manufacturing_date,
+        quantity_available: batch.current_stock || batch.stock || batch.quantity_available || 0,
+        mrp: batch.mrp || 0,
+        unit_price: batch.selling_price || batch.sale_price || batch.unit_price || 0, // Canonical backend name
+        sale_price: batch.selling_price || batch.sale_price || batch.unit_price || 0, // Alias
+        purchase_price: batch.purchase_price || 0,
+        days_to_expiry: batch.expiry_date ? DateFormatter.daysBetween(new Date(), new Date(batch.expiry_date)) : null,
+        ...batch
+      };
 
       // Add offline reservation info
       const reserved = batch.quantity_reserved_offline || 0;
@@ -245,14 +258,19 @@ const BatchSelector = ({
   };
 
   const createDefaultBatch = (product) => {
-    return DataTransformer.transformBatch({
+    return {
       batch_id: `default_${product.product_id}`,
       batch_number: INVOICE_CONFIG.BATCH.DEFAULT_BATCH.BATCH_NUMBER,
       expiry_date: new Date(Date.now() + INVOICE_CONFIG.BATCH.DEFAULT_BATCH.EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      manufacturing_date: new Date().toISOString(),
       quantity_available: INVOICE_CONFIG.BATCH.DEFAULT_BATCH.QUANTITY,
+      quantity_usable: INVOICE_CONFIG.BATCH.DEFAULT_BATCH.QUANTITY,
       mrp: product.mrp || 0,
-      unit_price: product.unit_price || product.mrp || 0  // Canonical backend name
-    }, product);
+      unit_price: product.unit_price || product.mrp || 0,
+      sale_price: product.unit_price || product.mrp || 0,
+      days_to_expiry: INVOICE_CONFIG.BATCH.DEFAULT_BATCH.EXPIRY_DAYS,
+      product_id: product.product_id || product.id
+    };
   };
 
   const handleBatchSelect = (batch) => {

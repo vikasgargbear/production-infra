@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customerAPI } from '../../../services/api';
-import DataTransformer from '../../../services/dataTransformer';
+
 import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../ui/FullScreenModal';
 
@@ -40,21 +40,23 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     setSaving(true);
     setErrors([]);
     try {
-      const customerData = DataTransformer.prepareCustomerForAPI({
+      // Prepare customer data for API - direct object without DataTransformer
+      const customerData = {
         ...newCustomer,
         org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
-      });
+      };
 
       const response = await customerAPI.create(customerData);
-      
+
       // The API returns the created customer directly, not wrapped in data
       if (response) {
-        const createdCustomer = DataTransformer.transformCustomer(response, 'display');
-        
+        // Use response directly - no transformation needed
+        const createdCustomer = response;
+
         if (onCustomerCreated) {
           onCustomerCreated(createdCustomer);
         }
-        
+
         // Reset form
         setNewCustomer({
           customer_name: '',
@@ -78,7 +80,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
             country: 'India'
           }
         });
-        
+
         // Close modal
         onClose();
       } else {
@@ -147,242 +149,240 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
             Fill in customer details below. Press <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Tab</kbd> or <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Enter</kbd> to navigate.
           </div>
         </div>
-          <div className="space-y-6">
-            {/* Customer Type Toggle */}
-            <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsBusinessCustomer(true);
-                  setNewCustomer({ ...newCustomer, customer_type: 'pharmacy' });
-                }}
-                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  isBusinessCustomer
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
+        <div className="space-y-6">
+          {/* Customer Type Toggle */}
+          <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsBusinessCustomer(true);
+                setNewCustomer({ ...newCustomer, customer_type: 'pharmacy' });
+              }}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isBusinessCustomer
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
-                <Building className="inline-block w-4 h-4 mr-2" />
-                Business
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsBusinessCustomer(false);
-                  setNewCustomer({ ...newCustomer, customer_type: 'individual' });
-                }}
-                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  !isBusinessCustomer
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
+            >
+              <Building className="inline-block w-4 h-4 mr-2" />
+              Business
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsBusinessCustomer(false);
+                setNewCustomer({ ...newCustomer, customer_type: 'individual' });
+              }}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${!isBusinessCustomer
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
                 }`}
-              >
-                <User className="inline-block w-4 h-4 mr-2" />
-                Individual
-              </button>
-            </div>
+            >
+              <User className="inline-block w-4 h-4 mr-2" />
+              Individual
+            </button>
+          </div>
 
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Basic Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer Name *
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newCustomer.customer_name}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, customer_name: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter customer name"
-                    />
-                  </div>
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Basic Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Customer Name *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={newCustomer.customer_name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, customer_name: e.target.value })}
+                    className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Enter customer name"
+                  />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number *
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newCustomer.primary_phone}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, primary_phone: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter phone number"
-                    />
-                  </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number *
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={newCustomer.primary_phone}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, primary_phone: e.target.value })}
+                    className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Enter phone number"
+                  />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    WhatsApp Number
-                  </label>
-                  <div className="relative">
-                    <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
-                    <input
-                      type="text"
-                      value={newCustomer.whatsapp_number}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, whatsapp_number: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="WhatsApp number"
-                    />
-                  </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  WhatsApp Number
+                </label>
+                <div className="relative">
+                  <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
+                  <input
+                    type="text"
+                    value={newCustomer.whatsapp_number}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, whatsapp_number: e.target.value })}
+                    className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="WhatsApp number"
+                  />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="email"
-                      value={newCustomer.primary_email}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, primary_email: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter email address"
-                    />
-                  </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="email"
+                    value={newCustomer.primary_email}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, primary_email: e.target.value })}
+                    className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Enter email address"
+                  />
                 </div>
               </div>
             </div>
-            
-            {/* Address Information */}
+          </div>
+
+          {/* Address Information */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Address Information</h4>
             <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Address Information</h4>
-              <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address *
+                </label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <textarea
+                    value={newCustomer.address.address_line1}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, address_line1: e.target.value } })}
+                    className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                    rows="2"
+                    placeholder="Enter complete address"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address *
+                    City *
                   </label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                    <textarea
-                      value={newCustomer.address.address_line1}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, address_line1: e.target.value } })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                      rows="2"
-                      placeholder="Enter complete address"
+                    <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={newCustomer.address.city}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, city: e.target.value } })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="Enter city"
                     />
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    State *
+                  </label>
+                  <select
+                    value={newCustomer.address.state}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, state: e.target.value } })}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Select State</option>
+                    <option value="Andhra Pradesh">Andhra Pradesh</option>
+                    <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                    <option value="Assam">Assam</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Chhattisgarh">Chhattisgarh</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Gujarat">Gujarat</option>
+                    <option value="Haryana">Haryana</option>
+                    <option value="Himachal Pradesh">Himachal Pradesh</option>
+                    <option value="Jharkhand">Jharkhand</option>
+                    <option value="Karnataka">Karnataka</option>
+                    <option value="Kerala">Kerala</option>
+                    <option value="Madhya Pradesh">Madhya Pradesh</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Manipur">Manipur</option>
+                    <option value="Meghalaya">Meghalaya</option>
+                    <option value="Mizoram">Mizoram</option>
+                    <option value="Nagaland">Nagaland</option>
+                    <option value="Odisha">Odisha</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Sikkim">Sikkim</option>
+                    <option value="Tamil Nadu">Tamil Nadu</option>
+                    <option value="Telangana">Telangana</option>
+                    <option value="Tripura">Tripura</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Uttarakhand">Uttarakhand</option>
+                    <option value="West Bengal">West Bengal</option>
+                    <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
+                    <option value="Chandigarh">Chandigarh</option>
+                    <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
+                    <option value="Delhi">Delhi</option>
+                    <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                    <option value="Ladakh">Ladakh</option>
+                    <option value="Lakshadweep">Lakshadweep</option>
+                    <option value="Puducherry">Puducherry</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className={`grid ${isBusinessCustomer ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pincode *
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomer.address.pincode}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, pincode: e.target.value } })}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Enter pincode"
+                    maxLength="6"
+                  />
+                </div>
+
+                {isBusinessCustomer && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      City *
-                    </label>
-                    <div className="relative">
-                      <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="text"
-                        value={newCustomer.address.city}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, city: e.target.value } })}
-                        className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        placeholder="Enter city"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      State *
+                      Business Type *
                     </label>
                     <select
-                      value={newCustomer.address.state}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, state: e.target.value } })}
+                      value={newCustomer.customer_type}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
                       className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
-                      <option value="">Select State</option>
-                      <option value="Andhra Pradesh">Andhra Pradesh</option>
-                      <option value="Arunachal Pradesh">Arunachal Pradesh</option>
-                      <option value="Assam">Assam</option>
-                      <option value="Bihar">Bihar</option>
-                      <option value="Chhattisgarh">Chhattisgarh</option>
-                      <option value="Goa">Goa</option>
-                      <option value="Gujarat">Gujarat</option>
-                      <option value="Haryana">Haryana</option>
-                      <option value="Himachal Pradesh">Himachal Pradesh</option>
-                      <option value="Jharkhand">Jharkhand</option>
-                      <option value="Karnataka">Karnataka</option>
-                      <option value="Kerala">Kerala</option>
-                      <option value="Madhya Pradesh">Madhya Pradesh</option>
-                      <option value="Maharashtra">Maharashtra</option>
-                      <option value="Manipur">Manipur</option>
-                      <option value="Meghalaya">Meghalaya</option>
-                      <option value="Mizoram">Mizoram</option>
-                      <option value="Nagaland">Nagaland</option>
-                      <option value="Odisha">Odisha</option>
-                      <option value="Punjab">Punjab</option>
-                      <option value="Rajasthan">Rajasthan</option>
-                      <option value="Sikkim">Sikkim</option>
-                      <option value="Tamil Nadu">Tamil Nadu</option>
-                      <option value="Telangana">Telangana</option>
-                      <option value="Tripura">Tripura</option>
-                      <option value="Uttar Pradesh">Uttar Pradesh</option>
-                      <option value="Uttarakhand">Uttarakhand</option>
-                      <option value="West Bengal">West Bengal</option>
-                      <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
-                      <option value="Chandigarh">Chandigarh</option>
-                      <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
-                      <option value="Delhi">Delhi</option>
-                      <option value="Jammu and Kashmir">Jammu and Kashmir</option>
-                      <option value="Ladakh">Ladakh</option>
-                      <option value="Lakshadweep">Lakshadweep</option>
-                      <option value="Puducherry">Puducherry</option>
+                      <option value="pharmacy">Pharmacy</option>
+                      <option value="hospital">Hospital</option>
+                      <option value="clinic">Clinic</option>
+                      <option value="institution">Institution</option>
+                      <option value="doctor">Doctor</option>
                     </select>
                   </div>
-                </div>
-                
-                <div className={`grid ${isBusinessCustomer ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pincode *
-                    </label>
-                    <input
-                      type="text"
-                      value={newCustomer.address.pincode}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, pincode: e.target.value } })}
-                      className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter pincode"
-                      maxLength="6"
-                    />
-                  </div>
-                  
-                  {isBusinessCustomer && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Business Type *
-                      </label>
-                      <select
-                        value={newCustomer.customer_type}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
-                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      >
-                        <option value="pharmacy">Pharmacy</option>
-                        <option value="hospital">Hospital</option>
-                        <option value="clinic">Clinic</option>
-                        <option value="institution">Institution</option>
-                        <option value="doctor">Doctor</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
-            
-            {/* Compliance Information - CRITICAL - Only for Business Customers */}
-            {isBusinessCustomer && (
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
-                  <Shield className="w-4 h-4 text-red-500 mr-2" />
-                  Compliance Information (Required for Pharmacy/Hospital)
-                </h4>
+          </div>
+
+          {/* Compliance Information - CRITICAL - Only for Business Customers */}
+          {isBusinessCustomer && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                <Shield className="w-4 h-4 text-red-500 mr-2" />
+                Compliance Information (Required for Pharmacy/Hospital)
+              </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -399,7 +399,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     License Validity Date *
@@ -421,7 +421,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     </p>
                   )}
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     GST Number
@@ -457,11 +457,11 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                 </div>
               </div>
             </div>
-            )}
+          )}
 
-            {/* Credit Management - CRITICAL - Only for Business Customers */}
-            {isBusinessCustomer && (
-              <div className="space-y-4">
+          {/* Credit Management - CRITICAL - Only for Business Customers */}
+          {isBusinessCustomer && (
+            <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
                 <CreditCard className="w-4 h-4 text-blue-500 mr-2" />
                 Credit Management
@@ -482,7 +482,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     <option value="D">D - Poor (Cash Only)</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Credit Limit (₹)
@@ -500,7 +500,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     <p className="text-xs text-red-600 mt-1">D-rated customers must pay cash</p>
                   )}
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Credit Days
@@ -518,24 +518,24 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                 </div>
               </div>
             </div>
-            )}
+          )}
 
-            {/* Sales & Territory Management removed - not essential for core customer creation */}
+          {/* Sales & Territory Management removed - not essential for core customer creation */}
 
-            {/* Error Messages */}
-            {errors.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="text-sm text-red-600 space-y-1">
-                  {errors.map((error, index) => (
-                    <div key={index} className="flex items-start">
-                      <span className="block w-1 h-1 bg-red-600 rounded-full mt-2 mr-2 flex-shrink-0"></span>
-                      <span>{error}</span>
-                    </div>
-                  ))}
-                </div>
+          {/* Error Messages */}
+          {errors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="text-sm text-red-600 space-y-1">
+                {errors.map((error, index) => (
+                  <div key={index} className="flex items-start">
+                    <span className="block w-1 h-1 bg-red-600 rounded-full mt-2 mr-2 flex-shrink-0"></span>
+                    <span>{error}</span>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
       </div>
     </FullScreenModal>
   );

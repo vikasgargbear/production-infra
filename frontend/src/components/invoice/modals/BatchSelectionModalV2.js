@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  X, Package, Calendar, AlertCircle, CheckCircle, 
+import {
+  X, Package, Calendar, AlertCircle, CheckCircle,
   TrendingDown, Zap, Shield, Clock, Box, DollarSign
 } from 'lucide-react';
 import { batchesApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
-import DataTransformer from '../../../services/dataTransformer';
+
 import DateFormatter from '../../../services/dateFormatter';
 import { componentStyles as styles, cx } from '../styles/invoiceStyles';
 
-const BatchSelectionModalV2 = ({ 
-  show, 
-  product, 
-  onClose, 
-  onBatchSelect 
+const BatchSelectionModalV2 = ({
+  show,
+  product,
+  onClose,
+  onBatchSelect
 }) => {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -59,51 +59,61 @@ const BatchSelectionModalV2 = ({
     setLoading(true);
     try {
       const response = await batchesApi.getByProduct(product.product_id);
-      
+
       const batchesData = response.data?.batches || response.data || [];
       // Transform batches using DataTransformer
-      const transformedBatches = batchesData.map(batch => 
-        DataTransformer.transformBatch(batch, product)
-      );
+      // Transform batches manually since DataTransformer is removed
+      const transformedBatches = batchesData.map(batch => ({
+        batch_id: batch.id || batch.batch_id,
+        batch_number: batch.batch_number || batch.batch_no,
+        expiry_date: batch.expiry_date,
+        manufacturing_date: batch.manufacturing_date || batch.mfg_date,
+        quantity_available: batch.current_stock || batch.stock || batch.quantity_available || 0,
+        mrp: batch.mrp || product.mrp || 0,
+        sale_price: batch.selling_price || batch.sale_price || batch.unit_price || 0,
+        ...batch
+      }));
       const availableBatches = transformedBatches
         .filter(batch => batch.quantity_available > 0)
         .sort((a, b) => new Date(b.expiry_date) - new Date(a.expiry_date)); // Descending order (latest expiry first)
-      
+
       // Cache the results
       searchCache.set('batches', { product_id: product.product_id }, availableBatches);
       setBatches(availableBatches);
-      
+
       // Auto-select first batch
       if (availableBatches.length > 0) {
         setSelectedBatch(availableBatches[0]);
         setHighlightedIndex(0);
       }
-      
+
       // If no batches found, create a default batch
       if (availableBatches.length === 0) {
-        const defaultBatch = DataTransformer.transformBatch({
+        const defaultBatch = {
           batch_id: `default_${product.product_id}`,
           batch_number: 'DEFAULT',
           expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          manufacturing_date: new Date().toISOString(),
           quantity_available: 100,
           mrp: product.mrp || 0,
           sale_price: product.sale_price || product.mrp || 0
-        }, product);
+        };
         setBatches([defaultBatch]);
         setSelectedBatch(defaultBatch);
         setHighlightedIndex(0);
       }
     } catch (error) {
-      
+
       // Create a fallback batch if API fails
-      const fallbackBatch = DataTransformer.transformBatch({
+      const fallbackBatch = {
         batch_id: `fallback_${product.product_id}`,
         batch_number: 'STOCK',
         expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        manufacturing_date: new Date().toISOString(),
         quantity_available: product.quantity || 100,
         mrp: product.mrp || 0,
-        selling_price: product.sale_price || product.mrp || 0
-      }, product);
+        sale_price: product.sale_price || product.mrp || 0
+      };
       setBatches([fallbackBatch]);
       setSelectedBatch(fallbackBatch);
       setHighlightedIndex(0);
@@ -120,10 +130,10 @@ const BatchSelectionModalV2 = ({
       setShowCostInfo(prev => !prev);
       return;
     }
-    
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => 
+      setHighlightedIndex(prev =>
         prev < batches.length - 1 ? prev + 1 : 0
       );
       if (batches[highlightedIndex + 1] || batches[0]) {
@@ -131,7 +141,7 @@ const BatchSelectionModalV2 = ({
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex(prev => 
+      setHighlightedIndex(prev =>
         prev > 0 ? prev - 1 : batches.length - 1
       );
       if (batches[highlightedIndex - 1] || batches[batches.length - 1]) {
@@ -150,7 +160,7 @@ const BatchSelectionModalV2 = ({
 
   const confirmBatchSelection = () => {
     if (!selectedBatch) return;
-    
+
     const productWithBatch = {
       ...product,
       batch_id: selectedBatch.batch_id,
@@ -164,15 +174,15 @@ const BatchSelectionModalV2 = ({
       gst_percent: product.gst_percent ?? 0,
       tax_rate: product.gst_percent ?? 0,
     };
-    
+
     onBatchSelect(productWithBatch);
     onClose();
   };
 
   const handleBatchSelect = (batch) => {
-    
+
     setSelectedBatch(batch);
-    
+
     const productWithBatch = {
       ...product,
       batch_id: batch.batch_id,
@@ -196,7 +206,7 @@ const BatchSelectionModalV2 = ({
 
   const getExpiryInfo = (expiryDate) => {
     const status = DateFormatter.getExpiryStatus(expiryDate);
-    
+
     // Map status to icons
     const iconMap = {
       expired: AlertCircle,
@@ -205,7 +215,7 @@ const BatchSelectionModalV2 = ({
       good: Shield,
       unknown: AlertCircle
     };
-    
+
     // Map status to gradients
     const gradientMap = {
       expired: 'from-red-700 to-red-800',
@@ -214,7 +224,7 @@ const BatchSelectionModalV2 = ({
       good: 'from-emerald-500 to-emerald-600',
       unknown: 'from-gray-500 to-gray-600'
     };
-    
+
     return {
       ...status,
       icon: iconMap[status.status],
@@ -230,7 +240,7 @@ const BatchSelectionModalV2 = ({
 
   return (
     <div className={styles.modalOverlay}>
-      <div 
+      <div
         ref={modalRef}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden"
         tabIndex={-1}
@@ -304,7 +314,7 @@ const BatchSelectionModalV2 = ({
                     const expiryInfo = getExpiryInfo(batch.expiry_date);
                     const isSelected = selectedBatch?.batch_id === batch.batch_id;
                     const isHighlighted = highlightedIndex === index;
-                    
+
                     return (
                       <div
                         key={batch.batch_id}
@@ -312,10 +322,10 @@ const BatchSelectionModalV2 = ({
                         className={`
                           cursor-pointer transition-colors duration-150
                           ${isSelected
-                            ? 'bg-blue-100' 
+                            ? 'bg-blue-100'
                             : isHighlighted
-                            ? 'bg-blue-50'
-                            : 'hover:bg-gray-50'
+                              ? 'bg-blue-50'
+                              : 'hover:bg-gray-50'
                           }
                         `}
                       >
@@ -344,7 +354,7 @@ const BatchSelectionModalV2 = ({
                               <div className="w-28 text-center">
                                 <span className="text-sm font-semibold text-gray-900">₹{batch.mrp || product.mrp}</span>
                               </div>
-                              
+
                               {/* Select button */}
                               <div className="w-32 text-right">
                                 {isSelected ? (
@@ -378,14 +388,14 @@ const BatchSelectionModalV2 = ({
                       </h4>
                       <span className="text-xs text-blue-600 font-medium">Confidential</span>
                     </div>
-                    
+
                     <div className="space-y-2">
                       {batches.map((batch, index) => {
                         const costPrice = parseFloat(batch.cost_per_unit) || parseFloat(batch.weighted_average_cost) || 0;
                         const sellPrice = parseFloat(batch.sale_price_per_unit) || parseFloat(batch.mrp_per_unit) || 0;
                         const profit = sellPrice - costPrice;
                         const margin = sellPrice > 0 ? ((profit / sellPrice) * 100) : 0;
-                        
+
                         return (
                           <div key={batch.batch_id} className="bg-white rounded-lg p-3 flex items-center justify-between border border-gray-200">
                             <div className="flex-1">
@@ -418,7 +428,7 @@ const BatchSelectionModalV2 = ({
                         );
                       })}
                     </div>
-                    
+
                     <div className="mt-3 text-xs text-gray-500 text-center">
                       Press <kbd className="px-1 py-0.5 bg-white rounded border">Shift+~</kbd> again to hide
                     </div>
@@ -441,7 +451,7 @@ const BatchSelectionModalV2 = ({
             <span className="flex items-center">
               <kbd className="px-2 py-1 bg-white rounded border border-gray-300 mr-1.5 flex items-center gap-1">
                 <span>Shift</span><span>+</span><span>~</span>
-              </kbd> 
+              </kbd>
               {showCostInfo ? 'Hide' : 'Show'} Cost/Profit
             </span>
             <span className="flex items-center">

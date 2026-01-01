@@ -82,8 +82,6 @@ export const calculateNoteBalance = (note: Note): number => {
 // API
 export { notesApi } from '../../services/api';
 
-// Data Transformer
-export { notesDataTransformer } from '../../services/api/utils/notesDataTransformer';
 
 // Component interfaces
 interface NotesComponents {

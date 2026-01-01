@@ -59,11 +59,11 @@ export const validateStockQuantity = (quantity, availableQty, movementType) => {
   if (!quantity || isNaN(quantity) || parseFloat(quantity) <= 0) {
     return { valid: false, message: 'Quantity must be greater than 0' };
   }
-  
+
   if (movementType === MOVEMENT_TYPES.ISSUE && parseFloat(quantity) > availableQty) {
     return { valid: false, message: `Quantity cannot exceed available stock (${availableQty})` };
   }
-  
+
   return { valid: true };
 };
 
@@ -74,7 +74,7 @@ export const calculateStockValue = (quantity, rate) => {
 export const getMovementSign = (movementType) => {
   const positiveMovements = [MOVEMENT_TYPES.RECEIVE, MOVEMENT_TYPES.OPENING];
   const negativeMovements = [MOVEMENT_TYPES.ISSUE, MOVEMENT_TYPES.DAMAGE, MOVEMENT_TYPES.EXPIRY];
-  
+
   if (positiveMovements.includes(movementType)) return 1;
   if (negativeMovements.includes(movementType)) return -1;
   return 0; // For transfers and adjustments, depends on context
@@ -83,8 +83,6 @@ export const getMovementSign = (movementType) => {
 // API
 export { stockApi } from '../../services/api';
 
-// Data Transformer
-export { stockDataTransformer } from '../../services/api/utils/stockDataTransformer';
 
 // Default export
 const InventoryModule = {

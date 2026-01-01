@@ -3,7 +3,7 @@ import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, 
 import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
-import DataTransformer from '../../../services/dataTransformer';
+
 import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../ui/FullScreenModal';
 
@@ -29,9 +29,9 @@ const INDIAN_STATES = [
  * @param {Object} props.initialData - Initial form data (for prefilling)
  * @param {string} props.title - Modal title (default: "Add New Supplier")
  */
-const SupplierCreationModal = ({ 
-  isOpen, 
-  onClose, 
+const SupplierCreationModal = ({
+  isOpen,
+  onClose,
   onSupplierCreated,
   initialData = {},
   title = "Add New Supplier"
@@ -41,7 +41,7 @@ const SupplierCreationModal = ({
   const [saving, setSaving] = useState(false);
   const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState(false);
   const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     // Basic Information
     supplier_name: '',
@@ -54,7 +54,7 @@ const SupplierCreationModal = ({
     alternate_phone: '',
     email: '',  // Business email
     website: '',
-    
+
     // Address Information
     address_line1: '',
     address_line2: '',
@@ -62,32 +62,32 @@ const SupplierCreationModal = ({
     state: 'Maharashtra',
     pincode: '',
     country: 'India',
-    
+
     // Tax & Compliance - CRITICAL
     gstin: '',
     pan_number: '',
     drug_license_no: '',
     drug_license_validity: '',  // NEW: Critical for compliance
-    
+
     // Banking Details - CRITICAL
     payment_terms: '30',
     bank_name: '',
     bank_account_no: '',
     bank_ifsc_code: '',
     account_holder_name: '',  // NEW: Required for payments
-    
+
     // Performance Ratings - NEW
     quality_rating: 4,
     delivery_rating: 4,
     compliance_rating: 'good',
-    
+
     // Additional Info
     supplier_type: 'distributor',
     notes: '',
     is_active: true,
     ...initialData
   });
-  
+
   const [errors, setErrors] = useState({});
 
   // Auto-generate supplier code
@@ -96,8 +96,8 @@ const SupplierCreationModal = ({
       const code = formData.supplier_name
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '')
-        .slice(0, 6) + 
-        '-' + 
+        .slice(0, 6) +
+        '-' +
         Date.now().toString().slice(-4);
       setFormData(prev => ({ ...prev, supplier_code: code }));
     }
@@ -151,35 +151,35 @@ const SupplierCreationModal = ({
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     // Required fields
     if (!formData.supplier_name) newErrors.supplier_name = 'Supplier name is required';
     if (!formData.phone) newErrors.phone = 'Phone number is required';
     else if (!validatePhone(formData.phone)) newErrors.phone = 'Invalid phone number';
-    
+
     if (!formData.city) newErrors.city = 'City is required';
     if (!formData.state) newErrors.state = 'State is required';
-    
+
     // If city and state are provided, pincode becomes required (database constraint)
     if ((formData.city || formData.state) && !formData.pincode) {
       newErrors.pincode = 'Pincode is required when providing address';
     } else if (formData.pincode && !/^\d{6}$/.test(formData.pincode)) {
       newErrors.pincode = 'Pincode must be 6 digits';
     }
-    
+
     // Format validations
     if (formData.gstin && !validateGSTIN(formData.gstin)) {
       newErrors.gstin = 'Invalid GSTIN format';
     }
-    
+
     if (formData.pan_number && !validatePAN(formData.pan_number)) {
       newErrors.pan_number = 'Invalid PAN format';
     }
-    
+
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -189,27 +189,31 @@ const SupplierCreationModal = ({
       toast.error('Please fix the errors before submitting');
       return;
     }
-    
+
     setSaving(true);
     try {
-      // Prepare data for API using DataTransformer
-      const supplierData = DataTransformer.prepareSupplierForAPI(formData);
-      
+      // Prepare data for API - direct object without DataTransformer
+      const supplierData = {
+        ...formData,
+        gstin: formData.gstin || null,
+        pan_number: formData.pan_number || null
+      };
+
       const response = await supplierAPI.create(supplierData);
-      
+
       if (response) {
         // Clear supplier cache to force refresh on next search
         searchCache.clearType('suppliers');
-        
-        // Transform response data
-        const transformedSupplier = DataTransformer.transformSupplier(response.data || response, 'display');
-        
+
+        // Use response directly - no transformation needed
+        const transformedSupplier = response.data || response;
+
         toast.success('Supplier created successfully');
-        
+
         if (onSupplierCreated) {
           onSupplierCreated(transformedSupplier);
         }
-        
+
         onClose();
       } else {
         throw new Error('Failed to create supplier');
@@ -251,362 +255,351 @@ const SupplierCreationModal = ({
       }
     >
       <div className="space-y-6">
-          {/* Basic Information Section */}
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              Basic Information
-            </h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Supplier Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.supplier_name}
-                    onChange={(e) => handleInputChange('supplier_name', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.supplier_name ? 'border-red-300' : 'border-gray-300'
+        {/* Basic Information Section */}
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-blue-600" />
+            Basic Information
+          </h3>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Supplier Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.supplier_name}
+                  onChange={(e) => handleInputChange('supplier_name', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.supplier_name ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="e.g., ABC Pharmaceuticals"
-                  />
-                  {errors.supplier_name && (
-                    <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Type
-                  </label>
-                  <select
-                    value={formData.supplier_type}
-                    onChange={(e) => handleInputChange('supplier_type', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="distributor">Distributor</option>
-                    <option value="manufacturer">Manufacturer</option>
-                    <option value="stockist">Stockist</option>
-                    <option value="wholesaler">Wholesaler</option>
-                    <option value="importer">Importer</option>
-                  </select>
-                </div>
+                  placeholder="e.g., ABC Pharmaceuticals"
+                />
+                {errors.supplier_name && (
+                  <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>
+                )}
               </div>
 
-              {/* Business Contact - Single Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Phone *
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.phone ? 'border-red-300' : 'border-gray-300'
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Type
+                </label>
+                <select
+                  value={formData.supplier_type}
+                  onChange={(e) => handleInputChange('supplier_type', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="distributor">Distributor</option>
+                  <option value="manufacturer">Manufacturer</option>
+                  <option value="stockist">Stockist</option>
+                  <option value="wholesaler">Wholesaler</option>
+                  <option value="importer">Importer</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Business Contact - Single Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Phone *
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.phone ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="Business phone"
-                  />
-                  {errors.phone && (
-                    <p className="mt-1 text-xs text-red-600">{errors.phone}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
-                    <span>WhatsApp</span>
-                    <label className="text-xs font-normal">
-                      <input
-                        type="checkbox"
-                        checked={useBusinessPhoneForWhatsApp}
-                        onChange={(e) => setUseBusinessPhoneForWhatsApp(e.target.checked)}
-                        className="mr-1"
-                      />
-                      Same
-                    </label>
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.whatsapp_number}
-                    onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
-                    disabled={useBusinessPhoneForWhatsApp}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      useBusinessPhoneForWhatsApp ? 'bg-gray-100' : ''
-                    } border-gray-300`}
-                    placeholder="WhatsApp"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.email ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="Business email"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Website
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.website}
-                    onChange={(e) => handleInputChange('website', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="example.com"
-                  />
-                </div>
+                  placeholder="Business phone"
+                />
+                {errors.phone && (
+                  <p className="mt-1 text-xs text-red-600">{errors.phone}</p>
+                )}
               </div>
 
-              {/* Contact Person - Optional compact section */}
-              <details className="border rounded-lg p-3 bg-gray-50">
-                <summary className="text-xs font-medium text-gray-700 cursor-pointer">
-                  Contact Person (Optional) 
-                  <label className="ml-3 text-xs font-normal">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
+                  <span>WhatsApp</span>
+                  <label className="text-xs font-normal">
                     <input
                       type="checkbox"
-                      checked={useBusinessContactForPerson}
-                      onChange={(e) => setUseBusinessContactForPerson(e.target.checked)}
+                      checked={useBusinessPhoneForWhatsApp}
+                      onChange={(e) => setUseBusinessPhoneForWhatsApp(e.target.checked)}
                       className="mr-1"
                     />
-                    Use business info
+                    Same
                   </label>
-                </summary>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3">
-                  <div>
-                    <input
-                      type="text"
-                      value={formData.contact_person}
-                      onChange={(e) => handleInputChange('contact_person', e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500"
-                      placeholder="Contact person name"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="tel"
-                      value={formData.contact_person_phone}
-                      onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
-                      disabled={useBusinessContactForPerson}
-                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${
-                        useBusinessContactForPerson ? 'bg-gray-100' : ''
-                      } border-gray-200`}
-                      placeholder="Contact phone"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="email"
-                      value={formData.contact_person_email}
-                      onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
-                      disabled={useBusinessContactForPerson}
-                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${
-                        useBusinessContactForPerson ? 'bg-gray-100' : ''
-                      } border-gray-200`}
-                      placeholder="Contact email"
-                    />
-                  </div>
-                </div>
-              </details>
-            </div>
-          </div>
-
-          {/* Address Section - Compact */}
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-blue-600" />
-              Address
-            </h3>
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                </label>
                 <input
-                  type="text"
-                  value={formData.address_line1}
-                  onChange={(e) => handleInputChange('address_line1', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Building/Street address"
-                />
-                <input
-                  type="text"
-                  value={formData.address_line2}
-                  onChange={(e) => handleInputChange('address_line2', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Area/Landmark"
+                  type="tel"
+                  value={formData.whatsapp_number}
+                  onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
+                  disabled={useBusinessPhoneForWhatsApp}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${useBusinessPhoneForWhatsApp ? 'bg-gray-100' : ''
+                    } border-gray-300`}
+                  placeholder="WhatsApp"
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                <div>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) => handleInputChange('city', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                      errors.city ? 'border-red-300' : 'border-gray-300'
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="City *"
-                  />
-                  {errors.city && (
-                    <p className="mt-1 text-xs text-red-600">{errors.city}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <select
-                    value={formData.state}
-                    onChange={(e) => handleInputChange('state', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                      errors.state ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">State *</option>
-                    {INDIAN_STATES.map(state => (
-                      <option key={state} value={state}>{state}</option>
-                    ))}
-                  </select>
-                  {errors.state && (
-                    <p className="mt-1 text-xs text-red-600">{errors.state}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <input
-                    type="text"
-                    value={formData.pincode}
-                    onChange={(e) => handleInputChange('pincode', e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                      errors.pincode ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="Pincode *"
-                    maxLength="6"
-                  />
-                  {errors.pincode && (
-                    <p className="mt-1 text-xs text-red-600">{errors.pincode}</p>
-                  )}
-                </div>
+                  placeholder="Business email"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Website
+                </label>
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => handleInputChange('website', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="example.com"
+                />
               </div>
             </div>
-          </div>
 
-          {/* Tax & Compliance - Single Row */}
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              Tax & Compliance
-            </h3>
+            {/* Contact Person - Optional compact section */}
+            <details className="border rounded-lg p-3 bg-gray-50">
+              <summary className="text-xs font-medium text-gray-700 cursor-pointer">
+                Contact Person (Optional)
+                <label className="ml-3 text-xs font-normal">
+                  <input
+                    type="checkbox"
+                    checked={useBusinessContactForPerson}
+                    onChange={(e) => setUseBusinessContactForPerson(e.target.checked)}
+                    className="mr-1"
+                  />
+                  Use business info
+                </label>
+              </summary>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3">
+                <div>
+                  <input
+                    type="text"
+                    value={formData.contact_person}
+                    onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    placeholder="Contact person name"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="tel"
+                    value={formData.contact_person_phone}
+                    onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
+                    disabled={useBusinessContactForPerson}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
+                      } border-gray-200`}
+                    placeholder="Contact phone"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="email"
+                    value={formData.contact_person_email}
+                    onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
+                    disabled={useBusinessContactForPerson}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
+                      } border-gray-200`}
+                    placeholder="Contact email"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        {/* Address Section - Compact */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-blue-600" />
+            Address
+          </h3>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={formData.address_line1}
+                onChange={(e) => handleInputChange('address_line1', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Building/Street address"
+              />
+              <input
+                type="text"
+                value={formData.address_line2}
+                onChange={(e) => handleInputChange('address_line2', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Area/Landmark"
+              />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               <div>
                 <input
                   type="text"
-                  value={formData.gstin}
-                  onChange={(e) => handleInputChange('gstin', e.target.value.toUpperCase())}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    errors.gstin ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="GSTIN (15 chars)"
-                  maxLength="15"
+                  value={formData.city}
+                  onChange={(e) => handleInputChange('city', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.city ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  placeholder="City *"
                 />
-                {errors.gstin && (
-                  <p className="mt-1 text-xs text-red-600">{errors.gstin}</p>
+                {errors.city && (
+                  <p className="mt-1 text-xs text-red-600">{errors.city}</p>
                 )}
               </div>
-              
+
+              <div>
+                <select
+                  value={formData.state}
+                  onChange={(e) => handleInputChange('state', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.state ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                >
+                  <option value="">State *</option>
+                  {INDIAN_STATES.map(state => (
+                    <option key={state} value={state}>{state}</option>
+                  ))}
+                </select>
+                {errors.state && (
+                  <p className="mt-1 text-xs text-red-600">{errors.state}</p>
+                )}
+              </div>
+
               <div>
                 <input
                   type="text"
-                  value={formData.pan_number}
-                  onChange={(e) => handleInputChange('pan_number', e.target.value.toUpperCase())}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                    errors.pan_number ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="PAN (10 chars)"
-                  maxLength="10"
+                  value={formData.pincode}
+                  onChange={(e) => handleInputChange('pincode', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.pincode ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  placeholder="Pincode *"
+                  maxLength="6"
                 />
-                {errors.pan_number && (
-                  <p className="mt-1 text-xs text-red-600">{errors.pan_number}</p>
+                {errors.pincode && (
+                  <p className="mt-1 text-xs text-red-600">{errors.pincode}</p>
                 )}
               </div>
-              
+            </div>
+          </div>
+        </div>
+
+        {/* Tax & Compliance - Single Row */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-600" />
+            Tax & Compliance
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div>
+              <input
+                type="text"
+                value={formData.gstin}
+                onChange={(e) => handleInputChange('gstin', e.target.value.toUpperCase())}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.gstin ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                placeholder="GSTIN (15 chars)"
+                maxLength="15"
+              />
+              {errors.gstin && (
+                <p className="mt-1 text-xs text-red-600">{errors.gstin}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="text"
+                value={formData.pan_number}
+                onChange={(e) => handleInputChange('pan_number', e.target.value.toUpperCase())}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.pan_number ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                placeholder="PAN (10 chars)"
+                maxLength="10"
+              />
+              {errors.pan_number && (
+                <p className="mt-1 text-xs text-red-600">{errors.pan_number}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="text"
+                value={formData.drug_license_no}
+                onChange={(e) => handleInputChange('drug_license_no', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Drug License No."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Commercial & Banking - Collapsible */}
+        <details className="mb-6 border rounded-lg p-3 bg-gray-50">
+          <summary className="text-xs font-medium text-gray-700 cursor-pointer">
+            Banking & Payment (Optional)
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
               <div>
-                <input
-                  type="text"
-                  value={formData.drug_license_no}
-                  onChange={(e) => handleInputChange('drug_license_no', e.target.value)}
+                <select
+                  value={formData.payment_terms}
+                  onChange={(e) => handleInputChange('payment_terms', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Drug License No."
+                >
+                  <option value="0">Immediate</option>
+                  <option value="7">7 Days</option>
+                  <option value="15">15 Days</option>
+                  <option value="30">30 Days</option>
+                  <option value="45">45 Days</option>
+                  <option value="60">60 Days</option>
+                  <option value="90">90 Days</option>
+                </select>
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={formData.bank_name}
+                  onChange={(e) => handleInputChange('bank_name', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Bank Name"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={formData.bank_account_no}
+                  onChange={(e) => handleInputChange('bank_account_no', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Account No."
+                />
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={formData.bank_ifsc_code}
+                  onChange={(e) => handleInputChange('bank_ifsc_code', e.target.value.toUpperCase())}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="IFSC Code"
+                  maxLength="11"
                 />
               </div>
             </div>
           </div>
-
-          {/* Commercial & Banking - Collapsible */}
-          <details className="mb-6 border rounded-lg p-3 bg-gray-50">
-            <summary className="text-xs font-medium text-gray-700 cursor-pointer">
-              Banking & Payment (Optional)
-            </summary>
-            <div className="mt-3 space-y-3">
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                <div>
-                  <select
-                    value={formData.payment_terms}
-                    onChange={(e) => handleInputChange('payment_terms', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="0">Immediate</option>
-                    <option value="7">7 Days</option>
-                    <option value="15">15 Days</option>
-                    <option value="30">30 Days</option>
-                    <option value="45">45 Days</option>
-                    <option value="60">60 Days</option>
-                    <option value="90">90 Days</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <input
-                    type="text"
-                    value={formData.bank_name}
-                    onChange={(e) => handleInputChange('bank_name', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Bank Name"
-                  />
-                </div>
-                
-                <div>
-                  <input
-                    type="text"
-                    value={formData.bank_account_no}
-                    onChange={(e) => handleInputChange('bank_account_no', e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Account No."
-                  />
-                </div>
-                
-                <div>
-                  <input
-                    type="text"
-                    value={formData.bank_ifsc_code}
-                    onChange={(e) => handleInputChange('bank_ifsc_code', e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="IFSC Code"
-                    maxLength="11"
-                  />
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
+        </details>
+      </div>
     </FullScreenModal>
   );
 };

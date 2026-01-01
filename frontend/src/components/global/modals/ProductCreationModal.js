@@ -3,25 +3,25 @@ import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertT
 import { productAPI, productsApi } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
 import MonthYearPicker from '../MonthYearPicker';
-import DataTransformer from '../../../services/dataTransformer';
+
 import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
 import { FullScreenModal } from '../ui/FullScreenModal';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 
-const ProductCreationModal = ({ 
-  show, 
-  onClose, 
+const ProductCreationModal = ({
+  show,
+  onClose,
   onProductCreated,
-  initialProductName = '' 
+  initialProductName = ''
 }) => {
   const toast = useToast();
   const productFormRef = useRef(null);
-  
+
   // Enable Enter-as-Tab navigation (Marg ERP style)
-  useEnterAsTab({ 
-    containerRef: productFormRef, 
+  useEnterAsTab({
+    containerRef: productFormRef,
     enabled: show,
     excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
   });
@@ -34,7 +34,7 @@ const ProductCreationModal = ({
     show,
     'ProductCreation-Main'
   );
-  
+
   const [newProduct, setNewProduct] = useState({
     product_name: initialProductName,
     product_code: '',
@@ -61,9 +61,9 @@ const ProductCreationModal = ({
     generic_name: '',
     composition: ''
   });
-  
+
   const [packConfig, setPackConfig] = useState({
-    sale_unit: '', 
+    sale_unit: '',
     qty_per_strip: 10,
     strips_per_box: 10,
     use_boxes: true,
@@ -73,12 +73,12 @@ const ProductCreationModal = ({
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
-  
+
   // Master data state
   const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [loadingMasterData, setLoadingMasterData] = useState(true);
-  
+
   // Custom input states
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [showCustomType, setShowCustomType] = useState(false);
@@ -90,7 +90,7 @@ const ProductCreationModal = ({
     const loadMasterData = async () => {
       try {
         setLoadingMasterData(true);
-        
+
         // Load categories and product types in parallel
         const [categoriesResponse, typesResponse] = await Promise.all([
           productsApi.get('/products/master/categories'),
@@ -100,11 +100,11 @@ const ProductCreationModal = ({
         if (categoriesResponse.data?.success) {
           setCategories(categoriesResponse.data.data);
         }
-        
+
         if (typesResponse.data?.success) {
           setProductTypes(typesResponse.data.data);
         }
-        
+
       } catch (error) {
         setErrors(['Failed to load categories and product types']);
       } finally {
@@ -130,12 +130,12 @@ const ProductCreationModal = ({
   // Function to create new category
   const createNewCategory = async () => {
     if (!customCategoryName.trim()) return;
-    
+
     try {
       const response = await productsApi.post('/products/master/categories', {
         category_name: customCategoryName.trim()
       });
-      
+
       if (response.data?.success) {
         const newCategory = response.data.data;
         setCategories([...categories, newCategory]);
@@ -159,13 +159,13 @@ const ProductCreationModal = ({
   // Function to create new product type
   const createNewType = async () => {
     if (!customTypeName.trim()) return;
-    
+
     try {
       const response = await productsApi.post('/products/master/types', {
         type_name: customTypeName.trim(),
         default_base_uom: 'Unit'
       });
-      
+
       if (response.data?.success) {
         const newType = response.data.data;
         setProductTypes([...productTypes, newType]);
@@ -208,7 +208,7 @@ const ProductCreationModal = ({
   const handleScheduleTypeChange = (scheduleType) => {
     const isNarcotic = scheduleType === 'X';
     const prescriptionRequired = ['H', 'H1', 'X'].includes(scheduleType);
-    
+
     setNewProduct({
       ...newProduct,
       schedule_type: scheduleType,
@@ -220,7 +220,7 @@ const ProductCreationModal = ({
   const saveProduct = async () => {
     setSaving(true);
     setErrors([]);
-    
+
     // Basic validation
     const validationErrors = [];
     if (!newProduct.product_name.trim()) validationErrors.push('Product name is required');
@@ -233,13 +233,13 @@ const ProductCreationModal = ({
     if (!newProduct.gst_percent && newProduct.gst_percent !== 0) validationErrors.push('GST percentage is required');
     if (!newProduct.quantity_available || parseInt(newProduct.quantity_available) <= 0) validationErrors.push('Valid quantity is required');
     if (!newProduct.expiry_date) validationErrors.push('Expiry date is required');
-    
+
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
       setSaving(false);
       return;
     }
-    
+
     try {
       // Convert MM/YY format to proper date format for backend
       const formatDateForAPI = (monthYearString) => {
@@ -266,7 +266,7 @@ const ProductCreationModal = ({
         // Pack configuration - now sent as individual fields for batch creation
         pack_type: packConfig.sale_unit || 'STRIP',
         pack_size: packConfig.qty_per_strip || 1,
-        pack_uom: packConfig.sale_unit || 'STRIP', 
+        pack_uom: packConfig.sale_unit || 'STRIP',
         base_uom: packConfig.base_unit || 'TABLET',
         units_per_pack: packConfig.qty_per_strip || 1,
         strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null,
@@ -286,7 +286,7 @@ const ProductCreationModal = ({
         is_saleable: true,
         is_purchasable: true
       };
-      
+
       // Prepare batch data separately
       const batchData = {
         batch_number: newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`,
@@ -312,21 +312,22 @@ const ProductCreationModal = ({
         unit_count: productData.unit_count ? parseInt(productData.unit_count) : null,
         unit_measurement: productData.unit_measurement
       };
-      
+
       const productResponse = await productAPI.create(apiData);
-      
+
       // API returns the product directly, not wrapped in data
       if (productResponse) {
         // Transform response data - productResponse is the product itself
-        const transformedProduct = DataTransformer.transformProduct(productResponse, 'display');
-        
+        // Direct assignment since DataTransformer is removed
+        const transformedProduct = productResponse;
+
         // Add batch info if needed
         const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
         transformedProduct.batch_number = batchNumber;
         transformedProduct.mfg_date = newProduct.mfg_date;
         transformedProduct.expiry_date = newProduct.expiry_date;
         transformedProduct.quantity_available = parseInt(newProduct.quantity_available) || 0;
-        
+
         // Return transformed product with all pricing fields
         const createdProduct = {
           ...productResponse,  // productResponse is the product itself
@@ -351,20 +352,20 @@ const ProductCreationModal = ({
           qty_per_strip: packConfig.qty_per_strip,
           strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null
         };
-        
+
         toast.created(`Product "${createdProduct.product_name}"`, 4000);
-        
+
         if (createdProduct.quantity_available) {
           toast.info(`Stock: ${createdProduct.quantity_available} units available`, 3000);
         }
-        
+
         onProductCreated(createdProduct);
         onClose();
       }
     } catch (error) {
-      
+
       let errorMessages = [];
-      
+
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
           errorMessages = error.response.data.detail.map(err => {
@@ -390,7 +391,7 @@ const ProductCreationModal = ({
       } else {
         errorMessages = ['Failed to save product - Unknown error'];
       }
-      
+
       setErrors(errorMessages);
       toast.error('Failed to save product. Please check your data and try again.');
     } finally {
@@ -437,473 +438,473 @@ const ProductCreationModal = ({
       </div>
 
       <div className="space-y-6">
-            {/* Product Details */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Product Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product Name *
-                  </label>
-                  <div className="relative">
-                    <Pill className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newProduct.product_name}
-                      onChange={(e) => setNewProduct({ ...newProduct, product_name: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                      placeholder="Enter product name"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product Code
-                  </label>
-                  <input
-                    type="text"
-                    value={newProduct.product_code}
-                    onChange={(e) => setNewProduct({ ...newProduct, product_code: e.target.value })}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder="Auto-generated if empty"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Manufacturer *
-                  </label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newProduct.manufacturer}
-                      onChange={(e) => setNewProduct({ ...newProduct, manufacturer: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                      placeholder="Enter manufacturer name"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Category
-                  </label>
-                  {!showCustomCategory ? (
-                    <div className="space-y-2">
-                      <select
-                        value={newProduct.category_id}
-                        onChange={(e) => {
-                          if (e.target.value === 'add_new') {
-                            setShowCustomCategory(true);
-                            return;
-                          }
-                          const selectedCategory = categories.find(cat => cat.category_id === parseInt(e.target.value));
-                          setNewProduct({ 
-                            ...newProduct, 
-                            category_id: e.target.value,
-                            category: selectedCategory ? selectedCategory.category_name : ''
-                          });
-                        }}
-                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        disabled={loadingMasterData}
-                      >
-                        <option value="">
-                          {loadingMasterData ? 'Loading categories...' : 'Select Category'}
-                        </option>
-                        {categories.map(category => (
-                          <option key={category.category_id} value={category.category_id}>
-                            {category.category_name}
-                          </option>
-                        ))}
-                        <option value="add_new" className="font-medium text-green-600">
-                          + Add New Category
-                        </option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          value={customCategoryName}
-                          onChange={(e) => setCustomCategoryName(e.target.value)}
-                          placeholder="Enter new category name"
-                          className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                          onKeyPress={(e) => e.key === 'Enter' && createNewCategory()}
-                        />
-                        <button
-                          onClick={createNewCategory}
-                          disabled={!customCategoryName.trim()}
-                          className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          Add
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowCustomCategory(false);
-                            setCustomCategoryName('');
-                          }}
-                          className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product Type
-                  </label>
-                  {!showCustomType ? (
-                    <div className="space-y-2">
-                      <select
-                        value={newProduct.type_id}
-                        onChange={(e) => {
-                          if (e.target.value === 'add_new') {
-                            setShowCustomType(true);
-                            return;
-                          }
-                          const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
-                          setNewProduct({ 
-                            ...newProduct, 
-                            type_id: e.target.value,
-                            product_type: selectedType ? selectedType.type_name : ''
-                          });
-                        }}
-                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        disabled={loadingMasterData}
-                      >
-                        <option value="">
-                          {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
-                        </option>
-                        {productTypes.map(type => (
-                          <option key={type.type_id} value={type.type_id}>
-                            {type.type_name}
-                          </option>
-                        ))}
-                        <option value="add_new" className="font-medium text-green-600">
-                          + Add New Product Type
-                        </option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          value={customTypeName}
-                          onChange={(e) => setCustomTypeName(e.target.value)}
-                          placeholder="Enter new product type"
-                          className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                          onKeyPress={(e) => e.key === 'Enter' && createNewType()}
-                        />
-                        <button
-                          onClick={createNewType}
-                          disabled={!customTypeName.trim()}
-                          className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          Add
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowCustomType(false);
-                            setCustomTypeName('');
-                          }}
-                          className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Salt Composition
-                  </label>
-                  <input
-                    type="text"
-                    value={newProduct.salt_composition}
-                    onChange={(e) => setNewProduct({ ...newProduct, salt_composition: e.target.value })}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder="e.g., Paracetamol 500mg + Caffeine 65mg"
-                  />
-                </div>
+        {/* Product Details */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Product Information</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Product Name *
+              </label>
+              <div className="relative">
+                <Pill className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={newProduct.product_name}
+                  onChange={(e) => setNewProduct({ ...newProduct, product_name: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  placeholder="Enter product name"
+                />
               </div>
+            </div>
 
-              {/* Pack Configuration - Integrated */}
-              <PackTypeSelector
-                productType={newProduct.category}
-                packData={packConfig}
-                onChange={setPackConfig}
-                compact={true}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Product Code
+              </label>
+              <input
+                type="text"
+                value={newProduct.product_code}
+                onChange={(e) => setNewProduct({ ...newProduct, product_code: e.target.value })}
+                className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                placeholder="Auto-generated if empty"
               />
             </div>
 
-            {/* Pharmaceutical Compliance - CRITICAL */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
-                <Shield className="w-4 h-4 text-red-500 mr-2" />
-                Pharmaceutical Compliance
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Drug Schedule Type *
-                  </label>
-                  <div className="relative">
-                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <select
-                      value={newProduct.schedule_type}
-                      onChange={(e) => handleScheduleTypeChange(e.target.value)}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    >
-                      <option value="">OTC (Over The Counter)</option>
-                      <option value="H">Schedule H (Prescription Drug)</option>
-                      <option value="H1">Schedule H1 (Prescription with Warning)</option>
-                      <option value="X">Schedule X (Narcotic/Psychotropic)</option>
-                      <option value="G">Schedule G (Hormonal Preparations)</option>
-                      <option value="J">Schedule J (Specific Diseases)</option>
-                    </select>
-                  </div>
-                  {newProduct.schedule_type === 'X' && (
-                    <p className="text-xs text-red-600 mt-1 flex items-center">
-                      <AlertTriangle className="w-3 h-3 mr-1" />
-                      Requires narcotic register entry
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Storage Condition *
-                  </label>
-                  <div className="relative">
-                    <Thermometer className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <select
-                      value={newProduct.storage_condition}
-                      onChange={(e) => setNewProduct({ ...newProduct, storage_condition: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    >
-                      <option value="room_temp">Room Temperature (15-30°C)</option>
-                      <option value="cool">Cool & Dry (8-15°C)</option>
-                      <option value="refrigerated">Refrigerated (2-8°C)</option>
-                      <option value="frozen">Frozen (-20°C)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Generic Name
-                  </label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newProduct.generic_name}
-                      onChange={(e) => setNewProduct({ ...newProduct, generic_name: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                      placeholder="e.g., Paracetamol"
-                    />
-                  </div>
-                </div>
-
-                <div className="md:col-span-3">
-                  <div className="flex items-center space-x-6">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={newProduct.prescription_required}
-                        onChange={(e) => setNewProduct({ ...newProduct, prescription_required: e.target.checked })}
-                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                        disabled={['H', 'H1', 'X'].includes(newProduct.schedule_type)}
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Prescription Required</span>
-                    </label>
-
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={newProduct.is_narcotic}
-                        onChange={(e) => setNewProduct({ ...newProduct, is_narcotic: e.target.checked })}
-                        className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                        disabled={newProduct.schedule_type === 'X'}
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Narcotic/Psychotropic Drug</span>
-                    </label>
-                  </div>
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Manufacturer *
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={newProduct.manufacturer}
+                  onChange={(e) => setNewProduct({ ...newProduct, manufacturer: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  placeholder="Enter manufacturer name"
+                />
               </div>
             </div>
 
-            {/* Pricing Information */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Pricing & Tax</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    MRP *
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="number"
-                      value={newProduct.mrp}
-                      onChange={(e) => setNewProduct({ ...newProduct, mrp: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      placeholder="0.00"
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Sale Price *
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="number"
-                      value={newProduct.sale_price}
-                      onChange={(e) => setNewProduct({ ...newProduct, sale_price: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      placeholder="0.00"
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cost Price *
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="number"
-                      value={newProduct.cost_price}
-                      onChange={(e) => setNewProduct({ ...newProduct, cost_price: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      placeholder="0.00"
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    HSN Code *
-                  </label>
-                  <div className="relative">
-                    <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={newProduct.hsn_code}
-                      onChange={(e) => setNewProduct({ ...newProduct, hsn_code: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                      placeholder="Enter HSN code"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    GST % *
-                  </label>
-                  <div className="relative">
-                    <Percent className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <select
-                      value={newProduct.gst_percent}
-                      onChange={(e) => setNewProduct({ ...newProduct, gst_percent: e.target.value })}
-                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    >
-                      <option value="0">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Batch Details */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Batch Details</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Batch Number
-                  </label>
-                  <input
-                    type="text"
-                    value={newProduct.batch_number}
-                    onChange={(e) => setNewProduct({ ...newProduct, batch_number: e.target.value })}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              {!showCustomCategory ? (
+                <div className="space-y-2">
+                  <select
+                    value={newProduct.category_id}
+                    onChange={(e) => {
+                      if (e.target.value === 'add_new') {
+                        setShowCustomCategory(true);
+                        return;
+                      }
+                      const selectedCategory = categories.find(cat => cat.category_id === parseInt(e.target.value));
+                      setNewProduct({
+                        ...newProduct,
+                        category_id: e.target.value,
+                        category: selectedCategory ? selectedCategory.category_name : ''
+                      });
+                    }}
                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder="Auto-generated if empty"
-                  />
+                    disabled={loadingMasterData}
+                  >
+                    <option value="">
+                      {loadingMasterData ? 'Loading categories...' : 'Select Category'}
+                    </option>
+                    {categories.map(category => (
+                      <option key={category.category_id} value={category.category_id}>
+                        {category.category_name}
+                      </option>
+                    ))}
+                    <option value="add_new" className="font-medium text-green-600">
+                      + Add New Category
+                    </option>
+                  </select>
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={customCategoryName}
+                      onChange={(e) => setCustomCategoryName(e.target.value)}
+                      placeholder="Enter new category name"
+                      className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      onKeyPress={(e) => e.key === 'Enter' && createNewCategory()}
+                    />
+                    <button
+                      onClick={createNewCategory}
+                      disabled={!customCategoryName.trim()}
+                      className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCustomCategory(false);
+                        setCustomCategoryName('');
+                      }}
+                      className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity Available *
-                  </label>
-                  <input
-                    type="number"
-                    value={newProduct.quantity_available}
-                    onChange={(e) => setNewProduct({ ...newProduct, quantity_available: e.target.value })}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    placeholder="Enter quantity"
-                    min="0"
-                  />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Product Type
+              </label>
+              {!showCustomType ? (
+                <div className="space-y-2">
+                  <select
+                    value={newProduct.type_id}
+                    onChange={(e) => {
+                      if (e.target.value === 'add_new') {
+                        setShowCustomType(true);
+                        return;
+                      }
+                      const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
+                      setNewProduct({
+                        ...newProduct,
+                        type_id: e.target.value,
+                        product_type: selectedType ? selectedType.type_name : ''
+                      });
+                    }}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    disabled={loadingMasterData}
+                  >
+                    <option value="">
+                      {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
+                    </option>
+                    {productTypes.map(type => (
+                      <option key={type.type_id} value={type.type_id}>
+                        {type.type_name}
+                      </option>
+                    ))}
+                    <option value="add_new" className="font-medium text-green-600">
+                      + Add New Product Type
+                    </option>
+                  </select>
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={customTypeName}
+                      onChange={(e) => setCustomTypeName(e.target.value)}
+                      placeholder="Enter new product type"
+                      className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      onKeyPress={(e) => e.key === 'Enter' && createNewType()}
+                    />
+                    <button
+                      onClick={createNewType}
+                      disabled={!customTypeName.trim()}
+                      className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCustomType(false);
+                        setCustomTypeName('');
+                      }}
+                      className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Manufacturing Date
-                  </label>
-                  <MonthYearPicker
-                    value={newProduct.mfg_date}
-                    onChange={(date) => handleMfgDateChange(date)}
-                    placeholder="MM/YYYY"
-                  />
-                </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Salt Composition
+              </label>
+              <input
+                type="text"
+                value={newProduct.salt_composition}
+                onChange={(e) => setNewProduct({ ...newProduct, salt_composition: e.target.value })}
+                className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                placeholder="e.g., Paracetamol 500mg + Caffeine 65mg"
+              />
+            </div>
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Expiry Date *
-                  </label>
-                  <MonthYearPicker
-                    value={newProduct.expiry_date}
-                    onChange={(date) => setNewProduct({ ...newProduct, expiry_date: date })}
-                    placeholder="MM/YYYY"
-                    minDate={newProduct.mfg_date}
-                  />
-                </div>
+          {/* Pack Configuration - Integrated */}
+          <PackTypeSelector
+            productType={newProduct.category}
+            packData={packConfig}
+            onChange={setPackConfig}
+            compact={true}
+          />
+        </div>
+
+        {/* Pharmaceutical Compliance - CRITICAL */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+            <Shield className="w-4 h-4 text-red-500 mr-2" />
+            Pharmaceutical Compliance
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Drug Schedule Type *
+              </label>
+              <div className="relative">
+                <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <select
+                  value={newProduct.schedule_type}
+                  onChange={(e) => handleScheduleTypeChange(e.target.value)}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                >
+                  <option value="">OTC (Over The Counter)</option>
+                  <option value="H">Schedule H (Prescription Drug)</option>
+                  <option value="H1">Schedule H1 (Prescription with Warning)</option>
+                  <option value="X">Schedule X (Narcotic/Psychotropic)</option>
+                  <option value="G">Schedule G (Hormonal Preparations)</option>
+                  <option value="J">Schedule J (Specific Diseases)</option>
+                </select>
+              </div>
+              {newProduct.schedule_type === 'X' && (
+                <p className="text-xs text-red-600 mt-1 flex items-center">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Requires narcotic register entry
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Storage Condition *
+              </label>
+              <div className="relative">
+                <Thermometer className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <select
+                  value={newProduct.storage_condition}
+                  onChange={(e) => setNewProduct({ ...newProduct, storage_condition: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                >
+                  <option value="room_temp">Room Temperature (15-30°C)</option>
+                  <option value="cool">Cool & Dry (8-15°C)</option>
+                  <option value="refrigerated">Refrigerated (2-8°C)</option>
+                  <option value="frozen">Frozen (-20°C)</option>
+                </select>
               </div>
             </div>
 
-            {/* Error Messages */}
-            {errors.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="text-sm text-red-600 space-y-1">
-                  {errors.map((error, index) => (
-                    <div key={index} className="flex items-start">
-                      <span className="block w-1 h-1 bg-red-600 rounded-full mt-2 mr-2 flex-shrink-0"></span>
-                      <span>{error}</span>
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Generic Name
+              </label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={newProduct.generic_name}
+                  onChange={(e) => setNewProduct({ ...newProduct, generic_name: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  placeholder="e.g., Paracetamol"
+                />
               </div>
-            )}
+            </div>
+
+            <div className="md:col-span-3">
+              <div className="flex items-center space-x-6">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newProduct.prescription_required}
+                    onChange={(e) => setNewProduct({ ...newProduct, prescription_required: e.target.checked })}
+                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    disabled={['H', 'H1', 'X'].includes(newProduct.schedule_type)}
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Prescription Required</span>
+                </label>
+
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newProduct.is_narcotic}
+                    onChange={(e) => setNewProduct({ ...newProduct, is_narcotic: e.target.checked })}
+                    className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                    disabled={newProduct.schedule_type === 'X'}
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Narcotic/Psychotropic Drug</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing Information */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Pricing & Tax</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                MRP *
+              </label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="number"
+                  value={newProduct.mrp}
+                  onChange={(e) => setNewProduct({ ...newProduct, mrp: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="0.00"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sale Price *
+              </label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="number"
+                  value={newProduct.sale_price}
+                  onChange={(e) => setNewProduct({ ...newProduct, sale_price: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="0.00"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cost Price *
+              </label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="number"
+                  value={newProduct.cost_price}
+                  onChange={(e) => setNewProduct({ ...newProduct, cost_price: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="0.00"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                HSN Code *
+              </label>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={newProduct.hsn_code}
+                  onChange={(e) => setNewProduct({ ...newProduct, hsn_code: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  placeholder="Enter HSN code"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                GST % *
+              </label>
+              <div className="relative">
+                <Percent className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <select
+                  value={newProduct.gst_percent}
+                  onChange={(e) => setNewProduct({ ...newProduct, gst_percent: e.target.value })}
+                  className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                >
+                  <option value="0">0%</option>
+                  <option value="5">5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Batch Details */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Batch Details</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Batch Number
+              </label>
+              <input
+                type="text"
+                value={newProduct.batch_number}
+                onChange={(e) => setNewProduct({ ...newProduct, batch_number: e.target.value })}
+                className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                placeholder="Auto-generated if empty"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Quantity Available *
+              </label>
+              <input
+                type="number"
+                value={newProduct.quantity_available}
+                onChange={(e) => setNewProduct({ ...newProduct, quantity_available: e.target.value })}
+                className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                placeholder="Enter quantity"
+                min="0"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Manufacturing Date
+              </label>
+              <MonthYearPicker
+                value={newProduct.mfg_date}
+                onChange={(date) => handleMfgDateChange(date)}
+                placeholder="MM/YYYY"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Expiry Date *
+              </label>
+              <MonthYearPicker
+                value={newProduct.expiry_date}
+                onChange={(date) => setNewProduct({ ...newProduct, expiry_date: date })}
+                placeholder="MM/YYYY"
+                minDate={newProduct.mfg_date}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Error Messages */}
+        {errors.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="text-sm text-red-600 space-y-1">
+              {errors.map((error, index) => (
+                <div key={index} className="flex items-start">
+                  <span className="block w-1 h-1 bg-red-600 rounded-full mt-2 mr-2 flex-shrink-0"></span>
+                  <span>{error}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </FullScreenModal>
   );

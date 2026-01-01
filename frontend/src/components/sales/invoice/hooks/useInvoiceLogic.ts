@@ -175,15 +175,17 @@ const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
         batch_number: product.batch_number || '',
         expiry_date: product.expiry_date || '',
         manufacturing_date: product.manufacturing_date || '',
-        // EXPLICIT MAPPING: Backend Source -> Invoice Field
-        unit_price: parseFloat(String(product.sale_price_per_unit || product.unit_price || product.sale_price || 0)),
-        mrp: parseFloat(String(product.mrp_per_unit || product.mrp || 0)),
+        // CANONICAL MAPPING: Backend field names (no fallbacks needed)
+        // Batch pricing: sale_price_per_unit, mrp_per_unit (from inventory.batches)
+        // Product pricing: gst_percent, hsn_code (from inventory.products)
+        unit_price: parseFloat(String(product.sale_price_per_unit || 0)),
+        mrp: parseFloat(String(product.mrp_per_unit || 0)),
         gst_percent: parseFloat(String(product.gst_percent || 0)),
         hsn_code: product.hsn_code || '',
         // Quantities
         quantity: parseInt(String(product.quantity || 1)),
         free_quantity: parseInt(String(product.free_quantity || 0)),
-        available_quantity: parseInt(String(product.quantity_available || product.available_quantity || 0)),
+        available_quantity: parseInt(String(product.quantity_available || 0)),
         // Optional: Item-level discount
         discount_percent: parseFloat(String(product.discount_percent || 0))
     };

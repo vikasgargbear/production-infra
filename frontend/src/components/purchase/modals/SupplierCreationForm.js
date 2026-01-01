@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, User, Globe, Banknote } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
-import DataTransformer from '../../../services/dataTransformer';
+
 
 // Indian states for dropdown
 const INDIAN_STATES = [
@@ -20,7 +20,7 @@ const INDIAN_STATES = [
  * Supplier Creation Form - Extracted from global component for inline use
  * Clean layout matching the global component design
  */
-const SupplierCreationForm = ({ 
+const SupplierCreationForm = ({
   initialData = {},
   onSupplierCreated,
   onCancel,
@@ -29,7 +29,7 @@ const SupplierCreationForm = ({
   const [saving, setSaving] = useState(false);
   const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState(false);
   const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     // Basic Information
     supplier_name: '',
@@ -42,7 +42,7 @@ const SupplierCreationForm = ({
     alternate_phone: '',
     email: '',
     website: '',
-    
+
     // Address Information
     address_line1: '',
     address_line2: '',
@@ -50,27 +50,27 @@ const SupplierCreationForm = ({
     state: 'Maharashtra',
     pincode: '',
     country: 'India',
-    
+
     // Tax & Compliance
     gstin: '',
     pan_number: '',
     drug_license_no: '',
     drug_license_validity: '',
-    
+
     // Banking Details
     payment_terms: '30',
     bank_name: '',
     bank_account_no: '',
     bank_ifsc_code: '',
     account_holder_name: '',
-    
+
     // Additional Info
     supplier_type: 'distributor',
     notes: '',
     is_active: true,
     ...initialData
   });
-  
+
   const [errors, setErrors] = useState({});
 
   // Auto-generate supplier code
@@ -79,8 +79,8 @@ const SupplierCreationForm = ({
       const code = formData.supplier_name
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '')
-        .slice(0, 6) + 
-        '-' + 
+        .slice(0, 6) +
+        '-' +
         Date.now().toString().slice(-4);
       setFormData(prev => ({ ...prev, supplier_code: code }));
     }
@@ -114,49 +114,54 @@ const SupplierCreationForm = ({
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.supplier_name) {
       newErrors.supplier_name = 'Supplier name is required';
     }
-    
+
     if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
     }
-    
+
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
     }
-    
+
     if (formData.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstin)) {
       newErrors.gstin = 'Invalid GSTIN format';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setSaving(true);
-    
+
     try {
       // Transform data for API
-      const dataToSend = DataTransformer.transformSupplier(formData, 'submit');
-      
+      // Prepare data for API - direct object without DataTransformer
+      const dataToSend = {
+        ...formData,
+        gstin: formData.gstin || null,
+        pan_number: formData.pan_number || null
+      };
+
       const response = await supplierAPI.create(dataToSend);
-      
+
       if (response) {
         // Clear supplier cache to force refresh on next search
         searchCache.clearType('suppliers');
-        
-        // Transform response data
-        const transformedSupplier = DataTransformer.transformSupplier(response.data || response, 'display');
-        
+
+        // Use response directly - no transformation needed
+        const transformedSupplier = response.data || response;
+
         if (onSupplierCreated) {
           onSupplierCreated(transformedSupplier);
         }
@@ -189,16 +194,15 @@ const SupplierCreationForm = ({
                 type="text"
                 value={formData.supplier_name}
                 onChange={(e) => handleInputChange('supplier_name', e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.supplier_name ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.supplier_name ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 placeholder="e.g., ABC Pharmaceuticals"
               />
               {errors.supplier_name && (
                 <p className="mt-1 text-xs text-red-600">{errors.supplier_name}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Type
@@ -227,16 +231,15 @@ const SupplierCreationForm = ({
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => handleInputChange('phone', e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.phone ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.phone ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 placeholder="Business phone"
               />
               {errors.phone && (
                 <p className="mt-1 text-xs text-red-600">{errors.phone}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
                 <span>WhatsApp</span>
@@ -255,13 +258,12 @@ const SupplierCreationForm = ({
                 value={formData.whatsapp_number}
                 onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
                 disabled={useBusinessPhoneForWhatsApp}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  useBusinessPhoneForWhatsApp ? 'bg-gray-100' : ''
-                } border-gray-300`}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${useBusinessPhoneForWhatsApp ? 'bg-gray-100' : ''
+                  } border-gray-300`}
                 placeholder="WhatsApp"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Email
@@ -270,13 +272,12 @@ const SupplierCreationForm = ({
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.email ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 placeholder="Business email"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Website
@@ -322,9 +323,8 @@ const SupplierCreationForm = ({
                   value={formData.contact_person_phone}
                   onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
                   disabled={useBusinessContactForPerson}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${
-                    useBusinessContactForPerson ? 'bg-gray-100' : ''
-                  } border-gray-200`}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
+                    } border-gray-200`}
                   placeholder="Contact phone"
                 />
               </div>
@@ -334,9 +334,8 @@ const SupplierCreationForm = ({
                   value={formData.contact_person_email}
                   onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
                   disabled={useBusinessContactForPerson}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${
-                    useBusinessContactForPerson ? 'bg-gray-100' : ''
-                  } border-gray-200`}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${useBusinessContactForPerson ? 'bg-gray-100' : ''
+                    } border-gray-200`}
                   placeholder="Contact email"
                 />
               </div>
@@ -449,9 +448,8 @@ const SupplierCreationForm = ({
               type="text"
               value={formData.gstin}
               onChange={(e) => handleInputChange('gstin', e.target.value.toUpperCase())}
-              className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${
-                errors.gstin ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${errors.gstin ? 'border-red-300' : 'border-gray-300'
+                }`}
               placeholder="00AAAAA0000A0Z0"
             />
             {errors.gstin && (
