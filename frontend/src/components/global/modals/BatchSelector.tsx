@@ -37,6 +37,7 @@ interface Product {
     sale_price_per_unit?: number;
     unit_price?: number;
     [key: string]: unknown;
+    batches?: any[]; // OPTIMIZATION: Embedded batches from search
 }
 
 interface Batch {
@@ -145,6 +146,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     const loadBatches = async (): Promise<void> => {
         if (!product) return;
+
+        // OPTIMIZATION: Use embedded batches if available (no API call needed)
+        if (product.batches && Array.isArray(product.batches) && product.batches.length > 0) {
+            console.log('[BatchSelector] Using embedded batches from product (OPTIMIZED)');
+            processBatches(product.batches);
+            return;
+        }
 
         const productId = product.product_id || product.id;
         const cacheKey = getBatchCacheKey(productId);

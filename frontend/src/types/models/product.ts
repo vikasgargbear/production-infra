@@ -16,20 +16,25 @@ export interface Product {
   hsn_code: string;
   category?: string;
   salt_composition?: string;
-  
+
   // Pricing
   mrp: number;
   sale_price: number;
   cost_price: number;
+  // Canonical Pricing
+  mrp_per_unit?: number;
+  sale_price_per_unit?: number;
+  cost_per_unit?: number;
+
   gst_percent: number;
   cgst_percent?: number;
   sgst_percent?: number;
   igst_percent?: number;
-  
+
   // Units
   base_unit: string;
   sale_unit?: string;
-  
+
   // Pack configuration
   pack_input?: string;
   pack_quantity?: number;
@@ -38,14 +43,14 @@ export interface Product {
   unit_count?: number;
   unit_measurement?: string;
   packages_per_box?: number;
-  
+
   // Pharmaceutical details
   drug_schedule?: 'G' | 'H' | 'H1' | 'X' | 'OTC';
   requires_prescription?: boolean;
   controlled_substance?: boolean;
   dosage_instructions?: string;
   storage_instructions?: string;
-  
+
   // Physical details
   generic_name?: string;
   packer?: string;
@@ -57,18 +62,19 @@ export interface Product {
   pack_form?: string;
   color?: string;
   asin?: string;
-  
+
   // Stock info (from batch aggregation)
+  total_stock?: number;
   total_quantity?: number;
   batch_count?: number;
   has_stock?: boolean;
   quantity_available?: number;
   current_stock?: number; // Added for MVP compatibility
-  
+
   // Status
   is_active?: boolean;
   is_discontinued?: boolean;
-  
+
   // Timestamps
   created_at?: string;
   updated_at?: string;
@@ -78,18 +84,33 @@ export interface Product {
  * Product batch information
  */
 export interface ProductBatch {
-  batch_id: number;
-  product_id: number;
+  batch_id: number | string; // Support string IDs
+  product_id: number | string;
   batch_number: string;
   expiry_date: string;
+  manufacturing_date?: string;
   quantity_available: number;
-  mrp: number;
-  purchase_price: number;
-  sale_price: number;
+
+  // Canonical Pricing (matches backend)
+  mrp_per_unit: number;
+  sale_price_per_unit: number;
+  cost_per_unit: number;
+
+  // Legacy Pricing (deprecated)
+  mrp?: number;
+  purchase_price?: number;
+  sale_price?: number;
+
   location?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+
+  // Extra fields
+  days_to_expiry?: number | null;
+  units_per_pack?: number;
+  packages_per_box?: number;
+  pack_type?: string;
 }
 
 /**
@@ -102,29 +123,29 @@ export interface ProductCreateInput {
   hsn_code: string;
   category?: string;
   salt_composition?: string;
-  
+
   // Pricing
   mrp: number;
   sale_price: number;
   cost_price: number;
   gst_percent: number;
-  
+
   // Units
   base_unit: string;
   sale_unit?: string;
-  
+
   // Pack configuration
   pack_input?: string;
   pack_quantity?: number;
   pack_multiplier?: number;
-  
+
   // Optional pharmaceutical details
   drug_schedule?: 'G' | 'H' | 'H1' | 'X' | 'OTC';
   requires_prescription?: boolean;
   controlled_substance?: boolean;
   dosage_instructions?: string;
   storage_instructions?: string;
-  
+
   // Optional physical details
   generic_name?: string;
   packer?: string;
@@ -137,7 +158,7 @@ export interface ProductCreateInput {
 /**
  * Product update input (all fields optional)
  */
-export interface ProductUpdateInput extends Partial<ProductCreateInput> {}
+export interface ProductUpdateInput extends Partial<ProductCreateInput> { }
 
 /**
  * Product search parameters

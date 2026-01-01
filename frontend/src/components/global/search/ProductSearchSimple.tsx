@@ -4,22 +4,12 @@ import { productAPI } from '../../../services/api';
 import BatchSelector from '../modals/BatchSelector';
 import { debounce } from '../../../utils/debounce';
 import localFirstService from '../../../services/offline/cache/localFirstService';
+import { mapProductToCanonical } from '../../../utils/productMapper';
+import { Product } from '../../../types/models/product';
 
 // ==================== TYPE DEFINITIONS ====================
 
-interface Product {
-    product_id?: number | string;
-    id?: number | string;
-    product_name?: string;
-    name?: string;
-    generic_name?: string;
-    hsn_code?: string;
-    current_stock?: number;
-    gst_percent?: number;
-    sale_price_per_unit?: number;
-    mrp_per_unit?: number;
-    [key: string]: unknown;
-}
+// ==================== TYPE DEFINITIONS ====================
 
 interface ProductWithBatch extends Product {
     batch_id?: number | string;
@@ -93,11 +83,9 @@ const ProductSearchSimple = forwardRef<ProductSearchSimpleRef, ProductSearchSimp
                 try {
                     const results = await localFirstService.searchProducts(query, { limit: 20 });
 
-                    const transformedResults: Product[] = results.map((product: Product) => ({
-                        ...product,
-                        product_id: product.product_id || product.id,
-                        product_name: product.product_name || product.name || ''
-                    }));
+                    // Map results to canonical format to ensure consistency
+                    const transformedResults: Product[] = results.map(mapProductToCanonical);
+
                     setSearchResults(transformedResults);
 
                     if (transformedResults.length > 0) {
@@ -223,7 +211,7 @@ const ProductSearchSimple = forwardRef<ProductSearchSimpleRef, ProductSearchSimp
                                     <>
                                         {searchResults.map((product, index) => (
                                             <div
-                                                key={`product-${product.product_id || product.id}-${index}`}
+                                                key={`product-${product.product_id}-${index}`}
                                                 ref={(el) => (resultRefs.current[index] = el)}
                                                 onClick={() => handleProductSelect(product)}
                                                 className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${index === highlightedIndex
@@ -233,15 +221,15 @@ const ProductSearchSimple = forwardRef<ProductSearchSimpleRef, ProductSearchSimp
                                             >
                                                 <div className="flex justify-between items-center">
                                                     <div>
-                                                        <div className="font-medium text-gray-900">{product.product_name || product.name}</div>
+                                                        <div className="font-medium text-gray-900">{product.product_name}</div>
                                                         <div className="text-sm text-gray-500">
                                                             {product.generic_name && <span>{product.generic_name} | </span>}
                                                             HSN: {product.hsn_code || 'N/A'}
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <div className={`font-medium ${(product.current_stock || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                            Stock: {product.current_stock || 0}
+                                                        <div className={`font-medium ${(product.total_stock || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                            Stock: {product.total_stock || 0}
                                                         </div>
                                                         <div className="text-xs text-gray-500">GST {product.gst_percent || 0}%</div>
                                                     </div>
