@@ -24,30 +24,30 @@ export interface APIConfig {
 export const API_CONFIG: APIConfig = {
   // Base URL configuration - use HTTPS for secure production Railway deployments
   BASE_URL: getApiBaseUrl(),
-  
+
   // API Version - consolidated, no version numbers
   API_VERSION: '/api',
-  
+
   // Timeout settings
   TIMEOUT: 30000, // 30 seconds
-  
+
   // Retry configuration
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
-  
+
   // Headers
   DEFAULT_HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  
+
   // Auth configuration
   AUTH: {
     TOKEN_KEY: 'authToken',
-    USER_KEY: 'currentUser',
+    USER_KEY: 'pharma_user',  // Must match AuthContext.js
     REFRESH_TOKEN_KEY: 'refreshToken',
   },
-  
+
   // API Endpoints organized by domain
   ENDPOINTS: {
     // Authentication
@@ -58,7 +58,7 @@ export const API_CONFIG: APIConfig = {
       VERIFY: '/auth/verify',
       REGISTER: '/auth/register',
     },
-    
+
     // Products
     PRODUCTS: {
       BASE: '/products/',  // Added trailing slash to prevent 307 redirects
@@ -68,7 +68,7 @@ export const API_CONFIG: APIConfig = {
       CATEGORIES: '/products/categories/',  // Added trailing slash
       STOCK_UPDATE: '/products/stock-update/',  // Added trailing slash
     },
-    
+
     // Customers
     CUSTOMERS: {
       BASE: '/customers/',  // Keep trailing slash for Django
@@ -76,14 +76,14 @@ export const API_CONFIG: APIConfig = {
       CREDIT_CHECK: '/customers/credit-check/',
       TRANSACTIONS: '/customers/transactions/',
     },
-    
+
     // Suppliers
     SUPPLIERS: {
       BASE: '/suppliers/',  // Added trailing slash
       SEARCH: '/suppliers/',  // Use same endpoint with search param - Added trailing slash
       TRANSACTIONS: '/suppliers/transactions/',  // Added trailing slash
     },
-    
+
     // Purchases
     PURCHASES: {
       BASE: '/purchases/',  // Added trailing slash
@@ -92,14 +92,14 @@ export const API_CONFIG: APIConfig = {
       PENDING_RECEIPTS: '/purchases-enhanced/pending-receipts/',  // Added trailing slash
       RECEIVE_ITEMS: (id) => `/purchases-enhanced/${id}/receive-fixed/`,  // Added trailing slash
     },
-    
+
     // Sales & Invoices
     SALES: {
       BASE: '/sales/',  // Added trailing slash
       DIRECT_INVOICE: '/sales/direct-invoice-sale/',  // Added trailing slash
       INVOICE_SEARCH: '/sales/invoices/search/',  // Added trailing slash
     },
-    
+
     INVOICES: {
       BASE: 'invoices/',  // Relative to baseURL /api
       CALCULATE: 'invoices/calculate-live/',
@@ -109,7 +109,7 @@ export const API_CONFIG: APIConfig = {
       PDF: (id) => `invoices/${id}/pdf/`,
       WHATSAPP: (id) => `invoices/${id}/whatsapp/`,
     },
-    
+
     // Challans (implemented as Orders with order_type='challan')
     // Note: Backend challan endpoints have schema issues, so we use orders instead
     CHALLANS: {
@@ -119,7 +119,7 @@ export const API_CONFIG: APIConfig = {
       PDF: (id) => `/orders/${id}/pdf/`,  // Added trailing slash
       WHATSAPP: (id) => `/orders/${id}/whatsapp/`,  // Added trailing slash
     },
-    
+
     // Orders (confirmed table exists)
     ORDERS: {
       BASE: '/orders/',  // Added trailing slash
@@ -129,7 +129,7 @@ export const API_CONFIG: APIConfig = {
       GENERATE_INVOICE: (id) => `/orders/${id}/generate-invoice/`,  // Added trailing slash
       ITEMS: '/order-items/',  // Added trailing slash
     },
-    
+
     // Sales Orders (enterprise-grade API)
     SALES_ORDERS: {
       BASE: '/sales-orders/',  // Added trailing slash
@@ -140,7 +140,7 @@ export const API_CONFIG: APIConfig = {
       CONVERT_TO_INVOICE: (id) => `/sales-orders/${id}/convert-to-invoice/`,  // Added trailing slash
       CONVERT_TO_CHALLAN: (id) => `/sales-orders/${id}/convert-to-challan/`,  // Added trailing slash
     },
-    
+
     // Inventory
     INVENTORY: {
       BATCHES: '/batches/',  // Added trailing slash
@@ -149,7 +149,7 @@ export const API_CONFIG: APIConfig = {
       ADJUSTMENTS: '/inventory/adjustments/',  // Added trailing slash
       REPORTS: '/inventory/reports/',  // Added trailing slash
     },
-    
+
     // Payments
     PAYMENTS: {
       BASE: '/payments/',  // Added trailing slash
@@ -157,7 +157,7 @@ export const API_CONFIG: APIConfig = {
       PENDING: '/payments/pending/',  // Added trailing slash
       METHODS: '/payments/methods/',  // Added trailing slash
     },
-    
+
     // Returns
     RETURNS: {
       BASE: '/returns/',  // Restored trailing slash for proper Django URL handling
@@ -168,7 +168,7 @@ export const API_CONFIG: APIConfig = {
       REASONS: '/returns/reasons/',  // Added explicit endpoint for reasons
       RETURNABLE_ITEMS: '/returns/returnable/',  // Added explicit endpoint for returnable items
     },
-    
+
     // Party Ledger
     LEDGER: {
       BASE: '/ledger/',  // Added trailing slash
@@ -177,7 +177,7 @@ export const API_CONFIG: APIConfig = {
       OUTSTANDING: '/ledger/outstanding/',  // Added trailing slash
       AGING: '/ledger/aging/',  // Added trailing slash
     },
-    
+
     // Credit/Debit Notes
     NOTES: {
       CREDIT: '/credit-notes/',  // Added trailing slash
@@ -185,7 +185,7 @@ export const API_CONFIG: APIConfig = {
       APPROVE: (type, id) => `/${type}-notes/${id}/approve/`,  // Added trailing slash
       CANCEL: (type, id) => `/${type}-notes/${id}/cancel/`,  // Added trailing slash
     },
-    
+
     // Stock Movement
     STOCK: {
       BASE: '/stock/',  // Added trailing slash
@@ -195,7 +195,7 @@ export const API_CONFIG: APIConfig = {
       TRANSFER: '/stock-movements/transfer/',  // Added trailing slash
       ADJUST: '/stock-movements/adjust/',  // Added trailing slash
     },
-    
+
     // Reports & Analytics
     REPORTS: {
       DASHBOARD: '/dashboard/',  // Added trailing slash
@@ -208,7 +208,7 @@ export const API_CONFIG: APIConfig = {
         GSTR3B: '/reports/gst/gstr3b/',  // Added trailing slash
       },
     },
-    
+
     // Settings
     SETTINGS: {
       COMPANY: '/settings/company/',  // Added trailing slash
@@ -217,7 +217,7 @@ export const API_CONFIG: APIConfig = {
       ROLES: '/roles/',  // Added trailing slash
       PERMISSIONS: '/permissions/',  // Added trailing slash
     },
-    
+
     // Utilities
     UTILS: {
       SEARCH: '/search/',  // Added trailing slash
@@ -226,7 +226,7 @@ export const API_CONFIG: APIConfig = {
       BACKUP: '/backup/',  // Added trailing slash
     },
   },
-  
+
   // Error messages
   ERROR_MESSAGES: {
     NETWORK_ERROR: 'Network error. Please check your connection.',
@@ -235,7 +235,7 @@ export const API_CONFIG: APIConfig = {
     SERVER_ERROR: 'Server error. Please try again later.',
     VALIDATION_ERROR: 'Please check your input and try again.',
   },
-  
+
   // Success messages
   SUCCESS_MESSAGES: {
     CREATED: 'Created successfully',

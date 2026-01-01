@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { getApiBaseUrl } from '../../config/apiBase';
+import { API_CONFIG } from '../../config/api.config';
 
 const apiClient = axios.create({
   baseURL: `${getApiBaseUrl()}/api`,
@@ -21,14 +22,14 @@ const apiClient = axios.create({
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Get token from localStorage (set by AuthContext)
-    const token = localStorage.getItem('authToken');
+    // Get token from localStorage
+    const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Get org_id from user data (set by AuthContext)
-    const userStr = localStorage.getItem('pharma_user');
+    // Get org_id from user data
+    const userStr = localStorage.getItem(API_CONFIG.AUTH.USER_KEY);
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
@@ -56,8 +57,8 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token expired or invalid - redirect to login
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('pharma_user');
+      localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
+      localStorage.removeItem(API_CONFIG.AUTH.USER_KEY);
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -89,6 +90,20 @@ export const apiHelpers = {
   delete: (url: string, config?: any) => {
     const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
     return apiClient.delete(urlWithSlash, config);
+  },
+  download: (url: string, filename: string) => {
+    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
+    return apiClient.get(urlWithSlash, { responseType: 'blob' }).then((response) => {
+      const href = window.URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = href;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(href);
+      return response;
+    });
   },
 };
 
