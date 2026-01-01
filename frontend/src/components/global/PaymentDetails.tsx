@@ -41,7 +41,7 @@ interface PaymentDetailsProps {
  * PaymentDetails Component
  * Handles payment information including mode, status, amounts, and terms
  */
-const PaymentDetails: React.FC<PaymentDetailsProps> = ({ 
+const PaymentDetails: React.FC<PaymentDetailsProps> = ({
   paymentData = {},
   onChange,
   totalAmount = 0,
@@ -78,12 +78,12 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
   const handleChange = (field: keyof PaymentData, value: string | number) => {
     if (onChange) {
       const updatedData = { ...paymentData, [field]: value };
-      
+
       // Auto-calculate payment status based on amount paid
       if (field === 'amount_paid') {
         const paid = parseFloat(value as string) || 0;
         const total = parseFloat(totalAmount.toString()) || 0;
-        
+
         if (paid === 0) {
           updatedData.payment_status = 'pending';
         } else if (paid < total) {
@@ -92,7 +92,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
           updatedData.payment_status = 'paid';
         }
       }
-      
+
       // Auto-calculate due date based on credit terms
       if (field === 'credit_terms') {
         const days = parseInt(value as string) || 0;
@@ -100,7 +100,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
         dueDate.setDate(dueDate.getDate() + days);
         updatedData.due_date = dueDate.toISOString().split('T')[0];
       }
-      
+
       onChange(updatedData);
     }
   };
@@ -112,7 +112,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
         PAYMENT DETAILS
       </h3>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Payment Mode */}
         <div>
@@ -130,7 +130,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
           ) : (
             <Select
               value={paymentData.payment_mode || 'cash'}
-              onChange={(value) => handleChange('payment_mode', value)}
+              onChange={(value) => handleChange('payment_mode', (value as string) || 'cash')}
               options={paymentModes}
               size="sm"
               required
@@ -155,7 +155,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
           ) : (
             <Select
               value={paymentData.payment_status || 'pending'}
-              onChange={(value) => handleChange('payment_status', value)}
+              onChange={(value) => handleChange('payment_status', (value as string) || 'pending')}
               options={paymentStatuses}
               size="sm"
             />
@@ -226,7 +226,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
             ) : (
               <Select
                 value={paymentData.credit_terms || '0'}
-                onChange={(value) => handleChange('credit_terms', value)}
+                onChange={(value) => handleChange('credit_terms', (value as string) || '0')}
                 options={creditTerms}
                 size="sm"
               />
@@ -281,12 +281,12 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
               `}
               placeholder={
                 paymentData.payment_mode === 'cheque' ? 'Cheque number' :
-                paymentData.payment_mode === 'upi' ? 'UPI transaction ID' :
-                'Transaction reference number'
+                  paymentData.payment_mode === 'upi' ? 'UPI transaction ID' :
+                    'Transaction reference number'
               }
             />
           </div>
-          
+
           {paymentData.payment_mode === 'cheque' && (
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-600 mb-2">

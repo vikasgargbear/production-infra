@@ -58,7 +58,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
   const fetchInvoices = async (page = 1, searchParams: any = {}) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Prepare search parameters
       const params: any = {
@@ -67,7 +67,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
         customer_id: customerId, // Filter by customer if provided
         ...searchParams
       };
-      
+
       // Add search query if provided
       if (searchParams.search && searchParams.search.trim()) {
         params.search = searchParams.search.trim();
@@ -77,18 +77,18 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
       if (filters.status?.length) {
         params.status = filters.status;
       }
-      
+
       if (filters.returnable) {
         params.returnable = true;
       }
-      
+
       // debugLogger.api('Fetching invoices with params:', params);
-      
+
       const response = await InvoiceApiService.getInvoices(params);
-      
+
       if (response.success) {
         // Transform backend data to match our interface
-        const transformedInvoices = response.data.invoices.map((invoice: any) => ({
+        const transformedInvoices = (response.data as any).invoices.map((invoice: any) => ({
           id: invoice.invoice_id?.toString() || invoice.invoice_number,
           invoice_id: invoice.invoice_id,
           invoice_number: invoice.invoice_number,
@@ -104,10 +104,10 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
         // debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
         setPagination({
-          total: response.data.total || 0,
+          total: (response.data as any).total || 0,
           page: page,
           per_page: pagination.per_page,
-          total_pages: Math.ceil((response.data.total || 0) / pagination.per_page)
+          total_pages: Math.ceil(((response.data as any).total || 0) / pagination.per_page)
         });
       } else {
         setError(response.error?.message || 'Failed to fetch invoices');
@@ -127,7 +127,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
   // Handle search with debouncing
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    
+
     const timeoutId = setTimeout(() => {
       const searchParams = {
         search: query,
@@ -135,7 +135,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
       };
       fetchInvoices(1, searchParams);
     }, 500);
-    
+
     return () => clearTimeout(timeoutId);
   };
 
