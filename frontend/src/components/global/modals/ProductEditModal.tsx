@@ -1,10 +1,11 @@
 import React, { FC } from 'react';
-import ProductMaster from '../../master/ProductMaster';
+import ProductCreationModal from './ProductCreationModal';
 
 // ==================== TYPE DEFINITIONS ====================
 
 interface Product {
     id?: string;
+    product_id?: number | string;
     product_name?: string;
     generic_name?: string;
     product_code?: string;
@@ -32,8 +33,32 @@ export interface ProductEditModalProps {
 
 // ==================== COMPONENT ====================
 
-const ProductEditModal: FC<ProductEditModalProps> = (props) => {
-    return <ProductMaster {...props} />;
+/**
+ * ProductEditModal - Wrapper around ProductCreationModal for editing products
+ * Note: ProductCreationModal handles both create and edit modes
+ */
+const ProductEditModal: FC<ProductEditModalProps> = ({
+    isOpen,
+    onClose,
+    product,
+    onSave,
+    mode = 'edit'
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <ProductCreationModal
+            show={isOpen}
+            onClose={onClose}
+            onProductCreated={(savedProduct) => {
+                if (onSave) {
+                    onSave(savedProduct as Product);
+                }
+            }}
+            initialProductName={product?.product_name || ''}
+        />
+    );
 };
 
 export default ProductEditModal;
+
