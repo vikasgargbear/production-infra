@@ -51,7 +51,7 @@ DOCUMENT_CONFIGS = {
     },
     "sales_order": {
         "prefix": "SO",
-        "table": "sales.sales_orders",
+        "table": "sales.orders",
         "column": "order_number",
         "id_column": "order_id"
     },
