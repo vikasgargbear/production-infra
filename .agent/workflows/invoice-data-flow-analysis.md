@@ -1,61 +1,55 @@
 # Invoice Data Flow Analysis & Optimization Plan
 
-> **Document Version:** 1.0  
+> **Document Version:** 4.0  
 > **Date:** January 1, 2026  
-> **Status:** Analysis Complete - Awaiting Implementation Decision
+> **Status:** ✅ Fully Implemented - Offline-First Architecture
 
 ---
 
 ## 📋 Executive Summary
 
-The current invoice creation flow has **multiple redundant API calls** and **inconsistent data transformation** causing pricing data (`sale_price_per_unit`) to be lost. This document maps the complete data flow and proposes an optimized architecture.
+The invoice creation flow now uses an **offline-first architecture** with:
+- **Instant search** (<50ms) from IndexedDB
+- **Background sync** of all products with batches
+- **Single API call** with embedded batch data
+- **Consistent pricing** via `mergeProductAndBatch()`
 
 ---
 
-## 🔄 Current Data Flow (Optimized)
+## 🔄 Current Data Flow (Offline-First)
 
 ### Overview Diagram
 
 ```
-User Types Search Query
-         │
-         ▼
-┌─────────────────────┐
-│  ProductSearchSimple │ ◀─── Entry Point
-│       (.tsx)         │
-└─────────────────────┘
-         │
-         │ searchProducts(query)
-         ▼
-┌─────────────────────┐     ┌─────────────────────┐
-│  localFirstService  │     │     IndexedDB       │
-│       (.ts)         │     │  (offlineDatabase)  │
-└─────────────────────┘     └─────────────────────┘
-         │                            ▲
-         │ [ONLINE] Network-First     │ [OFFLINE] Fallback
-         ▼                            │
-┌─────────────────────────────────────┴───────────────────┐
-│   GET /api/products/search-with-batches?q=X             │
-│   ✅ SINGLE API CALL - Returns products WITH batches    │
-└─────────────────────────────────────────────────────────┘
-         │
-         │ Response includes:
-         │ { product, batches: [...], best_batch: {...} }
-         ▼
-┌─────────────────────┐
-│   BatchSelector     │ ◀─── Opens Modal
-│       (.tsx)        │
-│   ✅ NO API CALL    │ ◀─── Uses product.batches directly
-└─────────────────────┘
-         │
-         │ User selects batch
-         │ mergeProductAndBatch(product, batch)
-         ▼
-┌─────────────────────┐
-│  useInvoiceLogic    │ ◀─── handleAddItem()
-│       (.ts)         │
-│   unit_price = 40   │ ◀─── Correct batch price!
-└─────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    OFFLINE-FIRST INVOICE FLOW                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  🔄 APP LOAD / LOGIN                                                │
+│     └─► localFirstService.syncProductsWithBatches()                │
+│         └─► GET /products/all-with-batches (paginated)             │
+│         └─► Store ALL products with batches in IndexedDB           │
+│                                                                     │
+│  ⚡ PRODUCT SEARCH (INSTANT!)                                       │
+│     └─► localFirstService.searchProducts(query)                    │
+│         └─► Search IndexedDB first (<50ms)                         │
+│         └─► Return results IMMEDIATELY                             │
+│         └─► [Background] Sync if data stale (>5 min)               │
+│                                                                     │
+│  📦 BATCH SELECTOR (NO API CALL)                                   │
+│     └─► Uses product.batches from IndexedDB                        │
+│     └─► User selects batch                                         │
+│     └─► mergeProductAndBatch(product, batch)                       │
+│                                                                     │
+│  🧾 ADD TO INVOICE                                                  │
+│     └─► useInvoiceLogic.handleAddItem(productWithBatch)            │
+│         └─► unit_price = batch.sale_price_per_unit = 40 ✅         │
+│                                                                     │
+│  📤 SUBMIT INVOICE                                                  │
+│     └─► [ONLINE] POST /api/invoices/ immediately                   │
+│     └─► [OFFLINE] Queue for sync when back online                  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -186,51 +180,59 @@ Invoice:    unit_price = 40  ✅ CORRECT!
 
 ---
 
-## ✅ Implemented Solution (Option A)
+## ✅ Implemented Solution - Offline-First Architecture
 
-We have successfully implemented the **Single API with Embedded Batches** architecture, resolving the `unit_price: 0` bug and optimizing performance.
+We have successfully implemented a **full offline-first architecture** with background sync.
 
-### 🏗️ New Architecture
+### 🏗️ Architecture Components
 
-#### 1. Backend (`/products/search-with-batches`)
+#### 1. Bulk Sync Endpoint (`/products/all-with-batches`)
 *   **File:** `backend/app/api/routes/master/products.py`
-*   **Response:** Products now include an embedded `batches` array and a `best_batch` object (calculated by FEFO).
-*   **Naming:** Returns strict canonical field names (`sale_price_per_unit`, `mrp_per_unit`), eliminating ambiguity.
+*   **Purpose:** Paginated bulk fetch of ALL products with embedded batches
+*   **Features:**
+    *   Pagination: `?page=1&page_size=100`
+    *   Delta sync: `?since=2026-01-01T00:00:00Z` (only changed products)
+    *   Returns products with `batches[]` array and `best_batch` object
 
-#### 2. Centralized Product Model
-*   **File:** `frontend/src/types/models/product.ts`
-*   **Purpose:** The single source of truth for `Product` and `ProductBatch` types.
-*   **Change:** Updated to include canonical fields (`mrp_per_unit`, `sale_price_per_unit`, `total_stock`) alongside legacy fields for backward compatibility.
+#### 2. Search Endpoint (`/products/search-with-batches`)
+*   **File:** `backend/app/api/routes/master/products.py`
+*   **Purpose:** Real-time search with embedded batches (optional fallback)
 
-#### 3. Data Mapper Logic
-*   **File:** `frontend/src/utils/productMapper.ts`
-*   **Purpose:** Handles all data transformation from Raw API -> Application Model.
-*   **Key Logic:**
-    *   Maps `sale_price_per_unit` → `unit_price` correctly.
-    *   Centrally calculates `days_to_expiry` from `expiry_date`.
-    *   Populates legacy aliases (`total_quantity`, `sale_price`) to support older components.
+#### 3. Local-First Service
+*   **File:** `frontend/src/services/offline/cache/localFirstService.ts`
+*   **Key Methods:**
+    *   `syncProductsWithBatches({ fullSync, pageSize, onProgress })` - Bulk sync all products
+    *   `searchProducts(query)` - LOCAL-FIRST search (IndexedDB → background API)
+    *   `getLastSyncTime()` / `needsSync()` - Sync status checks
+*   **Strategy:**
+    1. Search IndexedDB instantly (<50ms)
+    2. Return results immediately
+    3. If data stale (>5 min), trigger background sync
+    4. Fallback to cloud only if no local data
 
-### 📂 Useful Files Inventory (Invoice & Product Flow)
+#### 4. Centralized Product Model & Mapper
+*   **Types:** `frontend/src/types/models/product.ts`
+*   **Mapper:** `frontend/src/utils/productMapper.ts`
+    *   `mergeProductAndBatch()` - Ensures batch pricing overwrites product pricing
 
-These are the **critical files** that power the optimized flow. Any file with a similar name (e.g., `.js` version of a `.ts` file) not listed here is likely redundant.
+### 📂 File Inventory (Offline-First Architecture)
 
-#### 🖥️ Backend Files
-| File Path | Purpose |
-|-----------|---------|
-| `backend/app/api/routes/master/products.py` | **Primary Endpoint**. Handles `search-with-batches`. |
-| `backend/app/api/routes/inventory/stock.py` | **Stock Management**. Source of truth for raw batch data. |
-| `backend/app/api/routes/sales/invoices.py` | **Invoice Processing**. Handles final invoice submission. |
+#### 🖥️ Backend API Endpoints
+| Endpoint | File | Purpose |
+|----------|------|---------|
+| `GET /products/all-with-batches` | `products.py` | **Bulk Sync**. Paginated fetch of ALL products with batches. |
+| `GET /products/search-with-batches` | `products.py` | **Search**. Real-time search with embedded batches. |
+| `POST /invoices/` | `invoices.py` | **Create Invoice**. Final submission with pricing. |
 
 #### 🌐 Frontend Files
 
 **1. Data & Logic Layer (The "Brain")**
 | File Path | Purpose |
 |-----------|---------|
-| `frontend/src/types/models/product.ts` | **Type Definitions**. Single source of truth for `Product` & `Batch` interfaces. |
-| `frontend/src/utils/productMapper.ts` | **Data Mapper**. Standardizes API data & calculates expiry. |
-| `frontend/src/services/offline/cache/localFirstService.ts` | **Smart Caching**. Orchestrates offline-first data fetching. |
-| `frontend/src/services/api/modules/master/products.api.js` | **API Client**. Low-level HTTP calls to backend. |
-| `frontend/src/utils/fieldNormalizer.js` | **Tax Logic**. Standardizes GST/Tax calculations. |
+| `frontend/src/types/models/product.ts` | **Type Definitions**. Single source of truth for interfaces. |
+| `frontend/src/utils/productMapper.ts` | **Data Mapper**. `mergeProductAndBatch()` for pricing. |
+| `frontend/src/services/offline/cache/localFirstService.ts` | **Offline-First Engine**. Sync + instant search. |
+| `frontend/src/services/api/modules/master/products.api.js` | **API Client**. `getAllWithBatches()`, `searchWithBatches()`. |
 
 **2. UI Components (The "Face")**
 | File Path | Purpose |
