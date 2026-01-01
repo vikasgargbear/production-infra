@@ -197,15 +197,200 @@ class LocalFirstService {
         }
     }
 
+    // ==========================================================================
+    // BULK SYNC - Products with Batches (for Offline-First Architecture)
+    // ==========================================================================
+
     /**
-     * Search products locally with instant results
-     * Falls back to cloud if not found or data is stale
+     * Sync ALL products with embedded batches from the server.
+     * This is the key method for offline-first architecture.
+     * 
+     * Features:
+     * - Paginated to handle large catalogs
+     * - Delta sync support (only fetch changes since last sync)
+     * - Stores products with batches in IndexedDB
+     * - Called on login/app load and periodically in background
+     * 
+     * @param options.fullSync - If true, fetch all products (ignore lastSyncTime)
+     * @param options.pageSize - Products per page (default 100)
+     * @param options.onProgress - Callback for sync progress
      */
+    async syncProductsWithBatches(options: {
+        fullSync?: boolean;
+        pageSize?: number;
+        onProgress?: (progress: { page: number; totalPages: number; productsSynced: number }) => void;
+    } = {}): Promise<{ success: boolean; productsSynced: number; error?: string }> {
+        const { fullSync = false, pageSize = 100, onProgress } = options;
+
+        if (this.syncing) {
+            console.log('[LocalFirst] Sync already in progress, skipping...');
+            return { success: false, productsSynced: 0, error: 'Sync already in progress' };
+        }
+
+        this.syncing = true;
+        this.notifySyncListeners({ status: 'syncing' });
+
+        try {
+            console.log(`[LocalFirst] Starting products sync (fullSync: ${fullSync})...`);
+
+            // Determine since parameter for delta sync
+            let since: string | undefined;
+            if (!fullSync && this.lastSyncTime) {
+                since = new Date(this.lastSyncTime).toISOString();
+                console.log(`[LocalFirst] Delta sync since: ${since}`);
+            }
+
+            let page = 1;
+            let hasMore = true;
+            let totalProductsSynced = 0;
+            let totalPages = 1;
+
+            while (hasMore) {
+                console.log(`[LocalFirst] Fetching page ${page}...`);
+
+                const response = await productAPI.getAllWithBatches({
+                    page,
+                    pageSize,
+                    since
+                });
+
+                const data = (response as any)?.data || response;
+                const products = data.products || [];
+                const pagination = data.pagination || {};
+
+                totalPages = pagination.total_pages || 1;
+                hasMore = pagination.has_more || false;
+
+                console.log(`[LocalFirst] Page ${page}/${totalPages}: ${products.length} products`);
+
+                if (products.length > 0) {
+                    // Transform products to include search fields
+                    const transformedProducts = products.map((p: any) => {
+                        const productId = String(p.product_id);
+                        return {
+                            id: productId,
+                            product_id: productId,
+                            product_name: p.product_name,
+                            product_code: p.product_code,
+                            generic_name: p.generic_name,
+                            manufacturer: p.manufacturer,
+                            hsn_code: p.hsn_code,
+                            category: p.category,
+                            gst_percent: Number(p.gst_percent || 0),
+                            total_stock: p.total_stock || 0,
+                            // Canonical pricing fields
+                            mrp_per_unit: p.mrp_per_unit || 0,
+                            sale_price_per_unit: p.sale_price_per_unit || 0,
+                            // Embedded batches!
+                            batches: p.batches || [],
+                            best_batch: p.best_batch || null,
+                            // Timestamps
+                            updated_at: p.updated_at,
+                            // Normalized search fields
+                            _search_name: (p.product_name || '').toLowerCase(),
+                            _search_code: (p.product_code || '').toLowerCase(),
+                            _search_hsn: (p.hsn_code || '').toLowerCase(),
+                            _search_generic: (p.generic_name || '').toLowerCase(),
+                            _search_manufacturer: (p.manufacturer || '').toLowerCase(),
+                        };
+                    });
+
+                    // Upsert products (overwrite if exists)
+                    await offlineDB.bulkLoad('products', transformedProducts);
+                    totalProductsSynced += transformedProducts.length;
+
+                    // Also store batches separately for direct batch queries
+                    const allBatches: any[] = [];
+                    for (const product of products) {
+                        if (product.batches && product.batches.length > 0) {
+                            for (const batch of product.batches) {
+                                allBatches.push({
+                                    id: String(batch.batch_id),
+                                    batch_id: batch.batch_id,
+                                    product_id: product.product_id,
+                                    batch_number: batch.batch_number,
+                                    expiry_date: batch.expiry_date,
+                                    manufacturing_date: batch.manufacturing_date,
+                                    mrp_per_unit: batch.mrp_per_unit,
+                                    sale_price_per_unit: batch.sale_price_per_unit,
+                                    cost_per_unit: batch.cost_per_unit,
+                                    quantity_available: batch.quantity_available,
+                                    days_to_expiry: batch.days_to_expiry
+                                });
+                            }
+                        }
+                    }
+                    if (allBatches.length > 0) {
+                        await offlineDB.storeBatches(allBatches);
+                    }
+
+                    // Report progress
+                    if (onProgress) {
+                        onProgress({
+                            page,
+                            totalPages,
+                            productsSynced: totalProductsSynced
+                        });
+                    }
+                }
+
+                page++;
+            }
+
+            this.lastSyncTime = Date.now();
+            localStorage.setItem('localFirst_lastProductSync', this.lastSyncTime.toString());
+
+            this.notifySyncListeners({
+                status: 'synced',
+                timestamp: this.lastSyncTime,
+                productsUpdated: totalProductsSynced
+            });
+
+            console.log(`[LocalFirst] ✅ Sync complete! ${totalProductsSynced} products with batches synced.`);
+
+            return { success: true, productsSynced: totalProductsSynced };
+
+        } catch (error) {
+            const errorMessage = (error as Error).message;
+            console.error('[LocalFirst] Sync failed:', errorMessage);
+            this.notifySyncListeners({ status: 'error', error: error as Error });
+            return { success: false, productsSynced: 0, error: errorMessage };
+        } finally {
+            this.syncing = false;
+        }
+    }
+
     /**
-     * Search products
-     * NETWORK-FIRST strategy (modified based on user feedback): 
-     * If online, hit the API to get fresh pricing/batches. 
-     * If offline or API fails, fall back to local cache.
+     * Get the last sync timestamp
+     */
+    getLastSyncTime(): number | null {
+        if (!this.lastSyncTime) {
+            const stored = localStorage.getItem('localFirst_lastProductSync');
+            this.lastSyncTime = stored ? parseInt(stored, 10) : null;
+        }
+        return this.lastSyncTime;
+    }
+
+    /**
+     * Check if sync is needed (older than 5 minutes)
+     */
+    needsSync(): boolean {
+        const lastSync = this.getLastSyncTime();
+        if (!lastSync) return true;
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        return lastSync < fiveMinutesAgo;
+    }
+
+    /**
+     * Search products - LOCAL-FIRST strategy for instant results!
+     * 
+     * Strategy:
+     * 1. ALWAYS search IndexedDB first (instant, <50ms)
+     * 2. Return results immediately
+     * 3. If synced recently (< 5 min), done
+     * 4. If stale or forceCloud, trigger background refresh
+     * 
+     * This makes search feel instant even on slow connections.
      */
     async searchProducts(query: string, options: SearchOptions = {}): Promise<any[]> {
         const { limit = 20, forceCloud = false } = options;
@@ -217,69 +402,78 @@ class LocalFirstService {
             return [];
         }
 
-        const isOnline = navigator.onLine;
-
-        // STRATEGY: Network First (if online)
-        // This ensures pricing/batches are always fresh
-        if (isOnline || forceCloud) {
-            try {
-                console.log('[LocalFirst] Online detected, attempting cloud search first:', query);
-                const results = await this.cloudSearchProducts(query, limit);
-                if (results && results.length > 0) {
-                    return results;
-                }
-                console.log('[LocalFirst] Cloud search returned empty, checking local cache...');
-            } catch (error) {
-                console.warn('[LocalFirst] Cloud search failed despite being online, falling back to local:', error);
-            }
-        } else {
-            console.log('[LocalFirst] Offline detected, skipping cloud search');
-        }
-
-        // FALLBACK: Local Search (Offline or Cloud Failure)
         const searchTerm = query.toLowerCase();
 
+        // STEP 1: Search IndexedDB first (INSTANT!)
         try {
             const allProducts = await offlineDB.getAll('products');
 
             if (allProducts.length > 0) {
-                console.log('[LocalFirst] Searching', allProducts.length, 'local products for:', query);
+                console.log(`[LocalFirst] ⚡ Instant search in ${allProducts.length} cached products for: "${query}"`);
 
-                // Multi-field fuzzy search
+                // Multi-field fuzzy search (includes new fields from sync)
                 const matches = allProducts.filter((product: any) => {
                     return (
                         (product._search_name?.includes(searchTerm) || false) ||
                         (product._search_code?.includes(searchTerm) || false) ||
                         (product._search_hsn?.includes(searchTerm) || false) ||
-                        (product.name?.toLowerCase().includes(searchTerm) || false) ||
-                        (product.sku?.toLowerCase().includes(searchTerm) || false)
+                        (product._search_generic?.includes(searchTerm) || false) ||
+                        (product._search_manufacturer?.includes(searchTerm) || false) ||
+                        // Fallback for legacy data
+                        (product.product_name?.toLowerCase().includes(searchTerm) || false) ||
+                        (product.name?.toLowerCase().includes(searchTerm) || false)
                     );
                 });
 
-                // Sort by relevance (exact matches first)
+                // Sort by relevance (exact matches first, then by stock)
                 matches.sort((a: any, b: any) => {
+                    // Exact match priority
                     const aExact = a._search_name === searchTerm || a._search_code === searchTerm;
                     const bExact = b._search_name === searchTerm || b._search_code === searchTerm;
                     if (aExact && !bExact) return -1;
                     if (!aExact && bExact) return 1;
-                    return 0;
+
+                    // Then by stock (products with stock first)
+                    const aStock = a.total_stock || 0;
+                    const bStock = b.total_stock || 0;
+                    return bStock - aStock;
                 });
 
                 // Deduplicate by product_id
                 const seen = new Set<string | number>();
                 const uniqueMatches = matches.filter((product: any) => {
                     const key = product.product_id || product.id;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
+                    if (seen.has(String(key))) return false;
+                    seen.add(String(key));
                     return true;
                 });
 
                 const results = uniqueMatches.slice(0, limit);
-                console.log(`[LocalFirst] Returning ${results.length} local results (Fallback)`);
+                console.log(`[LocalFirst] ⚡ Returning ${results.length} instant results (LOCAL-FIRST)`);
+
+                // STEP 2: Background sync if data is stale (non-blocking)
+                if (forceCloud || this.needsSync()) {
+                    console.log('[LocalFirst] Data might be stale, triggering background sync...');
+                    this.syncProductsWithBatches({ fullSync: false }).catch(err => {
+                        console.warn('[LocalFirst] Background sync failed:', err.message);
+                    });
+                }
+
                 return results;
             }
         } catch (error) {
-            console.error('[LocalFirst] Local product search failed:', error);
+            console.error('[LocalFirst] Local search failed:', error);
+        }
+
+        // STEP 3: Fallback to cloud if no local data
+        console.log('[LocalFirst] No local data, falling back to cloud search...');
+        if (navigator.onLine) {
+            try {
+                const results = await this.cloudSearchProducts(query, limit);
+                return results;
+            } catch (error) {
+                console.error('[LocalFirst] Cloud search also failed:', error);
+            }
         }
 
         return [];

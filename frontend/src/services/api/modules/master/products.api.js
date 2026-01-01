@@ -71,6 +71,19 @@ export const productsApi = {
     });
   },
 
+  // Bulk fetch ALL products with batches for offline sync
+  // Usage: getAllWithBatches({ page: 1, pageSize: 100, since: '2026-01-01T00:00:00Z' })
+  getAllWithBatches: (params = {}) => {
+    return apiHelpers.get('/products/all-with-batches', {
+      params: {
+        page: params.page || 1,
+        page_size: params.pageSize || 100,
+        since: params.since || undefined,
+        include_inactive: params.includeInactive || false
+      }
+    });
+  },
+
   // =========================================================================
   // CATEGORIES
   // =========================================================================

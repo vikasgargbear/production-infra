@@ -353,6 +353,196 @@ async def search_products_with_batches(
     except Exception as e:
         raise handle_error(e, "search products with batches")
 
+
+# =============================================================================
+# BULK SYNC ENDPOINT - For Offline-First Architecture
+# =============================================================================
+
+@router.get("/all-with-batches")
+@with_tenant_context
+async def get_all_products_with_batches(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(100, ge=1, le=500, description="Products per page"),
+    since: Optional[str] = Query(None, description="ISO timestamp for delta sync (only products updated since)"),
+    include_inactive: bool = Query(False, description="Include inactive products"),
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Bulk fetch ALL products with embedded batches for offline sync.
+    
+    Features:
+    - Paginated (100 products per page by default)
+    - Delta sync support (since parameter)
+    - Returns products with embedded batches array
+    - Optimized for initial app load / background sync
+    
+    Usage:
+    - Initial sync: GET /products/all-with-batches?page=1&page_size=100
+    - Delta sync: GET /products/all-with-batches?since=2026-01-01T00:00:00Z
+    """
+    try:
+        offset = (page - 1) * page_size
+        
+        # Build base query with optional delta sync filter
+        where_clauses = ["p.org_id = :org_id"]
+        params = {"org_id": context.org_id, "limit": page_size, "offset": offset}
+        
+        if not include_inactive:
+            where_clauses.append("p.is_active = true")
+        
+        if since:
+            where_clauses.append("p.updated_at > :since")
+            params["since"] = since
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Count total products (for pagination info)
+        count_query = f"""
+            SELECT COUNT(*) as total 
+            FROM master.products p 
+            WHERE {where_sql}
+        """
+        count_result = db.execute(text(count_query), params)
+        total_count = count_result.fetchone()[0]
+        
+        # Fetch products
+        product_query = f"""
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.manufacturer, p.hsn_code, p.gst_percent,
+                p.category, p.category_id, p.product_type_id,
+                p.mrp_per_unit, p.sale_price_per_unit, p.cost_per_unit,
+                p.is_active, p.requires_prescription, p.is_narcotic,
+                p.pack_size, p.pack_unit, p.base_unit,
+                p.created_at, p.updated_at,
+                COALESCE(s.total_stock, 0) as total_stock
+            FROM master.products p
+            LEFT JOIN (
+                SELECT product_id, SUM(quantity_available) as total_stock
+                FROM inventory.stock_batches
+                WHERE org_id = :org_id AND quantity_available > 0
+                GROUP BY product_id
+            ) s ON p.product_id = s.product_id
+            WHERE {where_sql}
+            ORDER BY p.product_name
+            LIMIT :limit OFFSET :offset
+        """
+        
+        products_result = db.execute(text(product_query), params)
+        products = [dict(row._mapping) for row in products_result]
+        
+        if not products:
+            return {
+                "products": [],
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_products": total_count,
+                    "total_pages": 0,
+                    "has_more": False
+                },
+                "sync_metadata": {
+                    "synced_at": datetime.now(timezone.utc).isoformat(),
+                    "products_in_page": 0,
+                    "batches_in_page": 0
+                }
+            }
+        
+        # Get product IDs for batch query
+        product_ids = [p["product_id"] for p in products]
+        
+        # Fetch all batches for these products
+        batch_query = """
+            SELECT 
+                sb.batch_id, sb.product_id, sb.batch_number,
+                sb.expiry_date, sb.manufacturing_date,
+                sb.mrp_per_unit, sb.sale_price_per_unit, sb.cost_per_unit,
+                sb.quantity_available,
+                CASE 
+                    WHEN sb.expiry_date IS NULL THEN NULL
+                    ELSE EXTRACT(DAY FROM sb.expiry_date - CURRENT_DATE)::int
+                END as days_to_expiry
+            FROM inventory.stock_batches sb
+            WHERE sb.org_id = :org_id
+              AND sb.product_id = ANY(:product_ids)
+              AND sb.quantity_available > 0
+            ORDER BY sb.expiry_date ASC NULLS LAST
+        """
+        batches_result = db.execute(text(batch_query), {
+            "org_id": context.org_id,
+            "product_ids": product_ids
+        })
+        batches = [dict(row._mapping) for row in batches_result]
+        
+        # Group batches by product_id
+        batches_by_product = {}
+        for batch in batches:
+            pid = batch["product_id"]
+            if pid not in batches_by_product:
+                batches_by_product[pid] = []
+            # Convert decimals to floats for JSON serialization
+            batch["mrp_per_unit"] = float(batch["mrp_per_unit"] or 0)
+            batch["sale_price_per_unit"] = float(batch["sale_price_per_unit"] or 0)
+            batch["cost_per_unit"] = float(batch["cost_per_unit"] or 0)
+            batch["expiry_date"] = str(batch["expiry_date"]) if batch["expiry_date"] else None
+            batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch["manufacturing_date"] else None
+            batches_by_product[pid].append(batch)
+        
+        # Embed batches into products
+        for product in products:
+            pid = product["product_id"]
+            product_batches = batches_by_product.get(pid, [])
+            product["batches"] = product_batches
+            
+            # Convert decimal fields
+            product["mrp_per_unit"] = float(product["mrp_per_unit"] or 0)
+            product["sale_price_per_unit"] = float(product["sale_price_per_unit"] or 0)
+            product["cost_per_unit"] = float(product["cost_per_unit"] or 0) if product.get("cost_per_unit") else 0
+            product["gst_percent"] = float(product["gst_percent"] or 0)
+            product["total_stock"] = int(product["total_stock"] or 0)
+            product["created_at"] = str(product["created_at"]) if product["created_at"] else None
+            product["updated_at"] = str(product["updated_at"]) if product["updated_at"] else None
+            
+            # Best batch for quick access
+            if product_batches:
+                best = product_batches[0]  # Already sorted by expiry ASC
+                product["best_batch"] = {
+                    "batch_id": best["batch_id"],
+                    "batch_number": best["batch_number"],
+                    "mrp_per_unit": best["mrp_per_unit"],
+                    "sale_price_per_unit": best["sale_price_per_unit"],
+                    "quantity_available": best["quantity_available"],
+                    "expiry_date": best["expiry_date"],
+                    "days_to_expiry": best["days_to_expiry"]
+                }
+            else:
+                product["best_batch"] = None
+        
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        logger.info(f"Bulk sync: Page {page}/{total_pages}, {len(products)} products, {len(batches)} batches")
+        
+        return {
+            "products": products,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_products": total_count,
+                "total_pages": total_pages,
+                "has_more": page < total_pages
+            },
+            "sync_metadata": {
+                "synced_at": datetime.now(timezone.utc).isoformat(),
+                "products_in_page": len(products),
+                "batches_in_page": len(batches)
+            }
+        }
+        
+    except Exception as e:
+        raise handle_error(e, "bulk sync products with batches")
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 @with_tenant_context
 async def create_product(
