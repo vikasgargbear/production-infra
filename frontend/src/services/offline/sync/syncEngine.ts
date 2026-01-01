@@ -114,7 +114,7 @@ class SyncEngine {
     private retryDelay: number = 5000; // 5 seconds
 
     /**
-     * Start automatic sync
+     * Start automatic sync (includes product sync for offline-first search)
      */
     startAutoSync(interval: number = 30000): void {
         if (this.syncInterval) {
@@ -130,6 +130,35 @@ class SyncEngine {
         // Initial sync if online
         if (navigator.onLine) {
             this.startSync();
+
+            // Also sync products with batches for offline-first search
+            this.syncProductsForOfflineFirst();
+        }
+    }
+
+    /**
+     * Sync products with batches for offline-first search
+     * Uses the localFirstService for paginated bulk sync
+     */
+    private async syncProductsForOfflineFirst(): Promise<void> {
+        try {
+            // Dynamic import to avoid circular dependencies
+            const { default: localFirstService } = await import('../cache/localFirstService');
+
+            if (localFirstService.needsSync()) {
+                console.log('🔄 [SyncEngine] Triggering product sync for offline-first...');
+                const result = await localFirstService.syncProductsWithBatches({
+                    fullSync: false,
+                    pageSize: 100
+                });
+                if (result.success) {
+                    console.log(`✅ [SyncEngine] Product sync complete: ${result.productsSynced} products`);
+                } else {
+                    console.warn('⚠️ [SyncEngine] Product sync failed:', result.error);
+                }
+            }
+        } catch (error) {
+            console.warn('[SyncEngine] Failed to sync products:', error);
         }
     }
 
@@ -499,7 +528,8 @@ class SyncEngine {
     }
 
     /**
-     * Force sync (user-triggered)
+     * Force sync (user-triggered or when coming back online)
+     * Syncs both pending queue items AND products with batches
      */
     async forceSync(): Promise<any> {
         if (!navigator.onLine) {
@@ -529,7 +559,14 @@ class SyncEngine {
         }
 
         toast.info('Starting sync...');
-        return await this.startSync();
+
+        // Sync pending queue items
+        const result = await this.startSync();
+
+        // Also sync products with batches for offline-first search
+        this.syncProductsForOfflineFirst();
+
+        return result;
     }
 
     /**

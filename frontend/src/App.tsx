@@ -150,6 +150,39 @@ const AppContent = (): JSX.Element => {
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Authentication handled by AuthContext - no manual initialization needed
+
+  // Sync products with batches when authenticated (for offline-first search)
+  useEffect(() => {
+    if (isAuthenticated && navigator.onLine) {
+      console.log('🔄 [LocalFirst] User authenticated - starting product sync...');
+
+      // Import dynamically to avoid circular dependencies
+      import('./services/offline/cache/localFirstService').then(({ default: localFirstService }) => {
+        // Check if we need to sync (data older than 5 minutes)
+        if (localFirstService.needsSync()) {
+          console.log('🔄 [LocalFirst] Data stale - triggering full sync...');
+          localFirstService.syncProductsWithBatches({
+            fullSync: false,  // Delta sync if possible
+            pageSize: 100,
+            onProgress: (progress) => {
+              console.log(`📦 [LocalFirst] Sync progress: Page ${progress.page}/${progress.totalPages}, ${progress.productsSynced} products synced`);
+            }
+          }).then(result => {
+            if (result.success) {
+              console.log(`✅ [LocalFirst] Sync complete! ${result.productsSynced} products synced`);
+            } else {
+              console.warn('⚠️ [LocalFirst] Sync failed:', result.error);
+            }
+          });
+        } else {
+          console.log('✅ [LocalFirst] Data is fresh, skipping sync');
+        }
+      }).catch(err => {
+        console.warn('⚠️ [LocalFirst] Failed to load sync service:', err);
+      });
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     // OLD AUTH CODE REMOVED
     // AuthContext automatically initializes from token on mount
@@ -164,6 +197,14 @@ const AppContent = (): JSX.Element => {
     const handleOnline = () => {
       console.log('🌐 [SyncEngine] Back online - triggering sync');
       syncEngine.forceSync();
+
+      // Also sync products with batches for instant search
+      import('./services/offline/cache/localFirstService').then(({ default: localFirstService }) => {
+        console.log('🔄 [LocalFirst] Back online - syncing products...');
+        localFirstService.syncProductsWithBatches({ fullSync: false });
+      }).catch(err => {
+        console.warn('⚠️ [LocalFirst] Failed to sync on online:', err);
+      });
     };
 
     window.addEventListener('online', handleOnline);
