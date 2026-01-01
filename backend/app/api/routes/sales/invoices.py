@@ -213,7 +213,7 @@ def process_inventory_background(
     except Exception as e:
         logger.error(f"❌ [BACKGROUND] Failed to create session for invoice {invoice_id}: {e}")
 
-@router.post("/")
+@router.post("")
 @with_tenant_context
 async def create_invoice(
     invoice_data: InvoiceCreateRequest,
