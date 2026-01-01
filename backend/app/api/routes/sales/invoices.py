@@ -169,35 +169,23 @@ def process_inventory_background(
                 """), {**invoice_totals, "invoice_id": invoice_id})
                 logger.info(f"✅ [BACKGROUND] Updated totals for invoice {invoice_id}")
             
-            # Create customer outstanding record (for party ledger/aging reports)
+            # Update customer's current_outstanding balance
             if invoice_totals:
                 try:
-                    # Check if outstanding already exists
-                    check_result = db.execute(text("""
-                        SELECT outstanding_id FROM sales.customer_outstanding
-                        WHERE invoice_id = :invoice_id
-                    """), {"invoice_id": invoice_id})
+                    customer_id = invoice_totals.get("customer_id")
+                    final_amount = invoice_totals.get("final_amount", 0)
                     
-                    if not check_result.fetchone():
-                        db.execute(text("""
-                            INSERT INTO sales.customer_outstanding (
-                                org_id, customer_id, invoice_id, invoice_number,
-                                invoice_date, invoice_amount, outstanding_amount,
-                                due_date, status
-                            ) VALUES (
-                                :org_id, :customer_id, :invoice_id, :invoice_number,
-                                :invoice_date, :amount, :amount,
-                                :invoice_date + INTERVAL '30 days', 'open'
-                            )
-                        """), {
-                            "org_id": org_id,
-                            "customer_id": invoice_totals.get("customer_id"),
-                            "invoice_id": invoice_id,
-                            "invoice_number": invoice_totals.get("invoice_number"),
-                            "invoice_date": invoice_totals.get("invoice_date"),
-                            "amount": invoice_totals.get("final_amount")
-                        })
-                        logger.info(f"✅ [BACKGROUND] Created outstanding record for invoice {invoice_id}")
+                    # Add invoice amount to customer's outstanding balance
+                    db.execute(text("""
+                        UPDATE parties.customers 
+                        SET current_outstanding = COALESCE(current_outstanding, 0) + :amount,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE customer_id = :customer_id
+                    """), {
+                        "customer_id": customer_id,
+                        "amount": final_amount
+                    })
+                    logger.info(f"✅ [BACKGROUND] Updated customer {customer_id} outstanding by +{final_amount}")
                 except Exception as outstanding_error:
                     logger.warning(f"⚠️ [BACKGROUND] Could not create outstanding record: {outstanding_error}")
             
