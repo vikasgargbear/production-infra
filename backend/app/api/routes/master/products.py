@@ -217,6 +217,142 @@ async def search_products(
     except Exception as e:
         raise handle_error(e, "search products")
 
+@router.get("/search-with-batches")
+@with_tenant_context
+async def search_products_with_batches(
+    q: str = Query("", description="Search query"),
+    limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(0, ge=0),
+    include_expired: bool = Query(False, description="Include expired batches"),
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Search products with embedded batch data - OPTIMIZED SINGLE API CALL
+    
+    Returns products with all their batches in one response.
+    Uses canonical field names: sale_price_per_unit, mrp_per_unit, cost_per_unit
+    
+    This eliminates the need for separate batch API calls in the frontend.
+    """
+    try:
+        # Step 1: Get matching products
+        product_query = """
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.is_active,
+                COALESCE(SUM(b.quantity_available), 0) as total_stock
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                AND p.org_id = b.org_id
+                AND b.batch_status = 'active'
+            WHERE p.is_active = true
+        """
+        params = {"limit": limit, "offset": offset}
+        
+        if q:
+            product_query += """ AND (
+                p.product_name ILIKE :search 
+                OR p.brand ILIKE :search 
+                OR p.manufacturer ILIKE :search
+                OR p.hsn_code ILIKE :search
+                OR p.product_code ILIKE :search
+            )"""
+            params["search"] = f"%{q}%"
+        
+        product_query += """
+            GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
+                     p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                     p.is_active
+            ORDER BY p.product_name
+            LIMIT :limit OFFSET :offset
+        """
+        
+        products_result = db.execute(text(product_query), params)
+        products = [dict(row._mapping) for row in products_result]
+        
+        if not products:
+            return {"products": [], "total": 0}
+        
+        # Step 2: Get batches for all matching products in ONE query
+        product_ids = [p["product_id"] for p in products]
+        
+        batch_query = """
+            SELECT 
+                b.batch_id,
+                b.product_id,
+                b.batch_number,
+                b.manufacturing_date,
+                b.expiry_date,
+                b.quantity_available,
+                b.mrp_per_unit,
+                b.sale_price_per_unit,
+                b.cost_per_unit,
+                b.units_per_pack,
+                b.packages_per_box,
+                b.pack_type,
+                b.batch_status,
+                b.quality_status,
+                (b.expiry_date - CURRENT_DATE) as days_to_expiry
+            FROM inventory.batches b
+            WHERE b.product_id = ANY(:product_ids)
+              AND b.batch_status = 'active'
+              AND b.quality_status = 'approved'
+        """
+        
+        if not include_expired:
+            batch_query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
+        
+        batch_query += " ORDER BY b.expiry_date ASC, b.batch_id"
+        
+        batches_result = db.execute(text(batch_query), {"product_ids": product_ids})
+        batches = [dict(row._mapping) for row in batches_result]
+        
+        # Step 3: Group batches by product_id
+        batches_by_product = {}
+        for batch in batches:
+            pid = batch["product_id"]
+            if pid not in batches_by_product:
+                batches_by_product[pid] = []
+            batches_by_product[pid].append(batch)
+        
+        # Step 4: Embed batches into products
+        for product in products:
+            pid = product["product_id"]
+            product_batches = batches_by_product.get(pid, [])
+            product["batches"] = product_batches
+            
+            # Also provide the "best" batch (first expiring with stock) for quick access
+            if product_batches:
+                best_batch = next(
+                    (b for b in product_batches if b["quantity_available"] > 0),
+                    product_batches[0]
+                )
+                product["best_batch"] = {
+                    "batch_id": best_batch["batch_id"],
+                    "batch_number": best_batch["batch_number"],
+                    "mrp_per_unit": float(best_batch["mrp_per_unit"] or 0),
+                    "sale_price_per_unit": float(best_batch["sale_price_per_unit"] or 0),
+                    "quantity_available": best_batch["quantity_available"],
+                    "expiry_date": str(best_batch["expiry_date"]) if best_batch["expiry_date"] else None,
+                    "days_to_expiry": best_batch["days_to_expiry"]
+                }
+            else:
+                product["best_batch"] = None
+        
+        logger.info(f"Search with batches: Found {len(products)} products with {len(batches)} total batches")
+        
+        return {
+            "products": products,
+            "total": len(products),
+            "batches_count": len(batches)
+        }
+        
+    except Exception as e:
+        raise handle_error(e, "search products with batches")
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 @with_tenant_context
 async def create_product(

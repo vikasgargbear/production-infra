@@ -351,35 +351,73 @@ class LocalFirstService {
     }
 
     /**
-     * Cloud search for products (fallback)
+     * Cloud search for products with embedded batches (OPTIMIZED)
+     * Uses /products/search-with-batches endpoint for single API call
      */
     async cloudSearchProducts(query: string, limit: number = 20): Promise<any[]> {
         try {
-            console.log('[LocalFirst] Searching products via cloud API, query:', query);
-            const response = await productAPI.search(query, { limit });
-            const rawResults = (response as any)?.data || response || [];
+            console.log('[LocalFirst] Searching products via cloud API (with batches), query:', query);
 
-            console.log('[LocalFirst] Cloud product search returned:', rawResults.length, 'results');
+            // Use the new optimized endpoint that returns products with batches
+            const response = await productAPI.searchWithBatches(query, { limit });
+            const rawProducts = (response as any)?.products || (response as any)?.data?.products || [];
+
+            console.log('[LocalFirst] Cloud search returned:', rawProducts.length, 'products with batches');
 
             // Deduplicate by product_id
             const seen = new Set<string | number>();
-            const results = rawResults.filter((product: any) => {
+            const products = rawProducts.filter((product: any) => {
                 const key = product.product_id || product.id;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
             });
 
-            // Update local cache in background
-            if (results.length > 0) {
-                this.updateLocalCache('products', results).catch(() => { });
+            // Extract all batches from products for caching
+            const allBatches: any[] = [];
+            for (const product of products) {
+                if (product.batches && Array.isArray(product.batches)) {
+                    for (const batch of product.batches) {
+                        allBatches.push({
+                            ...batch,
+                            product_id: product.product_id,
+                            product_name: product.product_name
+                        });
+                    }
+                }
             }
 
-            return results;
+            // Update local caches in background
+            if (products.length > 0) {
+                // Cache products (with embedded batches for quick access)
+                this.updateLocalCache('products', products).catch(() => { });
+
+                // Also cache batches separately for BatchSelector
+                if (allBatches.length > 0) {
+                    try {
+                        await offlineDB.storeBatches(allBatches);
+                        console.log(`[LocalFirst] Cached ${allBatches.length} batches for offline use`);
+                    } catch (e) {
+                        console.warn('[LocalFirst] Failed to cache batches:', e);
+                    }
+                }
+            }
+
+            // Return products with batches for immediate use
+            return products;
         } catch (error) {
-            console.error('[LocalFirst] Cloud product search failed:', (error as Error).message, error);
-            // Return empty array so UI can show "no results" instead of breaking
-            return [];
+            console.error('[LocalFirst] Cloud product search failed:', (error as Error).message);
+
+            // Fallback to basic search if new endpoint fails
+            try {
+                console.log('[LocalFirst] Falling back to basic product search...');
+                const response = await productAPI.search(query, { limit });
+                const results = (response as any)?.data || response || [];
+                return results;
+            } catch (fallbackError) {
+                console.error('[LocalFirst] Fallback search also failed:', fallbackError);
+                return [];
+            }
         }
     }
 

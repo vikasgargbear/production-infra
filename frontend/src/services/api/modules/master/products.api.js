@@ -64,6 +64,13 @@ export const productsApi = {
     });
   },
 
+  // Search products with embedded batches (OPTIMIZED - single API call)
+  searchWithBatches: (query, params = {}) => {
+    return apiHelpers.get('/products/search-with-batches', {
+      params: { q: query, ...params }
+    });
+  },
+
   // =========================================================================
   // CATEGORIES
   // =========================================================================
