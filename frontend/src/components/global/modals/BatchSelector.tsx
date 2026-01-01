@@ -196,7 +196,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
     };
 
-    const fetchAndStoreBatches = async (productId: string | number, showLoadingState: boolean = true): Promise<Batch[]> => {
+    const fetchAndStoreBatches = async (productId: string | number, showLoadingSpinner: boolean = true): Promise<Batch[]> => {
         try {
             const response = await batchAPI.getByProduct(productId);
             const batchesData = response.data?.batches || response.data || [];
@@ -210,9 +210,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 console.warn('[BatchSelector] IndexedDB cache failed:', e);
             }
 
-            if (showLoadingState) {
-                processBatches(batchesData);
-            }
+            // ALWAYS update UI with fresh data (critical for pricing accuracy)
+            // The showLoadingSpinner flag only controls whether we showed a spinner initially
+            processBatches(batchesData);
+            console.log(`[BatchSelector] UI updated with ${batchesData.length} fresh batches from API`);
 
             return batchesData;
         } catch (error) {
