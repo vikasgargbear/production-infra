@@ -180,17 +180,18 @@ const BatchSelector = ({
   const processBatches = (batchesData) => {
     // Transform batches using DataTransformer
     let transformedBatches = batchesData.map(batch => {
-      // Map batch data manually since DataTransformer is removed
+      // Map batch data - using canonical backend field names
       const transformed = {
         batch_id: batch.id || batch.batch_id,
         batch_number: batch.batch_number || batch.batch_no,
         expiry_date: batch.expiry_date,
         manufacturing_date: batch.manufacturing_date,
-        quantity_available: batch.current_stock || batch.stock || batch.quantity_available || 0,
-        mrp: batch.mrp || 0,
-        unit_price: batch.selling_price || batch.sale_price || batch.unit_price || 0, // Canonical backend name
-        sale_price: batch.selling_price || batch.sale_price || batch.unit_price || 0, // Alias
-        purchase_price: batch.purchase_price || 0,
+        quantity_available: batch.quantity_available || batch.current_stock || batch.stock || 0,
+        // CANONICAL: Backend uses mrp_per_unit and sale_price_per_unit for batches
+        mrp: batch.mrp_per_unit || batch.mrp || 0,
+        unit_price: batch.sale_price_per_unit || batch.selling_price || batch.sale_price || batch.unit_price || 0,
+        sale_price: batch.sale_price_per_unit || batch.selling_price || batch.sale_price || batch.unit_price || 0,
+        purchase_price: batch.cost_per_unit || batch.purchase_price || 0,
         days_to_expiry: batch.expiry_date ? DateFormatter.daysBetween(new Date(), new Date(batch.expiry_date)) : null,
         ...batch
       };

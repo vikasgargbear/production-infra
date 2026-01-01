@@ -363,8 +363,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       console.error('[GST Reports] Failed to load from invoices, trying dashboard:', err);
       // Fallback to dashboard API if invoice loading fails
       try {
-        const dashboardResponse = await gstApi.dashboard.getSummary('current');
-        if (dashboardResponse && dashboardResponse.summary) {
+        const dashboardResponse = await gstApi.dashboard.getSummary('current') as any;
+        if (dashboardResponse && (dashboardResponse as any).summary) {
           return transformDashboardToGSTR1(dashboardResponse);
         }
         throw new Error('Invalid response format from GST dashboard API');
@@ -1490,8 +1490,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                                     key={pageNum}
                                     onClick={() => setCreditNotesCurrentPage(pageNum)}
                                     className={`px-3 py-1 text-sm border rounded ${creditNotesCurrentPage === pageNum
-                                        ? 'bg-blue-500 text-white border-blue-500'
-                                        : 'hover:bg-gray-50'
+                                      ? 'bg-blue-500 text-white border-blue-500'
+                                      : 'hover:bg-gray-50'
                                       }`}
                                   >
                                     {pageNum}

@@ -76,13 +76,13 @@ const GSTReconciliation: React.FC = () => {
         const [invoiceResponse, purchaseResponse] = await Promise.all([
           invoiceAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
           purchasesAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 })
-        ]);
+        ]) as [any, any];
 
         invoices = Array.isArray(invoiceResponse) ? invoiceResponse :
-          invoiceResponse?.invoices || invoiceResponse?.data?.invoices || [];
+          (invoiceResponse as any)?.invoices || (invoiceResponse as any)?.data?.invoices || [];
 
         purchases = Array.isArray(purchaseResponse) ? purchaseResponse :
-          purchaseResponse?.purchases || purchaseResponse?.data?.purchases || [];
+          (purchaseResponse as any)?.purchases || (purchaseResponse as any)?.data?.purchases || [];
 
         console.log(`[GST Reconciliation] Loaded ${invoices.length} invoices and ${purchases.length} purchases for reconciliation`);
       } catch (err) {
@@ -369,8 +369,8 @@ const GSTReconciliation: React.FC = () => {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)} Reconciliation
