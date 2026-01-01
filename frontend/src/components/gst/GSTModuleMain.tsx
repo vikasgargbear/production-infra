@@ -49,7 +49,7 @@ const GSTModuleMain: React.FC<GSTModuleMainProps> = ({ onBack }) => {
       const period = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;
 
       const [invoicesRes, purchasesRes] = await Promise.all([
-        invoicesApi.search('', { dateFrom: fromDate, dateTo: toDate, limit: 1000 }).catch(() => ({ data: { invoices: [] } })),
+        invoicesApi.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }).catch(() => ({ data: { invoices: [] } })),
         purchasesAPI.getAll({ start_date: fromDate, end_date: toDate, limit: 1000 }).catch(() => ({ data: [] }))
       ]);
 
@@ -250,11 +250,10 @@ const GSTModuleMain: React.FC<GSTModuleMainProps> = ({ onBack }) => {
               <h3 className="text-lg font-semibold text-gray-900">{item.type}</h3>
               <p className="text-sm text-gray-500">{item.description}</p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-              item.status === 'due' ? 'bg-amber-100 text-amber-800' :
-              item.status === 'overdue' ? 'bg-red-100 text-red-800' :
-              'bg-green-100 text-green-800'
-            }`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.status === 'due' ? 'bg-amber-100 text-amber-800' :
+                item.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                  'bg-green-100 text-green-800'
+              }`}>
               Due {item.dueDate}
             </span>
           </div>
@@ -449,11 +448,10 @@ const GSTModuleMain: React.FC<GSTModuleMainProps> = ({ onBack }) => {
                   <p className="text-sm text-gray-500">Due: {item.dueDate}</p>
                 </div>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                item.status === 'due' ? 'bg-amber-100 text-amber-800' :
-                item.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                'bg-green-100 text-green-800'
-              }`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.status === 'due' ? 'bg-amber-100 text-amber-800' :
+                  item.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                    'bg-green-100 text-green-800'
+                }`}>
                 {item.status === 'due' ? 'Pending' : item.status === 'overdue' ? 'Overdue' : 'Filed'}
               </span>
             </div>
@@ -529,11 +527,10 @@ const GSTModuleMain: React.FC<GSTModuleMainProps> = ({ onBack }) => {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
-                className={`flex items-center px-1 py-4 border-b-2 text-sm font-medium transition-colors ${
-                  activeTab === tab.key
+                className={`flex items-center px-1 py-4 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.key
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 <tab.icon className="w-4 h-4 mr-2" />
                 {tab.label}

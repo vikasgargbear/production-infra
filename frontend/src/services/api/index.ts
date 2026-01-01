@@ -74,7 +74,7 @@ import { supplierInvoicesApi } from './modules/purchase/supplierInvoices.api';
 // SALES
 // =========================================================================
 import { invoicesApi } from './modules/sales/invoices.api';
-import { ordersApi, salesOrdersApi } from './modules/sales/orders.api';
+import { ordersApi } from './modules/sales/orders.api';
 import { challansApi } from './modules/sales/challans.api';
 import { returnsApi } from './modules/sales/returns.api';
 import { loyaltyPointsApi } from './modules/sales/loyaltyPoints.api';
@@ -93,6 +93,11 @@ import utilsApi from './modules/settings/utils.api';
 // =========================================================================
 import { syncApi } from './modules/system/sync.api';
 import { documentsApi } from './modules/system/documents.api';
+
+// =========================================================================
+// ALIASES (for backward compatibility)
+// =========================================================================
+const salesOrdersApi = ordersApi;
 
 // =========================================================================
 // EXPORTS

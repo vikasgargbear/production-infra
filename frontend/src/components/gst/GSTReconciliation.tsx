@@ -74,15 +74,15 @@ const GSTReconciliation: React.FC = () => {
 
       try {
         const [invoiceResponse, purchaseResponse] = await Promise.all([
-          invoiceAPI.search('', { dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
-          purchasesAPI.search('', { dateFrom: fromDate, dateTo: toDate, limit: 1000 })
+          invoiceAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
+          purchasesAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 })
         ]);
 
         invoices = Array.isArray(invoiceResponse) ? invoiceResponse :
-                   invoiceResponse?.invoices || invoiceResponse?.data?.invoices || [];
+          invoiceResponse?.invoices || invoiceResponse?.data?.invoices || [];
 
         purchases = Array.isArray(purchaseResponse) ? purchaseResponse :
-                   purchaseResponse?.purchases || purchaseResponse?.data?.purchases || [];
+          purchaseResponse?.purchases || purchaseResponse?.data?.purchases || [];
 
         console.log(`[GST Reconciliation] Loaded ${invoices.length} invoices and ${purchases.length} purchases for reconciliation`);
       } catch (err) {
@@ -148,7 +148,7 @@ const GSTReconciliation: React.FC = () => {
           status
         };
       });
-      
+
       const data: Record<ActiveTab, ReconciliationData> = {
         purchase: {
           matched: purchaseItems.filter(item => item.status === 'matched').length,
@@ -165,23 +165,23 @@ const GSTReconciliation: React.FC = () => {
           items: salesItems
         }
       };
-      
+
       setReconciliationData(data);
-      
+
       // Store data offline for future use
-      await offlineStorage.storeOffline('gst_reconciliation', data, { 
-        critical: true, 
-        persistent: true 
+      await offlineStorage.storeOffline('gst_reconciliation', data, {
+        critical: true,
+        persistent: true
       });
-      
+
     } catch (err) {
-      
+
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('gst_reconciliation', { critical: true });
-      
+
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for GST data
         setReconciliationData(offlineData.data);
-        
+
         // Show offline indicator
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -201,7 +201,7 @@ const GSTReconciliation: React.FC = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       await loadReconciliationData();
     } catch (error) {
@@ -250,19 +250,19 @@ const GSTReconciliation: React.FC = () => {
   // Filter items based on search and status
   const getFilteredItems = () => {
     let items = reconciliationData[activeTab].items;
-    
+
     if (searchTerm) {
-      items = items.filter(item => 
+      items = items.filter(item =>
         item.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.supplierName && item.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.supplierGSTIN && item.supplierGSTIN.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
-    
+
     if (statusFilter !== 'all') {
       items = items.filter(item => item.status === statusFilter);
     }
-    
+
     return items;
   };
 
@@ -368,11 +368,10 @@ const GSTReconciliation: React.FC = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)} Reconciliation
             </button>
@@ -520,7 +519,7 @@ const GSTReconciliation: React.FC = () => {
                         <div className="text-sm text-gray-500">{item.invoiceDate}</div>
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
@@ -531,26 +530,26 @@ const GSTReconciliation: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         ₹{item.ourAmount.toLocaleString()}
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         ₹{item.gstPortalAmount.toLocaleString()}
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         <div>Our: ₹{item.ourGST.toLocaleString()}</div>
                         <div>Portal: ₹{item.portalGST.toLocaleString()}</div>
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(item.status)}
                     </td>

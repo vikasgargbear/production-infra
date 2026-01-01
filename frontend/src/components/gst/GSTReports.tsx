@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   BarChart3, Download, Calendar, Search, Filter,
   FileText, TrendingUp, TrendingDown, IndianRupee,
   Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
@@ -323,23 +323,23 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       }
 
       setReportData(data);
-      
+
       // Store data offline for future use
       const storageKey = `gst_report_${selectedReport}_${dateRange.from}_${dateRange.to}`;
-      await offlineStorage.storeOffline(storageKey, data, { 
-        critical: true, 
-        persistent: true 
+      await offlineStorage.storeOffline(storageKey, data, {
+        critical: true,
+        persistent: true
       });
-      
+
     } catch (err) {
-      
+
       // Try to load from offline storage instead of using mock data
       const storageKey = `gst_report_${selectedReport}_${dateRange.from}_${dateRange.to}`;
       const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
-      
+
       if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for GST report data
         setReportData(offlineData.data);
-        
+
         // Show offline indicator
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -386,14 +386,14 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
     try {
       console.log(`[GST Reports] Loading invoice data for period ${dateRange.from} to ${dateRange.to}`);
-      const response = await invoiceAPI.search('', {
+      const response = await invoiceAPI.search({
         dateFrom: dateRange.from,
         dateTo: dateRange.to,
         limit: 5000
       });
 
       const invoices = Array.isArray(response) ? response :
-                       response?.invoices || response?.data?.invoices || [];
+        response?.invoices || response?.data?.invoices || [];
 
       console.log(`[GST Reports] Loaded ${invoices.length} invoices - caching for reuse`);
       setInvoiceDataCache(invoices);
@@ -457,14 +457,14 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       console.log(`[GST Reports] Fetching purchase invoices from ${dateRange.from} to ${dateRange.to} for Input Credit calculation`);
 
       // Use purchasesAPI search with date filters
-      const response = await purchasesAPI.search('', {
+      const response = await purchasesAPI.search({
         dateFrom: dateRange.from,
         dateTo: dateRange.to,
         limit: 5000
       });
 
       const purchases = Array.isArray(response) ? response :
-                       response?.data?.purchases || response?.data || [];
+        response?.data?.purchases || response?.data || [];
 
       console.log(`[GST Reports] Found ${purchases.length} purchase invoices for Input Credit calculation`);
 
@@ -924,8 +924,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     const creditReduction = creditNotes.reduce((total, note) => {
       // Try different field names for tax amount
       const taxAmount = note.tax_amount ||
-                       (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
-                       note.total_gst || note.gst_amount || 0;
+        (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
+        note.total_gst || note.gst_amount || 0;
       console.log('[GST Reports] Credit note tax amount:', taxAmount, 'from note:', note);
       return total + taxAmount;
     }, 0);
@@ -934,8 +934,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     const debitAddition = debitNotes.reduce((total, note) => {
       // Try different field names for tax amount
       const taxAmount = note.tax_amount ||
-                       (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
-                       note.total_gst || note.gst_amount || 0;
+        (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
+        note.total_gst || note.gst_amount || 0;
       console.log('[GST Reports] Debit note tax amount:', taxAmount, 'from note:', note);
       return total + taxAmount;
     }, 0);
@@ -1030,13 +1030,13 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       if (invoiceCustomerName === masterCustomerName) {
         // Names match - use the customer's GSTIN
         customerGSTIN = customer?.gstin ||
-                       customer?.gst_number ||
-                       customer?.gst_no ||
-                       customer?.gstin_number ||
-                       customer?.tax_number ||
-                       customer?.customer_gstin ||
-                       invoice.customer_gstin ||
-                       invoice.gstin;
+          customer?.gst_number ||
+          customer?.gst_no ||
+          customer?.gstin_number ||
+          customer?.tax_number ||
+          customer?.customer_gstin ||
+          invoice.customer_gstin ||
+          invoice.gstin;
       } else {
         // Names don't match - only use invoice-level GSTIN fields (usually null)
         customerGSTIN = invoice.customer_gstin || invoice.gstin;
@@ -1489,11 +1489,10 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                                   <button
                                     key={pageNum}
                                     onClick={() => setCreditNotesCurrentPage(pageNum)}
-                                    className={`px-3 py-1 text-sm border rounded ${
-                                      creditNotesCurrentPage === pageNum
+                                    className={`px-3 py-1 text-sm border rounded ${creditNotesCurrentPage === pageNum
                                         ? 'bg-blue-500 text-white border-blue-500'
                                         : 'hover:bg-gray-50'
-                                    }`}
+                                      }`}
                                   >
                                     {pageNum}
                                   </button>
@@ -2327,8 +2326,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                 onClick={() => setSelectedReport(report.id)}
                 className={`
                   px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors
-                  ${selectedReport === report.id 
-                    ? 'bg-gray-900 text-white' 
+                  ${selectedReport === report.id
+                    ? 'bg-gray-900 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }
                 `}

@@ -1,5 +1,5 @@
 import React from 'react';
-import ProductMaster from '../../masters/ProductMaster';
+import ProductMaster from '../../master/ProductMaster';
 
 // Wrapper component to maintain backward compatibility
 // This redirects to the new comprehensive ProductMaster component

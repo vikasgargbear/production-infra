@@ -491,19 +491,26 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;
+    batch_no?: string;  // Alias used by some search results
     expiry_date?: string;
     manufacturing_date?: string;
+    // Pricing - batch level uses _per_unit suffix
     sale_price_per_unit?: number;
     unit_price?: number;
     sale_price?: number;
+    selling_price?: number;  // Alias from product search
     mrp_per_unit?: number;
     mrp?: number;
+    // Tax
     gst_percent?: number;
+    tax_rate?: number;  // Alias from product search
     hsn_code?: string;
+    // Quantities
     quantity?: number;
     free_quantity?: number;
     quantity_available?: number;
     available_quantity?: number;
+    current_stock?: number;  // Alias from product search
     discount_percent?: number;
 }
 
