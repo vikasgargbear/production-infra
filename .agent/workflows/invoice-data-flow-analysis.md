@@ -339,15 +339,124 @@ useInvoiceLogic.handleAddItem()
 
 ---
 
-**Document Version:** 2.1 (Final)
+**Document Version:** 3.0 (Complete)
 **Date:** January 1, 2026
-**Status:** Implementation Complete
+**Status:** ✅ Implementation Complete & Deployed
 
-### 📝 Latest Optimizations (v2.1)
-1. **Removed Redundant API Calls**: `batchAPI.getByProduct()` no longer called when batches are embedded in product or cached in IndexedDB.
-2. **Simplified Data Model**: Removed `quantity_usable` and `quantity_reserved_offline` - using canonical `quantity_available` for both online/offline.
-3. **Consistent Naming**: 
-   - Interface: `ProductWithBatch` (PascalCase for types)
-   - Variable: `productWithBatch` (camelCase for variables)
-4. **Centralized Merge Logic**: `productMapper.mergeProductAndBatch()` ensures batch pricing always overrides product pricing.
+---
+
+## 📝 Complete Changelog
+
+### Version 3.0 - January 1, 2026 (Current)
+
+#### 🐛 Bug Fixes
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| `unit_price: 0` on invoice items | Product-level `sale_price_per_unit` was overriding batch-level pricing | Created `mergeProductAndBatch()` in `productMapper.ts` to explicitly overwrite product pricing with batch pricing |
+| `sales.sales_orders` table not found | Wrong table name in `DocumentNumberService` config | Changed to correct table `sales.orders` |
+| `sales.customer_outstanding` table not found | Separate table doesn't exist, column exists on customer | Updated to directly update `parties.customers.current_outstanding` |
+| Circular dependency crash (webpack) | `ProductEditModal.js` imported `ProductMaster` which imported `ProductEditModal` | Deleted stale `.js` file, updated `.tsx` to use `ProductCreationModal` |
+| Inconsistent batch data (1 vs 2 batches) | Local-first strategy returned stale cache | Changed to **Network-First** when online in `localFirstService.ts` |
+
+#### 🚀 Frontend Optimizations
+| Change | File | Impact |
+|--------|------|--------|
+| Network-First Strategy | `localFirstService.ts` | Fresh data when online, fallback when offline |
+| Removed background API refresh | `BatchSelector.tsx` | No redundant `batchAPI.getByProduct()` calls |
+| Removed unused fields | `BatchSelector.tsx` | Deleted `quantity_usable`, `quantity_reserved_offline` - use `quantity_available` |
+| Centralized merge logic | `productMapper.ts` | New `mergeProductAndBatch()` function |
+| Cleaned unused imports | `PartyEditModal.js` | Removed dead `batchAPI`, `productAPI` imports |
+
+#### 🖥️ Backend Optimizations
+| Change | File | Impact |
+|--------|------|--------|
+| New optimized endpoint | `products.py` | `GET /products/search-with-batches` returns products with embedded batches |
+| Fixed table reference | `document_number_service.py` | `sales_order` config now uses `sales.orders` |
+| Simplified outstanding | `invoices.py` | Direct UPDATE to `parties.customers.current_outstanding` |
+
+#### 🗑️ Files Deleted
+| File | Reason |
+|------|--------|
+| `frontend/src/utils/dataMapper.ts` | Merged into `productMapper.ts` |
+| `frontend/src/components/global/modals/ProductEditModal.js` | Stale duplicate causing circular dependency |
+| `frontend/src/components/global/modals/ProductEditModal.d.ts` | Orphaned type file |
+| `frontend/src/components/global/modals/BatchSelector.js` | Migrated to `.tsx` |
+| `frontend/src/services/offline/cache/localFirstService.js` | Migrated to `.ts` |
+
+---
+
+## 📂 Active File Inventory
+
+### Backend (Python/FastAPI)
+| File | Purpose |
+|------|---------|
+| `backend/app/api/routes/master/products.py` | Product search & `search-with-batches` endpoint |
+| `backend/app/api/routes/sales/invoices.py` | Invoice CRUD, background outstanding update |
+| `backend/app/api/services/document_number_service.py` | Generates SO/INV/GRN numbers |
+
+### Frontend (TypeScript/React)
+| File | Purpose |
+|------|---------|
+| `frontend/src/types/models/product.ts` | **Type Definitions** - Product & Batch interfaces |
+| `frontend/src/utils/productMapper.ts` | **Data Mapper** - `mapProductToCanonical()`, `mergeProductAndBatch()` |
+| `frontend/src/services/offline/cache/localFirstService.ts` | **Caching** - Network-first search strategy |
+| `frontend/src/services/api/modules/master/products.api.js` | **API Client** - `searchWithBatches()` |
+| `frontend/src/components/global/search/ProductSearchSimple.tsx` | **UI** - Product search input |
+| `frontend/src/components/global/modals/BatchSelector.tsx` | **UI** - Batch selection modal |
+| `frontend/src/components/sales/invoice/hooks/useInvoiceLogic.ts` | **Logic** - Invoice cart management |
+
+---
+
+## 🧪 Testing Checklist
+
+- [x] Invoice creation returns 200 OK
+- [x] `unit_price` correctly shows batch price (40), not product average (100)
+- [x] Customer `current_outstanding` updates after invoice
+- [x] No circular dependency errors on app load
+- [x] Embedded batches load in BatchSelector without API call
+- [ ] Offline mode falls back to IndexedDB correctly
+- [ ] CORS issues resolved after Railway redeploy
+
+---
+
+## 🔄 Data Flow Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      OPTIMIZED INVOICE FLOW                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. User Search                                                     │
+│     └─► localFirstService.searchProducts()                         │
+│         └─► [ONLINE] GET /products/search-with-batches (SINGLE!)   │
+│         └─► [OFFLINE] IndexedDB.getAll('products')                 │
+│                                                                     │
+│  2. Display Results                                                 │
+│     └─► ProductSearchSimple renders product cards                  │
+│                                                                     │
+│  3. User Clicks Product                                             │
+│     └─► BatchSelector opens (NO API CALL - uses product.batches)   │
+│                                                                     │
+│  4. User Selects Batch                                              │
+│     └─► mergeProductAndBatch(product, batch)                       │
+│         └─► Batch pricing OVERWRITES product pricing               │
+│                                                                     │
+│  5. Add to Invoice                                                  │
+│     └─► useInvoiceLogic.handleAddItem(productWithBatch)            │
+│         └─► unit_price = batch.sale_price_per_unit = 40 ✅         │
+│                                                                     │
+│  6. Submit Invoice                                                  │
+│     └─► POST /api/invoices/                                        │
+│         └─► Creates order in sales.orders                          │
+│         └─► Creates invoice in sales.invoices                      │
+│         └─► Updates parties.customers.current_outstanding          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**Maintained by:** AI Assistant  
+**Last Updated:** January 1, 2026 @ 14:20 PST
+
 
