@@ -83,7 +83,18 @@ class OfflineDatabase {
     }
 
     async init(): Promise<IDBPDatabase<OfflineSchema>> {
-        if (this.db) return this.db;
+        // Check if existing connection is still valid
+        if (this.db) {
+            try {
+                // Quick validation - attempt to get store names (fails if connection is closing)
+                this.db.objectStoreNames;
+                return this.db;
+            } catch (e) {
+                // Connection is stale, need to reconnect
+                console.log(`${LOG_PREFIX} Database connection stale, reconnecting...`);
+                this.db = null;
+            }
+        }
         console.log(`${LOG_PREFIX} Initializing database v${DB_VERSION}...`);
 
         this.db = await openDB<OfflineSchema>(DB_NAME, DB_VERSION, {
