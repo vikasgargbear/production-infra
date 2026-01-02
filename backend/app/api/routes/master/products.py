@@ -393,7 +393,15 @@ async def get_all_products_with_batches(
             where_clauses.append("p.is_active = true")
         
         if since:
-            where_clauses.append("p.updated_at > :since")
+            # Delta sync: Include products updated OR products with batches updated
+            # This catches quantity changes from sales, not just product metadata changes
+            where_clauses.append("""(
+                p.updated_at > :since 
+                OR p.product_id IN (
+                    SELECT DISTINCT product_id FROM inventory.batches 
+                    WHERE org_id = :org_id AND updated_at > :since
+                )
+            )""")
             params["since"] = since
         
         where_sql = " AND ".join(where_clauses)
