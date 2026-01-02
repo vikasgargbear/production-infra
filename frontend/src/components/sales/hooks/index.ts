@@ -7,3 +7,6 @@ export type { UseSalesTransactionConfig, UseSalesTransactionReturn } from './use
 
 export { useEmployees } from './useEmployees';
 export type { UseEmployeesReturn } from './useEmployees';
+
+export { useDraftAutoSave } from './useDraftAutoSave';
+export type { UseDraftAutoSaveOptions } from './useDraftAutoSave';

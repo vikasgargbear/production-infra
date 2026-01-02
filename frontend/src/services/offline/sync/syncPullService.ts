@@ -494,11 +494,14 @@ class SyncPullService {
         try {
             console.log('[SyncPull] Syncing employees...');
 
-            const response = await employeesApi.getActive({ limit: 200 });
-            const employees = response?.data?.employees || response?.data || response || [];
+            // Use getAll with is_active param (matches backend @router.get("/") endpoint)
+            const response = await employeesApi.getAll({ is_active: true, limit: 200 });
+
+            // Backend returns: { success: true, data: [...], total: X }
+            const employees = response?.data?.data || [];
 
             if (!Array.isArray(employees)) {
-                console.warn('[SyncPull] Invalid employee response');
+                console.warn('[SyncPull] Invalid employee response:', response);
                 return { success: false, itemsSynced: 0, error: 'Invalid response format' };
             }
 
