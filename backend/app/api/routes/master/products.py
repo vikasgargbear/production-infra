@@ -494,18 +494,18 @@ async def get_all_products_with_batches(
             product_batches = batches_by_product.get(pid, [])
             product["batches"] = product_batches
             
-            # Convert decimal fields
-            product["mrp_per_unit"] = float(product["mrp_per_unit"] or 0)
-            product["sale_price_per_unit"] = float(product["sale_price_per_unit"] or 0)
-            product["cost_per_unit"] = float(product["cost_per_unit"] or 0) if product.get("cost_per_unit") else 0
+            # Convert decimal fields that exist on products
             product["gst_percent"] = float(product["gst_percent"] or 0)
             product["total_stock"] = int(product["total_stock"] or 0)
             product["created_at"] = str(product["created_at"]) if product["created_at"] else None
             product["updated_at"] = str(product["updated_at"]) if product["updated_at"] else None
             
-            # Best batch for quick access
+            # Get pricing from best batch (pricing is on batches, not products)
             if product_batches:
                 best = product_batches[0]  # Already sorted by expiry ASC
+                product["mrp_per_unit"] = best["mrp_per_unit"]
+                product["sale_price_per_unit"] = best["sale_price_per_unit"]
+                product["cost_per_unit"] = best["cost_per_unit"]
                 product["best_batch"] = {
                     "batch_id": best["batch_id"],
                     "batch_number": best["batch_number"],
@@ -513,9 +513,14 @@ async def get_all_products_with_batches(
                     "sale_price_per_unit": best["sale_price_per_unit"],
                     "quantity_available": best["quantity_available"],
                     "expiry_date": best["expiry_date"],
-                    "days_to_expiry": best["days_to_expiry"]
+                    "days_to_expiry": best["days_to_expiry"],
+                    "pack_size": best.get("pack_size"),
+                    "pack_type": best.get("pack_type")
                 }
             else:
+                product["mrp_per_unit"] = 0
+                product["sale_price_per_unit"] = 0
+                product["cost_per_unit"] = 0
                 product["best_batch"] = None
         
         total_pages = (total_count + page_size - 1) // page_size

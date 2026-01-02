@@ -5,14 +5,15 @@
 
 // Search Components
 export { CustomerSearch } from './search/CustomerSearch';
+export { EntitySearch } from './search/EntitySearch';
 // ProductSearch.tsx removed - was broken (batch selection not implemented)
 export { default as ProductSearchSimple } from './search/ProductSearchSimple';
-export { default as PartySearch } from './search/PartySearch';
+// PartySearch removed - was unused
 export { default as SupplierSearch } from './search/SupplierSearch';
-export { default as PurchaseProductSearch } from './PurchaseProductSearch';
+export { default as PurchaseProductSearch } from './search/PurchaseProductSearch';
 export { default as InvoiceSearch } from './search/InvoiceSearch';
 export { default as PurchaseSearch } from './search/PurchaseSearch';
-export { default as HistoricalDataSearch } from './search/HistoricalDataSearch';
+// HistoricalDataSearch removed - was unused
 
 // Selector Components
 export { default as InvoiceSelector } from './InvoiceSelector';
@@ -64,16 +65,16 @@ export { default as BaseModal } from '../common/BaseModal';
 export { default as CloseButton } from './ui/CloseButton';
 
 // Layout Components - NEW
-export { 
+export {
   default as GlobalLayout,
   ContentCard,
-  PageHeader, 
+  PageHeader,
   FormSection,
-  StatsGrid 
+  StatsGrid
 } from './layout/GlobalLayout';
 
 // Document Flow Components - NEW
-export { 
+export {
   default as GlobalDocumentFlow,
   InvoiceFlow,
   PurchaseFlow,
@@ -95,17 +96,17 @@ export { default as FormGrid, FormField } from './ui/FormGrid';
 export { default as ActionButton } from './ui/ActionButton';
 export { default as ContentSection } from './ui/ContentSection';
 export { default as KeyboardShortcuts, SHORTCUT_SETS } from './ui/KeyboardShortcuts';
-export { 
-  default as KeyboardNavigableTile, 
+export {
+  default as KeyboardNavigableTile,
   KeyboardNavigableForm,
-  useKeyboardShortcuts 
+  useKeyboardShortcuts
 } from './ui/KeyboardNavigableTile';
 
 // UI Components - NEW
 export * from './ui';
 export { default as Button } from './ui/Button.tsx';
 export { default as CompactPaymentMethod, PaymentBadge } from './ui/CompactPaymentMethod';
-export { 
+export {
   // Forms
   Select,
   DatePicker,
