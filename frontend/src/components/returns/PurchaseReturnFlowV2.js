@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle, 
+import {
+  ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle,
   RotateCcw, FileText, Building2, ChevronRight, Save, Printer, History, Truck, Plus, Trash2
 } from 'lucide-react';
-import { 
+import {
   SupplierSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
   ProceedToReviewComponent, StandardDatePicker, ItemsTable
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import SupplierInvoiceSelector from './components/SupplierInvoiceSelector';
-import DebitNotePreview from './components/DebitNotePreview';
+import DebitNotePreview from './ui/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 
 const PurchaseReturnFlowV2 = ({ onClose }) => {
@@ -78,17 +78,17 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         { value: 'OTHER', label: 'Other' }
       ];
       setReturnReasons(defaultReasons);
-      
+
       // Then try to load from backend in background
       try {
         const cached = await offlineStorage.getOffline('purchase_return_reasons', { persistent: true });
         if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
           setReturnReasons(cached.data);
         }
-        
+
         const response = await metadataApi.getReturnReasons();
         const fetchedReasons = response.data?.purchase_return_reasons || [];
-        
+
         if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           setReturnReasons(fetchedReasons);
           await offlineStorage.storeOffline('purchase_return_reasons', fetchedReasons, { persistent: true });
@@ -104,7 +104,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey) {
-        switch(e.key) {
+        switch (e.key) {
           case 'r':
             e.preventDefault();
             if (supplierSearchRef.current) {
@@ -133,7 +133,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             break;
         }
       }
-      
+
       if (e.key === 'Escape') {
         if (currentStep === 2) setCurrentStep(1);
         else onClose();
@@ -147,7 +147,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Handle invoice selection
   const handleInvoiceSelect = async (invoice) => {
     if (!invoice) return;
-    
+
     setSelectedInvoice(invoice);
     setReturnData(prev => ({
       ...prev,
@@ -156,16 +156,16 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       invoice_date: invoice.invoice_date,
       original_invoice: invoice
     }));
-    
+
     // Load invoice items if not already loaded
     try {
       setLoading(true);
       const response = await returnsApi.getSupplierInvoiceReturnableItems(
         invoice.supplier_invoice_id || invoice.invoice_id
       );
-      
+
       if (response.data.items) {
-        
+
         const mappedItems = response.data.items.map(item => {
           return {
             ...item,
@@ -214,7 +214,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       }));
       return;
     }
-    
+
     const fullSupplier = {
       ...supplier,
       supplier_name: supplier.supplier_name || supplier.name,
@@ -222,14 +222,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       phone: supplier.phone || supplier.mobile || '',
       gst_number: supplier.gst_number || supplier.gstin || ''
     };
-    
+
     setSelectedSupplier(fullSupplier);
     setSelectedInvoice(null);
     setShowInvoiceSection(true);
     setShowManualEntry(false);
-    
+
     const supplierId = supplier.supplier_id || supplier.id || supplier.party_id;
-    
+
     setReturnData(prev => ({
       ...prev,
       supplier_id: supplierId,
@@ -241,7 +241,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     // Fetch returnable invoices
     try {
       setLoading(true);
-      const response = await purchasesApi.getReturnableInvoices({ 
+      const response = await purchasesApi.getReturnableInvoices({
         supplier_id: supplierId
       });
       setReturnableInvoices(response.data?.invoices || []);
@@ -283,7 +283,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       is_manual: true,
       max_returnable_qty: 999999
     };
-    
+
     setReturnData(prev => ({
       ...prev,
       items: [...prev.items, newItem]
@@ -304,7 +304,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       })
     }));
   };
-  
+
   // Use effect to recalculate totals when items change
   React.useEffect(() => {
     let subtotal = 0;
@@ -315,7 +315,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         const returnQty = parseFloat(item.return_quantity) || 0;
         const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
-        
+
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
 
@@ -350,7 +350,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         const returnQty = parseFloat(item.return_quantity) || 0;
         const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
-        
+
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
 
@@ -374,7 +374,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       return false;
     }
 
-    const hasSelectedItems = returnData.items.some(item => 
+    const hasSelectedItems = returnData.items.some(item =>
       item.selected && item.return_quantity > 0
     );
 
@@ -406,12 +406,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setSaving(true);
     try {
       // Debug logging
-      
+
       const filteredItems = returnData.items.filter(item => {
         const hasQuantity = parseFloat(item.return_quantity) > 0;
         return item.selected && hasQuantity;
       });
-      
+
       const returnPayload = {
         ...returnData,
         purchase_id: selectedInvoice?.supplier_invoice_id || selectedInvoice?.invoice_id,  // Set purchase_id for transformer
@@ -441,9 +441,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       };
 
       const response = await returnsApi.createPurchaseReturn(returnPayload);
-      
+
       toast.success('Purchase return created successfully');
-      
+
       setTimeout(() => {
         onClose();
       }, 1500);
@@ -491,7 +491,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       className="w-full"
                     />
                   </div>
-                  
+
                   {/* Right side - Return Reason and Method */}
                   <div className="flex-1">
                     <div className="grid grid-cols-2 gap-4">
@@ -576,7 +576,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                         Skip Invoice Selection
                       </button>
                     </div>
-                    
+
                     {/* Show selected invoice if any */}
                     {selectedInvoice && (
                       <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
@@ -606,7 +606,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                         </button>
                       </div>
                     )}
-                    
+
                     {/* Invoice Selector */}
                     {!selectedInvoice && (
                       <SupplierInvoiceSelector
@@ -734,14 +734,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               supplier={selectedSupplier}
               purchase={selectedInvoice}
             />
-            
+
             {/* Return Notes Section - Below preview */}
             <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
               <NotesSection
                 value={returnData.return_reason_notes}
-                onChange={(value) => setReturnData(prev => ({ 
-                  ...prev, 
-                  return_reason_notes: value 
+                onChange={(value) => setReturnData(prev => ({
+                  ...prev,
+                  return_reason_notes: value
                 }))}
                 placeholder="Add any additional notes about this return..."
                 title="Return Notes"

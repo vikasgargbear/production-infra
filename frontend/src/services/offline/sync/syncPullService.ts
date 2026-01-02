@@ -213,17 +213,53 @@ class SyncPullService {
     private transformProduct(product: any): any {
         const productId = String(product.product_id || product.id);
 
-        // Transform embedded batches
-        const batches = (product.batches || []).map((batch: any) => ({
-            batch_id: String(batch.batch_id),
-            batch_number: batch.batch_number || '',
-            expiry_date: batch.expiry_date,
-            quantity_available: batch.quantity_available || 0,
-            quantity_reserved_offline: 0, // Will be merged with existing
-            mrp_per_unit: batch.mrp_per_unit || 0,
-            sale_price_per_unit: batch.sale_price_per_unit || 0,
-            units_per_pack: batch.units_per_pack || 1,
-        }));
+        // Transform embedded batches with ALL fields from backend
+        const batches = (product.batches || []).map((batch: any) => {
+            // Calculate days to expiry
+            const expiryDate = batch.expiry_date ? new Date(batch.expiry_date) : null;
+            const today = new Date();
+            const daysToExpiry = expiryDate
+                ? Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                : null;
+
+            return {
+                // Core identifiers
+                batch_id: String(batch.batch_id),
+                product_id: String(batch.product_id || product.product_id || product.id),
+                batch_number: batch.batch_number || '',
+
+                // Dates
+                manufacturing_date: batch.manufacturing_date || null,
+                expiry_date: batch.expiry_date || null,
+                days_to_expiry: daysToExpiry,
+
+                // Quantities
+                quantity_available: parseFloat(batch.quantity_available) || 0,
+                quantity_reserved: parseFloat(batch.quantity_reserved) || 0,
+                quantity_reserved_offline: 0, // Will be merged with existing
+
+                // Pricing
+                cost_per_unit: parseFloat(batch.cost_per_unit) || 0,
+                purchase_price: parseFloat(batch.cost_per_unit) || 0,
+                mrp: parseFloat(batch.mrp_per_unit) || 0,
+                mrp_per_unit: parseFloat(batch.mrp_per_unit) || 0,
+                sale_price: parseFloat(batch.sale_price_per_unit) || 0,
+                sale_price_per_unit: parseFloat(batch.sale_price_per_unit) || 0,
+
+                // Pack info
+                pack_type: batch.pack_type || null,
+                pack_size: batch.pack_size || 1,
+                units_per_pack: batch.units_per_pack || 1,
+                packages_per_box: batch.packages_per_box || null,
+
+                // Status
+                is_active: batch.batch_status === 'active' || batch.is_active !== false,
+
+                // Timestamps
+                created_at: batch.created_at || null,
+                updated_at: batch.updated_at || null,
+            };
+        });
 
         return {
             id: productId,

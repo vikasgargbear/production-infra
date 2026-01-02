@@ -457,7 +457,10 @@ async def get_all_products_with_batches(
                 sb.batch_id, sb.product_id, sb.batch_number,
                 sb.expiry_date, sb.manufacturing_date,
                 sb.mrp_per_unit, sb.sale_price_per_unit, sb.cost_per_unit,
-                sb.quantity_available, sb.pack_size, sb.pack_type, sb.pack_uom,
+                sb.quantity_available, sb.quantity_reserved,
+                sb.pack_size, sb.pack_type, sb.pack_uom,
+                sb.units_per_pack, sb.packages_per_box,
+                sb.batch_status, sb.created_at, sb.updated_at,
                 CASE 
                     WHEN sb.expiry_date IS NULL THEN NULL
                     ELSE (sb.expiry_date - CURRENT_DATE)
