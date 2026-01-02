@@ -198,6 +198,8 @@ const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
         availableQty = parseInt(String(
             product.quantity_available || product.available_quantity || 0
         ));
+        // Get manufacturing_date from batch if available
+        manufacturingDate = product.manufacturing_date || (product as any).mfg_date || '';
     } else if (bestBatch) {
         // New API: use best_batch ONLY if no batch was explicitly selected
         console.log('[Invoice] Using best_batch from API (auto-selected):', bestBatch);
@@ -207,6 +209,7 @@ const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
         batchId = bestBatch.batch_id;
         batchNumber = bestBatch.batch_number || '';
         expiryDate = bestBatch.expiry_date || '';
+        manufacturingDate = bestBatch.manufacturing_date || '';
     } else {
         // Legacy: product-level averages (fallback)
         console.log('[Invoice] Using product-level pricing (no batch selected)');
@@ -248,7 +251,6 @@ export const useInvoiceLogic = (
     onClose?: () => void,
     prefilledData: PrefilledData | null = null
 ): UseInvoiceLogicReturn => {
-    console.log('[DEBUG] useInvoiceLogic v2 loaded - checking for stale bundle');
     // Network Status
     const { isOnline } = useNetworkStatus();
 

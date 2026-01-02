@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
+import {
   FileText, Package, ShoppingCart, Truck, TrendingUp, List, DollarSign, BarChart3
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import InvoiceFlow from './InvoiceFlow';
 import InvoiceListV2 from './InvoiceListV2';
 import SalesOrderFlow from './SalesOrderFlow';
-import ModularChallanCreatorV5 from '../challan/ModularChallanCreatorV5';
+import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5';
 
 interface SalesHubProps {
   open?: boolean;
@@ -66,7 +66,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Sales Operations"
       subtitle=""
       icon={TrendingUp}

@@ -36,7 +36,7 @@ export { default as InvoiceFlow } from './InvoiceFlow';
 export { default as InvoiceList } from './InvoiceList';
 export { default as SalesOrderFlow } from './SalesOrderFlow';
 export { default as SalesOrderManagement } from './SalesOrderManagement';
-export { default as ChallanFlow } from '../challan/ModularChallanCreatorV5';
+export { default as ChallanFlow } from './challan/ModularChallanCreatorV5';
 export { default as SalesHub } from './SalesHub';
 
 // Sub Components
