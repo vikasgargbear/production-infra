@@ -168,11 +168,21 @@ class SyncEngine {
 
             if (syncPullService.needsSync()) {
                 console.log('🔄 [SyncEngine] Triggering pull sync...');
-                const result = await syncPullService.syncProducts({ fullSync: false });
-                if (result.success) {
-                    console.log(`✅ [SyncEngine] Pull sync complete: ${result.itemsSynced} products`);
+
+                // Sync products
+                const productResult = await syncPullService.syncProducts({ fullSync: false });
+                if (productResult.success) {
+                    console.log(`✅ [SyncEngine] Product sync complete: ${productResult.itemsSynced} products`);
                 } else {
-                    console.warn('⚠️ [SyncEngine] Pull sync failed:', result.error);
+                    console.warn('⚠️ [SyncEngine] Product sync failed:', productResult.error);
+                }
+
+                // Sync customers (with embedded addresses)
+                const customerResult = await syncPullService.syncCustomers({});
+                if (customerResult.success) {
+                    console.log(`✅ [SyncEngine] Customer sync complete: ${customerResult.itemsSynced} customers`);
+                } else {
+                    console.warn('⚠️ [SyncEngine] Customer sync failed:', customerResult.error);
                 }
             } else {
                 console.log('[SyncEngine] Data is fresh, skipping pull sync');
@@ -183,6 +193,7 @@ class SyncEngine {
             this.pullSyncInProgress = false;
         }
     }
+
 
     /**
      * Stop automatic sync

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Search, Loader2, X, LucideIcon } from 'lucide-react';
 import { ActionButton } from '../ui';
 import { debounce } from '../../../utils/debounce';
@@ -130,9 +130,13 @@ function EntitySearchInner<T>(
         }
     }));
 
-    // Debounced search
-    const performSearch = useCallback(
-        debounce(async (query: string) => {
+    // Use ref for searchFn so debounce doesn't need to be recreated when searchFn changes
+    const searchFnRef = useRef(searchFn);
+    searchFnRef.current = searchFn;
+
+    // Debounced search - only recreate when debounceMs or minLength changes
+    const performSearch = useMemo(
+        () => debounce(async (query: string) => {
             if (!query || query.length < minLength) {
                 setSearchResults([]);
                 setHighlightedIndex(-1);
@@ -141,7 +145,7 @@ function EntitySearchInner<T>(
 
             setLoading(true);
             try {
-                const results = await searchFn(query);
+                const results = await searchFnRef.current(query);
                 setSearchResults(results || []);
                 setHighlightedIndex(results?.length > 0 ? 0 : -1);
             } catch (error) {
@@ -152,7 +156,7 @@ function EntitySearchInner<T>(
                 setLoading(false);
             }
         }, debounceMs),
-        [searchFn, minLength, debounceMs, entityType]
+        [minLength, debounceMs, entityType]
     );
 
     // Trigger search when query changes

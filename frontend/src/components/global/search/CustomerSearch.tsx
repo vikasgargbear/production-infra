@@ -229,6 +229,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     );
   };
 
+  // Memoize key/label extractors to prevent unnecessary re-renders
+  const getItemKey = useCallback((c: Customer) => c.customer_id, []);
+  const getItemLabel = useCallback((c: Customer) => c.customer_name, []);
+
   return (
     <EntitySearch<Customer>
       ref={ref}
@@ -241,11 +245,11 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       createButtonLabel="Create New Customer"
       searchFn={searchCustomers}
       minLength={minSearchLength}
-      debounceMs={50}
+      debounceMs={100}
       renderResult={renderCustomerResult}
       renderSelected={renderSelectedCustomer}
-      getItemKey={(c) => c.customer_id}
-      getItemLabel={(c) => c.customer_name}
+      getItemKey={getItemKey}
+      getItemLabel={getItemLabel}
       displayMode={displayMode}
       showCreateButton={showCreateButton}
       required={required}
