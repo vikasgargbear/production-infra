@@ -18,6 +18,7 @@
 
 import offlineDB from '../core/offlineDatabase';
 import { productAPI, customersApi } from '../../api';
+import { employeesApi } from '../../api/modules/master/employees.api';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -486,12 +487,52 @@ class SyncPullService {
     // ==================== FULL SYNC ====================
 
     /**
+     * Sync employees from server
+     * Simple sync - employees don't change often
+     */
+    async syncEmployees(): Promise<SyncResult> {
+        try {
+            console.log('[SyncPull] Syncing employees...');
+
+            const response = await employeesApi.getActive({ limit: 200 });
+            const employees = response?.data?.employees || response?.data || response || [];
+
+            if (!Array.isArray(employees)) {
+                console.warn('[SyncPull] Invalid employee response');
+                return { success: false, itemsSynced: 0, error: 'Invalid response format' };
+            }
+
+            // Clear existing and add new
+            const tx = (await offlineDB.init()).transaction('employees', 'readwrite');
+            const store = tx.objectStore('employees');
+            await store.clear();
+
+            for (const employee of employees) {
+                await store.add({
+                    ...employee,
+                    employee_id: String(employee.employee_id),
+                    sync_status: 'synced',
+                    synced_at: new Date().toISOString()
+                });
+            }
+
+            await tx.done;
+            console.log(`[SyncPull] ✅ Synced ${employees.length} employees`);
+
+            return { success: true, itemsSynced: employees.length };
+        } catch (error) {
+            console.error('[SyncPull] Employee sync failed:', error);
+            return { success: false, itemsSynced: 0, error: (error as Error).message };
+        }
+    }
+
+    /**
      * Full sync - downloads all data after login
      * Called once after authentication
      */
     async fullSync(options: {
         onProgress?: (progress: SyncProgress) => void;
-    } = {}): Promise<{ products: SyncResult; customers: SyncResult }> {
+    } = {}): Promise<{ products: SyncResult; customers: SyncResult; employees: SyncResult }> {
         console.log('[SyncPull] Starting full sync...');
 
         const productResult = await this.syncProducts({
@@ -503,12 +544,15 @@ class SyncPullService {
             onProgress: options.onProgress
         });
 
+        const employeeResult = await this.syncEmployees();
+
         console.log('[SyncPull] Full sync complete:', {
             products: productResult.itemsSynced,
-            customers: customerResult.itemsSynced
+            customers: customerResult.itemsSynced,
+            employees: employeeResult.itemsSynced
         });
 
-        return { products: productResult, customers: customerResult };
+        return { products: productResult, customers: customerResult, employees: employeeResult };
     }
 
     // ==================== BATCH RESERVATIONS ====================
