@@ -11,24 +11,24 @@ import logging
 import time
 from typing import Optional
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.api_utils import handle_error
-from ....core.permissions import PermissionChecker  # RBAC
-from ....core.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
-from ...services.document_number_service import DocumentNumberService
-from ...services.gst_service import GSTService
-from ...services.inventory_service import InventoryService
-from ...services.sales.invoice_service import InvoiceService
-from ...schemas.inventory.inventory import StockMovementCreate
-from ...schemas.sales.billing import (
+from .....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from .....core.org_context import get_org_context, OrgContext
+from .....core.api_utils import handle_error
+from .....core.permissions import PermissionChecker  # RBAC
+from .....core.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
+from ....services.document_number_service import DocumentNumberService
+from ....services.gst_service import GSTService
+from ....services.inventory_service import InventoryService
+from ....services.sales.invoice_service import InvoiceService
+from ....schemas.inventory.inventory import StockMovementCreate
+from ....schemas.sales.billing import (
     InvoiceCreateRequest, InvoiceItemCreate, 
     InvoiceCancelRequest, InvoiceResponse, InvoiceSummary
 )
 from decimal import Decimal
 # Consolidated: using main DocumentNumberService
-from ..enterprise_calculations import calculate_line_item, finalize_totals  # Shared helpers
-from ....services.settings_service import SettingsService  # NEW: Settings enforcement
+from .....api.shared.calculations import calculate_line_item, finalize_totals  # Shared helpers
+from .....services.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
