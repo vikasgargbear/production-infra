@@ -412,10 +412,8 @@ async def get_all_products_with_batches(
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.generic_name,
                 p.manufacturer, p.hsn_code, p.gst_percent,
-                p.category_id, p.product_type_id,
-                p.mrp_per_unit, p.sale_price_per_unit, p.cost_per_unit,
+                p.category_id, p.type_id, p.product_type,
                 p.is_active, p.requires_prescription, p.is_narcotic,
-                p.pack_size, p.pack_unit, p.base_unit,
                 p.created_at, p.updated_at,
                 COALESCE(s.total_stock, 0) as total_stock
             FROM inventory.products p
@@ -459,7 +457,7 @@ async def get_all_products_with_batches(
                 sb.batch_id, sb.product_id, sb.batch_number,
                 sb.expiry_date, sb.manufacturing_date,
                 sb.mrp_per_unit, sb.sale_price_per_unit, sb.cost_per_unit,
-                sb.quantity_available,
+                sb.quantity_available, sb.pack_size, sb.pack_type, sb.pack_uom,
                 CASE 
                     WHEN sb.expiry_date IS NULL THEN NULL
                     ELSE EXTRACT(DAY FROM sb.expiry_date - CURRENT_DATE)::int
