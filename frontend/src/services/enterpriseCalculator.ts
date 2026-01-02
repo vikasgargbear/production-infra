@@ -213,7 +213,8 @@ class EnterpriseCalculator {
 
     const result = this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
-      delivery_charges: Number(invoiceData.delivery_charges),
+      // Support both field names: freight_charges (canonical) and delivery_charges (legacy)
+      delivery_charges: Number(invoiceData.freight_charges || invoiceData.delivery_charges || 0),
       additional_discount: additionalDiscount  // Apply invoice-level discount (in addition to item discounts)
     });
 
