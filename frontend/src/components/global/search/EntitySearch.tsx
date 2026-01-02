@@ -279,7 +279,6 @@ function EntitySearchInner<T>(
             <p className="text-sm text-gray-500">No {entityType}s found for "{query}"</p>
             {showCreateButton && createFn && (
                 <ActionButton
-                    label={`${createButtonLabel} "${query}"`}
                     onClick={() => {
                         setShowDropdown(false);
                         createFn(query);
@@ -287,7 +286,9 @@ function EntitySearchInner<T>(
                     variant="primary"
                     size="md"
                     className="mt-3 w-full"
-                />
+                >
+                    {`${createButtonLabel} "${query}"`}
+                </ActionButton>
             )}
         </div>
     );
@@ -315,7 +316,6 @@ function EntitySearchInner<T>(
                     {showCreateButton && onCreateNew && searchQuery.length >= minLength && (
                         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
                             <ActionButton
-                                label={`${createButtonLabel} "${searchQuery}"`}
                                 onClick={() => {
                                     setShowDropdown(false);
                                     onCreateNew(searchQuery);
@@ -323,7 +323,9 @@ function EntitySearchInner<T>(
                                 variant="ghost"
                                 size="sm"
                                 className="w-full"
-                            />
+                            >
+                                {`${createButtonLabel} "${searchQuery}"`}
+                            </ActionButton>
                         </div>
                     )}
                 </>
@@ -366,11 +368,12 @@ function EntitySearchInner<T>(
                             </h4>
                             {showCreateButton && onCreateNew && !value && (
                                 <ActionButton
-                                    label={createButtonLabel}
                                     onClick={() => onCreateNew()}
                                     variant="secondary"
                                     size="sm"
-                                />
+                                >
+                                    {createButtonLabel}
+                                </ActionButton>
                             )}
                         </div>
 

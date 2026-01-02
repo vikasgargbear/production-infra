@@ -7,7 +7,7 @@ PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import text
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import logging
 import random

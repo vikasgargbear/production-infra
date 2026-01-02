@@ -31,7 +31,7 @@ export interface Supplier {
  * SupplierSearch Component Props
  */
 export interface SupplierSearchProps {
-    value: Supplier | null;
+    value?: Supplier | null;
     onChange: (supplier: Supplier | null) => void;
     onCreateNew?: (searchQuery?: string) => void;
     placeholder?: string;
@@ -59,7 +59,7 @@ export interface SupplierSearchRef extends EntitySearchRef { }
  */
 export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>((
     {
-        value,
+        value = null,
         onChange,
         onCreateNew,
         placeholder = "Search supplier by name, phone, or code...",
@@ -103,8 +103,8 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
     const renderSupplierResult = (supplier: Supplier, isHighlighted: boolean, index: number) => (
         <div
             className={`p-3 cursor-pointer transition-colors ${isHighlighted
-                    ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                    : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+                ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                : 'hover:bg-gray-50 border-l-4 border-l-transparent'
                 }`}
         >
             <div className="flex justify-between items-start">
