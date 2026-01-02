@@ -5,7 +5,7 @@ import {
 import { ModuleHub } from '../global';
 import InvoiceFlow from './invoice/InvoiceFlow';
 import InvoiceList from './invoice/InvoiceList';
-import SalesOrderFlow from './SalesOrderFlow';
+import { SalesOrderFlow } from './order';
 import { ChallanFlow } from './challan';
 
 interface SalesHubProps {

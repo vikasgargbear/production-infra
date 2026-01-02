@@ -10,13 +10,13 @@ import {
     ModuleHeader,
     DocumentFooter,
     GenericSuccessModal
-} from '../global';
-import CustomerCreation from '../global/ui/forms/CustomerCreation';
-import { ProductCreationModal } from '../global';
-import { DocumentImportModal } from '../global/modals';
-import { useSalesOrderLogic } from './order/hooks/useSalesOrderLogic';
-import OrderItemsStep from './order/steps/OrderItemsStep';
-import OrderReviewStep from './order/steps/OrderReviewStep';
+} from '../../global';
+import CustomerCreation from '../../global/ui/forms/CustomerCreation';
+import { ProductCreationModal } from '../../global';
+import { DocumentImportModal } from '../../global/modals';
+import { useSalesOrderLogic } from './hooks/useSalesOrderLogic';
+import OrderItemsStep from './steps/OrderItemsStep';
+import OrderReviewStep from './steps/OrderReviewStep';
 
 // ==================== TYPE DEFINITIONS ====================
 

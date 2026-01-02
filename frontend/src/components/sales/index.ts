@@ -32,16 +32,15 @@ export interface ValidationResult {
 }
 
 // Main Components
-export { default as InvoiceFlow } from './InvoiceFlow';
-export { default as InvoiceList } from './InvoiceList';
-export { default as SalesOrderFlow } from './SalesOrderFlow';
-export { default as SalesOrderManagement } from './SalesOrderManagement';
-export { default as ChallanFlow } from './challan/ModularChallanCreatorV5';
+export { default as InvoiceFlow } from './invoice/InvoiceFlow';
+export { default as InvoiceList } from './invoice/InvoiceList';
+export { SalesOrderFlow, SalesOrderManagement } from './order';
+export { ChallanFlow } from './challan';
 export { default as SalesHub } from './SalesHub';
 
 // Sub Components
 // BillSummary moved to archive - use BillSummary from global instead
-export { default as PaymentDetails } from './ui/PaymentDetails';
+// SalesCustomerSelection moved to archive - use CustomerSearch from global instead
 // SalesCustomerSelection moved to archive - use CustomerSearch from global instead
 export { default as SalesHeader } from './ui/SalesHeader';
 export { default as SalesTypeSelector } from './ui/SalesTypeSelector';

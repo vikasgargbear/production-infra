@@ -3,8 +3,8 @@ import {
     FileText, Truck, Search,
     Eye, Download, Printer, Calendar, ChevronDown, MessageCircle
 } from 'lucide-react';
-import { salesOrdersAPI } from '../../services/api';
-import ConvertToInvoiceButton from './ui/ConvertToInvoiceButton';
+import { salesOrdersAPI } from '../../../services/api';
+import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
 import jsPDF from 'jspdf';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -41,7 +41,7 @@ interface jsPDFWithAutoTable extends jsPDF {
 
 // ==================== MAIN COMPONENT ====================
 
-const SalesOrderManagement: React.FC = () => {
+const SalesOrderList: React.FC = () => {
     const [orders, setOrders] = useState<SalesOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -493,4 +493,4 @@ const SalesOrderManagement: React.FC = () => {
     );
 };
 
-export default SalesOrderManagement;
+export default SalesOrderList;

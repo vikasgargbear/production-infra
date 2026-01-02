@@ -66,7 +66,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
     gross_amount: 0,
     total_discount: 0,
     taxable_amount: 0,
-    total_tax: 0,
+    total_gst: 0,
     cgst_amount: 0,
     sgst_amount: 0,
     igst_amount: 0,
@@ -527,7 +527,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Total GST:</span>
-                  <span className="font-medium">{formatCurrency(totals.total_tax)}</span>
+                  <span className="font-medium">{formatCurrency(totals.total_gst ?? totals.total_tax ?? 0)}</span>
                 </div>
                 {(totals.delivery_charges ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
