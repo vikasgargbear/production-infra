@@ -239,8 +239,7 @@ const ItemsTableKeyboard = forwardRef(({
                     min={0}
                     step={1}
                     decimalPlaces={0}
-                    onChange={(val) => onUpdateItem(index, 'quantity', val)}  // Real-time update
-                    onSave={(val) => onUpdateItem(index, 'quantity', val)}
+                    onChange={(val) => onUpdateItem(index, 'quantity', val)}
                     onNavigate={(dir) => handleNavigate(index, 'quantity', dir)}
                     readOnly={readOnly}
                     selectOnFocus={true}
@@ -264,15 +263,7 @@ const ItemsTableKeyboard = forwardRef(({
                     min={0}
                     decimalPlaces={2}
                     prefix={currencySymbol}
-                    onChange={(val) => {
-                      // Update unit_price - canonical backend name
-                      onUpdateItem(index, 'unit_price', val);
-                      onUpdateItem(index, 'rate', val); // Legacy alias
-                    }}
-                    onSave={(val) => {
-                      onUpdateItem(index, 'unit_price', val);
-                      onUpdateItem(index, 'rate', val);
-                    }}
+                    onChange={(val) => onUpdateItem(index, 'unit_price', val)}
                     onNavigate={(dir) => handleNavigate(index, 'rate', dir)}
                     readOnly={readOnly}
                     selectOnFocus={true}
@@ -284,14 +275,13 @@ const ItemsTableKeyboard = forwardRef(({
                 <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'discount', el)}
-                    value={item.discount || 0}
+                    value={item.discount_percent || item.discount || 0}
                     type="number"
                     min={0}
                     max={100}
                     decimalPlaces={2}
                     suffix="%"
-                    onChange={(val) => onUpdateItem(index, 'discount', val)}  // Real-time update
-                    onSave={(val) => onUpdateItem(index, 'discount', val)}
+                    onChange={(val) => onUpdateItem(index, 'discount_percent', val)}
                     onNavigate={(dir) => handleNavigate(index, 'discount', dir)}
                     readOnly={readOnly}
                     selectOnFocus={true}
