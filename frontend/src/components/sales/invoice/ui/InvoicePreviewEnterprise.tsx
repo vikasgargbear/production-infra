@@ -63,16 +63,16 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
   const totals = invoice.totals || {
     // Emergency fallback (should never be used in practice)
-    gross_amount: 0,
-    total_discount: 0,
+    subtotal_amount: 0,
+    discount_amount: 0,
+    scheme_discount: 0,
     taxable_amount: 0,
-    total_gst: 0,
+    total_tax_amount: 0,
     cgst_amount: 0,
     sgst_amount: 0,
     igst_amount: 0,
-    delivery_charges: 0,
-    round_off: 0,
-    net_amount: 0,
+    freight_charges: 0,
+    round_off_amount: 0,
     final_amount: 0
   };
 
@@ -507,18 +507,18 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               <div className="p-3 space-y-2">
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">{formatCurrency(totals.gross_amount)}</span>
+                  <span className="font-medium">{formatCurrency(totals.subtotal_amount)}</span>
                 </div>
-                {(totals.total_discount ?? 0) > 0 && (
+                {(totals.discount_amount ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-600">Item Discounts:</span>
-                    <span className="font-medium text-green-600">-{formatCurrency(totals.total_discount)}</span>
+                    <span className="font-medium text-green-600">-{formatCurrency(totals.discount_amount)}</span>
                   </div>
                 )}
-                {(totals.additional_discount ?? 0) > 0 && (
+                {(totals.scheme_discount ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-600">Invoice Discount:</span>
-                    <span className="font-medium text-green-600">-{formatCurrency(totals.additional_discount ?? 0)}</span>
+                    <span className="text-gray-600">Scheme Discount:</span>
+                    <span className="font-medium text-green-600">-{formatCurrency(totals.scheme_discount ?? 0)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
@@ -527,18 +527,18 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Total GST:</span>
-                  <span className="font-medium">{formatCurrency(totals.total_gst || 0)}</span>
+                  <span className="font-medium">{formatCurrency(totals.total_tax_amount || 0)}</span>
                 </div>
-                {(totals.delivery_charges ?? 0) > 0 && (
+                {(totals.freight_charges ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-600">Delivery Charges:</span>
-                    <span className="font-medium">{formatCurrency(totals.delivery_charges)}</span>
+                    <span className="font-medium">{formatCurrency(totals.freight_charges)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Round Off:</span>
                   <span className="font-medium">
-                    {(totals.round_off ?? 0) >= 0 ? '+' : ''}{formatCurrency(totals.round_off ?? 0)}
+                    {(totals.round_off_amount ?? 0) >= 0 ? '+' : ''}{formatCurrency(totals.round_off_amount ?? 0)}
                   </span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-gray-300">

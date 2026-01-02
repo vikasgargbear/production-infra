@@ -46,8 +46,8 @@ import { InvoiceItem, InvoiceTotals, GstType, Invoice } from '../components/sale
 // Define loose interfaces for input flexibility (since inputs might be partial or from different sources)
 export interface CalculationOptions {
   gst_type?: GstType | string;
-  delivery_charges?: number;
-  additional_discount?: number;
+  freight_charges?: number;       // Was: delivery_charges
+  invoice_discount?: number;      // Was: additional_discount
   [key: string]: any;
 }
 
@@ -161,29 +161,29 @@ class EnterpriseCalculator {
     });
 
     // Additional charges
-    const deliveryCharges = parseFloat(String(options.delivery_charges || 0));
-    const additionalDiscount = parseFloat(String(options.additional_discount || 0));
+    const freightCharges = parseFloat(String(options.freight_charges || options.delivery_charges || 0));
+    const invoiceDiscount = parseFloat(String(options.invoice_discount || options.additional_discount || 0));
 
     // Final calculations
-    const netAmount = taxableAmount + totalGst + deliveryCharges - additionalDiscount;
+    const netAmount = taxableAmount + totalGst + freightCharges - invoiceDiscount;
     const finalAmount = Math.round(netAmount);
     const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
 
     return {
       items: calculatedItems,
       totals: {
-        // Core totals - canonical names only
-        gross_amount: this.round(grossAmount),
-        total_discount: this.round(totalDiscount),
-        taxable_amount: this.round(taxableAmount),
-        total_gst: this.round(totalGst),
-        cgst_amount: this.round(cgstTotal),
-        sgst_amount: this.round(sgstTotal),
-        igst_amount: this.round(igstTotal),
-        delivery_charges: this.round(deliveryCharges),
-        additional_discount: this.round(additionalDiscount),
-        round_off: this.round(roundOff),
-        final_amount: finalAmount
+        // Canonical field names (matching database schema: sales.invoices)
+        subtotal_amount: this.round(grossAmount),       // DB: subtotal_amount
+        discount_amount: this.round(totalDiscount),     // DB: discount_amount (item-level)
+        scheme_discount: this.round(invoiceDiscount),   // DB: scheme_discount (invoice-level)
+        taxable_amount: this.round(taxableAmount),      // DB: taxable_amount
+        total_tax_amount: this.round(totalGst),         // DB: total_tax_amount
+        cgst_amount: this.round(cgstTotal),             // DB: cgst_amount
+        sgst_amount: this.round(sgstTotal),             // DB: sgst_amount
+        igst_amount: this.round(igstTotal),             // DB: igst_amount
+        freight_charges: this.round(freightCharges),    // DB: freight_charges
+        round_off_amount: this.round(roundOff),         // DB: round_off_amount
+        final_amount: finalAmount                        // DB: final_amount
       }
     };
   }
@@ -194,28 +194,27 @@ class EnterpriseCalculator {
   static calculateInvoice(invoiceData: Partial<Invoice>): CalculatedTotals {
     console.log('🧮 [CALCULATOR] Received invoice data:', invoiceData);
 
-    // Calculate additional discount from percentage or amount
-    let additionalDiscount = 0;
+    // Calculate invoice discount from percentage or amount
+    let invoiceDiscount = 0;
     if (invoiceData.discount_type === 'percentage' && invoiceData.discount_percent) {
       // IMPORTANT: Calculate discount as percentage of TAXABLE amount (after item-level discounts)
       // This is the standard practice - invoice discount applies on pre-tax amount after item discounts
       const prelimResult = this.calculateTotals(invoiceData.items || [], {
         gst_type: invoiceData.gst_type,
-        delivery_charges: 0,
-        additional_discount: 0
+        freight_charges: 0,
+        invoice_discount: 0
       });
-      additionalDiscount = (Number(prelimResult.totals.taxable_amount) * Number(invoiceData.discount_percent)) / 100;
-      console.log('🧮 [CALCULATOR] Percentage discount:', invoiceData.discount_percent, '% of taxable amount', prelimResult.totals.taxable_amount, '=', additionalDiscount);
+      invoiceDiscount = (Number(prelimResult.totals.taxable_amount) * Number(invoiceData.discount_percent)) / 100;
+      console.log('🧮 [CALCULATOR] Percentage discount:', invoiceData.discount_percent, '% of taxable amount', prelimResult.totals.taxable_amount, '=', invoiceDiscount);
     } else if (invoiceData.discount_type === 'fixed' && invoiceData.discount_amount) {
-      additionalDiscount = Number(invoiceData.discount_amount);
-      console.log('🧮 [CALCULATOR] Fixed discount:', additionalDiscount);
+      invoiceDiscount = Number(invoiceData.discount_amount);
+      console.log('🧮 [CALCULATOR] Fixed discount:', invoiceDiscount);
     }
 
     const result = this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
-      // Support both field names: freight_charges (canonical) and delivery_charges (legacy)
-      delivery_charges: Number(invoiceData.freight_charges || invoiceData.delivery_charges || 0),
-      additional_discount: additionalDiscount  // Apply invoice-level discount (in addition to item discounts)
+      freight_charges: Number(invoiceData.freight_charges || 0),
+      invoice_discount: invoiceDiscount  // Apply invoice-level discount (in addition to item discounts)
     });
 
     console.log('🧮 [CALCULATOR] Calculated result:', result);

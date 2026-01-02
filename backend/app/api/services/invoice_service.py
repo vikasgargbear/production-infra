@@ -328,20 +328,20 @@ class InvoiceService:
         round_off_amount = final_amount - amount_before_round
         
         return {
-            "subtotal": subtotal,
-            "total_item_discount": total_item_discount,
-            "invoice_discount": invoice_discount,
-            "total_discount": total_discount,
-            "taxable_amount": taxable_after_all_discounts,
-            "total_cgst": total_cgst,
-            "total_sgst": total_sgst,
-            "total_igst": total_igst,
-            "total_tax": total_tax,
-            "freight_charges": freight_charges,
-            "insurance_charges": insurance_charges,
-            "other_charges": other_charges,
-            "round_off_amount": round_off_amount,
-            "final_amount": final_amount,
+            # Canonical field names (matching database schema: sales.invoices)
+            "subtotal_amount": subtotal,              # DB: subtotal_amount
+            "discount_amount": total_item_discount,   # DB: discount_amount (item-level)
+            "scheme_discount": invoice_discount,      # DB: scheme_discount (invoice-level)
+            "taxable_amount": taxable_after_all_discounts,  # DB: taxable_amount
+            "total_tax_amount": total_tax,            # DB: total_tax_amount
+            "cgst_amount": total_cgst,                # DB: cgst_amount
+            "sgst_amount": total_sgst,                # DB: sgst_amount
+            "igst_amount": total_igst,                # DB: igst_amount
+            "freight_charges": freight_charges,       # DB: freight_charges
+            "insurance_charges": insurance_charges,   # DB: insurance_charges
+            "other_charges": other_charges,           # DB: other_charges
+            "round_off_amount": round_off_amount,     # DB: round_off_amount
+            "final_amount": final_amount,             # DB: final_amount
             "line_calculations": calculated_lines
         }
 

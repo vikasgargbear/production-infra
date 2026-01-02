@@ -17,3 +17,6 @@ export { default as OrderReviewStep } from './steps/OrderReviewStep';
 
 // Hooks
 export { useSalesOrderLogic } from './hooks/useSalesOrderLogic';
+
+// Types
+export * from './types/orderTypes';

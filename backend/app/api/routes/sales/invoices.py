@@ -283,17 +283,17 @@ async def create_invoice(
             discount_amount=discount_amount_fixed
         )
         
-        # Extract calculated values
-        subtotal = totals["subtotal"]
-        total_discount = totals["total_discount"]  # Item + Invoice level discounts
-        invoice_discount = totals["invoice_discount"]  # Just invoice-level for DB storage
-        taxable_amount = totals["taxable_amount"]
-        total_cgst = totals["total_cgst"]
-        total_sgst = totals["total_sgst"]
-        total_igst = totals["total_igst"]
-        total_tax = totals["total_tax"]
-        round_off_amount = totals["round_off_amount"]
-        final_amount = totals["final_amount"]
+        # Extract calculated values (using database-aligned field names)
+        subtotal = totals["subtotal_amount"]            # DB: subtotal_amount
+        total_discount = totals["discount_amount"]      # DB: discount_amount (item-level)
+        invoice_discount = totals["scheme_discount"]    # DB: scheme_discount (invoice-level)
+        taxable_amount = totals["taxable_amount"]       # DB: taxable_amount
+        total_cgst = totals["cgst_amount"]              # DB: cgst_amount
+        total_sgst = totals["sgst_amount"]              # DB: sgst_amount
+        total_igst = totals["igst_amount"]              # DB: igst_amount
+        total_tax = totals["total_tax_amount"]          # DB: total_tax_amount
+        round_off_amount = totals["round_off_amount"]   # DB: round_off_amount
+        final_amount = totals["final_amount"]           # DB: final_amount
         
         # Extracted line calculations for inserting later (AVOIDS REDUNDANT RE-CALCULATION)
         line_item_details = totals.get("line_calculations", [])
