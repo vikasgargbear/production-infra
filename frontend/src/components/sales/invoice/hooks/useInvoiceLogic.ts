@@ -330,19 +330,29 @@ export const useInvoiceLogic = (
     const vehicleRef = useRef<HTMLInputElement | null>(null);
     const deliveryChargesRef = useRef<HTMLInputElement | null>(null);
 
-    // Auto-save draft every 30 seconds
+    // Refs for auto-save (prevents effect re-run on every state change)
+    const invoiceRef = useRef(invoice);
+    const selectedCustomerRef = useRef(selectedCustomer);
+
+    // Keep refs in sync without triggering effects
+    useEffect(() => { invoiceRef.current = invoice; }, [invoice]);
+    useEffect(() => { selectedCustomerRef.current = selectedCustomer; }, [selectedCustomer]);
+
+    // Auto-save draft every 30 seconds (uses refs to avoid re-running effect)
     useEffect(() => {
-        if (invoice.items.length === 0 || !selectedCustomer) {
-            return;
-        }
+        const autoSaveInterval = setInterval(() => {
+            const currentInvoice = invoiceRef.current;
+            const currentCustomer = selectedCustomerRef.current;
 
-        const autoSaveInterval = setInterval(async () => {
+            if (currentInvoice.items.length === 0 || !currentCustomer) {
+                return;
+            }
+
             try {
-
                 const draftData = {
-                    ...invoice,
-                    customer_id: selectedCustomer.customer_id,
-                    customer_details: selectedCustomer,
+                    ...currentInvoice,
+                    customer_id: currentCustomer.customer_id,
+                    customer_details: currentCustomer,
                     draft_saved_at: getUTCTimestamp()
                 };
 
@@ -354,7 +364,7 @@ export const useInvoiceLogic = (
         }, 30000);
 
         return () => clearInterval(autoSaveInterval);
-    }, [invoice, selectedCustomer]);
+    }, []); // Empty deps - runs once, uses refs for current values
 
     // Load draft on mount - use ref to prevent double execution in StrictMode
     const draftLoadedRef = useRef(false);
@@ -472,15 +482,6 @@ export const useInvoiceLogic = (
             return;
         }
 
-        console.log('🧮 Starting calculation with invoice items:',
-            invoice.items?.map(i => ({
-                name: i.product_name,
-                qty: i.quantity,
-                rate: i.unit_price,
-                discount: i.discount_percent
-            }))
-        );
-
         EnterpriseCalculator.calculateDebounced(
             invoice,
             (error: Error | null, result: any) => {
@@ -490,15 +491,8 @@ export const useInvoiceLogic = (
                 }
 
                 if (result && result.totals) {
-                    console.log('✅ Calculation result:', {
-                        items: result.items?.map(i => ({
-                            name: i.product_name,
-                            qty: i.quantity,
-                            rate: i.unit_price,
-                            total: i.total_amount
-                        })),
-                        totals: result.totals
-                    });
+                    // Concise logging - only key info
+                    console.log(`🧮 Calculated: ${result.items?.length || 0} items → ₹${result.totals.final_amount}`);
 
                     setInvoice(prev => {
                         const enrichedItems = prev.items.map((item, idx) => {
@@ -516,11 +510,6 @@ export const useInvoiceLogic = (
                                 sgst_amount: calculatedItem.sgst_amount,
                                 igst_amount: calculatedItem.igst_amount,
                             };
-                        });
-
-                        console.log('📊 Updating invoice with totals:', {
-                            final_amount: result.totals.final_amount,
-                            items_count: enrichedItems.length
                         });
 
                         return {

@@ -8,8 +8,8 @@ import ItemsTableKeyboard from '../../global/ui/display/ItemsTableKeyboard';
 import CustomerCreationB2B from '../../global/ui/forms/CustomerCreationB2B';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../global/ui/KeyboardShortcuts';
 // NotesSection is now imported from global
-import ChallanPreview from './components/ChallanPreview';
-import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
+import ChallanPreview from './ui/ChallanPreview';
+import ImportFromInvoiceModal from './ui/ImportFromInvoiceModal';
 import { challansApi } from '../../../services/api';
 import { apiClient, employeesAPI } from '../../../services/api';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
