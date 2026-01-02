@@ -184,6 +184,14 @@ class SyncEngine {
                 } else {
                     console.warn('⚠️ [SyncEngine] Customer sync failed:', customerResult.error);
                 }
+
+                // Sync employees
+                const employeeResult = await syncPullService.syncEmployees();
+                if (employeeResult.success) {
+                    console.log(`✅ [SyncEngine] Employee sync complete: ${employeeResult.itemsSynced} employees`);
+                } else {
+                    console.warn('⚠️ [SyncEngine] Employee sync failed:', employeeResult.error);
+                }
             } else {
                 console.log('[SyncEngine] Data is fresh, skipping pull sync');
             }
