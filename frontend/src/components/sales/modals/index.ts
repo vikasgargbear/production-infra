@@ -10,4 +10,5 @@ export { default as ConflictResolutionModal } from './ConflictResolutionModal';
 export { default as ImportDocumentModal } from './ImportDocumentModal';
 export { default as ItemProfitModal } from './ItemProfitModal';
 export { default as LastDealModal } from './LastDealModal';
+export { default as PaymentRecordingModal } from './PaymentRecordingModal';
 export { default as TaxDetailModal } from './TaxDetailModal';

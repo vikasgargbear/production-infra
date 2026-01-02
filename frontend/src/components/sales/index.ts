@@ -38,16 +38,15 @@ export { SalesOrderFlow, SalesOrderManagement } from './order';
 export { ChallanFlow } from './challan';
 export { default as SalesHub } from './SalesHub';
 
-// Sub Components
-// BillSummary moved to archive - use BillSummary from global instead
-// SalesCustomerSelection moved to archive - use CustomerSearch from global instead
-// SalesCustomerSelection moved to archive - use CustomerSearch from global instead
+// Sub Components - shared UI
 export { default as SalesHeader } from './ui/SalesHeader';
 export { default as SalesTypeSelector } from './ui/SalesTypeSelector';
-export { default as TransportDetails } from './ui/TransportDetails';
-export { default as PaymentRecordingModal } from './ui/PaymentRecordingModal';
-// ImportDocumentModal moved to archive - unused
 export { default as ConvertToInvoiceButton } from './ui/ConvertToInvoiceButton';
+
+// Modals - re-export from modals folder
+export { PaymentRecordingModal } from './modals';
+
+// TransportDetails - use from global (removed duplicate from sales/ui)
 
 // Sales Constants
 export const SALES_TYPES = {
