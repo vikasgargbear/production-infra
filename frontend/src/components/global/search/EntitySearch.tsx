@@ -313,7 +313,11 @@ function EntitySearchInner<T>(
             ) : searchResults.length > 0 ? (
                 <>
                     {searchResults.map((item, index) => (
-                        <div key={getItemKey(item)}>
+                        <div
+                            key={getItemKey(item)}
+                            onClick={() => handleSelect(item)}
+                            ref={(el) => { resultRefs.current[index] = el; }}
+                        >
                             {renderResultFn(item, index === highlightedIndex, index)}
                         </div>
                     ))}
