@@ -237,10 +237,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                             <CustomerSearch
                                 value={invoice?.customer_details as any || null}
                                 onChange={handleCustomerSelect as any}
-                                onCreateNew={() => setShowCustomerModal(true)}
-                                displayMode="inline"
+                                displayMode="compact"
                                 placeholder="Search customer by name, phone, or code..."
-                                required
+                                showCreateButton={false}
                                 clearable={true}
                             />
                         </div>

@@ -339,8 +339,8 @@ function EntitySearchInner<T>(
         </div>
     );
 
-    // Search input component
-    const SearchInput = () => (
+    // Search input JSX - NOT a component to prevent remounting on every render
+    const searchInputJSX = (
         <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -381,7 +381,7 @@ function EntitySearchInner<T>(
                             )}
                         </div>
 
-                        {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+                        {!value ? searchInputJSX : renderSelectedFn(value, handleClear)}
                     </div>
                 </div>
 
@@ -394,7 +394,7 @@ function EntitySearchInner<T>(
     if (displayMode === 'compact') {
         return (
             <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
-                {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+                {!value ? searchInputJSX : renderSelectedFn(value, handleClear)}
                 {showDropdown && searchQuery && renderDropdownContent()}
             </div>
         );
@@ -403,7 +403,7 @@ function EntitySearchInner<T>(
     // Dropdown mode (default)
     return (
         <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
-            {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+            {!value ? searchInputJSX : renderSelectedFn(value, handleClear)}
             {showDropdown && searchQuery && renderDropdownContent()}
         </div>
     );
