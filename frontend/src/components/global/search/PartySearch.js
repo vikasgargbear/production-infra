@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, User, Building2, MapPin, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { customersApi, suppliersApi } from '../../../services/api';
-import localFirstService from '../../../services/offline/cache/localFirstService';
+import localSearchService from '../../../services/offline/search/localSearchService';
 
 const PartySearch = ({
   onSelect,
@@ -27,9 +27,8 @@ const PartySearch = ({
       let results = [];
 
       if (partyType === 'customer' || partyType === 'all') {
-        // Use localFirstService for unified customer search
-        // This handles local cache + cloud fallback automatically
-        const customers = await localFirstService.searchCustomers(searchQuery, { limit: 20 });
+        // Use localSearchService for customer search from IndexedDB
+        const customers = await localSearchService.searchCustomers(searchQuery, { limit: 20 });
         results = [...results, ...customers.map(c => ({ ...c, type: 'customer' }))];
       }
 

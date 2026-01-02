@@ -6,7 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
-import dataSyncService from '../services/offline/sync/dataSyncService';
+import syncPullService from '../services/offline/sync/syncPullService';
 
 const AuthContext = createContext(null);
 
@@ -286,7 +286,7 @@ export const AuthProvider = ({ children }) => {
 
       // OFFLINE SYNC: Download all data for offline use (non-blocking)
       // This runs in background so login completes immediately
-      dataSyncService.syncWithProgress().catch(err => {
+      syncPullService.fullSync().catch(err => {
         console.warn('[Auth] Offline sync failed (will retry later):', err.message);
       });
 
