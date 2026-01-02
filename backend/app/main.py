@@ -81,6 +81,7 @@ from .api.routes import enterprise_calculations
 from .api.routes import schemes_discounts
 from .api.routes import loyalty_points
 from .api.routes import documents
+from .api.routes import schema as schema_router  # Live database schema documentation
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -212,6 +213,7 @@ api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=[
 api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
+api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 # api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
 # api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
 
