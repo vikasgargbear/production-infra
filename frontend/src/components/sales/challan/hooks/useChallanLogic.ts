@@ -1,12 +1,16 @@
 /**
- * useChallanLogic Hook
+ * useChallanLogic Hook (Refactored)
  * 
- * Centralized business logic for challan creation
- * Pattern: Matches useInvoiceLogic structure
+ * Centralized business logic for challan creation.
+ * Now COMPOSES useSalesTransaction for common operations,
+ * keeping only challan-specific logic here.
+ * 
+ * Pattern: Composition over duplication
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { challansApi, apiClient, employeesAPI } from '../../../../services/api';
+import { challansApi } from '../../../../services/api';
+import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 import {
     Challan,
     ChallanItem,
@@ -17,19 +21,49 @@ import {
     getInitialChallan
 } from '../types/challanTypes';
 
-// ==================== HOOK ====================
+// ==================== PROPS ====================
 
 export interface UseChallanLogicProps {
     onClose?: () => void;
     sameAsBillingInitial?: boolean;
 }
 
+// ==================== THE HOOK ====================
+
 export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseChallanLogicProps = {}) {
-    // ==================== STATE ====================
-    const [challan, setChallan] = useState<Challan>(getInitialChallan());
+
+    // ==================== COMPOSE SHARED TRANSACTION LOGIC ====================
+    const {
+        document: challan,
+        setDocument: setChallan,
+        selectedCustomer,
+        setSelectedCustomer,
+        employees,
+        selectedMR,
+        setSelectedMR,
+        loadingEmployees,
+        saving: baseSaving,
+        fetchingAddress,
+        productSearchRef,
+        itemsTableRef,
+        handleCustomerSelect: baseHandleCustomerSelect,
+        handleProductSelect,
+        updateItem,
+        removeItem,
+        recalculateTotals,
+        fetchCustomerAddress,
+        resetDocument
+    } = useSalesTransaction<Challan, CustomerDetails, ChallanItem>({
+        getInitialDocument: getInitialChallan,
+        documentType: 'challan',
+        priceField: 'sale_price',
+        includeGst: false,
+        onClose
+    });
+
+    // ==================== CHALLAN-SPECIFIC STATE ====================
     const [currentStep, setCurrentStep] = useState(1);
     const [saving, setSaving] = useState(false);
-    const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetails | null>(null);
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
     const [showCreateProduct, setShowCreateProduct] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
@@ -37,58 +71,12 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     const [createdChallanData, setCreatedChallanData] = useState<CreatedChallanData | null>(null);
     const [sameAsBilling, setSameAsBilling] = useState(sameAsBillingInitial);
     const [newProductName, setNewProductName] = useState('');
-    const [fetchingAddress, setFetchingAddress] = useState(false);
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
-    const [employees, setEmployees] = useState<Employee[]>([]);
-    const [selectedMR, setSelectedMR] = useState<Employee | null>(null);
 
-    // ==================== REFS ====================
+    // ==================== CHALLAN-SPECIFIC REFS ====================
     const customerSearchRef = useRef<HTMLInputElement>(null);
-    const productSearchRef = useRef<HTMLInputElement>(null);
-    const itemsTableRef = useRef<any>(null);
     const challanFormRef = useRef<HTMLFormElement>(null);
-
-    // ==================== LOAD EMPLOYEES ====================
-    const loadEmployees = useCallback(async () => {
-        try {
-            const response = await employeesAPI.getAll({ is_active: true, limit: 100 });
-            if (response.success) {
-                setEmployees(response.data || []);
-            }
-        } catch (error) {
-            console.error('Failed to load employees:', error);
-        }
-    }, []);
-
-    useEffect(() => {
-        loadEmployees();
-    }, [loadEmployees]);
-
-    // ==================== FETCH ADDRESS ====================
-    const fetchCustomerAddress = async (customerId: string | number) => {
-        try {
-            const response = await apiClient.get(`/customers/${customerId}/addresses`);
-
-            if (response.data?.success && response.data.data?.length > 0) {
-                const addresses = response.data.data;
-                const billingAddr = addresses.find((addr: any) => addr.address_type === 'billing' && addr.is_default);
-                const shippingAddr = addresses.find((addr: any) => addr.address_type === 'shipping' && addr.is_default);
-                const anyDefaultAddr = addresses.find((addr: any) => addr.is_default);
-                const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-
-                return {
-                    address: preferredAddr.address_line1 || '',
-                    city: preferredAddr.city || '',
-                    state: preferredAddr.state_name || '',
-                    pincode: preferredAddr.pincode || ''
-                };
-            }
-            return null;
-        } catch (error) {
-            return null;
-        }
-    };
 
     // ==================== GENERATE CHALLAN NUMBER ====================
     const generateChallanNumber = useCallback(async () => {
@@ -105,35 +93,17 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             const uniqueNum = 10000000 + (timestamp % 90000000);
             setChallan(prev => ({ ...prev, challan_number: `DC-${yearPrefix}${uniqueNum}` }));
         }
-    }, []);
+    }, [setChallan]);
 
-    // ==================== RECALCULATE TOTALS ====================
-    const recalculateTotals = useCallback((items: ChallanItem[]) => {
-        const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0);
-        const totalAmount = items.reduce((sum, item) => {
-            const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0;
-            return sum + (quantity * unitPrice);
-        }, 0);
-
-        setChallan(prev => ({
-            ...prev,
-            total_quantity: totalQuantity,
-            total_amount: totalAmount
-        }));
-    }, []);
-
-    // ==================== HANDLE CUSTOMER SELECT ====================
+    // ==================== ENHANCED CUSTOMER SELECT (with delivery address logic) ====================
     const handleCustomerSelect = useCallback(async (customer: CustomerDetails | null) => {
-        setSelectedCustomer(customer);
+        // Call base handler first
+        await baseHandleCustomerSelect(customer);
 
         if (!customer) {
             setChallan(prev => ({
                 ...prev,
-                customer_id: '',
-                customer_name: '',
                 customer_details: null,
-                billing_address: '',
                 delivery_address: '',
                 delivery_city: '',
                 delivery_state: '',
@@ -144,37 +114,16 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             return;
         }
 
-        let address = customer.address || customer.address_line1 || '';
-        let city = customer.city || '';
-        let state = customer.state || customer.state_name || '';
-        let pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
+        // Challan-specific: handle delivery address based on sameAsBilling
+        const address = customer.address || customer.address_line1 || '';
+        const city = customer.city || '';
+        const state = customer.state || customer.state_name || '';
+        const pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
         const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
-
-        let addressParts = [address, city, state, pincode].filter(part => part && part.trim());
-        let billingAddress = addressParts.join(', ');
-
-        if (!address && !city && customer.customer_id) {
-            setFetchingAddress(true);
-            const addressData = await fetchCustomerAddress(customer.customer_id);
-            if (addressData) {
-                address = addressData.address;
-                city = addressData.city;
-                state = addressData.state;
-                pincode = addressData.pincode;
-                const newAddressParts = [address, city, state, pincode].filter(part => part && part.trim());
-                billingAddress = newAddressParts.join(', ');
-                customer = { ...customer, address, city, state, pincode };
-                setSelectedCustomer(customer);
-            }
-            setFetchingAddress(false);
-        }
 
         setChallan(prev => ({
             ...prev,
-            customer_id: customer.customer_id || '',
-            customer_name: customer.customer_name || customer.name || '',
-            customer_details: { ...customer, address, city, state, pincode, phone },
-            billing_address: billingAddress,
+            customer_details: { ...customer, address, city, state, pincode, phone } as CustomerDetails,
             delivery_address: sameAsBilling ? address : prev.delivery_address,
             delivery_city: sameAsBilling ? city : prev.delivery_city,
             delivery_state: sameAsBilling ? state : prev.delivery_state,
@@ -182,52 +131,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name || customer.name || '') : prev.delivery_contact_person,
             delivery_contact_phone: sameAsBilling ? phone : prev.delivery_contact_phone
         }));
-    }, [sameAsBilling]);
-
-    // ==================== HANDLE PRODUCT SELECT ====================
-    const handleProductSelect = useCallback((product: any) => {
-        const existingItem = challan.items.find(item => item.product_id === product.product_id);
-
-        if (existingItem) {
-            const updatedItems = challan.items.map(item =>
-                item.id === existingItem.id ? { ...item, quantity: item.quantity + 1 } : item
-            );
-            setChallan(prev => ({ ...prev, items: updatedItems }));
-            recalculateTotals(updatedItems);
-        } else {
-            const quantity = 1;
-            const unitPrice = product.sale_price || product.mrp || 0;
-            const total = quantity * unitPrice;
-
-            const newItem: ChallanItem = {
-                id: Date.now(),
-                product_id: product.product_id,
-                product_name: product.product_name,
-                hsn_code: product.hsn_code,
-                quantity,
-                unit: product.unit || product.base_uom || product.uom_code || '',
-                mrp: product.mrp || 0,
-                unit_price: unitPrice,
-                rate: unitPrice,
-                sale_price: unitPrice,
-                total,
-                line_total: total,
-                gst_percent: product.gst_percent || 0,
-                manufacturer: product.manufacturer,
-                category: product.category
-            };
-
-            const updatedItems = [...challan.items, newItem];
-            setChallan(prev => ({ ...prev, items: updatedItems }));
-            recalculateTotals(updatedItems);
-
-            setTimeout(() => {
-                if (itemsTableRef.current?.focusFirstField) {
-                    itemsTableRef.current.focusFirstField();
-                }
-            }, 150);
-        }
-    }, [challan.items, recalculateTotals]);
+    }, [baseHandleCustomerSelect, sameAsBilling, setChallan]);
 
     // ==================== HANDLE IMPORT ====================
     const handleImport = useCallback((importData: ImportData) => {
@@ -264,42 +168,20 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 notes: importData.notes || prev.notes
             }));
 
-            setTimeout(() => recalculateTotals(formattedItems), 100);
+            // Recalculate totals and update document
+            setTimeout(() => {
+                const { totalQuantity, totalAmount } = recalculateTotals(formattedItems);
+                setChallan(prev => ({
+                    ...prev,
+                    total_quantity: totalQuantity,
+                    total_amount: totalAmount
+                }));
+            }, 100);
         } else {
             setMessage('⚠️ No items found in the selected document');
             setMessageType('warning');
         }
-    }, [handleCustomerSelect, recalculateTotals]);
-
-    // ==================== UPDATE ITEM ====================
-    const updateItem = useCallback((index: number, field: string, value: any) => {
-        const updatedItems = challan.items.map((item, i) => {
-            if (i === index) {
-                const updatedItem = { ...item, [field]: value };
-                if (field === 'quantity' || field === 'unit_price' || field === 'rate') {
-                    const quantity = parseFloat(field === 'quantity' ? value : String(item.quantity)) || 0;
-                    const unitPrice = parseFloat(field === 'unit_price' || field === 'rate' ? value : String(item.unit_price || item.rate)) || 0;
-                    const total = quantity * unitPrice;
-                    updatedItem.total = total;
-                    updatedItem.line_total = total;
-                    updatedItem.unit_price = unitPrice;
-                    updatedItem.rate = unitPrice;
-                }
-                return updatedItem;
-            }
-            return item;
-        });
-
-        setChallan(prev => ({ ...prev, items: updatedItems }));
-        recalculateTotals(updatedItems);
-    }, [challan.items, recalculateTotals]);
-
-    // ==================== REMOVE ITEM ====================
-    const removeItem = useCallback((itemId: number | string) => {
-        const updatedItems = challan.items.filter(item => item.id !== itemId);
-        setChallan(prev => ({ ...prev, items: updatedItems }));
-        recalculateTotals(updatedItems);
-    }, [challan.items, recalculateTotals]);
+    }, [handleCustomerSelect, recalculateTotals, setChallan, setSelectedCustomer]);
 
     // ==================== SAVE CHALLAN ====================
     const saveChallan = useCallback(async () => {
@@ -350,10 +232,10 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 expected_delivery_date: challan.expected_delivery_date || challan.challan_date,
                 customer_id: challan.customer_id,
                 customer_name: challan.customer_name,
-                delivery_address: challan.delivery_address || selectedCustomer?.address || 'N/A',
-                delivery_city: challan.delivery_city || selectedCustomer?.city || 'Mumbai',
-                delivery_state: challan.delivery_state || selectedCustomer?.state || 'Maharashtra',
-                delivery_pincode: challan.delivery_pincode || selectedCustomer?.pincode || '400001',
+                delivery_address: challan.delivery_address || (selectedCustomer as CustomerDetails)?.address || 'N/A',
+                delivery_city: challan.delivery_city || (selectedCustomer as CustomerDetails)?.city || 'Mumbai',
+                delivery_state: challan.delivery_state || (selectedCustomer as CustomerDetails)?.state || 'Maharashtra',
+                delivery_pincode: challan.delivery_pincode || (selectedCustomer as CustomerDetails)?.pincode || '400001',
                 items: apiItems,
                 transport_company: challan.transport_company || '',
                 vehicle_number: challan.vehicle_number || '',
@@ -380,18 +262,19 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 setCreatedChallanData(createdData);
                 setShowSuccessModal(true);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { detail?: unknown } }; message?: string };
             let errorMsg = 'Failed to save challan';
-            if (error.response?.data?.detail) {
-                if (Array.isArray(error.response.data.detail)) {
-                    errorMsg = error.response.data.detail.map((err: any) =>
-                        typeof err === 'object' ? `${err.loc?.join('.') || 'Field'}: ${err.msg}` : err
+            if (err.response?.data?.detail) {
+                if (Array.isArray(err.response.data.detail)) {
+                    errorMsg = err.response.data.detail.map((e: { loc?: string[]; msg?: string }) =>
+                        typeof e === 'object' ? `${e.loc?.join('.') || 'Field'}: ${e.msg}` : String(e)
                     ).join('\n');
                 } else {
-                    errorMsg = error.response.data.detail;
+                    errorMsg = String(err.response.data.detail);
                 }
-            } else if (error.message) {
-                errorMsg = error.message;
+            } else if (err.message) {
+                errorMsg = err.message;
             }
             alert(`Error: ${errorMsg}`);
         } finally {
@@ -431,15 +314,16 @@ Expected Delivery: ${challan.expected_delivery_date}
         const challanDate = new Date(challan.challan_date).toLocaleDateString('en-IN');
         const expectedDeliveryDate = new Date(challan.expected_delivery_date).toLocaleDateString('en-IN');
 
-        const formatAddress = (addr: any) => {
+        const formatAddress = (addr: unknown) => {
             if (!addr) return '';
             if (typeof addr === 'string') return addr;
-            const parts = [];
-            if (addr.address_line_1) parts.push(addr.address_line_1);
-            if (addr.address_line_2) parts.push(addr.address_line_2);
-            if (addr.city) parts.push(addr.city);
-            if (addr.state) parts.push(addr.state);
-            if (addr.pincode) parts.push(addr.pincode);
+            const a = addr as { address_line_1?: string; address_line_2?: string; city?: string; state?: string; pincode?: string };
+            const parts: string[] = [];
+            if (a.address_line_1) parts.push(a.address_line_1);
+            if (a.address_line_2) parts.push(a.address_line_2);
+            if (a.city) parts.push(a.city);
+            if (a.state) parts.push(a.state);
+            if (a.pincode) parts.push(a.pincode);
             return parts.join(', ');
         };
 
@@ -494,7 +378,7 @@ Expected Delivery: ${challan.expected_delivery_date}
 
     // ==================== RETURN ====================
     return {
-        // State
+        // Document State (from shared hook)
         challan,
         setChallan,
         selectedCustomer,
@@ -503,7 +387,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         selectedMR,
         setSelectedMR,
 
-        // UI State
+        // Challan-specific UI State
         currentStep,
         setCurrentStep,
         saving,
@@ -530,7 +414,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         itemsTableRef,
         challanFormRef,
 
-        // Handlers
+        // Handlers (mixed: shared + challan-specific)
         handleCustomerSelect,
         handleProductSelect,
         handleImport,
@@ -541,7 +425,14 @@ Expected Delivery: ${challan.expected_delivery_date}
         printChallan,
         thermalPrintChallan,
         generateChallanNumber,
-        recalculateTotals,
+        recalculateTotals: (items: ChallanItem[]) => {
+            const { totalQuantity, totalAmount } = recalculateTotals(items);
+            setChallan(prev => ({
+                ...prev,
+                total_quantity: totalQuantity,
+                total_amount: totalAmount
+            }));
+        },
 
         // Utilities
         onClose

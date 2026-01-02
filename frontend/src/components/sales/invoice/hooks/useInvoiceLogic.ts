@@ -876,6 +876,18 @@ export const useInvoiceLogic = (
             setShowSuccessModal(true);
             localStorage.removeItem('invoice_draft');
 
+            // CRITICAL: Trigger product sync to update local stock levels after invoice creation
+            // This ensures the next invoice sees the updated available_quantity
+            try {
+                console.log('[Invoice] Triggering product sync to update local stock...');
+                const syncPullService = (await import('../../../../services/offline/sync/syncPullService')).default;
+                // Use delta sync to only get updated products (the batch trigger handles updated_at propagation)
+                await syncPullService.syncProducts(100, false);
+                console.log('[Invoice] ✅ Stock levels updated in local cache');
+            } catch (syncError) {
+                console.warn('[Invoice] Could not sync stock (will update on next full sync):', syncError);
+            }
+
             toast.success('✅ Invoice created successfully');
         } catch (error) {
             const err = error as { response?: { status?: number; data?: { detail?: { error?: string; product_id?: number; required_quantity?: number; available_quantity?: number } } }; code?: string; message?: string };
