@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
-import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building, X } from 'lucide-react';
+import React, { forwardRef } from 'react';
+import { Building, User, Phone, MapPin, Mail, Trash2 } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
-import { debounce } from 'lodash';
-import { AddNewButton } from '../ui';
+import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
 import localSearchService from '../../../services/offline/search/localSearchService';
 
 /**
  * CustomerSearch Component Props
+ * Extends EntitySearch with customer-specific options
  */
-interface CustomerSearchProps {
+export interface CustomerSearchProps {
   value: Customer | null;
   onChange: (customer: Customer | null) => void;
   onCreateNew?: () => void;
@@ -16,7 +16,7 @@ interface CustomerSearchProps {
   disabled?: boolean;
   required?: boolean;
   showCreateButton?: boolean;
-  displayMode?: 'inline' | 'modal' | 'dropdown';
+  displayMode?: 'inline' | 'compact' | 'dropdown';
   className?: string;
   renderCustomerInfo?: (customer: Customer) => React.ReactNode;
   autoFocus?: boolean;
@@ -24,582 +24,234 @@ interface CustomerSearchProps {
   minSearchLength?: number;
 }
 
-export interface CustomerSearchRef {
-  focus: () => void;
-  clear: () => void;
-}
+export interface CustomerSearchRef extends EntitySearchRef { }
 
 /**
- * Global Customer Search Component v2
- * TypeScript version with enhanced type safety
+ * CustomerSearch - Customer-specific search component built on EntitySearch
+ * 
+ * This is a thin wrapper that provides:
+ * - Customer-specific search function (localSearchService.searchCustomers)
+ * - Customer-specific result rendering (B2B badges, contact info, GST status)
+ * - Customer-specific selected state rendering
+ * 
+ * All the core search logic (debounce, keyboard nav, dropdown, etc.) is handled by EntitySearch
  */
-export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>(({
-  value,
-  onChange,
-  onCreateNew,
-  placeholder = "Search customer by name, phone, or code...",
-  disabled = false,
-  required = false,
-  showCreateButton = true,
-  displayMode = 'modal',
-  className = '',
-  renderCustomerInfo,
-  autoFocus = false,
-  clearable = true,
-  minSearchLength = 2
-}, ref) => {
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [searchResults, setSearchResults] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  // localSearchService auto-initializes, no explicit init needed
-
-  // Instant search using local-first service
-  const performSearch = useCallback(async (query: string) => {
-    if (!query || query.length < minSearchLength) {
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const results = await localSearchService.searchCustomers(query, { limit: 20 });
-      setSearchResults(results as Customer[]);
-
-      // Auto-highlight first result so Enter key works immediately
-      if (results.length > 0) {
-        setHighlightedIndex(0);
-      } else {
-        setHighlightedIndex(-1);
-      }
-    } catch (error) {
-      console.error('[CustomerSearch] Search failed:', error);
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [minSearchLength]);
-
-  // Debounce search for 50ms (near-instant but prevents excessive updates)
-  const debouncedSearch = useMemo(
-    () => debounce((query: string) => performSearch(query), 50),
-    [performSearch]
-  );
-
-  // Trigger search when query changes
-  useEffect(() => {
-    debouncedSearch(searchQuery);
-  }, [searchQuery, debouncedSearch]);
-
-  // Expose methods to parent
-  useImperativeHandle(ref, () => ({
-    focus: () => {
-      searchInputRef.current?.focus();
-    },
-    clear: () => {
-      setSearchQuery('');
-    }
-  }));
-
-  // Handle click outside for dropdown mode
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-
-    if (displayMode === 'dropdown' && showDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [displayMode, showDropdown]);
-
-  // Handle customer selection
-  const handleCustomerSelect = (customer: Customer) => {
-    onChange(customer);
-    setShowSearch(false);
-    setShowDropdown(false);
-    setSearchQuery('');
-    setHighlightedIndex(-1);
+export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>((
+  {
+    value,
+    onChange,
+    onCreateNew,
+    placeholder = "Search customer by name, phone, or code...",
+    disabled = false,
+    required = false,
+    showCreateButton = true,
+    displayMode = 'inline',
+    className = '',
+    renderCustomerInfo,
+    autoFocus = false,
+    clearable = true,
+    minSearchLength = 2
+  },
+  ref
+) => {
+  // Customer search function using local-first service
+  const searchCustomers = async (query: string): Promise<Customer[]> => {
+    const results = await localSearchService.searchCustomers(query, { limit: 20 });
+    return results as Customer[];
   };
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex(prev =>
-        prev < searchResults.length - 1 ? prev + 1 : 0
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(prev =>
-        prev > 0 ? prev - 1 : searchResults.length - 1
-      );
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      // If we have results and one is highlighted, select it
-      if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
-        handleCustomerSelect(searchResults[highlightedIndex]);
-      }
-      // If no results and we have a search query, trigger create customer
-      else if (searchResults.length === 0 && searchQuery.length >= minSearchLength && onCreateNew) {
-        onCreateNew();
-      }
-    } else if (e.key === 'Escape') {
-      e.stopPropagation();
-      setSearchQuery('');
-      setShowSearch(false);
-      setShowDropdown(false);
-      setHighlightedIndex(-1);
-    }
-  };
+  // Render customer result in dropdown
+  const renderCustomerResult = (customer: Customer, isHighlighted: boolean, index: number) => (
+    <div
+      className={`p-3 cursor-pointer transition-colors ${isHighlighted
+          ? 'bg-blue-50 border-l-4 border-l-blue-500'
+          : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+        }`}
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          {/* Business/Party Name */}
+          <div className="flex items-center gap-2 mb-1">
+            <p className="font-medium text-gray-900">{customer.customer_name}</p>
+            {customer.customer_type === 'B2B' && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
+            )}
+          </div>
 
-  // Auto-scroll to highlighted item
-  useEffect(() => {
-    if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
-      resultRefs.current[highlightedIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest'
-      });
-    }
-  }, [highlightedIndex]);
+          <div className="text-sm text-gray-600 mt-1 space-y-0.5">
+            {/* Contact Person for B2B */}
+            {(customer as any).contact_person?.name && (
+              <p className="flex items-center gap-1">
+                <User className="w-3 h-3" />
+                <span className="font-medium">Contact:</span> {(customer as any).contact_person.name}
+              </p>
+            )}
 
-  // Note: highlightedIndex is set directly in performSearch, no separate useEffect needed
+            {/* Phone */}
+            {(() => {
+              const phone = (customer as any).contact_person?.phone ||
+                customer.phone ||
+                (customer as any).primary_phone;
+              if (phone) {
+                return (
+                  <p className="flex items-center gap-1">
+                    <Phone className="w-3 h-3" /> {phone}
+                  </p>
+                );
+              }
+              return null;
+            })()}
 
-  // Handle remove customer
-  const handleRemoveCustomer = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    e?.stopPropagation();
-    onChange(null);
-  };
+            {customer.customer_code && <p>Code: {customer.customer_code}</p>}
 
-  // Default customer info renderer - Enhanced for B2B with contact person
-  const defaultRenderCustomerInfo = (customer: Customer) => (
-    <div className="flex items-center justify-between">
-      <div className="flex-1">
-        {/* Business/Party Name */}
-        <div className="flex items-center gap-2 mb-1">
-          <Building className="w-4 h-4 text-blue-600" />
-          <p className="font-medium text-gray-900">{customer.customer_name}</p>
-          {customer.customer_type === 'B2B' && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
-          )}
+            {/* City from cached address */}
+            {(() => {
+              const city = (customer as any).billing_address?.city ||
+                customer.billing_address?.city ||
+                (customer as any).city;
+              if (city) {
+                return <p>City: {city}</p>;
+              }
+              return null;
+            })()}
+          </div>
         </div>
-
-        <div className="text-sm text-gray-600 space-y-0.5 ml-6">
-          {/* Contact Person - for B2B customers */}
-          {(customer as any).contact_person_name && (
-            <p className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
-            </p>
-          )}
-
-          {/* Mobile Number - prioritize contact person phone for B2B */}
-          {(() => {
-            const phoneNumber = (customer as any).contact_person_phone ||
-              customer.phone ||
-              customer.contact_info?.primary_phone ||
-              (customer as any).primary_phone;
-            if (phoneNumber) {
-              return (
-                <p className="flex items-center gap-1">
-                  <Phone className="w-3 h-3" /> {phoneNumber}
-                </p>
-              );
-            }
-            return null;
-          })()}
-
-          {/* Email */}
-          {(() => {
-            const email = (customer as any).contact_person_email ||
-              customer.email ||
-              (customer as any).primary_email;
-            if (email) {
-              return (
-                <p className="flex items-center gap-1">
-                  <Mail className="w-3 h-3" /> {email}
-                </p>
-              );
-            }
-            return null;
-          })()}
-
-          {/* Compact Address - City, State only */}
-          {(() => {
-            // Try to get city and state from multiple possible sources
-            const city = customer.billing_address?.city ||
-              customer.address_info?.billing_city ||
-              (customer as any).city || '';
-            const state = customer.billing_address?.state ||
-              customer.address_info?.billing_state ||
-              (customer as any).state || '';
-
-            if (city || state) {
-              return (
-                <p className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {city}{state ? `, ${state}` : ''}
-                </p>
-              );
-            }
-            return null;
-          })()}
-        </div>
-      </div>
-
-      {/* GST Status Badge */}
-      <div className="ml-3">
-        {(customer.gstin || customer.gst_number || (customer as any).gst_number) ? (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-            ✓ GST Verified
-          </span>
-        ) : (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-            No GST
+        {(customer.gstin || (customer as any).gst_number) && (
+          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+            GST Registered
           </span>
         )}
       </div>
     </div>
   );
 
-  // Render search results
-  const renderSearchResults = () => (
-    <>
-      {isLoading ? (
-        <div className="text-center py-8 text-gray-500">
-          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-          <p className="mt-2">Searching...</p>
-        </div>
-      ) : searchResults.length > 0 ? (
-        <div className="space-y-2">
-          {searchResults.map((customer, index) => (
-            <div
-              key={customer.customer_id}
-              ref={(el) => (resultRefs.current[index] = el)}
-              onClick={() => handleCustomerSelect(customer)}
-              className={`p-3 border rounded-lg cursor-pointer transition-colors ${index === highlightedIndex
-                ? 'bg-blue-50 border-blue-500 border-2'
-                : 'border-gray-200 hover:bg-gray-50'
-                }`}
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  {/* Business/Party Name */}
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium text-gray-900">{customer.customer_name}</p>
-                    {customer.customer_type === 'B2B' && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
-                    )}
-                  </div>
-
-                  <div className="text-sm text-gray-600 mt-1 space-y-0.5">
-                    {/* Contact Person for B2B */}
-                    {(customer as any).contact_person_name && (
-                      <p className="flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
-                      </p>
-                    )}
-
-                    {/* Phone */}
-                    {(() => {
-                      const phone = (customer as any).contact_person_phone ||
-                        customer.phone ||
-                        (customer as any).primary_phone;
-                      if (phone) {
-                        return (
-                          <p className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" /> {phone}
-                          </p>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    {customer.customer_code && <p>Code: {customer.customer_code}</p>}
-                    {(customer.billing_address?.city || customer.address_info?.billing_city) && (
-                      <p>City: {customer.billing_address?.city || customer.address_info?.billing_city}</p>
-                    )}
-                  </div>
-                </div>
-                {(customer.gstin || (customer as any).gst_number) && (
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                    GST Registered
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : searchQuery.length >= minSearchLength ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500">No customers found</p>
-          {showCreateButton && onCreateNew && (
-            <AddNewButton
-              label="Create New Customer"
-              onClick={() => {
-                setShowSearch(false);
-                setShowDropdown(false);
-                onCreateNew();
-              }}
-              variant="primary"
-              size="sm"
-              disabled={false}
-              className="mt-4"
-              showIcon={true}
-            />
-          )}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-gray-400">
-          Type at least {minSearchLength} characters to search
-        </div>
-      )}
-    </>
-  );
-
-  // Render based on display mode
-  if (displayMode === 'inline') {
-    return (
-      <div className={`bg-white rounded-lg shadow-sm p-4 ${className}`}>
-        {!value ? (
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={disabled}
-                autoFocus={autoFocus}
-              />
-            </div>
-            {searchQuery && renderSearchResults()}
-          </div>
-        ) : (
-          <div className="bg-gray-50 rounded-lg p-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <Building className="w-4 h-4 text-blue-600" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900 truncate">{value.customer_name}</p>
-                    {value.customer_type === 'B2B' && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">B2B</span>
-                    )}
-                    {/* GST Status Badge */}
-                    {(value.gstin || value.gst_number || (value as any).gst_number) ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
-                        GST
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
-                        No GST
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
-                    {/* Phone Number */}
-                    {(() => {
-                      const phoneNumber = (value as any).contact_person_phone ||
-                        value.phone ||
-                        value.contact_info?.primary_phone ||
-                        (value as any).primary_phone;
-                      if (phoneNumber) {
-                        return (
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" /> {phoneNumber}
-                          </span>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    {/* Compact Address - City, State only */}
-                    {(() => {
-                      const city = value.billing_address?.city ||
-                        value.address_info?.billing_city ||
-                        (value as any).city || '';
-                      const state = value.billing_address?.state ||
-                        value.address_info?.billing_state ||
-                        (value as any).state || '';
-
-                      if (city || state) {
-                        return (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {city}{state ? `, ${state}` : ''}
-                          </span>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Delete Icon - Vertically Centered Right */}
-              {clearable && !disabled && (
-                <div className="flex items-center justify-center min-h-[3rem]">
-                  <button
-                    type="button"
-                    onClick={handleRemoveCustomer}
-                    className="p-3 hover:bg-red-50 rounded-full text-red-500 hover:text-red-600 transition-colors shrink-0"
-                    title="Remove customer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (displayMode === 'dropdown') {
-    return (
-      <div className={`relative ${className}`} ref={dropdownRef}>
-        {!value ? (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setShowDropdown(true);
-              }}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setShowDropdown(true)}
-              placeholder={placeholder}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={disabled}
-              autoFocus={autoFocus}
-            />
-          </div>
-        ) : (
-          <div className="relative">
-            <div className="flex items-center justify-between p-3 border border-gray-300 rounded-lg bg-gray-50">
-              <div className="flex items-center gap-3">
-                <User className="w-5 h-5 text-gray-500" />
-                <div>
-                  <p className="font-medium">{value.customer_name}</p>
-                  {/* Customer code hidden for cleaner UI */}
-                </div>
-              </div>
-              {clearable && !disabled && (
-                <button
-                  type="button"
-                  onClick={handleRemoveCustomer}
-                  className="p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-                  title="Remove customer"
-                >
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {showDropdown && searchQuery && !value && (
-          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-            <div className="p-3">
-              {renderSearchResults()}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Modal display mode
-  return (
-    <>
-      {!value ? (
-        <button
-          type="button"
-          onClick={() => setShowSearch(true)}
-          disabled={disabled}
-          className={`w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors flex items-center justify-center gap-2 ${disabled ? 'opacity-50 cursor-not-allowed' : ''
-            } ${className}`}
-        >
-          <User className="w-5 h-5 text-gray-400" />
-          <span className="text-gray-600">Select Customer</span>
-        </button>
-      ) : (
-        <div className={`flex justify-between items-start ${className}`}>
-          <div className="flex-1">
-            {renderCustomerInfo ? renderCustomerInfo(value) : defaultRenderCustomerInfo(value)}
-          </div>
+  // Render selected customer
+  const renderSelectedCustomer = (customer: Customer, onClear: () => void) => {
+    // Use custom renderer if provided
+    if (renderCustomerInfo) {
+      return (
+        <div className="flex justify-between items-start">
+          <div className="flex-1">{renderCustomerInfo(customer)}</div>
           {clearable && !disabled && (
             <button
               type="button"
-              onClick={handleRemoveCustomer}
-              className="ml-3 p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+              onClick={onClear}
+              className="ml-3 p-1 hover:bg-gray-200 rounded"
               title="Remove customer"
             >
-              <X className="w-4 h-4 text-gray-500" />
+              <Trash2 className="w-4 h-4 text-red-500" />
             </button>
           )}
         </div>
-      )}
+      );
+    }
 
-      {showSearch && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold">Select Customer</h2>
-                <button
-                  onClick={() => setShowSearch(false)}
-                  className="p-1 hover:bg-gray-100 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+    // Default selected customer rendering
+    return (
+      <div className="bg-gray-50 rounded-lg p-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Building className="w-4 h-4 text-blue-600" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-gray-900 truncate">{customer.customer_name}</p>
+                {customer.customer_type === 'B2B' && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">B2B</span>
+                )}
+                {/* GST Status Badge */}
+                {(customer.gstin || (customer as any).gst_number) ? (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
+                    GST
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
+                    No GST
+                  </span>
+                )}
               </div>
-            </div>
+              <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
+                {/* Phone Number */}
+                {(() => {
+                  const phoneNumber = (customer as any).contact_person?.phone ||
+                    customer.phone ||
+                    customer.contact_info?.primary_phone ||
+                    (customer as any).primary_phone;
+                  if (phoneNumber) {
+                    return (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {phoneNumber}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
 
-            <div className="p-4">
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={placeholder}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  autoFocus
-                />
-              </div>
+                {/* Compact Address - City, State only */}
+                {(() => {
+                  const city = (customer as any).billing_address?.city ||
+                    customer.billing_address?.city ||
+                    (customer as any).city || '';
+                  const state = (customer as any).billing_address?.state ||
+                    customer.billing_address?.state ||
+                    (customer as any).state || '';
 
-              <div className="max-h-[60vh] overflow-y-auto">
-                {renderSearchResults()}
+                  if (city || state) {
+                    return (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {city}{state ? `, ${state}` : ''}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
           </div>
+
+          {/* Delete Icon */}
+          {clearable && !disabled && (
+            <div className="flex items-center justify-center min-h-[3rem]">
+              <button
+                type="button"
+                onClick={onClear}
+                className="p-3 hover:bg-red-50 rounded-full text-red-500 hover:text-red-600 transition-colors shrink-0"
+                title="Remove customer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
-    </>
+      </div>
+    );
+  };
+
+  return (
+    <EntitySearch<Customer>
+      ref={ref}
+      value={value}
+      onChange={onChange}
+      onCreateNew={onCreateNew}
+      entityType="customer"
+      entityIcon={Building}
+      placeholder={placeholder}
+      createButtonLabel="Create New Customer"
+      searchFn={searchCustomers}
+      minLength={minSearchLength}
+      debounceMs={50}
+      renderResult={renderCustomerResult}
+      renderSelected={renderSelectedCustomer}
+      getItemKey={(c) => c.customer_id}
+      getItemLabel={(c) => c.customer_name}
+      displayMode={displayMode}
+      showCreateButton={showCreateButton}
+      required={required}
+      clearable={clearable}
+      disabled={disabled}
+      autoFocus={autoFocus}
+      className={className}
+    />
   );
 });
 

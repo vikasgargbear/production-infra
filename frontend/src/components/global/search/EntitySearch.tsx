@@ -1,0 +1,411 @@
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { Search, Loader2, X, LucideIcon } from 'lucide-react';
+import { ActionButton } from '../ui';
+import { debounce } from '../../../utils/debounce';
+
+/**
+ * EntitySearch - Generic base component for all entity search (Customer, Supplier, Product, etc.)
+ * 
+ * @template T - The entity type (Customer, Supplier, Product, etc.)
+ * 
+ * This component handles:
+ * - Search input with debounced API calls
+ * - Loading state
+ * - Keyboard navigation (Arrow, Enter, Escape)
+ * - Click outside handling
+ * - Auto-scroll to highlighted item
+ * - Create new entity button
+ * 
+ * Usage:
+ * <EntitySearch<Customer>
+ *   entityType="customer"
+ *   searchFn={(query) => localSearchService.searchCustomers(query)}
+ *   getItemKey={(c) => c.customer_id}
+ *   getItemLabel={(c) => c.customer_name}
+ *   renderResult={(item, isHighlighted) => <div>...</div>}
+ *   renderSelected={(item) => <div>...</div>}
+ *   value={selectedCustomer}
+ *   onChange={setSelectedCustomer}
+ * />
+ */
+
+// ==================== TYPE DEFINITIONS ====================
+
+export interface EntitySearchRef {
+    focus: () => void;
+    clear: () => void;
+}
+
+export interface EntitySearchProps<T> {
+    // Core props
+    value: T | null;
+    onChange: (item: T | null) => void;
+    onCreateNew?: (searchQuery?: string) => void;
+
+    // Entity configuration
+    entityType?: string;
+    entityIcon?: LucideIcon;
+    placeholder?: string;
+    createButtonLabel?: string;
+
+    // Search configuration
+    searchFn: (query: string) => Promise<T[]>;
+    minLength?: number;
+    debounceMs?: number;
+
+    // Rendering - pass entity-specific renderers
+    renderResult?: (item: T, isHighlighted: boolean, index: number) => React.ReactNode;
+    renderSelected?: (item: T, onClear: () => void) => React.ReactNode;
+    renderEmptyState?: (searchQuery: string, createFn?: (q?: string) => void) => React.ReactNode;
+    getItemKey: (item: T) => string | number;
+    getItemLabel: (item: T) => string;
+
+    // Display options
+    displayMode?: 'inline' | 'compact' | 'dropdown';
+    showCreateButton?: boolean;
+    required?: boolean;
+    clearable?: boolean;
+    disabled?: boolean;
+    autoFocus?: boolean;
+    className?: string;
+}
+
+// ==================== COMPONENT ====================
+
+function EntitySearchInner<T>(
+    props: EntitySearchProps<T>,
+    ref: React.ForwardedRef<EntitySearchRef>
+) {
+    const {
+        // Core props
+        value = null,
+        onChange,
+        onCreateNew,
+
+        // Entity configuration
+        entityType = 'entity',
+        entityIcon: EntityIcon = Search,
+        placeholder = 'Search...',
+        createButtonLabel = 'Create New',
+
+        // Search configuration
+        searchFn,
+        minLength = 2,
+        debounceMs = 100,
+
+        // Rendering
+        renderResult,
+        renderSelected,
+        renderEmptyState,
+        getItemKey,
+        getItemLabel,
+
+        // Display options
+        displayMode = 'inline',
+        showCreateButton = true,
+        required = false,
+        clearable = true,
+        disabled = false,
+        autoFocus = false,
+        className = ''
+    } = props;
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<T[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+    // Expose methods to parent
+    useImperativeHandle(ref, () => ({
+        focus: () => searchInputRef.current?.focus(),
+        clear: () => {
+            onChange(null);
+            setSearchQuery('');
+            setSearchResults([]);
+        }
+    }));
+
+    // Debounced search
+    const performSearch = useCallback(
+        debounce(async (query: string) => {
+            if (!query || query.length < minLength) {
+                setSearchResults([]);
+                setHighlightedIndex(-1);
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const results = await searchFn(query);
+                setSearchResults(results || []);
+                setHighlightedIndex(results?.length > 0 ? 0 : -1);
+            } catch (error) {
+                console.error(`[EntitySearch] ${entityType} search failed:`, error);
+                setSearchResults([]);
+                setHighlightedIndex(-1);
+            } finally {
+                setLoading(false);
+            }
+        }, debounceMs),
+        [searchFn, minLength, debounceMs, entityType]
+    );
+
+    // Trigger search when query changes
+    useEffect(() => {
+        if (searchQuery) {
+            setShowDropdown(true);
+            performSearch(searchQuery);
+        } else {
+            setShowDropdown(false);
+            setSearchResults([]);
+        }
+    }, [searchQuery, performSearch]);
+
+    // Auto-scroll to highlighted item
+    useEffect(() => {
+        if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
+            resultRefs.current[highlightedIndex]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
+    }, [highlightedIndex]);
+
+    // Click outside handler
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Handle item selection
+    const handleSelect = (item: T) => {
+        onChange(item);
+        setSearchQuery('');
+        setShowDropdown(false);
+        setSearchResults([]);
+        setHighlightedIndex(-1);
+    };
+
+    // Handle clear
+    const handleClear = () => {
+        onChange(null);
+        setSearchQuery('');
+        searchInputRef.current?.focus();
+    };
+
+    // Keyboard navigation
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedIndex(prev =>
+                    prev < searchResults.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedIndex(prev =>
+                    prev > 0 ? prev - 1 : searchResults.length - 1
+                );
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+                    handleSelect(searchResults[highlightedIndex]);
+                } else if (searchResults.length === 0 && searchQuery.length >= minLength && onCreateNew) {
+                    onCreateNew(searchQuery);
+                }
+                break;
+            case 'Escape':
+                e.stopPropagation();
+                setShowDropdown(false);
+                setHighlightedIndex(-1);
+                setSearchQuery('');
+                break;
+            case 'Tab':
+                setShowDropdown(false);
+                setHighlightedIndex(-1);
+                break;
+        }
+    };
+
+    // Default result renderer
+    const defaultRenderResult = (item: T, isHighlighted: boolean, index: number) => (
+        <div
+            ref={(el) => { resultRefs.current[index] = el; }}
+            onClick={() => handleSelect(item)}
+            className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${isHighlighted ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'hover:bg-gray-50'
+                }`}
+        >
+            <div className="font-medium text-gray-900">{getItemLabel(item)}</div>
+        </div>
+    );
+
+    // Default selected renderer
+    const defaultRenderSelected = (item: T, onClear: () => void) => (
+        <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+            <div className="flex items-center gap-2">
+                <EntityIcon className="w-4 h-4 text-blue-600" />
+                <span className="font-medium text-gray-900">{getItemLabel(item)}</span>
+            </div>
+            {clearable && (
+                <button
+                    type="button"
+                    onClick={onClear}
+                    className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    title={`Remove ${entityType}`}
+                >
+                    <X className="w-4 h-4" />
+                </button>
+            )}
+        </div>
+    );
+
+    // Default empty state renderer
+    const defaultRenderEmptyState = (query: string, createFn?: (q?: string) => void) => (
+        <div className="p-4 text-center">
+            <EntityIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No {entityType}s found for "{query}"</p>
+            {showCreateButton && createFn && (
+                <ActionButton
+                    label={`${createButtonLabel} "${query}"`}
+                    onClick={() => {
+                        setShowDropdown(false);
+                        createFn(query);
+                    }}
+                    variant="primary"
+                    size="md"
+                    className="mt-3 w-full"
+                />
+            )}
+        </div>
+    );
+
+    // Use provided renderers or defaults
+    const renderResultFn = renderResult || defaultRenderResult;
+    const renderSelectedFn = renderSelected || defaultRenderSelected;
+    const renderEmptyStateFn = renderEmptyState || defaultRenderEmptyState;
+
+    // Render dropdown content
+    const renderDropdownContent = () => (
+        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {loading ? (
+                <div className="p-4 text-center text-gray-500">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p className="text-sm">Searching...</p>
+                </div>
+            ) : searchResults.length > 0 ? (
+                <>
+                    {searchResults.map((item, index) => (
+                        <div key={getItemKey(item)}>
+                            {renderResultFn(item, index === highlightedIndex, index)}
+                        </div>
+                    ))}
+                    {showCreateButton && onCreateNew && searchQuery.length >= minLength && (
+                        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+                            <ActionButton
+                                label={`${createButtonLabel} "${searchQuery}"`}
+                                onClick={() => {
+                                    setShowDropdown(false);
+                                    onCreateNew(searchQuery);
+                                }}
+                                variant="ghost"
+                                size="sm"
+                                className="w-full"
+                            />
+                        </div>
+                    )}
+                </>
+            ) : searchQuery.length >= minLength ? (
+                renderEmptyStateFn(searchQuery, onCreateNew)
+            ) : null}
+        </div>
+    );
+
+    // Search input component
+    const SearchInput = () => (
+        <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+                ref={searchInputRef}
+                type="text"
+                placeholder={placeholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowDropdown(true)}
+                onKeyDown={handleKeyDown}
+                disabled={disabled}
+                autoFocus={autoFocus}
+                className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+        </div>
+    );
+
+    // Inline mode (full width card with header)
+    if (displayMode === 'inline') {
+        return (
+            <div className={`relative ${className}`} ref={dropdownRef}>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-gray-700 flex items-center">
+                                <EntityIcon className="w-4 h-4 mr-2" />
+                                {entityType.charAt(0).toUpperCase() + entityType.slice(1)}
+                                {required && <span className="text-red-500 ml-1">*</span>}
+                            </h4>
+                            {showCreateButton && onCreateNew && !value && (
+                                <ActionButton
+                                    label={createButtonLabel}
+                                    onClick={() => onCreateNew()}
+                                    variant="secondary"
+                                    size="sm"
+                                />
+                            )}
+                        </div>
+
+                        {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+                    </div>
+                </div>
+
+                {showDropdown && searchQuery && !value && renderDropdownContent()}
+            </div>
+        );
+    }
+
+    // Compact mode (smaller, no card wrapper)
+    if (displayMode === 'compact') {
+        return (
+            <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
+                {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+                {showDropdown && searchQuery && renderDropdownContent()}
+            </div>
+        );
+    }
+
+    // Dropdown mode (default)
+    return (
+        <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
+            {!value ? <SearchInput /> : renderSelectedFn(value, handleClear)}
+            {showDropdown && searchQuery && renderDropdownContent()}
+        </div>
+    );
+}
+
+// Create the generic forwardRef component
+export const EntitySearch = forwardRef(EntitySearchInner) as <T>(
+    props: EntitySearchProps<T> & { ref?: React.ForwardedRef<EntitySearchRef> }
+) => React.ReactElement;
+
+// For backwards compatibility
+export default EntitySearch;

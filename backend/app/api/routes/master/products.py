@@ -401,7 +401,7 @@ async def get_all_products_with_batches(
         # Count total products (for pagination info)
         count_query = f"""
             SELECT COUNT(*) as total 
-            FROM master.products p 
+            FROM inventory.products p 
             WHERE {where_sql}
         """
         count_result = db.execute(text(count_query), params)
@@ -418,7 +418,7 @@ async def get_all_products_with_batches(
                 p.pack_size, p.pack_unit, p.base_unit,
                 p.created_at, p.updated_at,
                 COALESCE(s.total_stock, 0) as total_stock
-            FROM master.products p
+            FROM inventory.products p
             LEFT JOIN (
                 SELECT product_id, SUM(quantity_available) as total_stock
                 FROM inventory.stock_batches
