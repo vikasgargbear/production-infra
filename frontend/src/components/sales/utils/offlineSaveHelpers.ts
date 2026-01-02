@@ -20,6 +20,9 @@ export const generateTempId = (): string => {
 /**
  * Deduct stock locally from IndexedDB for offline-first saves
  * 
+ * ⚠️ **IMPORTANT:** Use only for INVOICES (actual sales).
+ * Do NOT use for challans (delivery notes) or orders (sales orders).
+ * 
  * @param items - Line items to deduct stock for
  */
 export const deductStockLocally = async (items: BaseLineItem[]): Promise<void> => {
