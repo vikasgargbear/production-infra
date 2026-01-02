@@ -421,7 +421,7 @@ async def get_all_products_with_batches(
             FROM inventory.products p
             LEFT JOIN (
                 SELECT product_id, SUM(quantity_available) as total_stock
-                FROM inventory.stock_batches
+                FROM inventory.batches
                 WHERE org_id = :org_id AND quantity_available > 0
                 GROUP BY product_id
             ) s ON p.product_id = s.product_id
@@ -464,7 +464,7 @@ async def get_all_products_with_batches(
                     WHEN sb.expiry_date IS NULL THEN NULL
                     ELSE EXTRACT(DAY FROM sb.expiry_date - CURRENT_DATE)::int
                 END as days_to_expiry
-            FROM inventory.stock_batches sb
+            FROM inventory.batches sb
             WHERE sb.org_id = :org_id
               AND sb.product_id = ANY(:product_ids)
               AND sb.quantity_available > 0
