@@ -9,8 +9,8 @@ import { apiHelpers } from '../../apiClient';
 
 const ENDPOINTS = {
     BASE: '/loyalty-points',
-    BALANCE: (customerId) => `/loyalty-points/customer/${customerId}/balance`,
-    HISTORY: (customerId) => `/loyalty-points/customer/${customerId}/history`,
+    BALANCE: (customerId: number | string) => `/loyalty-points/customer/${customerId}/balance`,
+    HISTORY: (customerId: number | string) => `/loyalty-points/customer/${customerId}/history`,
     EARN: '/loyalty-points/earn',
     REDEEM: '/loyalty-points/redeem',
     RULES: '/loyalty-points/rules',
@@ -23,13 +23,13 @@ export const loyaltyPointsApi = {
     // =========================================================================
 
     // Get customer balance
-    getBalance: (customerId) => {
-        return apiHelpers.get(ENDPOINTS.BALANCE(customerId));
+    getBalance: (customerId: number | string) => {
+        return apiHelpers.get<{ balance: number }>(ENDPOINTS.BALANCE(customerId));
     },
 
     // Get points history
-    getHistory: (customerId, params = {}) => {
-        return apiHelpers.get(ENDPOINTS.HISTORY(customerId), { params });
+    getHistory: (customerId: number | string, params: Record<string, any> = {}) => {
+        return apiHelpers.get<any>(ENDPOINTS.HISTORY(customerId), { params });
     },
 
     // =========================================================================
@@ -37,18 +37,18 @@ export const loyaltyPointsApi = {
     // =========================================================================
 
     // Earn points
-    earnPoints: (data) => {
-        return apiHelpers.post(ENDPOINTS.EARN, data);
+    earnPoints: (data: any) => {
+        return apiHelpers.post<any>(ENDPOINTS.EARN, data);
     },
 
     // Redeem points
-    redeemPoints: (data) => {
-        return apiHelpers.post(ENDPOINTS.REDEEM, data);
+    redeemPoints: (data: any) => {
+        return apiHelpers.post<any>(ENDPOINTS.REDEEM, data);
     },
 
     // Calculate points for order
-    calculatePoints: (orderAmount, customerId = null) => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/calculate`, {
+    calculatePoints: (orderAmount: number, customerId: number | string | null = null) => {
+        return apiHelpers.post<{ points: number }>(`${ENDPOINTS.BASE}/calculate`, {
             order_amount: orderAmount,
             customer_id: customerId
         });
@@ -60,21 +60,21 @@ export const loyaltyPointsApi = {
 
     // Get earning rules
     getRules: () => {
-        return apiHelpers.get(ENDPOINTS.RULES);
+        return apiHelpers.get<any>(ENDPOINTS.RULES);
     },
 
     // Update earning rules
-    updateRules: (data) => {
-        return apiHelpers.put(ENDPOINTS.RULES, data);
+    updateRules: (data: any) => {
+        return apiHelpers.put<any>(ENDPOINTS.RULES, data);
     },
 
     // Get loyalty tiers
     getTiers: () => {
-        return apiHelpers.get(ENDPOINTS.TIERS);
+        return apiHelpers.get<any>(ENDPOINTS.TIERS);
     },
 
     // Update tiers
-    updateTiers: (data) => {
-        return apiHelpers.put(ENDPOINTS.TIERS, data);
+    updateTiers: (data: any) => {
+        return apiHelpers.put<any>(ENDPOINTS.TIERS, data);
     }
 };

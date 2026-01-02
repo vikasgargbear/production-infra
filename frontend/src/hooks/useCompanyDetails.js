@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { settingsApi } from '../services/api';
+import { storageService, STORAGE_KEYS } from '../services/core/storageService';
 
 const useCompanyDetails = () => {
   const [companyDetails, setCompanyDetails] = useState({
@@ -23,13 +24,13 @@ const useCompanyDetails = () => {
   useEffect(() => {
     const fetchCompanyDetails = async () => {
       // First check localStorage cache
-      const cached = localStorage.getItem('company_details_cache');
-      const cacheTime = localStorage.getItem('company_details_cache_time');
-      
+      const cached = storageService.getItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE);
+      const cacheTime = storageService.getItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME);
+
       // Use cache if less than 1 hour old
       if (cached && cacheTime && (Date.now() - parseInt(cacheTime)) < 3600000) {
         try {
-          setCompanyDetails(JSON.parse(cached));
+          setCompanyDetails(cached);
           setLoading(false);
           return;
         } catch (e) {
@@ -40,7 +41,7 @@ const useCompanyDetails = () => {
         // Try to fetch company info first (more structured)
         let response = await settingsApi.getCompanyInfo();
         let details = {};
-        
+
         if (response?.data?.success && response.data.data) {
           const info = response.data.data;
           details = {
@@ -63,7 +64,7 @@ const useCompanyDetails = () => {
           response = await settingsApi.getSettings();
           if (response?.data?.success && response.data.data) {
             const settings = response.data.data;
-            
+
             // Map settings to company details
             details = {
               company_name: settings.company_name || 'AASO Pharmaceuticals',
@@ -82,33 +83,33 @@ const useCompanyDetails = () => {
             };
           }
         }
-        
+
         if (Object.keys(details).length > 0) {
           setCompanyDetails(details);
-          
+
           // Cache the details
-          localStorage.setItem('company_details_cache', JSON.stringify(details));
-          localStorage.setItem('company_details_cache_time', Date.now().toString());
-          
+          storageService.setItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE, details);
+          storageService.setItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME, Date.now().toString());
+
           // Also set individual items for backward compatibility
           Object.keys(details).forEach(key => {
             if (typeof details[key] === 'string') {
-              localStorage.setItem(key, details[key]);
+              storageService.setItem(key, details[key]);
             }
           });
         }
       } catch (err) {
         setError(err);
-        
+
         // Fall back to localStorage individual items
         const fallbackDetails = {};
         Object.keys(companyDetails).forEach(key => {
-          const value = localStorage.getItem(key);
+          const value = storageService.getItem(key);
           if (value) {
             fallbackDetails[key] = value;
           }
         });
-        
+
         if (Object.keys(fallbackDetails).length > 0) {
           setCompanyDetails({ ...companyDetails, ...fallbackDetails });
         }
@@ -122,9 +123,9 @@ const useCompanyDetails = () => {
 
   const refreshCompanyDetails = () => {
     // Clear cache
-    localStorage.removeItem('company_details_cache');
-    localStorage.removeItem('company_details_cache_time');
-    
+    storageService.removeItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE);
+    storageService.removeItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME);
+
     // Force re-render to re-fetch
     window.location.reload();
   };

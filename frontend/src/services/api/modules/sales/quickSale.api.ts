@@ -13,7 +13,7 @@ const ENDPOINTS = {
     CREATE: '/quick-sale/create',
     COMPLETE: '/quick-sale/complete',
     VOID: '/quick-sale/void',
-    RECEIPT: (id) => `/quick-sale/${id}/receipt`,
+    RECEIPT: (id: number | string) => `/quick-sale/${id}/receipt`,
     TODAY: '/quick-sale/today',
     SUMMARY: '/quick-sale/summary'
 };
@@ -24,19 +24,19 @@ export const quickSaleApi = {
     // =========================================================================
 
     // Create quick sale
-    create: (data) => {
+    create: (data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.CREATE, cleanedData);
+        return apiHelpers.post<any>(ENDPOINTS.CREATE, cleanedData);
     },
 
     // Complete sale (finalize payment)
-    complete: (saleId, paymentData) => {
-        return apiHelpers.post(ENDPOINTS.COMPLETE, { sale_id: saleId, ...paymentData });
+    complete: (saleId: number | string, paymentData: any) => {
+        return apiHelpers.post<any>(ENDPOINTS.COMPLETE, { sale_id: saleId, ...paymentData });
     },
 
     // Void sale
-    void: (saleId, reason) => {
-        return apiHelpers.post(ENDPOINTS.VOID, { sale_id: saleId, reason });
+    void: (saleId: number | string, reason: string) => {
+        return apiHelpers.post<any>(ENDPOINTS.VOID, { sale_id: saleId, reason });
     },
 
     // =========================================================================
@@ -44,18 +44,18 @@ export const quickSaleApi = {
     // =========================================================================
 
     // Get sale by ID
-    getById: (id) => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${id}`);
+    getById: (id: number | string) => {
+        return apiHelpers.get<any>(`${ENDPOINTS.BASE}/${id}`);
     },
 
     // Get today's sales
     getToday: () => {
-        return apiHelpers.get(ENDPOINTS.TODAY);
+        return apiHelpers.get<any>(ENDPOINTS.TODAY);
     },
 
     // Get sales summary
-    getSummary: (params = {}) => {
-        return apiHelpers.get(ENDPOINTS.SUMMARY, { params });
+    getSummary: (params: Record<string, any> = {}) => {
+        return apiHelpers.get<any>(ENDPOINTS.SUMMARY, { params });
     },
 
     // =========================================================================
@@ -63,12 +63,12 @@ export const quickSaleApi = {
     // =========================================================================
 
     // Get receipt
-    getReceipt: (saleId) => {
-        return apiHelpers.get(ENDPOINTS.RECEIPT(saleId));
+    getReceipt: (saleId: number | string) => {
+        return apiHelpers.get<any>(ENDPOINTS.RECEIPT(saleId));
     },
 
     // Print receipt
-    printReceipt: (saleId) => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/${saleId}/print`);
+    printReceipt: (saleId: number | string) => {
+        return apiHelpers.post<void>(`${ENDPOINTS.BASE}/${saleId}/print`);
     }
 };

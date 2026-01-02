@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { QueryClientProvider } from 'react-query';
 import queryClient from './queryClient';
 import { useAuth } from './contexts/AuthContext';
-import LoginPage from './components/LoginPage';
+import LoginPage from './components/auth/LoginPage';
 // import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';

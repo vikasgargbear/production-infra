@@ -60,8 +60,6 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         isLoading,
         error,
         setError,
-        message,
-        messageType,
         saving,
         showSuccessModal,
         setShowSuccessModal,
@@ -104,7 +102,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         handleImport,
         handleApplyBillDiscount,
         handleSaveInvoice,
-        clearMessage
+
     } = useInvoiceLogic(onClose, prefilledData as any);
 
     // Enable Enter-as-Tab navigation (Marg ERP style)
@@ -283,9 +281,6 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                     isLoading={isLoading}
                     error={error}
                     setError={setError}
-                    message={message}
-                    messageType={messageType as any}
-                    clearMessage={clearMessage as any}
                     onClose={onClose as any}
                     onContinue={handleContinueFromStep1}
                     productSearchRef={productSearchRef as any}

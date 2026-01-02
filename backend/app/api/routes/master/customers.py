@@ -42,6 +42,160 @@ router = APIRouter(tags=["master", "customers"])
 # =============================================================================
 
 
+@router.get("/all-with-addresses")
+@with_tenant_context
+async def get_all_customers_with_addresses(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(100, ge=1, le=500, description="Customers per page"),
+    since: Optional[str] = Query(None, description="ISO timestamp for delta sync"),
+    include_inactive: bool = Query(False, description="Include inactive customers"),
+    _: dict = Depends(PermissionChecker("master", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Get all customers with their addresses embedded (for offline sync).
+    Similar to /products/all-with-batches pattern.
+    
+    Returns customers with:
+    - Basic customer info (name, phone, GST, credit)
+    - Contact person details
+    - Embedded addresses array (billing/shipping)
+    
+    Usage:
+    - Initial sync: GET /customers/all-with-addresses?page=1&page_size=100
+    - Delta sync: GET /customers/all-with-addresses?since=2026-01-01T00:00:00Z
+    """
+    try:
+        offset = (page - 1) * page_size
+        
+        # Build base query with optional delta sync filter
+        where_clauses = ["c.org_id = :org_id"]
+        params = {"org_id": context.org_id, "limit": page_size, "offset": offset}
+        
+        if not include_inactive:
+            where_clauses.append("c.is_active = true")
+        
+        if since:
+            where_clauses.append("c.updated_at > :since")
+            params["since"] = since
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Count total customers (for pagination info)
+        count_query = f"""
+            SELECT COUNT(*) as total 
+            FROM parties.customers c 
+            WHERE {where_sql}
+        """
+        count_result = db.execute(text(count_query), params)
+        total_count = count_result.fetchone()[0]
+        
+        # Fetch customers with essential fields
+        customer_query = f"""
+            SELECT 
+                c.customer_id, c.customer_code, c.customer_name, c.customer_type,
+                c.primary_phone, c.primary_email, c.secondary_phone, c.whatsapp_number,
+                c.gst_number, c.pan_number, c.drug_license_number, c.drug_license_validity,
+                c.credit_limit, c.credit_days, c.current_outstanding,
+                c.contact_person_name, c.contact_person_phone, c.contact_person_email,
+                c.business_type, c.customer_category, c.customer_grade,
+                c.is_active, c.created_at, c.updated_at
+            FROM parties.customers c
+            WHERE {where_sql}
+            ORDER BY c.customer_name
+            LIMIT :limit OFFSET :offset
+        """
+        
+        customers_result = db.execute(text(customer_query), params)
+        customers = [dict(row._mapping) for row in customers_result]
+        
+        if not customers:
+            return {
+                "customers": [],
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_customers": total_count,
+                    "total_pages": 0,
+                    "has_more": False
+                },
+                "sync_metadata": {
+                    "synced_at": datetime.utcnow().isoformat() + "Z",
+                    "customers_in_page": 0,
+                    "addresses_in_page": 0
+                }
+            }
+        
+        # Get customer IDs for batch address fetch
+        customer_ids = [c["customer_id"] for c in customers]
+        
+        # Fetch all addresses for these customers in one query
+        address_query = """
+            SELECT 
+                a.address_id, a.entity_id as customer_id, a.address_type,
+                a.address_line1, a.address_line2, a.landmark,
+                a.city, a.state_code, a.state_name, a.country, a.pincode,
+                a.contact_person, a.contact_number, a.contact_email,
+                a.is_default, a.is_active
+            FROM master.addresses a
+            WHERE a.org_id = :org_id
+              AND a.entity_type = 'customer'
+              AND a.entity_id = ANY(:customer_ids)
+              AND a.is_active = true
+            ORDER BY a.is_default DESC, a.address_type
+        """
+        addresses_result = db.execute(text(address_query), {
+            "org_id": context.org_id,
+            "customer_ids": customer_ids
+        })
+        
+        # Group addresses by customer_id
+        addresses_by_customer = {}
+        total_addresses = 0
+        for row in addresses_result:
+            addr = dict(row._mapping)
+            cid = addr.pop("customer_id")
+            if cid not in addresses_by_customer:
+                addresses_by_customer[cid] = []
+            addresses_by_customer[cid].append(addr)
+            total_addresses += 1
+        
+        # Embed addresses into customers
+        for customer in customers:
+            cid = customer["customer_id"]
+            customer["addresses"] = addresses_by_customer.get(cid, [])
+            
+            # Convert decimal fields
+            customer["credit_limit"] = float(customer["credit_limit"] or 0)
+            customer["current_outstanding"] = float(customer["current_outstanding"] or 0)
+            customer["created_at"] = str(customer["created_at"]) if customer["created_at"] else None
+            customer["updated_at"] = str(customer["updated_at"]) if customer["updated_at"] else None
+            customer["drug_license_validity"] = str(customer["drug_license_validity"]) if customer["drug_license_validity"] else None
+        
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        return {
+            "customers": customers,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_customers": total_count,
+                "total_pages": total_pages,
+                "has_more": page < total_pages
+            },
+            "sync_metadata": {
+                "synced_at": datetime.utcnow().isoformat() + "Z",
+                "customers_in_page": len(customers),
+                "addresses_in_page": total_addresses
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in get_all_customers_with_addresses: {e}")
+        raise handle_error(e, "get all customers with addresses")
+
+
 @router.post("/")
 @with_tenant_context
 async def create_customer(

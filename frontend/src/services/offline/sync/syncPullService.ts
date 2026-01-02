@@ -287,7 +287,8 @@ class SyncPullService {
     // ==================== CUSTOMER SYNC ====================
 
     /**
-     * Sync customers from server
+     * Sync customers from server with embedded addresses
+     * Uses new /customers/all-with-addresses endpoint
      */
     async syncCustomers(options: {
         pageSize?: number;
@@ -304,33 +305,51 @@ class SyncPullService {
         }
 
         this.syncing = true;
+        let totalSynced = 0;
 
         try {
-            console.log('[SyncPull] Starting customer sync...');
+            console.log('[SyncPull] Starting customer sync with addresses...');
 
-            const response = await customersApi.list({ limit: pageSize });
-            const customers = response.data?.customers || response.data || [];
+            let page = 1;
+            let hasMore = true;
 
-            if (customers.length > 0) {
-                const transformedCustomers = customers.map((customer: any) => this.transformCustomer(customer));
-                await offlineDB.bulkLoad('customers', transformedCustomers);
-                console.log(`[SyncPull] ✅ Synced ${customers.length} customers`);
-            }
-
-            if (onProgress) {
-                onProgress({
-                    page: 1,
-                    totalPages: 1,
-                    itemsSynced: customers.length,
-                    type: 'customers'
+            while (hasMore) {
+                // Use new endpoint that returns customers with embedded addresses
+                const response = await customersApi.getAllWithAddresses({
+                    page,
+                    page_size: pageSize
                 });
+
+                const data = response.data || response;
+                const customers = data.customers || [];
+                const pagination = data.pagination || {};
+
+                if (customers.length > 0) {
+                    const transformedCustomers = customers.map((customer: any) => this.transformCustomer(customer));
+                    await offlineDB.bulkLoad('customers', transformedCustomers);
+                    totalSynced += customers.length;
+                    console.log(`[SyncPull] ✅ Synced ${customers.length} customers (page ${page})`);
+                }
+
+                if (onProgress) {
+                    onProgress({
+                        page,
+                        totalPages: pagination.total_pages || 1,
+                        itemsSynced: totalSynced,
+                        type: 'customers'
+                    });
+                }
+
+                hasMore = pagination.has_more || false;
+                page++;
             }
 
-            return { success: true, itemsSynced: customers.length };
+            console.log(`[SyncPull] ✅ Customer sync complete: ${totalSynced} customers`);
+            return { success: true, itemsSynced: totalSynced };
 
         } catch (error: any) {
             console.error('[SyncPull] Customer sync failed:', error);
-            return { success: false, itemsSynced: 0, error: error.message };
+            return { success: false, itemsSynced: totalSynced, error: error.message };
         } finally {
             this.syncing = false;
         }
@@ -339,24 +358,44 @@ class SyncPullService {
     /**
      * Transform customer from API format to IndexedDB format
      * Includes embedded address and contact data (like products include batches)
+     * 
+     * New endpoint returns addresses as an array - we extract billing/shipping
      */
     private transformCustomer(customer: any): any {
         const customerId = String(customer.customer_id || customer.id);
 
+        // Extract addresses from embedded array (new endpoint format)
+        const addresses = customer.addresses || [];
+        const billingAddr = addresses.find((a: any) => a.address_type === 'billing' && a.is_default) ||
+            addresses.find((a: any) => a.address_type === 'billing') ||
+            addresses[0];
+        const shippingAddr = addresses.find((a: any) => a.address_type === 'shipping');
+
         // Build billing address object
-        const billingAddress = {
-            street: customer.billing_address || customer.address_info?.billing_address || '',
-            city: customer.billing_city || customer.city || customer.address_info?.billing_city || '',
-            state: customer.billing_state || customer.state || customer.address_info?.billing_state || '',
-            pincode: customer.billing_pincode || customer.address_info?.billing_pincode || ''
+        const billingAddress = billingAddr ? {
+            street: billingAddr.address_line1 || '',
+            address_line1: billingAddr.address_line1 || '',
+            address_line2: billingAddr.address_line2 || '',
+            city: billingAddr.city || '',
+            state: billingAddr.state_name || billingAddr.state_code || '',
+            state_code: billingAddr.state_code || '',
+            pincode: billingAddr.pincode || ''
+        } : {
+            street: '',
+            city: '',
+            state: '',
+            pincode: ''
         };
 
-        // Build shipping address object (if different from billing)
-        const shippingAddress = customer.shipping_address || customer.address_info?.shipping_address ? {
-            street: customer.shipping_address || customer.address_info?.shipping_address || '',
-            city: customer.shipping_city || customer.address_info?.shipping_city || '',
-            state: customer.shipping_state || customer.address_info?.shipping_state || '',
-            pincode: customer.shipping_pincode || customer.address_info?.shipping_pincode || ''
+        // Build shipping address object (if available)
+        const shippingAddress = shippingAddr ? {
+            street: shippingAddr.address_line1 || '',
+            address_line1: shippingAddr.address_line1 || '',
+            address_line2: shippingAddr.address_line2 || '',
+            city: shippingAddr.city || '',
+            state: shippingAddr.state_name || shippingAddr.state_code || '',
+            state_code: shippingAddr.state_code || '',
+            pincode: shippingAddr.pincode || ''
         } : null;
 
         // Build contact person object for B2B customers
@@ -371,31 +410,39 @@ class SyncPullService {
             customer_id: customerId,
             customer_name: customer.customer_name || customer.name || '',
             customer_code: customer.customer_code || '',
-            primary_phone: customer.primary_phone || customer.phone || customer.contact_info?.primary_phone || '',
-            primary_email: customer.primary_email || customer.email || customer.contact_info?.email || '',
+            primary_phone: customer.primary_phone || customer.phone || '',
+            primary_email: customer.primary_email || customer.email || '',
+            secondary_phone: customer.secondary_phone || '',
+            whatsapp_number: customer.whatsapp_number || '',
             gst_number: customer.gst_number || customer.gstin || '',
             customer_type: customer.customer_type || 'regular',
+            business_type: customer.business_type || '',
             credit_limit: customer.credit_limit || 0,
+            credit_days: customer.credit_days || 0,
             current_outstanding: customer.current_outstanding || 0,
             // Embedded address data (like batches in products)
             city: billingAddress.city,
             state: billingAddress.state,
             billing_address: billingAddress,
             shipping_address: shippingAddress,
+            // Keep raw addresses for advanced use
+            addresses: addresses,
             // Embedded contact person (for B2B)
             contact_person: contactPerson,
             // Compliance fields
             pan_number: customer.pan_number || '',
             drug_license_number: customer.drug_license_number || '',
-            drug_license_expiry: customer.drug_license_expiry || null,
-            // Search fields
+            drug_license_validity: customer.drug_license_validity || null,
+            // Search fields (indexed for fast lookup)
             _search_name: (customer.customer_name || customer.name || '').toLowerCase(),
             _search_phone: (customer.primary_phone || customer.phone || '').replace(/\D/g, ''),
             _search_gst: (customer.gst_number || customer.gstin || '').toLowerCase(),
             // Metadata
-            updated_at: new Date().toISOString()
+            is_active: customer.is_active !== false,
+            updated_at: customer.updated_at || new Date().toISOString()
         };
     }
+
 
     // ==================== FULL SYNC ====================
 

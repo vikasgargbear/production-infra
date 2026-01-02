@@ -133,75 +133,379 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.4; color: #1f2937; }
         
-        /* Print styles */
+        /* Digital-first styles - continuous page flow */
         @media print {
-            @page { size: A4; margin: 1cm 0.8cm; }
-            body { margin: 0 !important; padding: 0 !important; background: white !important; font-size: 13px !important; }
-            .print-container { padding: 20px !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
-            .print-table { border-collapse: collapse !important; border: 1px solid #ddd !important; width: 100% !important; font-size: 12px !important; }
-            .print-table th, .print-table td { border: 1px solid #000 !important; padding: 4px !important; font-size: 10px !important; }
-            .print-table thead { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            @page { 
+                size: A4; 
+                margin: 1cm 0.8cm; 
+            }
+            body { 
+                margin: 0 !important; 
+                padding: 0 !important; 
+                background: white !important;
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+            }
+            .print-container { 
+                padding: 20px !important; 
+                box-shadow: none !important; 
+                margin: 0 !important; 
+                max-width: none !important;
+                width: 100% !important;
+                page-break-inside: avoid;
+            }
+            .print-table { 
+                border-collapse: collapse !important; 
+                border: 1px solid #ddd !important; 
+                width: 100% !important;
+                font-size: 12px !important;
+            }
+            .print-table th, .print-table td { 
+                border: 1px solid #000 !important; 
+                padding: 4px !important;
+                font-size: 10px !important;
+            }
+            .print-table thead { 
+                background-color: #f0f0f0 !important; 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+            }
+            .pack-info { 
+                font-size: 9px !important; 
+                color: #666 !important; 
+            }
             .no-print { display: none !important; }
+            .print-header { 
+                border-bottom: 2px solid #000 !important; 
+                margin-bottom: 10px !important; 
+                padding-bottom: 8px !important; 
+            }
+            .company-name { font-size: 1.5rem !important; }
+            .document-title { font-size: 1.1rem !important; }
+            .page-break-avoid { page-break-inside: avoid !important; }
+            input, select { border: none !important; background: transparent !important; }
+            .order-details { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .summary-box { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .amount-words { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 6px !important; }
+            .terms-section { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .summary-section { gap: 8px !important; }
+            .customer-section { gap: 1rem !important; margin-bottom: 1rem !important; }
+            .signature-section { margin-bottom: 1rem !important; }
         }
         
-        /* Layout styles */
-        .print-container { max-width: 850px; margin: 0 auto; background: white; padding: 2.5rem; min-height: 100vh; display: flex; flex-direction: column; font-size: 14px; }
-        .print-header { text-align: center; margin-bottom: 2.5rem; padding: 2rem; border-bottom: 3px solid #667eea; background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); border-radius: 12px; }
-        .company-logo { width: 5rem; height: 5rem; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; color: white; font-size: 2.5rem; }
-        .company-name { font-size: 2.2rem; font-weight: bold; color: #1f2937; margin-bottom: 0.8rem; }
-        .document-title { font-size: 1.4rem; font-weight: 600; color: #667eea; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 2px; }
-        .document-number { color: #6b7280; margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: 500; }
-        .document-date { font-size: 1rem; color: #9ca3af; }
+        /* Layout styles - continuous digital flow */
+        .print-container { 
+            max-width: 850px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 2.5rem; 
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .print-header { 
+            text-align: center; 
+            margin-bottom: 2.5rem; 
+            padding-bottom: 1.5rem; 
+            border-bottom: 3px solid #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        .company-logo { 
+            width: 5rem; 
+            height: 5rem; 
+            background: linear-gradient(135deg, #667eea, #764ba2); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            margin: 0 auto 1.5rem; 
+            color: white; 
+            font-size: 2.5rem;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        .company-name { 
+            font-size: 2.2rem; 
+            font-weight: bold; 
+            color: #1f2937; 
+            margin-bottom: 0.8rem;
+            letter-spacing: 1px;
+        }
+        .document-title { 
+            font-size: 1.4rem; 
+            font-weight: 600; 
+            color: #667eea; 
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .document-number { 
+            color: #6b7280; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+        .document-date { 
+            font-size: 1rem; 
+            color: #9ca3af;
+        }
         
-        /* Order details grid */
-        .order-details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 2rem; padding: 1.5rem; background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); border-radius: 12px; border: 2px solid #667eea; }
-        .detail-label { font-size: 0.9rem; color: #667eea; margin-bottom: 0.3rem; font-weight: 600; text-transform: uppercase; }
-        .detail-value { font-size: 1.1rem; font-weight: 600; color: #1f2937; }
+        /* Order details grid - enhanced for digital viewing */
+        .order-details { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 2rem; 
+            margin-bottom: 2rem; 
+            padding: 1.5rem; 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        .detail-label { 
+            font-size: 0.9rem; 
+            color: #667eea; 
+            margin-bottom: 0.3rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .detail-value { 
+            font-size: 1.1rem; 
+            font-weight: 600; 
+            color: #1f2937;
+            line-height: 1.4;
+        }
         
-        /* Customer section */
-        .customer-section { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 2.5rem; background: #f8f9ff; padding: 2rem; border-radius: 12px; border-left: 4px solid #667eea; }
-        .section-title { font-size: 1.1rem; font-weight: 700; color: #667eea; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; border-bottom: 2px solid #667eea; padding-bottom: 0.5rem; }
-        .customer-name { font-weight: 600; margin-bottom: 0.5rem; font-size: 1.1rem; color: #1f2937; }
-        .customer-detail { font-size: 1rem; color: #6b7280; margin-bottom: 0.3rem; }
+        /* Customer info - improved spacing and alignment */
+        .customer-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 3rem; 
+            margin-bottom: 2.5rem;
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+        .section-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        .customer-name { 
+            font-weight: 600; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            color: #1f2937;
+        }
+        .customer-detail { 
+            font-size: 1rem; 
+            color: #6b7280; 
+            margin-bottom: 0.3rem;
+            line-height: 1.5;
+        }
         
-        /* Items table */
-        .items-section { margin-bottom: 2.5rem; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-        .print-table { width: 100%; border: none; border-collapse: collapse; background: white; }
-        .print-table thead { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .print-table th { text-align: left; padding: 1.2rem 1rem; font-size: 0.95rem; font-weight: 600; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
-        .print-table td { padding: 1rem; font-size: 1rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-        .print-table tr:nth-child(even) { background: #f8f9ff; }
-        .product-name { font-weight: 600; margin-bottom: 0.3rem; color: #1f2937; font-size: 1.1rem; }
-        .product-batch { font-size: 0.9rem; color: #667eea; font-weight: 500; }
-        .pack-info { font-size: 0.9rem; color: #666; }
+        /* Items table - enhanced for digital viewing */
+        .items-section { 
+            margin-bottom: 2.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .print-table { 
+            width: 100%; 
+            border: none;
+            border-collapse: collapse;
+            background: white;
+        }
+        .print-table thead { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .print-table th { 
+            text-align: left; 
+            padding: 1.2rem 1rem; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: none;
+        }
+        .print-table td { 
+            padding: 1rem; 
+            font-size: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        .print-table tr:nth-child(even) { 
+            background: #f8f9ff; 
+        }
+        .print-table tr:hover {
+            background: #e3f2fd;
+            transition: background-color 0.2s ease;
+        }
+        .product-name { 
+            font-weight: 600; 
+            margin-bottom: 0.3rem;
+            color: #1f2937;
+            font-size: 1.1rem;
+        }
+        .product-batch { 
+            font-size: 0.9rem; 
+            color: #667eea;
+            font-weight: 500;
+        }
         
-        /* Summary sections */
-        .summary-section { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
-        .summary-box { background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); padding: 1.5rem; border-radius: 12px; border: 2px solid #667eea; }
-        .summary-title { font-size: 1.1rem; font-weight: 700; color: #667eea; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #667eea; padding-bottom: 0.5rem; }
-        .summary-item { display: flex; justify-content: space-between; font-size: 1rem; margin-bottom: 0.5rem; padding: 0.3rem 0; align-items: center; }
-        .summary-item.total { border-top: 2px solid #667eea; padding-top: 1rem; margin-top: 1rem; font-weight: 700; color: #667eea; font-size: 1.2rem; }
+        /* Summary sections - enhanced for digital viewing */
+        .summary-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 2rem; 
+            margin-bottom: 2rem;
+        }
+        .summary-box { 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            padding: 1.5rem; 
+            border-radius: 12px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        .summary-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        .summary-item { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 1rem; 
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0;
+            align-items: center;
+        }
+        .summary-item.total { 
+            border-top: 2px solid #667eea; 
+            padding-top: 1rem; 
+            margin-top: 1rem;
+            font-weight: 700; 
+            color: #667eea;
+            font-size: 1.2rem;
+        }
         
-        /* Amount in words */
-        .amount-words { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; font-size: 1.1rem; font-weight: 600; text-align: center; }
+        /* Amount in words - enhanced styling */
+        .amount-words { 
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            margin-bottom: 2rem; 
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+            letter-spacing: 0.5px;
+        }
         
-        /* Terms section */
-        .terms-section { background: #f8f9ff; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border-left: 4px solid #667eea; }
-        .terms-list { font-size: 1rem; color: #4b5563; list-style: decimal inside; line-height: 1.6; }
-        .terms-list li { margin-bottom: 0.8rem; padding-left: 0.5rem; }
+        /* Terms - enhanced for better readability */
+        .terms-section { 
+            background: #f8f9ff; 
+            padding: 1.5rem; 
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border-left: 4px solid #667eea;
+        }
+        .terms-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .terms-list { 
+            font-size: 1rem; 
+            color: #4b5563; 
+            list-style: decimal inside;
+            line-height: 1.6;
+        }
+        .terms-list li { 
+            margin-bottom: 0.8rem;
+            padding-left: 0.5rem;
+        }
         
-        /* Signatures */
-        .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 2rem; background: #f8f9ff; padding: 2rem; border-radius: 12px; }
-        .signature-box { text-align: center; padding: 1rem; }
-        .signature-line { height: 5rem; border-bottom: 2px solid #667eea; margin-bottom: 1rem; }
-        .signature-label { font-size: 1.1rem; color: #667eea; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; }
-        .signature-sublabel { font-size: 0.9rem; color: #6b7280; }
+        /* Signatures - enhanced styling */
+        .signature-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 3rem; 
+            margin-bottom: 2rem;
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+        }
+        .signature-box { 
+            text-align: center;
+            padding: 1rem;
+        }
+        .signature-line { 
+            height: 5rem; 
+            border-bottom: 2px solid #667eea; 
+            margin-bottom: 1rem;
+            position: relative;
+        }
+        .signature-label { 
+            font-size: 1.1rem; 
+            color: #667eea; 
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .signature-sublabel { 
+            font-size: 0.9rem; 
+            color: #6b7280;
+        }
         
-        /* Footer */
-        .footer { text-align: center; padding: 2rem 0; border-top: 3px solid #667eea; background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%); border-radius: 12px; margin-top: 2rem; }
-        .footer-text { font-size: 1.1rem; color: #667eea; margin-bottom: 0.8rem; font-weight: 600; }
-        .footer-subtext { font-size: 1rem; color: #6b7280; margin-bottom: 0.5rem; }
-        .footer-brand { font-size: 0.9rem; color: #667eea; font-weight: 500; }
+        /* Footer - enhanced branding */
+        .footer { 
+            text-align: center; 
+            padding: 2rem 0; 
+            border-top: 3px solid #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            margin-top: 2rem;
+        }
+        .footer-text { 
+            font-size: 1.1rem; 
+            color: #667eea; 
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+        }
+        .footer-subtext { 
+            font-size: 1rem; 
+            color: #6b7280; 
+            margin-bottom: 0.5rem;
+        }
+        .footer-brand { 
+            font-size: 0.9rem; 
+            color: #667eea;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -232,7 +536,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
             <div>
                 <h3 class="section-title">Bill To</h3>
                 <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
-                ${invoiceData.billing_address ? invoiceData.billing_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                ${invoiceData.billing_address ? invoiceData.billing_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
                 ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}
                 ${invoiceData.customer_gstin ? `<p class="customer-detail">GSTIN: ${invoiceData.customer_gstin}</p>` : ''}
             </div>
@@ -241,10 +545,10 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
                 ${invoiceData.is_same_address !== false ?
             `<p class="customer-detail" style="color: #10b981; font-weight: 500;">✓ Same as billing</p>
                    <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
-                   ${invoiceData.billing_address ? invoiceData.billing_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                   ${invoiceData.billing_address ? invoiceData.billing_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
                    ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}` :
             `<p class="customer-name">${invoiceData.shipping_contact_name || invoiceData.customer_name || 'Customer Name'}</p>
-                   ${invoiceData.shipping_address ? invoiceData.shipping_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                   ${invoiceData.shipping_address ? invoiceData.shipping_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
                    ${invoiceData.shipping_phone ? `<p class="customer-detail">Phone: ${invoiceData.shipping_phone}</p>` : ''}`}
             </div>
         </div>

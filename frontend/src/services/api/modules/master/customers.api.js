@@ -26,6 +26,16 @@ export const customersApi = {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
+  // Alias for backward compatibility
+  list: (params = {}) => {
+    return apiHelpers.get(ENDPOINTS.BASE, { params });
+  },
+
+  // Get all customers with embedded addresses (for offline sync)
+  getAllWithAddresses: (params = {}) => {
+    return apiHelpers.get(`${ENDPOINTS.BASE}/all-with-addresses`, { params });
+  },
+
   // Get customer by ID
   getById: (id) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));

@@ -22,30 +22,30 @@ export const schemesDiscountsApi = {
     // =========================================================================
 
     // Get all schemes
-    getSchemes: (params = {}) => {
-        return apiHelpers.get(ENDPOINTS.SCHEMES, { params });
+    getSchemes: (params: Record<string, any> = {}) => {
+        return apiHelpers.get<any>(ENDPOINTS.SCHEMES, { params });
     },
 
     // Get scheme by ID
-    getSchemeById: (id) => {
-        return apiHelpers.get(`${ENDPOINTS.SCHEMES}/${id}`);
+    getSchemeById: (id: number | string) => {
+        return apiHelpers.get<any>(`${ENDPOINTS.SCHEMES}/${id}`);
     },
 
     // Create scheme
-    createScheme: (data) => {
+    createScheme: (data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.SCHEMES, cleanedData);
+        return apiHelpers.post<any>(ENDPOINTS.SCHEMES, cleanedData);
     },
 
     // Update scheme
-    updateScheme: (id, data) => {
+    updateScheme: (id: number | string, data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.put(`${ENDPOINTS.SCHEMES}/${id}`, cleanedData);
+        return apiHelpers.put<any>(`${ENDPOINTS.SCHEMES}/${id}`, cleanedData);
     },
 
     // Delete scheme
-    deleteScheme: (id) => {
-        return apiHelpers.delete(`${ENDPOINTS.SCHEMES}/${id}`);
+    deleteScheme: (id: number | string) => {
+        return apiHelpers.delete<void>(`${ENDPOINTS.SCHEMES}/${id}`);
     },
 
     // =========================================================================
@@ -53,20 +53,20 @@ export const schemesDiscountsApi = {
     // =========================================================================
 
     // Get all discounts
-    getDiscounts: (params = {}) => {
-        return apiHelpers.get(ENDPOINTS.DISCOUNTS, { params });
+    getDiscounts: (params: Record<string, any> = {}) => {
+        return apiHelpers.get<any>(ENDPOINTS.DISCOUNTS, { params });
     },
 
     // Create discount
-    createDiscount: (data) => {
+    createDiscount: (data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.DISCOUNTS, cleanedData);
+        return apiHelpers.post<any>(ENDPOINTS.DISCOUNTS, cleanedData);
     },
 
     // Update discount
-    updateDiscount: (id, data) => {
+    updateDiscount: (id: number | string, data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.put(`${ENDPOINTS.DISCOUNTS}/${id}`, cleanedData);
+        return apiHelpers.put<any>(`${ENDPOINTS.DISCOUNTS}/${id}`, cleanedData);
     },
 
     // =========================================================================
@@ -75,17 +75,17 @@ export const schemesDiscountsApi = {
 
     // Get active schemes/discounts
     getActive: () => {
-        return apiHelpers.get(ENDPOINTS.ACTIVE);
+        return apiHelpers.get<any>(ENDPOINTS.ACTIVE);
     },
 
     // Apply scheme to cart
-    apply: (data) => {
-        return apiHelpers.post(ENDPOINTS.APPLY, data);
+    apply: (data: any) => {
+        return apiHelpers.post<any>(ENDPOINTS.APPLY, data);
     },
 
     // Get applicable schemes for products
-    getApplicable: (productIds, customerId = null) => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/applicable`, {
+    getApplicable: (productIds: (number | string)[], customerId: number | string | null = null) => {
+        return apiHelpers.get<any>(`${ENDPOINTS.BASE}/applicable`, {
             params: { product_ids: productIds.join(','), customer_id: customerId }
         });
     }

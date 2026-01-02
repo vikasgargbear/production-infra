@@ -32,9 +32,7 @@ interface InvoiceItemsStepProps {
     isLoading: boolean;
     error: string | null;
     setError: React.Dispatch<React.SetStateAction<string | null>>;
-    message: string | null;
-    messageType: 'success' | 'error' | 'info' | null;
-    clearMessage: () => void;
+
     onClose: () => void;
     onContinue: () => void;
     // Refs
@@ -80,9 +78,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     isLoading,
     error,
     setError,
-    message,
-    messageType,
-    clearMessage,
+
     onClose,
     onContinue,
     // Refs
@@ -173,23 +169,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 <div className="flex-1 overflow-y-auto bg-blue-50">
                     <div className="w-full px-8 py-6">
 
-                        {/* Message Display */}
-                        {message && (
-                            <div className={`
-              mb-4 p-3 rounded flex items-start text-sm
-              ${messageType === 'success' ? 'bg-green-100 text-green-800' :
-                                    messageType === 'error' ? 'bg-red-100 text-red-800' :
-                                        'bg-blue-100 text-blue-800'
-                                }
-            `}>
-                                {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-                                {messageType === 'error' && <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-                                <div className="flex-1">{message}</div>
-                                <button onClick={clearMessage} className="ml-2 hover:opacity-70">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
+
 
                         {/* Date Section */}
                         <div className="grid grid-cols-3 gap-4 mb-6">

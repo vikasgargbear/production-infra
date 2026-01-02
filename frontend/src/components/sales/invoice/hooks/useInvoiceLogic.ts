@@ -22,6 +22,7 @@ import {
     CreatedInvoiceData,
     GstType
 } from '../types/invoiceTypes';
+import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 
 // ==================== HOOK-SPECIFIC TYPE EXTENSIONS ====================
 // These extend shared types with required fields for the hook's internal state
@@ -112,8 +113,7 @@ export interface UseInvoiceLogicReturn {
     isLoading: boolean;
     error: string | null;
     setError: Dispatch<SetStateAction<string | null>>;
-    message: string;
-    messageType: string;
+
     saving: boolean;
     showSuccessModal: boolean;
     setShowSuccessModal: Dispatch<SetStateAction<boolean>>;
@@ -157,7 +157,7 @@ export interface UseInvoiceLogicReturn {
     handleImport: (importData: ImportData) => Promise<void>;
     handleApplyBillDiscount: (discountData: DiscountData) => void;
     handleSaveInvoice: () => Promise<void>;
-    clearMessage: () => void;
+
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -185,18 +185,9 @@ const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
     let expiryDate = product.expiry_date || '';
     let manufacturingDate = product.manufacturing_date || '';
 
-    if (bestBatch) {
-        // New API: use best_batch data
-        console.log('[Invoice] Using best_batch from API:', bestBatch);
-        unitPrice = parseFloat(String(bestBatch.sale_price_per_unit || 0));
-        mrp = parseFloat(String(bestBatch.mrp_per_unit || 0));
-        availableQty = parseInt(String(bestBatch.quantity_available || 0));
-        batchId = bestBatch.batch_id;
-        batchNumber = bestBatch.batch_number || '';
-        expiryDate = bestBatch.expiry_date || '';
-    } else if (product.batch_id) {
-        // BatchSelector: product already has batch data merged
-        console.log('[Invoice] Using batch data from BatchSelector');
+    if (product.batch_id) {
+        // BatchSelector: product already has batch data merged - ALWAYS respect user selection
+        console.log('[Invoice] Using batch data from BatchSelector (user selected)');
         // CANONICAL: sale_price_per_unit, mrp_per_unit
         unitPrice = parseFloat(String(
             product.sale_price_per_unit || (product as any).unit_price || 0
@@ -207,6 +198,15 @@ const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
         availableQty = parseInt(String(
             product.quantity_available || product.available_quantity || 0
         ));
+    } else if (bestBatch) {
+        // New API: use best_batch ONLY if no batch was explicitly selected
+        console.log('[Invoice] Using best_batch from API (auto-selected):', bestBatch);
+        unitPrice = parseFloat(String(bestBatch.sale_price_per_unit || 0));
+        mrp = parseFloat(String(bestBatch.mrp_per_unit || 0));
+        availableQty = parseInt(String(bestBatch.quantity_available || 0));
+        batchId = bestBatch.batch_id;
+        batchNumber = bestBatch.batch_number || '';
+        expiryDate = bestBatch.expiry_date || '';
     } else {
         // Legacy: product-level averages (fallback)
         console.log('[Invoice] Using product-level pricing (no batch selected)');
@@ -248,6 +248,7 @@ export const useInvoiceLogic = (
     onClose?: () => void,
     prefilledData: PrefilledData | null = null
 ): UseInvoiceLogicReturn => {
+    console.log('[DEBUG] useInvoiceLogic v2 loaded - checking for stale bundle');
     // Network Status
     const { isOnline } = useNetworkStatus();
 
@@ -298,8 +299,7 @@ export const useInvoiceLogic = (
     const [sameAsShipping, setSameAsShipping] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [message, setMessage] = useState('');
-    const [messageType, setMessageType] = useState('');
+
     const [saving, setSaving] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [createdInvoiceData, setCreatedInvoiceData] = useState<CreatedInvoiceData | null>(null);
@@ -332,6 +332,7 @@ export const useInvoiceLogic = (
 
         const autoSaveInterval = setInterval(async () => {
             try {
+
                 const draftData = {
                     ...invoice,
                     customer_id: selectedCustomer.customer_id,
@@ -339,7 +340,7 @@ export const useInvoiceLogic = (
                     draft_saved_at: getUTCTimestamp()
                 };
 
-                localStorage.setItem('invoice_draft', JSON.stringify(draftData));
+                storageService.setItem(STORAGE_KEYS.INVOICE_DRAFT, draftData);
                 console.log('[Invoice] Auto-saved draft');
             } catch (error) {
                 console.error('[Invoice] Auto-save failed:', error);
@@ -360,13 +361,12 @@ export const useInvoiceLogic = (
 
         // Clean up old drafts silently
         try {
-            const savedDraft = localStorage.getItem('invoice_draft');
-            if (savedDraft) {
-                const draft = JSON.parse(savedDraft);
+            const draft = storageService.getItem<{ draft_saved_at: string }>(STORAGE_KEYS.INVOICE_DRAFT);
+            if (draft) {
                 const draftAge = Date.now() - new Date(draft.draft_saved_at).getTime();
                 const maxAge = 24 * 60 * 60 * 1000;
                 if (draftAge >= maxAge) {
-                    localStorage.removeItem('invoice_draft');
+                    storageService.removeItem(STORAGE_KEYS.INVOICE_DRAFT);
                 }
             }
         } catch {
@@ -382,17 +382,14 @@ export const useInvoiceLogic = (
 
                 // Load employees for MR selection with caching
                 try {
-                    const cacheKey = 'employees_cache';
-                    const cacheTimeKey = 'employees_cache_time';
-                    const cached = localStorage.getItem(cacheKey);
-                    const cacheTime = localStorage.getItem(cacheTimeKey);
+                    const cached = storageService.getItem<Employee[]>(STORAGE_KEYS.EMPLOYEES_CACHE);
+                    const cacheTime = storageService.getItem<string>(STORAGE_KEYS.EMPLOYEES_CACHE_TIME);
                     const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
 
                     if (cached && cacheAge < 2 * 60 * 1000) {
                         console.log('[Invoice] Using cached employees');
-                        const cachedEmployees = JSON.parse(cached) as Employee[];
                         const uniqueCached = Array.from(
-                            new Map(cachedEmployees.map(e => [e.employee_id, e])).values()
+                            new Map(cached.map(e => [e.employee_id, e])).values()
                         );
                         setEmployees(uniqueCached);
                     } else {
@@ -410,8 +407,8 @@ export const useInvoiceLogic = (
                             );
 
                             setEmployees(uniqueEmployees);
-                            localStorage.setItem(cacheKey, JSON.stringify(uniqueEmployees));
-                            localStorage.setItem(cacheTimeKey, Date.now().toString());
+                            storageService.setItem(STORAGE_KEYS.EMPLOYEES_CACHE, uniqueEmployees);
+                            storageService.setItem(STORAGE_KEYS.EMPLOYEES_CACHE_TIME, Date.now().toString());
                             console.log('[Invoice] Cached', uniqueEmployees.length, 'employees');
                         } else {
                             throw new Error('Empty or invalid employee response');
@@ -573,9 +570,7 @@ export const useInvoiceLogic = (
             shipping_address: sameAsShipping ? billingAddress : prev.shipping_address
         }));
 
-        setMessage(`Customer "${customer.customer_name}" selected`);
-        setMessageType('success');
-        setTimeout(() => setMessage(''), 3000);
+        toast.success(`Customer "${customer.customer_name}" selected`);
     }, [sameAsShipping]);
 
     const handleAddItem = useCallback(async (product: ProductInput) => {
@@ -689,11 +684,11 @@ export const useInvoiceLogic = (
                     free_quantity: 0
                 };
 
-                const message = invoiceItem.batch_number
+                const toastMsg = invoiceItem.batch_number
                     ? `Added ${invoiceItem.product_name} (Batch: ${invoiceItem.batch_number})`
                     : `Added ${invoiceItem.product_name}`;
 
-                toast.success(message);
+                toast.success(toastMsg);
 
                 return {
                     ...prev,
@@ -702,9 +697,7 @@ export const useInvoiceLogic = (
             }
         });
 
-        setMessage(`Added "${invoiceItem.product_name}" to invoice`);
-        setMessageType('success');
-        setTimeout(() => setMessage(''), 2000);
+        // Message already shown via toast.success above
     }, []);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: unknown) => {
@@ -751,14 +744,10 @@ export const useInvoiceLogic = (
                 }));
             }
 
-            setMessage(`Imported ${importData.items?.length || 0} items from ${importData.source}`);
-            setMessageType('success');
-            setTimeout(() => setMessage(''), 3000);
+            toast.success(`Imported ${importData.items?.length || 0} items from ${importData.source}`);
         } catch (error) {
             console.error('Import error:', error);
-            setMessage('Failed to import data');
-            setMessageType('error');
-            setTimeout(() => setMessage(''), 5000);
+            toast.error('Failed to import data');
         }
     }, [handleCustomerSelect]);
 
@@ -856,7 +845,7 @@ export const useInvoiceLogic = (
 
                 setCreatedInvoiceData(createdData);
                 setShowSuccessModal(true);
-                localStorage.removeItem('invoice_draft');
+                storageService.removeItem(STORAGE_KEYS.INVOICE_DRAFT);
 
                 setSaving(false);
                 return;
@@ -964,7 +953,7 @@ export const useInvoiceLogic = (
 
                     setCreatedInvoiceData(createdData);
                     setShowSuccessModal(true);
-                    localStorage.removeItem('invoice_draft');
+                    storageService.removeItem(STORAGE_KEYS.INVOICE_DRAFT);
                     return;
                 } catch (offlineError) {
                     console.error('[Invoice] Offline fallback also failed:', offlineError);
@@ -986,10 +975,7 @@ export const useInvoiceLogic = (
         }
     }, [invoice, selectedCustomer, isOnline]);
 
-    const clearMessage = useCallback(() => {
-        setMessage('');
-        setMessageType('');
-    }, []);
+
 
     return {
         // State
@@ -1005,8 +991,7 @@ export const useInvoiceLogic = (
         isLoading,
         error,
         setError,
-        message,
-        messageType,
+
         saving,
         showSuccessModal,
         setShowSuccessModal,
@@ -1050,6 +1035,6 @@ export const useInvoiceLogic = (
         handleImport,
         handleApplyBillDiscount,
         handleSaveInvoice,
-        clearMessage
+
     };
 };

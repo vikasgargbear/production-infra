@@ -13,7 +13,7 @@ export { default as NotesSection } from './forms/NotesSection';
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';
 export { default as NumericInput } from './inputs/NumericInput';
-export { default as MonthYearPicker } from './inputs/MonthYearPicker';
+export { default as MonthYearPicker } from './forms/MonthYearPicker';
 
 // Display Components
 export { DataTable } from './display/DataTable';

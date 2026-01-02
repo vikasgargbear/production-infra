@@ -442,7 +442,8 @@ export interface User {
 }
 
 export interface LoginResponse {
-  access_token: string;
+  access_token?: string;
+  token?: string; // Legacy/Alternative support
   token_type: 'bearer';
   user: User;
 }
@@ -456,5 +457,42 @@ export interface Organization {
   fssai_license?: string;
   address: Address;
   subscription_plan: string;
+
   features: Record<string, boolean>;
+}
+
+export interface Role {
+  role_id: number;
+  name: string;
+  description?: string;
+  is_system_role: boolean;
+  permissions: string[];
+  created_at?: string;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password?: string;
+  full_name: string;
+  role_id?: number;
+  role?: string;
+}
+
+export interface UpdateUserRequest extends Partial<CreateUserRequest> {
+  status?: 'active' | 'inactive';
+}
+
+export interface PasswordUpdate {
+  current_password?: string;
+  new_password: string;
+  confirm_password?: string;
+}
+
+export interface LoginCredentials {
+  username?: string;
+  email?: string;
+  password?: string;
+  provider?: string;
+  token?: string;
 }
