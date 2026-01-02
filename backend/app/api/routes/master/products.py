@@ -412,7 +412,7 @@ async def get_all_products_with_batches(
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.generic_name,
                 p.manufacturer, p.hsn_code, p.gst_percent,
-                p.category, p.category_id, p.product_type_id,
+                p.category_id, p.product_type_id,
                 p.mrp_per_unit, p.sale_price_per_unit, p.cost_per_unit,
                 p.is_active, p.requires_prescription, p.is_narcotic,
                 p.pack_size, p.pack_unit, p.base_unit,
