@@ -65,12 +65,16 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Export apiHelpers for modules that use them
 export const apiHelpers = {
   get: (url: string, config?: any) => {
-    // CRITICAL FIX: Ensure trailing slash for FastAPI routes
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    return apiClient.get(urlWithSlash, config);
+    // Note: Don't add trailing slash for GET with params - causes redirect issues
+    // FastAPI redirect_slashes + params creates /path/?x=1 -> /path?x=1 which breaks CORS
+    // Only add trailing slash if no params
+    let finalUrl = url;
+    if (!config?.params && !url.endsWith('/')) {
+      finalUrl = `${url}/`;
+    }
+    return apiClient.get(finalUrl, config);
   },
   post: (url: string, data?: any, config?: any) => {
     // CRITICAL FIX: Ensure trailing slash for FastAPI routes
