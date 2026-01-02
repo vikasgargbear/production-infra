@@ -3,7 +3,7 @@ import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building, X } from 'lu
 import { Customer } from '../../../types/models/customer';
 import { debounce } from 'lodash';
 import { AddNewButton } from '../ui';
-import localFirstService from '../../../services/offline/cache/localFirstService';
+import localSearchService from '../../../services/offline/search/localSearchService';
 
 /**
  * CustomerSearch Component Props
@@ -58,10 +58,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Initialize local-first service on mount
-  useEffect(() => {
-    localFirstService.initialize().catch(console.error);
-  }, []);
+  // localSearchService auto-initializes, no explicit init needed
 
   // Instant search using local-first service
   const performSearch = useCallback(async (query: string) => {
@@ -76,8 +73,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
     setIsLoading(true);
     try {
-      // // console.log('[CustomerSearch] Calling localFirstService.searchCustomers');
-      const results = await localFirstService.searchCustomers(query, { limit: 20 });
+      // // console.log('[CustomerSearch] Calling localSearchService.searchCustomers');
+      const results = await localSearchService.searchCustomers(query, { limit: 20 });
       // // console.log('[CustomerSearch] Got results:', results.length, results);
       setSearchResults(results as Customer[]);
 
@@ -318,8 +315,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               ref={(el) => (resultRefs.current[index] = el)}
               onClick={() => handleCustomerSelect(customer)}
               className={`p-3 border rounded-lg cursor-pointer transition-colors ${index === highlightedIndex
-                  ? 'bg-blue-50 border-blue-500 border-2'
-                  : 'border-gray-200 hover:bg-gray-50'
+                ? 'bg-blue-50 border-blue-500 border-2'
+                : 'border-gray-200 hover:bg-gray-50'
                 }`}
             >
               <div className="flex justify-between items-start">

@@ -3,7 +3,7 @@ import { Search, Package } from 'lucide-react';
 import { productAPI } from '../../../services/api';
 import BatchSelector from '../modals/BatchSelector';
 import { debounce } from '../../../utils/debounce';
-import localFirstService from '../../../services/offline/cache/localFirstService';
+import localSearchService from '../../../services/offline/search/localSearchService';
 import { mapProductToCanonical } from '../../../utils/productMapper';
 import { Product } from '../../../types/models/product';
 
@@ -56,18 +56,7 @@ const ProductSearchSimple = forwardRef<ProductSearchSimpleRef, ProductSearchSimp
             }
         }));
 
-        // Initialize local-first service on mount for instant search
-        useEffect(() => {
-            const initializeLocalFirst = async (): Promise<void> => {
-                try {
-                    await localFirstService.initialize();
-                } catch (error) {
-                    console.error('Failed to initialize local-first service:', error);
-                }
-            };
-
-            initializeLocalFirst();
-        }, []);
+        // localSearchService auto-initializes on first use, no explicit init needed
 
         // Instant search using local-first service
         const searchProducts = useCallback(
@@ -81,7 +70,7 @@ const ProductSearchSimple = forwardRef<ProductSearchSimpleRef, ProductSearchSimp
                 setLoading(true);
 
                 try {
-                    const results = await localFirstService.searchProducts(query, { limit: 20 });
+                    const results = await localSearchService.searchProducts(query, { limit: 20 });
 
                     // Map results to canonical format to ensure consistency
                     const transformedResults: Product[] = results.map(mapProductToCanonical);

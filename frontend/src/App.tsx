@@ -151,43 +151,17 @@ const AppContent = (): JSX.Element => {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Authentication handled by AuthContext - no manual initialization needed
 
-  // Sync products with batches when authenticated (for offline-first search)
-  useEffect(() => {
-    if (isAuthenticated && navigator.onLine) {
-      console.log('🔄 [LocalFirst] User authenticated - starting product sync...');
+  // NOTE: Product sync is handled by syncEngine.startAutoSync() which calls syncPullService internally
+  // No separate useEffect needed for product sync
 
-      // Import dynamically to avoid circular dependencies
-      import('./services/offline/cache/localFirstService').then(({ default: localFirstService }) => {
-        // Check if we need to sync (data older than 5 minutes)
-        if (localFirstService.needsSync()) {
-          console.log('🔄 [LocalFirst] Data stale - triggering full sync...');
-          localFirstService.syncProductsWithBatches({
-            fullSync: false,  // Delta sync if possible
-            pageSize: 100,
-            onProgress: (progress) => {
-              console.log(`📦 [LocalFirst] Sync progress: Page ${progress.page}/${progress.totalPages}, ${progress.productsSynced} products synced`);
-            }
-          }).then(result => {
-            if (result.success) {
-              console.log(`✅ [LocalFirst] Sync complete! ${result.productsSynced} products synced`);
-            } else {
-              console.warn('⚠️ [LocalFirst] Sync failed:', result.error);
-            }
-          });
-        } else {
-          console.log('✅ [LocalFirst] Data is fresh, skipping sync');
-        }
-      }).catch(err => {
-        console.warn('⚠️ [LocalFirst] Failed to load sync service:', err);
-      });
+  useEffect(() => {
+    // Only start auto-sync when authenticated
+    if (!isAuthenticated) {
+      console.log('[SyncEngine] Not authenticated, skipping auto-sync setup');
+      return;
     }
-  }, [isAuthenticated]);
 
-  useEffect(() => {
-    // OLD AUTH CODE REMOVED
-    // AuthContext automatically initializes from token on mount
-
-    // OFFLINE SYNC: Start auto-sync when app loads
+    // OFFLINE SYNC: Start auto-sync when authenticated AND online
     if (navigator.onLine) {
       console.log('🔄 [SyncEngine] Starting auto-sync (30s interval)');
       syncEngine.startAutoSync(30000); // Every 30 seconds
@@ -198,13 +172,8 @@ const AppContent = (): JSX.Element => {
       console.log('🌐 [SyncEngine] Back online - triggering sync');
       syncEngine.forceSync();
 
-      // Also sync products with batches for instant search
-      import('./services/offline/cache/localFirstService').then(({ default: localFirstService }) => {
-        console.log('🔄 [LocalFirst] Back online - syncing products...');
-        localFirstService.syncProductsWithBatches({ fullSync: false });
-      }).catch(err => {
-        console.warn('⚠️ [LocalFirst] Failed to sync on online:', err);
-      });
+      // syncEngine.forceSync already triggers syncPullService via triggerPullSync()
+      // No need for duplicate call here
     };
 
     window.addEventListener('online', handleOnline);
@@ -224,7 +193,7 @@ const AppContent = (): JSX.Element => {
       window.removeEventListener('navigate', handleNavigate as EventListener);
       syncEngine.stopAutoSync();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Component renderer - removed useCallback to reduce input lag
   const renderActiveComponent = (): JSX.Element => {

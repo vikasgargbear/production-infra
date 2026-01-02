@@ -1,6 +1,10 @@
 /**
- * Sync Engine for Offline Support
- * Handles syncing of local changes to backend
+ * Sync Engine (Push Service)
+ * 
+ * Handles PUSHING local changes TO the server.
+ * This processes the sync queue and uploads pending invoices, customers, etc.
+ * 
+ * For PULLING data FROM server, use syncPullService.
  */
 
 import offlineDB from '../core/offlineDatabase';
@@ -27,6 +31,7 @@ interface InvoiceData {
     _localId?: string;
     _syncStatus?: string;
     reserved_batches?: Array<{
+        product_id: string | number;
         batch_id: string | number;
         quantity: number;
     }>;
@@ -112,9 +117,12 @@ class SyncEngine {
     private retryTimeout: ReturnType<typeof setTimeout> | null = null;
     private maxRetries: number = 3;
     private retryDelay: number = 5000; // 5 seconds
+    private pullSyncInProgress: boolean = false;
 
     /**
-     * Start automatic sync (includes product sync for offline-first search)
+     * Start automatic sync
+     * - Pushes local changes to server (invoices, customers, etc.)
+     * - Triggers pull sync for products (via syncPullService)
      */
     startAutoSync(interval: number = 30000): void {
         if (this.syncInterval) {
@@ -131,56 +139,48 @@ class SyncEngine {
         if (navigator.onLine) {
             this.startSync();
 
-            // Also sync products with batches for offline-first search (with auth check)
-            this.syncProductsForOfflineFirst();
+            // Also trigger PULL sync for products (via syncPullService)
+            this.triggerPullSync();
         }
     }
 
-    private productSyncInProgress: boolean = false;
-
     /**
-     * Sync products with batches for offline-first search
-     * Uses the localFirstService for paginated bulk sync
-     * IMPORTANT: Only runs if user is authenticated
+     * Trigger pull sync via syncPullService
+     * Keeps push/pull logic separated
      */
-    private async syncProductsForOfflineFirst(): Promise<void> {
-        // Prevent concurrent syncs
-        if (this.productSyncInProgress) {
-            console.log('[SyncEngine] Product sync already in progress, skipping...');
+    private async triggerPullSync(): Promise<void> {
+        if (this.pullSyncInProgress) {
+            console.log('[SyncEngine] Pull sync already in progress');
             return;
         }
 
-        // Check if user is authenticated (has token)
         const token = localStorage.getItem('access_token');
         if (!token) {
-            console.log('[SyncEngine] User not authenticated, skipping product sync');
+            console.log('[SyncEngine] Not authenticated, skipping pull sync');
             return;
         }
 
-        this.productSyncInProgress = true;
+        this.pullSyncInProgress = true;
 
         try {
-            // Dynamic import to avoid circular dependencies
-            const { default: localFirstService } = await import('../cache/localFirstService');
+            // Use syncPullService for all pull operations
+            const { default: syncPullService } = await import('./syncPullService');
 
-            if (localFirstService.needsSync()) {
-                console.log('🔄 [SyncEngine] Triggering product sync for offline-first...');
-                const result = await localFirstService.syncProductsWithBatches({
-                    fullSync: false,
-                    pageSize: 100
-                });
+            if (syncPullService.needsSync()) {
+                console.log('🔄 [SyncEngine] Triggering pull sync...');
+                const result = await syncPullService.syncProducts({ fullSync: false });
                 if (result.success) {
-                    console.log(`✅ [SyncEngine] Product sync complete: ${result.productsSynced} products`);
+                    console.log(`✅ [SyncEngine] Pull sync complete: ${result.itemsSynced} products`);
                 } else {
-                    console.warn('⚠️ [SyncEngine] Product sync failed:', result.error);
+                    console.warn('⚠️ [SyncEngine] Pull sync failed:', result.error);
                 }
             } else {
-                console.log('[SyncEngine] Product data is fresh, skipping sync');
+                console.log('[SyncEngine] Data is fresh, skipping pull sync');
             }
         } catch (error) {
-            console.warn('[SyncEngine] Failed to sync products:', error);
+            console.warn('[SyncEngine] Pull sync failed:', error);
         } finally {
-            this.productSyncInProgress = false;
+            this.pullSyncInProgress = false;
         }
     }
 
@@ -431,7 +431,7 @@ class SyncEngine {
             // SUCCESS: Clear reserved quantities
             if (reserved_batches && Array.isArray(reserved_batches)) {
                 for (const reservation of reserved_batches) {
-                    await offlineDB.clearReservedQuantity(reservation.batch_id, reservation.quantity);
+                    await offlineDB.clearReservedQuantity(reservation.product_id, reservation.batch_id, reservation.quantity);
                 }
                 console.log(`✅ Cleared ${reserved_batches.length} batch reservations after successful sync`);
             }
@@ -439,7 +439,7 @@ class SyncEngine {
             // Update batch quantities from server response if available
             if (response.data?.updated_batches) {
                 for (const batchUpdate of response.data.updated_batches) {
-                    await offlineDB.updateBatchQuantity(batchUpdate.batch_id, batchUpdate.new_quantity);
+                    await offlineDB.updateBatchQuantity(batchUpdate.product_id, batchUpdate.batch_id, batchUpdate.new_quantity);
                 }
             }
 
@@ -582,11 +582,11 @@ class SyncEngine {
 
         toast.info('Starting sync...');
 
-        // Sync pending queue items
+        // Sync pending queue items (PUSH)
         const result = await this.startSync();
 
-        // Also sync products with batches for offline-first search
-        this.syncProductsForOfflineFirst();
+        // Also trigger data pull (products, etc.)
+        this.triggerPullSync();
 
         return result;
     }

@@ -1,6 +1,5 @@
 import { openDB, IDBPDatabase, DBSchema } from 'idb';
 import { SyncQueueManager } from './syncQueueManager';
-import { BatchManager } from './batchManager';
 import { CacheManager } from './cacheManager';
 import { SYNC_STATUS, SyncStats, SyncQueueItem } from '../types';
 
@@ -74,14 +73,12 @@ export interface OfflineSchema extends DBSchema {
 class OfflineDatabase {
     private db: IDBPDatabase<OfflineSchema> | null = null;
     public syncQueue: SyncQueueManager;
-    public batches: BatchManager;
     public cache: CacheManager;
 
     constructor() {
         // Managers take a getter for the DB to ensure it's initialized
         const getDb = () => this.init();
         this.syncQueue = new SyncQueueManager(getDb);
-        this.batches = new BatchManager(getDb);
         this.cache = new CacheManager(getDb);
     }
 
@@ -500,50 +497,111 @@ class OfflineDatabase {
             }
         }
     }
+    // ==================== BATCH HELPERS (Embedded in Products) ====================
+    // Batches are now embedded in products as product.batches[]
+    // These methods provide a consistent API for components
 
-    // Batch delegates
-    async getBatchesByProduct(productId: string | number) {
-        return this.batches.getBatchesByProduct(productId);
+    /**
+     * Get batches for a product (from embedded product.batches)
+     */
+    async getBatchesByProduct(productId: string | number): Promise<any[]> {
+        const product = await this.get('products', String(productId));
+        return product?.batches || [];
     }
 
-    async storeBatches(batches: any[]) {
-        return this.batches.storeBatches(batches);
+    /**
+     * Alias for getBatchesByProduct for backward compatibility
+     */
+    async getBatchesForProduct(productId: string | number): Promise<any[]> {
+        return this.getBatchesByProduct(productId);
     }
 
-    async clearBatchesForProduct(productId: string | number) {
-        return this.batches.clearBatchesForProduct(productId);
+    /**
+     * Store/update batches for a product (updates product.batches)
+     */
+    async storeBatches(batches: any[]): Promise<void> {
+        if (!batches || batches.length === 0) return;
+
+        // Group batches by product_id
+        const batchesByProduct = new Map<string, any[]>();
+        for (const batch of batches) {
+            const productId = String(batch.product_id);
+            if (!batchesByProduct.has(productId)) {
+                batchesByProduct.set(productId, []);
+            }
+            batchesByProduct.get(productId)!.push(batch);
+        }
+
+        // Update each product with its batches
+        for (const [productId, productBatches] of batchesByProduct) {
+            const product = await this.get('products', productId);
+            if (product) {
+                product.batches = productBatches;
+                product.updated_at = new Date().toISOString();
+                await this.update('products', product);
+            }
+        }
     }
 
-    async clearAllBatches() {
-        return this.batches.clearAllBatches();
+    /**
+     * Reserve batch quantity for offline invoice
+     * Updates product.batches[].quantity_reserved_offline
+     */
+    async reserveBatchQuantity(productId: string | number, batchId: string | number, quantity: number): Promise<{ success: boolean; error?: string; usable?: number }> {
+        const product = await this.get('products', String(productId));
+        if (!product || !product.batches) {
+            return { success: false, error: 'Product not found' };
+        }
+
+        const batch = product.batches.find((b: any) => String(b.batch_id) === String(batchId));
+        if (!batch) {
+            return { success: false, error: 'Batch not found' };
+        }
+
+        const available = batch.quantity_available || 0;
+        const reserved = batch.quantity_reserved_offline || 0;
+        const usable = available - reserved;
+
+        if (usable < quantity) {
+            return { success: false, error: `Insufficient stock. Available: ${usable}`, usable };
+        }
+
+        batch.quantity_reserved_offline = reserved + quantity;
+        await this.update('products', product);
+
+        console.log(`[OfflineDB] Reserved ${quantity} units on batch ${batchId}`);
+        return { success: true, usable: usable - quantity };
     }
 
-    async reserveBatchQuantity(batchId: string | number, quantity: number) {
-        return this.batches.reserveBatchQuantity(batchId, quantity);
+    /**
+     * Clear reserved quantity after sync completes
+     */
+    async clearReservedQuantity(productId: string | number, batchId: string | number, quantity: number): Promise<void> {
+        const product = await this.get('products', String(productId));
+        if (!product || !product.batches) return;
+
+        const batch = product.batches.find((b: any) => String(b.batch_id) === String(batchId));
+        if (!batch) return;
+
+        batch.quantity_reserved_offline = Math.max(0, (batch.quantity_reserved_offline || 0) - quantity);
+        await this.update('products', product);
     }
 
-    async getBatchesForProduct(productId: string | number) {
-        return this.batches.getBatchesByProduct(productId);
-    }
+    /**
+     * Update batch quantity from server response
+     */
+    async updateBatchQuantity(productId: string | number, batchId: string | number, newQuantity: number): Promise<void> {
+        const product = await this.get('products', String(productId));
+        if (!product || !product.batches) return;
 
-    async getBatchUsableQuantity(batchId: string | number) {
-        return this.batches.getBatchUsableQuantity(batchId);
-    }
-
-
-
-    async getBatchesWithReservations() {
-        return this.batches.getBatchesWithReservations();
-    }
-
-    async clearReservedQuantity(batchId: string | number, quantity: number) {
-        return this.batches.clearReservedQuantity(batchId, quantity);
-    }
-
-    async updateBatchQuantity(batchId: string | number, newQuantity: number) {
-        return this.batches.updateBatchQuantity(batchId, newQuantity);
+        const batch = product.batches.find((b: any) => String(b.batch_id) === String(batchId));
+        if (batch) {
+            batch.quantity_available = newQuantity;
+            await this.update('products', product);
+        }
     }
 }
+
 
 // Export singleton instance
 const offlineDB = new OfflineDatabase();

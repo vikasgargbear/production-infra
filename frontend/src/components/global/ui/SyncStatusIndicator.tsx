@@ -1,56 +1,58 @@
 /**
  * Sync Status Indicator
  * Shows real-time sync status for offline-first data layer
+ * 
+ * Uses syncPullService for status (not localFirstService)
  */
 
 import React, { useState, useEffect } from 'react';
 import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
-import localFirstService from '../../../services/offline/cache/localFirstService';
+import syncPullService from '../../../services/offline/sync/syncPullService';
 
 interface SyncStatus {
-  initialized: boolean;
-  syncing: boolean;
   lastSyncTime: number | null;
   isOnline: boolean;
+  productCount: number;
+  customerCount: number;
 }
 
 interface SyncEvent {
-  status: 'seeded' | 'syncing' | 'synced' | 'error';
-  timestamp?: number;
-  productsUpdated?: number;
-  customersUpdated?: number;
+  status: 'syncing' | 'synced' | 'error';
+  type?: 'products' | 'customers';
+  count?: number;
   error?: any;
 }
 
 export const SyncStatusIndicator: React.FC = () => {
   const [status, setStatus] = useState<SyncStatus>({
-    initialized: false,
-    syncing: false,
-    lastSyncTime: null,
-    isOnline: navigator.onLine
+    lastSyncTime: syncPullService.getLastSyncTime(),
+    isOnline: navigator.onLine,
+    productCount: 0,
+    customerCount: 0
   });
-  const [lastSync, setLastSync] = useState<SyncEvent | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastEvent, setLastEvent] = useState<SyncEvent | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    // Initialize and get initial status
-    const initStatus = localFirstService.getSyncStatus();
-    setStatus(initStatus);
+    // Get initial status
+    syncPullService.getStatus().then(setStatus);
 
     // Listen for sync events
-    const unsubscribe = localFirstService.onSyncStatusChange((event: SyncEvent) => {
-      setLastSync(event);
+    const unsubscribe = syncPullService.onSyncEvent((event: SyncEvent) => {
+      setLastEvent(event);
+      setIsSyncing(event.status === 'syncing');
 
-      // Update status
-      const newStatus = localFirstService.getSyncStatus();
-      setStatus(newStatus);
+      if (event.status === 'synced') {
+        syncPullService.getStatus().then(setStatus);
+      }
     });
 
     // Listen for online/offline events
     const handleOnline = () => {
       setStatus(prev => ({ ...prev, isOnline: true }));
       // Trigger sync when coming online
-      localFirstService.syncNow().catch(() => { });
+      syncPullService.syncProducts({ fullSync: false }).catch(() => { });
     };
 
     const handleOffline = () => {
@@ -68,14 +70,14 @@ export const SyncStatusIndicator: React.FC = () => {
   }, []);
 
   const handleManualSync = () => {
-    localFirstService.syncNow();
+    syncPullService.syncProducts({ fullSync: false });
   };
 
   const getStatusColor = () => {
     if (!status.isOnline) return 'text-gray-400';
-    if (status.syncing) return 'text-blue-500 animate-pulse';
-    if (lastSync?.status === 'error') return 'text-red-500';
-    if (lastSync?.status === 'synced') return 'text-green-500';
+    if (isSyncing) return 'text-blue-500 animate-pulse';
+    if (lastEvent?.status === 'error') return 'text-red-500';
+    if (lastEvent?.status === 'synced') return 'text-green-500';
     return 'text-gray-500';
   };
 
@@ -83,13 +85,13 @@ export const SyncStatusIndicator: React.FC = () => {
     if (!status.isOnline) {
       return <CloudOff className="w-4 h-4" />;
     }
-    if (status.syncing) {
+    if (isSyncing) {
       return <RefreshCw className="w-4 h-4 animate-spin" />;
     }
-    if (lastSync?.status === 'error') {
+    if (lastEvent?.status === 'error') {
       return <AlertCircle className="w-4 h-4" />;
     }
-    if (lastSync?.status === 'synced') {
+    if (lastEvent?.status === 'synced') {
       return <CheckCircle2 className="w-4 h-4" />;
     }
     return <Cloud className="w-4 h-4" />;
@@ -97,9 +99,9 @@ export const SyncStatusIndicator: React.FC = () => {
 
   const getStatusText = () => {
     if (!status.isOnline) return 'Offline';
-    if (status.syncing) return 'Syncing...';
-    if (lastSync?.status === 'error') return 'Sync Error';
-    if (lastSync?.status === 'synced' && status.lastSyncTime) {
+    if (isSyncing) return 'Syncing...';
+    if (lastEvent?.status === 'error') return 'Sync Error';
+    if (status.lastSyncTime) {
       const minutes = Math.floor((Date.now() - status.lastSyncTime) / 60000);
       if (minutes === 0) return 'Just synced';
       if (minutes < 60) return `Synced ${minutes}m ago`;
@@ -107,20 +109,6 @@ export const SyncStatusIndicator: React.FC = () => {
       return `Synced ${hours}h ago`;
     }
     return 'Ready';
-  };
-
-  const formatLastSyncDetails = () => {
-    if (!lastSync) return null;
-
-    const parts: string[] = [];
-    if (lastSync.productsUpdated !== undefined) {
-      parts.push(`${lastSync.productsUpdated} products`);
-    }
-    if (lastSync.customersUpdated !== undefined) {
-      parts.push(`${lastSync.customersUpdated} customers`);
-    }
-
-    return parts.length > 0 ? parts.join(', ') : 'No updates';
   };
 
   return (
@@ -147,11 +135,11 @@ export const SyncStatusIndicator: React.FC = () => {
               <h3 className="text-sm font-semibold text-gray-900">Sync Status</h3>
               <button
                 onClick={handleManualSync}
-                disabled={status.syncing || !status.isOnline}
+                disabled={isSyncing || !status.isOnline}
                 className="p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Sync now"
               >
-                <RefreshCw className={`w-4 h-4 ${status.syncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               </button>
             </div>
 
@@ -170,16 +158,17 @@ export const SyncStatusIndicator: React.FC = () => {
               )}
             </div>
 
+            {/* Data Stats */}
+            <div className="text-xs text-gray-600">
+              <div className="font-medium mb-1">Local Data:</div>
+              <div>{status.productCount} products, {status.customerCount} customers</div>
+            </div>
+
             {/* Sync Info */}
             {status.lastSyncTime && (
               <div className="text-xs text-gray-600">
                 <div className="font-medium mb-1">Last Sync:</div>
                 <div>{new Date(status.lastSyncTime).toLocaleString()}</div>
-                {lastSync && (
-                  <div className="mt-1 text-gray-500">
-                    {formatLastSyncDetails()}
-                  </div>
-                )}
               </div>
             )}
 
@@ -190,19 +179,14 @@ export const SyncStatusIndicator: React.FC = () => {
                   <strong>Offline Mode:</strong> Searches use local data. Changes will sync when online.
                 </div>
               )}
-              {lastSync?.status === 'error' && (
+              {lastEvent?.status === 'error' && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded text-red-800">
                   <strong>Sync Error:</strong> Unable to sync. Will retry automatically.
                 </div>
               )}
-              {status.syncing && (
+              {isSyncing && (
                 <div className="p-2 bg-blue-50 border border-blue-200 rounded text-blue-800">
                   <strong>Syncing:</strong> Updating local data...
-                </div>
-              )}
-              {!status.initialized && status.isOnline && (
-                <div className="p-2 bg-gray-50 border border-gray-200 rounded text-gray-800">
-                  <strong>Initializing:</strong> Loading data for offline use...
                 </div>
               )}
             </div>

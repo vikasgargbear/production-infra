@@ -154,6 +154,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
 
         const productId = product.product_id || product.id;
+        if (!productId) {
+            console.warn('[BatchSelector] No product ID available');
+            setError('Product ID not available');
+            return;
+        }
         const cacheKey = getBatchCacheKey(productId);
 
         // LAYER 1: Memory cache (instant)
@@ -165,7 +170,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
 
         try {
-            const offlineBatches = await offlineDB.getBatchesByProduct(productId as number);
+            const offlineBatches = await offlineDB.getBatchesByProduct(productId);
             if (offlineBatches && offlineBatches.length > 0) {
                 console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
                 processBatches(offlineBatches);

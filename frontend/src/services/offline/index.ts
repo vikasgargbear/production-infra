@@ -1,33 +1,46 @@
 /**
  * Offline Services - Unified Exports
  * 
- * Import from this index for clean, consistent access to all offline functionality.
+ * Architecture:
+ * - PUSH: syncEngine        → Upload local changes to server
+ * - PULL: syncPullService   → Download data from server  
+ * - SEARCH: localSearchService → Query local IndexedDB
+ * - CORE: offlineDB, networkMonitor → Infrastructure
  * 
  * Usage:
- *   import { offlineDB, localFirstService, dataSyncService } from '@/services/offline';
+ *   import { syncPullService, localSearchService, syncEngine } from '@/services/offline';
  */
 
-// Core Infrastructure
+// ==================== CORE INFRASTRUCTURE ====================
 export { default as offlineDB, SYNC_STATUS } from './core/offlineDatabase';
 export { default as networkMonitor } from './core/networkMonitor';
 
-// Synchronization Layer
-export { default as dataSyncService } from './sync/dataSyncService';
+// ==================== SYNC LAYER ====================
+// PUSH: Upload local changes to server (invoices, customers, etc.)
 export { default as syncEngine } from './sync/syncEngine';
 
-// Caching / Local-First Layer
-export { default as localFirstService } from './cache/localFirstService';
+// PULL: Download data from server (products, customers, batches)
+export { default as syncPullService } from './sync/syncPullService';
 
-// Document Services
+// ==================== SEARCH LAYER ====================
+// Local-first search on IndexedDB (products, customers)
+export { default as localSearchService } from './search/localSearchService';
+
+// ==================== DOCUMENT SERVICES ====================
 export { default as documentNumberGenerator, DOC_TYPES } from './documents/documentNumberGenerator';
 
-// Re-export types for external use
+// ==================== TYPE EXPORTS ====================
 export type {
     SyncResult,
-    TransformedProduct,
-    TransformedBatch,
-    TransformedCustomer
-} from './sync/dataSyncService';
+    SyncProgress,
+    SyncStatus as PullSyncStatus
+} from './sync/syncPullService';
+
+export type {
+    SearchOptions,
+    ProductSearchResult,
+    CustomerSearchResult
+} from './search/localSearchService';
 
 export type {
     SyncResults,
