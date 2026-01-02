@@ -28,7 +28,7 @@ import { challansApi as challansApiModule } from '../../services/api';
 import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 import ImportFromDocumentModal from './components/ImportFromDocumentModal';
-import documentNumberService from '../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 
 // Function to convert number to words
 const numberToWords = (num) => {
@@ -116,7 +116,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   // Generate order number using document number service
   const generateOrderNumber = async () => {
     try {
-      const orderNumber = await documentNumberService.generateSalesOrderNumber();
+      const orderNumber = await documentNumberGenerator.generateSalesOrderNumber();
       setOrder(prev => ({ ...prev, order_number: orderNumber }));
       return orderNumber;
     } catch (error) {

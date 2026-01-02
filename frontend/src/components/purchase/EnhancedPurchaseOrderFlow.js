@@ -17,7 +17,7 @@ import {
   MonthYearPicker,
   StandardDatePicker
 } from '../global';
-import documentNumberService from '../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 
 /**
@@ -66,7 +66,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   useEffect(() => {
     const generateAndSetPONumber = async () => {
       try {
-        const poNumber = await documentNumberService.generatePONumber();
+        const poNumber = await documentNumberGenerator.generatePONumber();
         setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
       } catch (error) {
         const fallbackNumber = `PO-${Date.now().toString().slice(-8)}`;

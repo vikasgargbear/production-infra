@@ -20,7 +20,7 @@ import {
   MonthYearPicker,
   SplitPayment
 } from '../global';
-import documentNumberService from '../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import { PURCHASE_CONFIG, formatCurrency } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
@@ -88,7 +88,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   useEffect(() => {
     const generateAndSetPurchaseNumber = async () => {
       try {
-        const purchaseNumber = await documentNumberService.generatePurchaseNumber();
+        const purchaseNumber = await documentNumberGenerator.generatePurchaseNumber();
         setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
       } catch (error) {
         const date = new Date();

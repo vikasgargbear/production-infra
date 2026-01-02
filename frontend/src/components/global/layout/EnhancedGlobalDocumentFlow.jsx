@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ModuleHeader from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
-import documentNumberService from '../../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import { useToast } from '../ui/feedback/Toast';
 
 /**
@@ -175,9 +175,9 @@ const EnhancedGlobalDocumentFlow = ({
           let number = null;
 
           // Try to use the service if it exists
-          if (documentNumberService && documentNumberService[serviceMethod]) {
+          if (documentNumberGenerator && documentNumberGenerator[serviceMethod]) {
             try {
-              number = await documentNumberService[serviceMethod]();
+              number = await documentNumberGenerator[serviceMethod]();
             } catch (serviceError) {
               // Service failed, use fallback
             }

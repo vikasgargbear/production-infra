@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, ChevronLeft, Package, User, CreditCard, FileText, CheckCircle, Truck, Loader2, RefreshCw } from 'lucide-react';
 import { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } from '../services/api';
-import documentNumberService from '../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../services/offline/documents/documentNumberGenerator';
 import CustomerCreationB2B from './global/ui/forms/CustomerCreationB2B';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -431,7 +431,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       // Generate real invoice number only when saving
       let finalInvoice = { ...invoice };
       if (invoice.invoiceNo === 'INV-DRAFT' || invoice.invoiceNo.startsWith('INV-DRAFT')) {
-        const invoiceNumber = await documentNumberService.generateInvoiceNumber();
+        const invoiceNumber = await documentNumberGenerator.generateInvoiceNumber();
         finalInvoice.invoiceNo = invoiceNumber;
         setInvoice(prev => ({ ...prev, invoiceNo: invoiceNumber }));
       }

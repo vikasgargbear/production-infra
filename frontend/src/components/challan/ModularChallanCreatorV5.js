@@ -210,7 +210,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const generateChallanNumber = async () => {
     try {
       // Use the document number service for consistent numbering
-      const { generateChallanNumber } = await import('../../services/offline/documents/documentNumberService');
+      const { generateChallanNumber } = await import('../../services/offline/documents/documentNumberGenerator');
       const challanNumber = await generateChallanNumber();
 
       setChallan(prev => ({

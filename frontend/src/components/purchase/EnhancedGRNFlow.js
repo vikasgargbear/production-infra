@@ -17,7 +17,7 @@ import {
   MonthYearPicker,
   StandardDatePicker
 } from '../global';
-import documentNumberService from '../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 
 /**
@@ -68,7 +68,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
   useEffect(() => {
     const generateAndSetGRNNumber = async () => {
       try {
-        const grnNumber = await documentNumberService.generateGRNNumber();
+        const grnNumber = await documentNumberGenerator.generateGRNNumber();
         setGrn(prev => ({ ...prev, grn_no: grnNumber }));
       } catch (error) {
         const fallbackNumber = `GRN-${Date.now().toString().slice(-8)}`;

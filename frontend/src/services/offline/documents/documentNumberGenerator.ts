@@ -302,7 +302,7 @@ class DocumentNumberGenerator {
     }
 
     // ==================== CONVENIENCE METHODS ====================
-    // These match documentNumberService API for easy migration
+    // These match documentNumberGenerator API for easy migration
 
     /** Generate Invoice Number */
     async generateInvoiceNumber(): Promise<string> {

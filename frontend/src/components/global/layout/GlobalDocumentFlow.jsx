@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ModuleHeader from '../ui/ModuleHeader';
-import documentNumberService from '../../../services/offline/documents/documentNumberService';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 
 /**
  * GlobalDocumentFlow - Universal layout component for all document flows
@@ -111,7 +111,7 @@ const GlobalDocumentFlow = ({
         try {
           setIsGenerating(true);
           const serviceMethod = config.serviceMethod;
-          const number = await documentNumberService[serviceMethod]();
+          const number = await documentNumberGenerator[serviceMethod]();
           setGeneratedNumber(number);
           onNumberGenerated?.(number);
         } catch (error) {
