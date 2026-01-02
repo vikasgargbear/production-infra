@@ -165,6 +165,21 @@ const AppContent = (): JSX.Element => {
     if (navigator.onLine) {
       console.log('🔄 [SyncEngine] Starting auto-sync (30s interval)');
       syncEngine.startAutoSync(30000); // Every 30 seconds
+
+      // ALSO: Trigger immediate sync on login to populate cache
+      console.log('🔄 [SyncPull] Triggering immediate sync on login...');
+      import('./services/offline/sync/syncPullService').then(({ default: syncPullService }) => {
+        syncPullService.syncProducts({ fullSync: false }).then(result => {
+          if (result.success) {
+            console.log(`✅ [SyncPull] Initial sync complete: ${result.itemsSynced} products`);
+          }
+        });
+        syncPullService.syncCustomers().then(result => {
+          if (result.success) {
+            console.log(`✅ [SyncPull] Customer sync complete: ${result.itemsSynced} customers`);
+          }
+        });
+      });
     }
 
     // OFFLINE SYNC: Trigger sync when coming back online

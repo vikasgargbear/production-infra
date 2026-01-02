@@ -79,9 +79,10 @@ class LocalSearchService {
         try {
             const allProducts = await offlineDB.getAll('products');
 
+            // If cache is empty, fallback to cloud API
             if (allProducts.length === 0) {
-                console.log('[LocalSearch] No products in cache');
-                return [];
+                console.log('[LocalSearch] No products in cache, falling back to API...');
+                return this.searchProductsFromCloud(query, limit);
             }
 
             console.log(`[LocalSearch] ⚡ Searching ${allProducts.length} products for: "${query}"`);
@@ -129,6 +130,23 @@ class LocalSearchService {
             return results;
         } catch (error) {
             console.error('[LocalSearch] Product search failed:', error);
+            // Fallback to cloud on error
+            return this.searchProductsFromCloud(query, limit);
+        }
+    }
+
+    /**
+     * Fallback: Search products from cloud API
+     */
+    private async searchProductsFromCloud(query: string, limit: number): Promise<ProductSearchResult[]> {
+        try {
+            const { productAPI } = await import('../../api');
+            const response = await productAPI.search({ query, limit });
+            const products = response.data?.products || response.data || [];
+            console.log(`[LocalSearch] ☁️ Found ${products.length} products from API`);
+            return products;
+        } catch (error) {
+            console.error('[LocalSearch] Cloud search failed:', error);
             return [];
         }
     }
@@ -155,9 +173,10 @@ class LocalSearchService {
         try {
             const allCustomers = await offlineDB.getAll('customers');
 
+            // If cache is empty, fallback to cloud API
             if (allCustomers.length === 0) {
-                console.log('[LocalSearch] No customers in cache');
-                return [];
+                console.log('[LocalSearch] No customers in cache, falling back to API...');
+                return this.searchCustomersFromCloud(query, limit);
             }
 
             console.log(`[LocalSearch] ⚡ Searching ${allCustomers.length} customers for: "${query}"`);
@@ -200,6 +219,23 @@ class LocalSearchService {
             return results;
         } catch (error) {
             console.error('[LocalSearch] Customer search failed:', error);
+            // Fallback to cloud on error
+            return this.searchCustomersFromCloud(query, limit);
+        }
+    }
+
+    /**
+     * Fallback: Search customers from cloud API
+     */
+    private async searchCustomersFromCloud(query: string, limit: number): Promise<CustomerSearchResult[]> {
+        try {
+            const { customersApi } = await import('../../api');
+            const response = await customersApi.search({ query, limit });
+            const customers = response.data?.customers || response.data || [];
+            console.log(`[LocalSearch] ☁️ Found ${customers.length} customers from API`);
+            return customers;
+        } catch (error) {
+            console.error('[LocalSearch] Cloud customer search failed:', error);
             return [];
         }
     }
