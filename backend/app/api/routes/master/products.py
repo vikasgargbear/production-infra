@@ -18,7 +18,7 @@ from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, Te
 from ....core.org_context import get_org_context, OrgContext
 from ....core.api_utils import handle_error
 from ....core.permissions import PermissionChecker  # RBAC
-from ...services.product_service import ProductService  # Service layer
+from ...services.master.product_service import ProductService  # Service layer
 from ...schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 
 logger = logging.getLogger(__name__)

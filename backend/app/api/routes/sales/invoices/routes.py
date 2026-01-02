@@ -19,7 +19,7 @@ from ....core.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMetho
 from ...services.document_number_service import DocumentNumberService
 from ...services.gst_service import GSTService
 from ...services.inventory_service import InventoryService
-from ...services.invoice_service import InvoiceService
+from ...services.sales.invoice_service import InvoiceService
 from ...schemas.inventory.inventory import StockMovementCreate
 from ...schemas.sales.billing import (
     InvoiceCreateRequest, InvoiceItemCreate, 

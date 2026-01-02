@@ -25,7 +25,7 @@ from ...schemas.master.customer import (
     CustomerLedgerResponse, CustomerOutstandingResponse,
     PaymentRecord, PaymentResponse
 )
-from ...services.customer_service import CustomerService
+from ...services.master.customer_service import CustomerService
 
 logger = logging.getLogger(__name__)
 

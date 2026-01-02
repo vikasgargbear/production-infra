@@ -19,9 +19,9 @@ from ...schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
 )
-from ...services.order_service import OrderService
-from ...services.customer_service import CustomerService
-from ...services.invoice_service import InvoiceService
+from ...services.sales.order_service import OrderService
+from ...services.master.customer_service import CustomerService
+from ...services.sales.invoice_service import InvoiceService
 from ...services.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
