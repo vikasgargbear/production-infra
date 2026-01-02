@@ -1,14 +1,14 @@
 import React from 'react';
-import { 
-  Package, ArrowDownToLine, ArrowUpFromLine, 
+import {
+  Package, ArrowDownToLine, ArrowUpFromLine,
   BarChart3, ArrowRightLeft, Archive, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import StockMovement from '../stock/StockMovement';
-import StockTransfer from '../stock/StockTransfer';
-import CurrentStock from '../stock/CurrentStock';
-import BatchTracking from '../stock/BatchTracking';
-import EnhancedStockAdjustmentFlow from '../stock/EnhancedStockAdjustmentFlow';
+import StockMovement from './stock/StockMovement';
+import StockTransfer from './stock/StockTransfer';
+import CurrentStock from './stock/CurrentStock';
+import BatchTracking from './stock/BatchTracking';
+import EnhancedStockAdjustmentFlow from './stock/EnhancedStockAdjustmentFlow';
 
 interface StockHubProps {
   open?: boolean;
@@ -77,7 +77,7 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Stock Hub"
       subtitle="Manage inventory & warehouse"
       icon={Archive}

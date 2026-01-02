@@ -13,13 +13,13 @@ from sqlalchemy import text
 import logging
 import re
 
-from ..schemas.master.customer import (
+from ...schemas.master.customer import (
     CustomerLedgerEntry, CustomerLedgerResponse, OutstandingInvoice,
     CustomerOutstandingResponse, PaymentRecord,
     PaymentResponse, CustomerCreate, CustomerResponse
 )
-from .gst_service import GSTService
-from .document_number_service import DocumentNumberService
+from ..gst_service import GSTService
+from ..document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 

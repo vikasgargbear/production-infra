@@ -9,9 +9,9 @@ from sqlalchemy import text
 import logging
 from uuid import UUID
 
-from .document_number_service import DocumentNumberService
-from .gst_service import GSTService
-from ...core.constants import (
+from ..document_number_service import DocumentNumberService
+from ..gst_service import GSTService
+from ....core.constants import (
     InvoiceType, InvoiceStatus, InvoicePaymentStatus, OrderStatus
 )
 
@@ -272,7 +272,7 @@ class InvoiceService:
         Returns:
             Dict with all calculated totals
         """
-        from ..routes.enterprise_calculations import calculate_line_item
+        from ...shared.calculations import calculate_line_item
         
         subtotal = 0
         total_item_discount = 0
