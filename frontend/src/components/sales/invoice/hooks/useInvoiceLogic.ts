@@ -824,6 +824,21 @@ export const useInvoiceLogic = (
                 await offlineDB.add('invoices', offlineInvoice);
                 await offlineDB.addToSyncQueue('invoices', tempId, 'create', offlineInvoice as unknown as null);
 
+                // OFFLINE-FIRST: Immediately deduct stock from local IndexedDB
+                // This ensures accurate stock levels even when offline
+                const stockDeductions = invoice.items
+                    .filter(item => item.batch_id && item.quantity > 0)
+                    .map(item => ({
+                        product_id: item.product_id,
+                        batch_id: item.batch_id!,
+                        quantity: parseFloat(String(item.quantity)) + parseFloat(String(item.free_quantity || 0))
+                    }));
+
+                if (stockDeductions.length > 0) {
+                    await offlineDB.deductStockLocally(stockDeductions);
+                    console.log('[Invoice] ✅ Local stock updated (offline mode)');
+                }
+
                 toast.success('✅ Invoice saved offline - Will sync when online', {
                     autoClose: 5000,
                 });
@@ -876,17 +891,27 @@ export const useInvoiceLogic = (
             setShowSuccessModal(true);
             localStorage.removeItem('invoice_draft');
 
-            // CRITICAL: Trigger product sync to update local stock levels after invoice creation
-            // This ensures the next invoice sees the updated available_quantity
-            try {
-                console.log('[Invoice] Triggering product sync to update local stock...');
-                const syncPullService = (await import('../../../../services/offline/sync/syncPullService')).default;
-                // Use delta sync to only get updated products (the batch trigger handles updated_at propagation)
-                await syncPullService.syncProducts(100, false);
-                console.log('[Invoice] ✅ Stock levels updated in local cache');
-            } catch (syncError) {
-                console.warn('[Invoice] Could not sync stock (will update on next full sync):', syncError);
+            // OFFLINE-FIRST: Immediately deduct stock from local IndexedDB
+            // Works even if sync fails - ensures accurate local quantities
+            const stockDeductions = invoice.items
+                .filter(item => item.batch_id && item.quantity > 0)
+                .map(item => ({
+                    product_id: item.product_id,
+                    batch_id: item.batch_id!,
+                    quantity: parseFloat(String(item.quantity)) + parseFloat(String(item.free_quantity || 0))
+                }));
+
+            if (stockDeductions.length > 0) {
+                await offlineDB.deductStockLocally(stockDeductions);
+                console.log('[Invoice] ✅ Local stock updated immediately');
             }
+
+            // OPTIONAL: Try to sync from server for full accuracy (non-blocking)
+            // This runs in background and doesn't block the success flow
+            import('../../../../services/offline/sync/syncPullService')
+                .then(module => module.default.syncProducts(100, false))
+                .then(() => console.log('[Invoice] ✅ Background sync complete'))
+                .catch(err => console.log('[Invoice] Background sync skipped:', err.message));
 
             toast.success('✅ Invoice created successfully');
         } catch (error) {

@@ -95,8 +95,8 @@ export function useSalesTransaction<
     const loadEmployees = useCallback(async () => {
         setLoadingEmployees(true);
         try {
-            const response = await employeesAPI.getAll({ is_active: true, limit: 100 });
-            if (response.success) {
+            const response = await employeesAPI.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
+            if (response.success || response.data) {
                 setEmployees(response.data || []);
             }
         } catch (error) {

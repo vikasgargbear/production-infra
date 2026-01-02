@@ -477,6 +477,51 @@ class OfflineDatabase {
         await tx.done;
     }
 
+    /**
+     * Deduct stock locally (for offline-first invoice creation)
+     * Updates quantity_available in embedded batches within product records
+     * 
+     * @param deductions Array of { product_id, batch_id, quantity }
+     */
+    async deductStockLocally(deductions: Array<{ product_id: string | number; batch_id: string | number; quantity: number }>): Promise<void> {
+        if (!deductions || deductions.length === 0) return;
+
+        const db = await this.init();
+        const tx = db.transaction('products', 'readwrite');
+        const store = tx.objectStore('products');
+
+        for (const { product_id, batch_id, quantity } of deductions) {
+            try {
+                const product = await store.get(String(product_id));
+                if (!product || !product.batches) continue;
+
+                // Find and update the batch within the product
+                const batchIndex = product.batches.findIndex(
+                    (b: any) => String(b.batch_id) === String(batch_id)
+                );
+
+                if (batchIndex !== -1) {
+                    const currentQty = product.batches[batchIndex].quantity_available || 0;
+                    product.batches[batchIndex].quantity_available = Math.max(0, currentQty - quantity);
+
+                    // Also update product total_stock if present
+                    if (typeof product.total_stock === 'number') {
+                        product.total_stock = Math.max(0, product.total_stock - quantity);
+                    }
+
+                    product.updated_at = new Date().toISOString();
+                    await store.put(product);
+
+                    console.log(`${LOG_PREFIX} ✅ Deducted ${quantity} from product ${product_id}, batch ${batch_id}. New qty: ${product.batches[batchIndex].quantity_available}`);
+                }
+            } catch (err) {
+                console.warn(`${LOG_PREFIX} Could not deduct stock for product ${product_id}:`, err);
+            }
+        }
+
+        await tx.done;
+    }
+
     // Bulk operations for initial data load
     async bulkLoad(storeName: any, data: any[]): Promise<void> {
         const db = await this.init();
