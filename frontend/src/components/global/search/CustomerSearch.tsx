@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import { Building, User, Phone, MapPin, Mail, Trash2 } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
 import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
@@ -54,18 +54,20 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   },
   ref
 ) => {
-  // Customer search function using local-first service
-  const searchCustomers = async (query: string): Promise<Customer[]> => {
+  // Memoized search function to prevent EntitySearch debounce recreation
+  // This is CRITICAL - without useCallback, the searchFn changes on every render,
+  // causing the debounced performSearch in EntitySearch to reset its timeout
+  const searchCustomers = useCallback(async (query: string): Promise<Customer[]> => {
     const results = await localSearchService.searchCustomers(query, { limit: 20 });
     return results as Customer[];
-  };
+  }, []);
 
   // Render customer result in dropdown
   const renderCustomerResult = (customer: Customer, isHighlighted: boolean, index: number) => (
     <div
       className={`p-3 cursor-pointer transition-colors ${isHighlighted
-          ? 'bg-blue-50 border-l-4 border-l-blue-500'
-          : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+        ? 'bg-blue-50 border-l-4 border-l-blue-500'
+        : 'hover:bg-gray-50 border-l-4 border-l-transparent'
         }`}
     >
       <div className="flex justify-between items-start">

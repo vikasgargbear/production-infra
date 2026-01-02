@@ -1,0 +1,401 @@
+// Fast search implementation with caching and indexing
+
+interface CacheEntry {
+    data: any;
+    timestamp: number;
+}
+
+interface ScoredResult {
+    item: any;
+    score: number;
+}
+
+interface SmartSearchOptions {
+    useLocalSearch?: boolean;
+    limit?: number;
+    minQueryLength?: number;
+    preloadIfEmpty?: boolean;
+}
+
+class SearchCache {
+    private cache: Map<string, CacheEntry>;
+    private indexes: Map<string, Map<string, Set<any>>>;
+    private maxAge: number;
+    private preloadedData: Map<string, any[]>;
+    private pendingRequests: Map<string, Promise<any>>; // Prevent duplicate requests
+
+    constructor(maxAge: number = 10 * 60 * 1000) { // 10 minutes
+        this.cache = new Map();
+        this.indexes = new Map();
+        this.maxAge = maxAge;
+        this.preloadedData = new Map();
+        this.pendingRequests = new Map();
+    }
+
+    // Generate cache key from search params
+    getCacheKey(prefix: string, params: any): string {
+        return `${prefix}:${JSON.stringify(params || {})}`;
+    }
+
+    // Get cached data if valid
+    get(prefix: string, params: any): any {
+        const key = this.getCacheKey(prefix, params);
+        const cached = this.cache.get(key);
+
+        if (!cached) return null;
+
+        // Check if cache is expired
+        if (Date.now() - cached.timestamp > this.maxAge) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        return cached.data;
+    }
+
+    // Set cache data
+    set(prefix: string, params: any, data: any): void {
+        const key = this.getCacheKey(prefix, params);
+        this.cache.set(key, {
+            data,
+            timestamp: Date.now()
+        });
+    }
+
+    // Set preloaded items (alias for createIndex + storing in preloadedData)
+    setItems(type: string, data: any[]): void {
+        if (!data || !Array.isArray(data)) return;
+
+        // Store in preloaded data
+        this.preloadedData.set(type, data);
+
+        // Create search index
+        this.createIndex(type, data);
+
+        // Also cache as "all" for quick access
+        this.set(type, 'all', data);
+    }
+
+    // Create search index for fast client-side search
+    createIndex(type: string, data: any[]): Map<string, Set<any>> {
+        const index = new Map<string, Set<any>>();
+
+        data.forEach(item => {
+            // Index by various fields for fast lookup
+            const searchableFields = this.getSearchableFields(type, item);
+
+            searchableFields.forEach(field => {
+                if (field) {
+                    // Create tokens for search
+                    const tokens = this.tokenize(String(field).toLowerCase());
+                    tokens.forEach(token => {
+                        if (!index.has(token)) {
+                            index.set(token, new Set());
+                        }
+                        index.get(token)!.add(item);
+                    });
+                }
+            });
+        });
+
+        this.indexes.set(type, index);
+        return index;
+    }
+
+    // Get searchable fields based on type
+    getSearchableFields(type: string, item: any): (string | undefined)[] {
+        switch (type) {
+            case 'customers':
+                return [
+                    item.customer_name,
+                    item.phone,
+                    item.email,
+                    item.city,
+                    item.state,
+                    item.gst_number
+                ].filter(Boolean);
+
+            case 'products':
+                return [
+                    item.product_name,
+                    item.product_code,
+                    item.hsn_code,
+                    item.category,
+                    item.manufacturer
+                ].filter(Boolean);
+
+            case 'suppliers':
+                return [
+                    item.supplier_name,
+                    item.phone,
+                    item.email,
+                    item.city,
+                    item.state,
+                    item.gst_number
+                ].filter(Boolean);
+
+            default:
+                // Filter for strings only
+                return Object.values(item).filter(val => typeof val === 'string') as string[];
+        }
+    }
+
+    // Tokenize string for indexing
+    tokenize(str: string): Set<string> {
+        const tokens = new Set<string>();
+
+        // Add full string
+        tokens.add(str);
+
+        // Add each word
+        str.split(/\s+/).forEach(word => {
+            if (word.length >= 2) {
+                tokens.add(word);
+                // Add prefixes for autocomplete
+                for (let i = 2; i <= word.length; i++) {
+                    tokens.add(word.substring(0, i));
+                }
+            }
+        });
+
+        return tokens;
+    }
+
+    // Fast client-side search
+    searchLocal(type: string, query: string, limit: number = 20): any[] {
+        if (!query || query.length < 2) {
+            // Return most recent/popular items if no query
+            const allData = this.preloadedData.get(type) || [];
+            return Array.isArray(allData) ? allData.slice(0, limit) : [];
+        }
+
+        const index = this.indexes.get(type);
+        if (!index) {
+            return [];
+        }
+
+        const queryLower = query.toLowerCase();
+        const results = new Set<any>();
+
+        // Search in index
+        const tokens = this.tokenize(queryLower);
+        tokens.forEach(token => {
+            const matches = index.get(token);
+            if (matches) {
+                matches.forEach(item => results.add(item));
+            }
+        });
+
+        // Score and sort results
+        const scoredResults: ScoredResult[] = Array.from(results).map(item => {
+            const score = this.calculateScore(type, item, queryLower);
+            return { item, score };
+        });
+
+        // Sort by score and return top results
+        return scoredResults
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit)
+            .map(result => result.item);
+    }
+
+    // Calculate relevance score
+    calculateScore(type: string, item: any, query: string): number {
+        let score = 0;
+        const fields = this.getSearchableFields(type, item);
+
+        fields.forEach(field => {
+            if (field) {
+                const fieldLower = String(field).toLowerCase();
+
+                // Exact match
+                if (fieldLower === query) {
+                    score += 100;
+                }
+                // Starts with query
+                else if (fieldLower.startsWith(query)) {
+                    score += 50;
+                }
+                // Contains query
+                else if (fieldLower.includes(query)) {
+                    score += 20;
+                }
+            }
+        });
+
+        return score;
+    }
+
+    // Preload common data
+    async preloadData(type: string, fetchFunction: () => Promise<any>): Promise<any> {
+        try {
+            // Check if already preloading
+            if (this.pendingRequests.has(type)) {
+                return this.pendingRequests.get(type);
+            }
+
+            // Create promise for this request
+            const promise = fetchFunction().then(response => {
+                // Handle different response structures
+                let data: any[] = [];
+                if (response && response.data) {
+                    if (Array.isArray(response.data)) {
+                        data = response.data;
+                    } else if (response.data.results && Array.isArray(response.data.results)) {
+                        data = response.data.results;
+                    } else if (response.data.data && Array.isArray(response.data.data)) {
+                        data = response.data.data;
+                    } else if (response.data[type] && Array.isArray(response.data[type])) {
+                        data = response.data[type];
+                    }
+                }
+
+                // Store in preloaded data
+                this.preloadedData.set(type, data);
+
+                // Create search index
+                this.createIndex(type, data);
+
+                // Remove from pending
+                this.pendingRequests.delete(type);
+
+                return data;
+            }).catch(error => {
+                this.pendingRequests.delete(type);
+                return [];
+            });
+
+            // Store pending request
+            this.pendingRequests.set(type, promise);
+
+            return promise;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    // Get preloaded data
+    getPreloadedData(type: string): any[] {
+        const data = this.preloadedData.get(type) || [];
+        return Array.isArray(data) ? data : [];
+    }
+
+    // Clear cache
+    clear(): void {
+        this.cache.clear();
+        this.indexes.clear();
+        this.preloadedData.clear();
+        this.pendingRequests.clear();
+    }
+
+    // Clear specific type
+    clearType(type: string): void {
+        // Clear cache entries for this type
+        const keysToDelete: string[] = [];
+        for (const key of this.cache.keys()) {
+            if (key.startsWith(type + ':')) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => this.cache.delete(key));
+
+        // Clear index and preloaded data
+        this.indexes.delete(type);
+        this.preloadedData.delete(type);
+    }
+
+    // Add item to preloaded data and update index
+    addItem(type: string, item: any): void {
+        // Add to preloaded data
+        const currentData = this.preloadedData.get(type) || [];
+        const updatedData = [item, ...currentData]; // Add to beginning
+        this.preloadedData.set(type, updatedData);
+
+        // Update search index
+        const index = this.indexes.get(type) || new Map<string, Set<any>>();
+        const searchableFields = this.getSearchableFields(type, item);
+
+        searchableFields.forEach(field => {
+            if (field) {
+                const tokens = this.tokenize(String(field).toLowerCase());
+                tokens.forEach(token => {
+                    if (!index.has(token)) {
+                        index.set(token, new Set());
+                    }
+                    index.get(token)!.add(item);
+                });
+            }
+        });
+
+        this.indexes.set(type, index);
+    }
+}
+
+// Create singleton instance
+export const searchCache = new SearchCache();
+
+// Helper to perform cached search with fallback to API
+export const smartSearch = async (
+    type: string,
+    query: string,
+    apiSearchFunction: (q: string) => Promise<any>,
+    options: SmartSearchOptions = {}
+): Promise<any[]> => {
+    const {
+        useLocalSearch = true,
+        limit = 20,
+        minQueryLength = 2,
+        preloadIfEmpty = true
+    } = options;
+
+    // If query is too short, return empty or preloaded data
+    if (!query || query.length < minQueryLength) {
+        if (preloadIfEmpty) {
+            const preloaded = searchCache.getPreloadedData(type);
+            return Array.isArray(preloaded) ? preloaded.slice(0, limit) : [];
+        }
+        return [];
+    }
+
+    // Try local search first if enabled and data is preloaded
+    const preloadedData = searchCache.getPreloadedData(type);
+    if (useLocalSearch && Array.isArray(preloadedData) && preloadedData.length > 0) {
+        const localResults = searchCache.searchLocal(type, query, limit);
+        if (Array.isArray(localResults) && localResults.length > 0) {
+            return localResults;
+        }
+    }
+
+    // Check API cache
+    const cached = searchCache.get(type, { search: query });
+    if (cached) {
+        return cached;
+    }
+
+    // Fallback to API search
+    try {
+        const response = await apiSearchFunction(query);
+        // Handle different API response structures
+        let results: any[] = [];
+        if (response && response.data) {
+            if (Array.isArray(response.data)) {
+                results = response.data;
+            } else if (response.data.results && Array.isArray(response.data.results)) {
+                results = response.data.results;
+            } else if (response.data.data && Array.isArray(response.data.data)) {
+                results = response.data.data;
+            } else if (response.data[type] && Array.isArray(response.data[type])) {
+                results = response.data[type];
+            }
+        }
+
+        // Cache the results
+        searchCache.set(type, { search: query }, results);
+
+        return results;
+    } catch (error) {
+        return [];
+    }
+};
+
+export default searchCache;

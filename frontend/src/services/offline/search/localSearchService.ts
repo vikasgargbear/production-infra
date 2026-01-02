@@ -184,6 +184,10 @@ class LocalSearchService {
      * @param query - Search term (min 2 characters)
      * @param options - Search options (limit)
      * @returns Array of matching customers
+     * 
+     * NOTE: Unlike products, if cache is empty we return [] immediately
+     * to avoid blocking the UI with slow/failing API calls.
+     * Customers will be available after sync completes.
      */
     async searchCustomers(query: string, options: SearchOptions = {}): Promise<CustomerSearchResult[]> {
         const { limit = 20 } = options;
@@ -200,10 +204,11 @@ class LocalSearchService {
         try {
             const allCustomers = await offlineDB.getAll('customers');
 
-            // If cache is empty, fallback to cloud API
+            // If cache is empty, return empty immediately (don't block UI with API calls)
+            // Customers will be populated after sync completes
             if (allCustomers.length === 0) {
-                console.log('[LocalSearch] No customers in cache, falling back to API...');
-                return this.searchCustomersFromCloud(query, limit);
+                console.log('[LocalSearch] No customers in cache - sync required. Returning empty.');
+                return [];
             }
 
             console.log(`[LocalSearch] ⚡ Searching ${allCustomers.length} customers for: "${query}"`);
@@ -246,8 +251,8 @@ class LocalSearchService {
             return results;
         } catch (error) {
             console.error('[LocalSearch] Customer search failed:', error);
-            // Fallback to cloud on error
-            return this.searchCustomersFromCloud(query, limit);
+            // Don't fallback to cloud - return empty to avoid UI blocking
+            return [];
         }
     }
 
