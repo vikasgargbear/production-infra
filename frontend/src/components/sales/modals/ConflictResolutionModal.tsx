@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { AlertTriangle, X, Edit, Trash2, Package, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
-import offlineDB from '../../services/offline/core/offlineDatabase';
-import syncEngine from '../../services/offline/sync/syncEngine';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 
 interface ConflictDetails {
     invoiceNumber?: string;

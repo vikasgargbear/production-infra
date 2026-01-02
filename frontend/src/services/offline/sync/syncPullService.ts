@@ -152,8 +152,11 @@ class SyncPullService {
                     since
                 });
 
-                const { products, total_pages, has_more } = response.data;
-                totalPages = total_pages || 1;
+                const { products, pagination } = response.data;
+                // Handle both flat and nested pagination structures
+                const total_pages = pagination?.total_pages || response.data.total_pages || 1;
+                const has_more = pagination?.has_more ?? response.data.has_more ?? false;
+                totalPages = total_pages;
 
                 if (products && products.length > 0) {
                     // Transform products for IndexedDB storage

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
-import ConflictResolutionModal from '../../sales/ConflictResolutionModal';
+import ConflictResolutionModal from '../../sales/modals/ConflictResolutionModal';
 
 // ==================== TYPE DEFINITIONS ====================
 
