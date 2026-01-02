@@ -154,7 +154,7 @@ class SyncEngine {
             return;
         }
 
-        const token = localStorage.getItem('access_token');
+        const token = localStorage.getItem('authToken');
         if (!token) {
             console.log('[SyncEngine] Not authenticated, skipping pull sync');
             return;

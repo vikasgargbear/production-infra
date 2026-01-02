@@ -87,9 +87,10 @@ class SyncPullService {
 
     /**
      * Check if user is authenticated (has token)
+     * Note: AuthContext stores token as 'authToken'
      */
     private isAuthenticated(): boolean {
-        return !!localStorage.getItem('access_token');
+        return !!localStorage.getItem('authToken');
     }
 
     // ==================== PRODUCT SYNC ====================
