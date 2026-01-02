@@ -5,8 +5,8 @@ import {
   X, Check, AlertCircle, RefreshCw, Search, Mail,
   Share2, Copy, MoreVertical, CheckCircle, Clock
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../global';
-import InvoiceApiService from '../../services/invoiceApiService';
+import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../../global';
+import InvoiceApiService from '../../../services/invoiceApiService';
 // Debug logger removed for production
 
 interface InvoiceListProps {
@@ -550,7 +550,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         const fullInvoice = response.data;
 
         // Use the print function for print dialog
-        const { printInvoice } = await import('../../utils/invoicePdfGenerator');
+        const { printInvoice } = await import('../../../utils/invoicePdfGenerator');
         printInvoice(fullInvoice);
       } else {
         alert('Failed to load invoice details. Please try again.');
@@ -570,7 +570,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         const fullInvoice = response.data;
 
         // Use the download function for direct PDF save
-        const { downloadInvoicePDF } = await import('../../utils/invoicePdfGenerator');
+        const { downloadInvoicePDF } = await import('../../../utils/invoicePdfGenerator');
         downloadInvoicePDF(fullInvoice);
       } else {
         alert('Failed to load invoice details. Please try again.');
@@ -875,8 +875,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                   ) : (
                     <>
                       <RefreshCw className={`w-4 h-4 transition-all duration-500 ${refreshing
-                          ? 'animate-spin text-white'
-                          : 'text-white group-hover:rotate-180'
+                        ? 'animate-spin text-white'
+                        : 'text-white group-hover:rotate-180'
                         }`} />
                       <span className="ml-2 text-white">Refresh</span>
                     </>

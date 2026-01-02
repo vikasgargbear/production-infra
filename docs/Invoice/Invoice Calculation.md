@@ -6,6 +6,26 @@
 
 ---
 
+## 🔗 Field Name Mapping (Database ↔ Frontend ↔ Backend)
+
+> All systems now use identical field names matching the database schema.
+
+| Database Column | Frontend (enterpriseCalculator) | Backend (invoice_service) | Status |
+|-----------------|--------------------------------|---------------------------|--------|
+| `subtotal_amount` | `subtotal_amount` | `subtotal_amount` | ✅ Aligned |
+| `discount_amount` | `discount_amount` | `discount_amount` | ✅ Aligned |
+| `scheme_discount` | `scheme_discount` | `scheme_discount` | ✅ Aligned |
+| `taxable_amount` | `taxable_amount` | `taxable_amount` | ✅ Aligned |
+| `total_tax_amount` | `total_tax_amount` | `total_tax_amount` | ✅ Aligned |
+| `cgst_amount` | `cgst_amount` | `cgst_amount` | ✅ Aligned |
+| `sgst_amount` | `sgst_amount` | `sgst_amount` | ✅ Aligned |
+| `igst_amount` | `igst_amount` | `igst_amount` | ✅ Aligned |
+| `freight_charges` | `freight_charges` | `freight_charges` | ✅ Aligned |
+| `round_off_amount` | `round_off_amount` | `round_off_amount` | ✅ Aligned |
+| `final_amount` | `final_amount` | `final_amount` | ✅ Aligned |
+
+---
+
 ## 📊 Invoice-Level Totals
 
 These fields match the `sales.invoices` table columns:

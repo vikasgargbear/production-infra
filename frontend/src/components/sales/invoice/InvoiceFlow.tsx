@@ -1,16 +1,16 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import { useCompany } from '../../contexts/CompanyContext';
-import useEscapeKey from '../../hooks/useEscapeKey';
-import { useEnterAsTab } from '../../hooks/useEnterAsTab';
+import { useCompany } from '../../../contexts/CompanyContext';
+import useEscapeKey from '../../../hooks/useEscapeKey';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
-import EnterpriseCalculator from '../../services/enterpriseCalculator';
-import InvoiceItemsStepBase from './invoice/steps/InvoiceItemsStep';
-import InvoiceDetailsStepBase from './invoice/steps/InvoiceDetailsStep';
-import InvoicePreviewStepBase from './invoice/steps/InvoicePreviewStep';
-import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './invoice/hooks/useInvoiceLogic';
-import { GenericSuccessModal } from '../global';
-import InvoicePreview from './invoice/ui/InvoicePreviewEnterprise';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
+import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
+import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
+import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
+import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './hooks/useInvoiceLogic';
+import { GenericSuccessModal } from '../../global';
+import InvoicePreview from './ui/InvoicePreviewEnterprise';
 
 // ==================== TYPE DEFINITIONS ====================
 
