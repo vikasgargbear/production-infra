@@ -185,17 +185,18 @@ class EnterpriseCalculator {
       items: calculatedItems,
       totals: {
         // Canonical field names (matching database schema: sales.invoices)
-        subtotal_amount: this.round(grossAmount),                // DB: subtotal_amount
-        discount_amount: this.round(totalDiscount),              // DB: discount_amount (item-level)
-        scheme_discount: this.round(invoiceDiscount),            // DB: scheme_discount (invoice-level)
-        taxable_amount: this.round(taxableAfterSchemeDiscount),  // DB: taxable_amount (AFTER all discounts)
-        total_tax_amount: this.round(adjustedGst),               // DB: total_tax_amount
-        cgst_amount: this.round(adjustedCgst),                   // DB: cgst_amount
-        sgst_amount: this.round(adjustedSgst),                   // DB: sgst_amount
-        igst_amount: this.round(igstTotal > 0 ? adjustedGst : 0), // DB: igst_amount
-        freight_charges: this.round(freightCharges),             // DB: freight_charges
-        round_off_amount: this.round(roundOff),                  // DB: round_off_amount
-        final_amount: finalAmount                                 // DB: final_amount
+        // NOTE: No rounding on intermediate values - only final_amount is rounded
+        subtotal_amount: grossAmount,                           // DB: subtotal_amount
+        discount_amount: totalDiscount,                         // DB: discount_amount (item-level)
+        scheme_discount: invoiceDiscount,                       // DB: scheme_discount (invoice-level)
+        taxable_amount: taxableAfterSchemeDiscount,             // DB: taxable_amount (AFTER all discounts)
+        total_tax_amount: adjustedGst,                          // DB: total_tax_amount
+        cgst_amount: adjustedCgst,                              // DB: cgst_amount
+        sgst_amount: adjustedSgst,                              // DB: sgst_amount
+        igst_amount: igstTotal > 0 ? adjustedGst : 0,           // DB: igst_amount
+        freight_charges: freightCharges,                        // DB: freight_charges
+        round_off_amount: this.round(roundOff),                 // DB: round_off_amount (keep 2 decimal precision)
+        final_amount: finalAmount                               // DB: final_amount (ONLY this is rounded)
       }
     };
   }
