@@ -43,15 +43,15 @@ export interface InvoiceItem {
     pack_size?: string;
     pack_type?: string;
 
-    // Calculated values
-    line_subtotal?: number;
-    line_discount?: number;
-    line_tax?: number;
-    line_total?: number;
-    taxable_amount?: number;
-    subtotal?: number;
-    total?: number;
-    calculated_total?: number;
+    // Calculated values (canonical names from enterpriseCalculator)
+    // Note: discount_amount is in Discounts section above
+    subtotal?: number;             // unit_price × quantity (pre-discount)
+    taxable_amount?: number;       // subtotal - discount_amount (post-discount)
+    gst_amount?: number;           // Total GST on taxable_amount
+    cgst_amount?: number;          // CGST portion
+    sgst_amount?: number;          // SGST portion
+    igst_amount?: number;          // IGST portion
+    total_amount?: number;         // taxable_amount + gst_amount
 
     // Meta
     manufacturer?: string;

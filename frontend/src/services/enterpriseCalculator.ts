@@ -52,9 +52,7 @@ export interface CalculationOptions {
 }
 
 export interface CalculatedItem extends InvoiceItem {
-  base_quantity: number;
-  free_quantity: number;
-  total_quantity: number;
+  // quantity and free_quantity inherited from InvoiceItem
   subtotal: number;
   discount_amount: number;
   taxable_amount: number;
@@ -105,10 +103,9 @@ class EnterpriseCalculator {
     // Return enriched item with all calculations
     return {
       ...item,
-      // Quantities
-      base_quantity: baseQuantity,
+      // Quantities - only keep essential fields (base_quantity and total_quantity are derivable)
+      quantity: baseQuantity,
       free_quantity: freeQuantity,
-      total_quantity: baseQuantity + freeQuantity,
 
       // Amounts - use canonical names only
       unit_price: this.round(unit_price),

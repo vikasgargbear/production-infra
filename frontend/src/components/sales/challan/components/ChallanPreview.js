@@ -1,9 +1,9 @@
 import React from 'react';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency } from '../../../../utils/formatters';
 
-const ChallanPreview = ({ 
-  challan, 
-  companyInfo = {} 
+const ChallanPreview = ({
+  challan,
+  companyInfo = {}
 }) => {
 
   const formatDate = (date) => {
@@ -44,16 +44,16 @@ const ChallanPreview = ({
           }
         }
       `}</style>
-      
+
       <div id="challan-preview" className="font-sans p-8 print-colors">
         {/* Header Section - Consistent with Invoice */}
         <div className="mb-8 grid grid-cols-2 gap-4">
           {/* Company Info - Left Side */}
           <div className="flex items-start space-x-3">
             {companyInfo?.logo ? (
-              <img 
-                src={companyInfo.logo} 
-                alt={companyInfo.name || 'Company'} 
+              <img
+                src={companyInfo.logo}
+                alt={companyInfo.name || 'Company'}
                 className="w-14 h-14 object-contain"
               />
             ) : (
@@ -238,7 +238,7 @@ const ChallanPreview = ({
                 <p className="text-xs text-gray-600">{challan.notes}</p>
               </div>
             )}
-            
+
             {/* Digital Authorization - Compact */}
             <div className="border border-gray-200 rounded p-2">
               <p className="text-xs text-gray-600">For {companyInfo?.name || 'Your Company'}</p>
@@ -250,57 +250,57 @@ const ChallanPreview = ({
           {/* Right Side: Summary Box */}
           <div className="flex justify-end">
             <div className="border border-gray-300 rounded-lg overflow-hidden w-80">
-            <div className="bg-gray-100 px-3 py-1">
-              <h3 className="text-xs font-bold text-gray-800 uppercase">Summary</h3>
-            </div>
-            <div className="p-3 space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-600">Taxable Amount:</span>
-                <span className="font-medium">
-                  {formatCurrency(
-                    challan.items.reduce((sum, item) => {
-                      const price = item.unit_price || item.rate || item.sale_price || 0;
-                      return sum + ((parseFloat(item.quantity) || 0) * price);
-                    }, 0)
-                  )}
-                </span>
+              <div className="bg-gray-100 px-3 py-1">
+                <h3 className="text-xs font-bold text-gray-800 uppercase">Summary</h3>
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-600">Total GST:</span>
-                <span className="font-medium">
-                  {formatCurrency(
-                    challan.items.reduce((sum, item) => {
-                      const price = item.unit_price || item.rate || item.sale_price || 0;
-                      const taxableAmount = (parseFloat(item.quantity) || 0) * price;
-                      const gstPercent = item.gst_percent || item.tax_percent || 0;
-                      return sum + ((taxableAmount * gstPercent) / 100);
-                    }, 0)
-                  )}
-                </span>
-              </div>
-              {challan.freight_charges > 0 && (
+              <div className="p-3 space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Freight Charges:</span>
-                  <span className="font-medium">{formatCurrency(challan.freight_charges)}</span>
+                  <span className="text-gray-600">Taxable Amount:</span>
+                  <span className="font-medium">
+                    {formatCurrency(
+                      challan.items.reduce((sum, item) => {
+                        const price = item.unit_price || item.rate || item.sale_price || 0;
+                        return sum + ((parseFloat(item.quantity) || 0) * price);
+                      }, 0)
+                    )}
+                  </span>
                 </div>
-              )}
-              <div className="flex justify-between pt-1 border-t border-gray-300">
-                <span className="text-sm font-bold text-gray-900">Grand Total:</span>
-                <span className="text-sm font-bold text-blue-600">
-                  {formatCurrency(
-                    challan.items.reduce((sum, item) => {
-                      const price = item.unit_price || item.rate || item.sale_price || 0;
-                      const taxableAmount = (parseFloat(item.quantity) || 0) * price;
-                      const gstPercent = item.gst_percent || item.tax_percent || 0;
-                      const gstAmount = (taxableAmount * gstPercent) / 100;
-                      return sum + taxableAmount + gstAmount;
-                    }, 0) + (parseFloat(challan.freight_charges) || 0)
-                  )}
-                </span>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Total GST:</span>
+                  <span className="font-medium">
+                    {formatCurrency(
+                      challan.items.reduce((sum, item) => {
+                        const price = item.unit_price || item.rate || item.sale_price || 0;
+                        const taxableAmount = (parseFloat(item.quantity) || 0) * price;
+                        const gstPercent = item.gst_percent || item.tax_percent || 0;
+                        return sum + ((taxableAmount * gstPercent) / 100);
+                      }, 0)
+                    )}
+                  </span>
+                </div>
+                {challan.freight_charges > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Freight Charges:</span>
+                    <span className="font-medium">{formatCurrency(challan.freight_charges)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1 border-t border-gray-300">
+                  <span className="text-sm font-bold text-gray-900">Grand Total:</span>
+                  <span className="text-sm font-bold text-blue-600">
+                    {formatCurrency(
+                      challan.items.reduce((sum, item) => {
+                        const price = item.unit_price || item.rate || item.sale_price || 0;
+                        const taxableAmount = (parseFloat(item.quantity) || 0) * price;
+                        const gstPercent = item.gst_percent || item.tax_percent || 0;
+                        const gstAmount = (taxableAmount * gstPercent) / 100;
+                        return sum + taxableAmount + gstAmount;
+                      }, 0) + (parseFloat(challan.freight_charges) || 0)
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
         </div>
 
         {/* Digital Footer - No physical signatures needed */}

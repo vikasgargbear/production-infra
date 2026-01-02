@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart, BarChart, Bar } from 'recharts';
 // import NewChallan from './NewChallan'; // Old version
-import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5'; // New improved version
+import ModularChallanCreatorV5 from './sales/challan/ModularChallanCreatorV5'; // New improved version
 // import { AddSalePage } from './Home';
 import BusinessSalesEntry from './BusinessSalesEntry';
 import { dashboardApi, ordersApi, invoiceAPI, invoicesApi, purchasesAPI, productsApi, customersApi } from '../services/api';

@@ -36,12 +36,16 @@ export interface InvoiceItem extends SharedInvoiceItem {
     quantity: number;
     free_quantity: number;
     discount_percent: number;
-    // Calculated fields
-    line_subtotal?: number;
-    line_discount?: number;
-    line_taxable?: number;
-    line_gst?: number;
-    line_total?: number;
+    // Calculated fields (use canonical names from enterpriseCalculator)
+    subtotal?: number;
+    discount_amount?: number;
+    taxable_amount?: number;
+    gst_amount?: number;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
+    total_amount?: number;
+    // Availability
     available_quantity?: number;
     manufacturing_date?: string;
 }
@@ -491,7 +495,7 @@ export const useInvoiceLogic = (
                             name: i.product_name,
                             qty: i.quantity,
                             rate: i.unit_price,
-                            line_total: i.line_total
+                            total: i.total_amount
                         })),
                         totals: result.totals
                     });
@@ -502,11 +506,12 @@ export const useInvoiceLogic = (
 
                             return {
                                 ...item,
-                                line_subtotal: calculatedItem.line_subtotal,
-                                line_discount: calculatedItem.line_discount,
-                                line_taxable: calculatedItem.line_taxable,
-                                line_gst: calculatedItem.line_gst,
-                                line_total: calculatedItem.line_total,
+                                // Use canonical field names from enterpriseCalculator
+                                subtotal: calculatedItem.subtotal,
+                                discount_amount: calculatedItem.discount_amount,
+                                taxable_amount: calculatedItem.taxable_amount,
+                                gst_amount: calculatedItem.gst_amount,
+                                total_amount: calculatedItem.total_amount,
                                 cgst_amount: calculatedItem.cgst_amount,
                                 sgst_amount: calculatedItem.sgst_amount,
                                 igst_amount: calculatedItem.igst_amount,

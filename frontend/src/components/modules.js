@@ -13,8 +13,8 @@ import NotesModule from './notes';
 import InventoryModule from './inventory';
 
 // Import other important modules
-import InvoiceModule from './invoice';
-import ChallanModule from './challan';
+// InvoiceModule removed - now part of sales module
+import ChallanModule from './sales/challan';
 import ReportsModule from './reports';
 import DashboardModule from './dashboard';
 
@@ -27,7 +27,6 @@ export {
   LedgerModule,
   NotesModule,
   InventoryModule,
-  InvoiceModule,
   ChallanModule,
   ReportsModule,
   DashboardModule
@@ -105,7 +104,7 @@ export const getModuleByShortcut = (shortcut) => {
 export const hasModulePermission = (moduleKey, userPermissions = []) => {
   const module = ModuleRegistry[moduleKey];
   if (!module || !module.permissions) return true;
-  
+
   return module.permissions.some(permission => userPermissions.includes(permission));
 };
 
@@ -120,7 +119,6 @@ const Modules = {
     LedgerModule,
     NotesModule,
     InventoryModule,
-    InvoiceModule,
     ChallanModule,
     ReportsModule,
     DashboardModule

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Search, FileText, ShoppingCart, Calendar, FileInput } from 'lucide-react';
-import { invoicesApi, ordersApi, salesOrdersAPI } from '../../../services/api';
+import { invoicesApi, ordersApi, salesOrdersAPI } from '../../../../services/api';
 
 const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
   const [searchType, setSearchType] = useState('invoice');
@@ -22,16 +22,16 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
       let results = [];
       if (searchType === 'invoice') {
         // Get recent invoices using search with empty query
-        const response = await invoicesApi.search('', { 
+        const response = await invoicesApi.search('', {
           limit: 10
         });
         // Handle different response formats
-        results = Array.isArray(response) ? response : 
-                 (response?.data && Array.isArray(response.data)) ? response.data :
-                 (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
+        results = Array.isArray(response) ? response :
+          (response?.data && Array.isArray(response.data)) ? response.data :
+            (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
       } else {
         // Get recent sales orders
-        const response = await salesOrdersAPI.search('', { 
+        const response = await salesOrdersAPI.search('', {
           limit: 10
         });
         // Handle response format
@@ -60,9 +60,9 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
       if (searchType === 'invoice') {
         const response = await invoicesApi.search(searchQuery);
         // Handle different response formats
-        results = Array.isArray(response) ? response : 
-                 (response?.data && Array.isArray(response.data)) ? response.data :
-                 (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
+        results = Array.isArray(response) ? response :
+          (response?.data && Array.isArray(response.data)) ? response.data :
+            (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
       } else {
         // Search sales orders
         const response = await salesOrdersAPI.search(searchQuery);
@@ -111,8 +111,8 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
         manufacturer: item.manufacturer,
         category: item.category
       })),
-      reference_doc: searchType === 'invoice' ? 
-        `Invoice: ${selectedDoc.invoice_number}` : 
+      reference_doc: searchType === 'invoice' ?
+        `Invoice: ${selectedDoc.invoice_number}` :
         `Order: ${selectedDoc.order_number}`,
       notes: `Delivery for ${searchType === 'invoice' ? 'Invoice' : 'Order'} #${selectedDoc.invoice_number || selectedDoc.order_number}`
     };
@@ -143,11 +143,10 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
                   setSearchType('invoice');
                   setSearchQuery('');
                 }}
-                className={`p-3 rounded-lg border-2 ${
-                  searchType === 'invoice' 
-                    ? 'border-blue-500 bg-blue-50' 
+                className={`p-3 rounded-lg border-2 ${searchType === 'invoice'
+                    ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300'
-                }`}
+                  }`}
               >
                 <FileText className="w-5 h-5 mx-auto mb-1" />
                 <span className="text-sm">Sales Invoice</span>
@@ -157,11 +156,10 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
                   setSearchType('order');
                   setSearchQuery('');
                 }}
-                className={`p-3 rounded-lg border-2 ${
-                  searchType === 'order' 
-                    ? 'border-blue-500 bg-blue-50' 
+                className={`p-3 rounded-lg border-2 ${searchType === 'order'
+                    ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300'
-                }`}
+                  }`}
               >
                 <ShoppingCart className="w-5 h-5 mx-auto mb-1" />
                 <span className="text-sm">Sales Order</span>
@@ -200,43 +198,41 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
               <div className="max-h-64 overflow-y-auto">
                 {searchResults.map((doc) => (
                   <div
-                  key={doc.invoice_id || doc.order_id}
-                  onClick={() => setSelectedDoc(doc)}
-                  className={`p-3 border rounded-lg cursor-pointer ${
-                    selectedDoc?.invoice_id === doc.invoice_id || selectedDoc?.order_id === doc.order_id
-                      ? 'border-blue-500 bg-blue-50' 
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-medium">
-                        {searchType === 'invoice' ? doc.invoice_number : doc.order_number}
-                      </div>
-                      <div className="text-sm text-gray-600">{doc.customer_name}</div>
-                      <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(doc.invoice_date || doc.order_date).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">
-                        ₹{(doc.total_amount || 0).toFixed(2)}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {doc.items?.length || doc.invoice_items?.length || 0} items
-                      </div>
-                      {doc.payment_status && (
-                        <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${
-                          doc.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
-                          doc.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {doc.payment_status}
+                    key={doc.invoice_id || doc.order_id}
+                    onClick={() => setSelectedDoc(doc)}
+                    className={`p-3 border rounded-lg cursor-pointer ${selectedDoc?.invoice_id === doc.invoice_id || selectedDoc?.order_id === doc.order_id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium">
+                          {searchType === 'invoice' ? doc.invoice_number : doc.order_number}
                         </div>
-                      )}
+                        <div className="text-sm text-gray-600">{doc.customer_name}</div>
+                        <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(doc.invoice_date || doc.order_date).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium">
+                          ₹{(doc.total_amount || 0).toFixed(2)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {doc.items?.length || doc.invoice_items?.length || 0} items
+                        </div>
+                        {doc.payment_status && (
+                          <div className={`text-xs mt-1 px-2 py-0.5 rounded-full inline-block ${doc.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                              doc.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                            }`}>
+                            {doc.payment_status}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
                   </div>
                 ))}
               </div>

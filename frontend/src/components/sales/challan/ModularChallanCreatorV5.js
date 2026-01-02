@@ -3,17 +3,17 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, GenericSuccessModal } from '../global';
-import ItemsTableKeyboard from '../global/ui/display/ItemsTableKeyboard';
-import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, GenericSuccessModal } from '../../global';
+import ItemsTableKeyboard from '../../global/ui/display/ItemsTableKeyboard';
+import CustomerCreationB2B from '../../global/ui/forms/CustomerCreationB2B';
+import KeyboardShortcuts, { SHORTCUT_SETS } from '../../global/ui/KeyboardShortcuts';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
-import { challansApi } from '../../services/api';
-import { apiClient, employeesAPI } from '../../services/api';
-import { useEnterAsTab } from '../../hooks/useEnterAsTab';
-import useEscapeKey from '../../hooks/useEscapeKey';
+import { challansApi } from '../../../services/api';
+import { apiClient, employeesAPI } from '../../../services/api';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
+import useEscapeKey from '../../../hooks/useEscapeKey';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
@@ -210,7 +210,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const generateChallanNumber = async () => {
     try {
       // Use the document number service for consistent numbering
-      const { generateChallanNumber } = await import('../../services/offline/documents/documentNumberGenerator');
+      const { generateChallanNumber } = await import('../../../services/offline/documents/documentNumberGenerator');
       const challanNumber = await generateChallanNumber();
 
       setChallan(prev => ({
