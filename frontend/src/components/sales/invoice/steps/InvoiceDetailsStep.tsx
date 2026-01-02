@@ -117,8 +117,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         <input
                                             ref={deliveryChargesRef}
                                             type="number"
-                                            value={invoice.delivery_charges || ''}
-                                            onChange={(e) => setInvoice(prev => ({ ...prev, delivery_charges: parseFloat(e.target.value) || 0 }))}
+                                            value={invoice.freight_charges || ''}
+                                            onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
                                             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                             placeholder="₹0"
                                             min="0"
@@ -512,10 +512,10 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         )}
 
                                         {/* Delivery Charges */}
-                                        {(invoice.delivery_charges || 0) > 0 && (
+                                        {(invoice.freight_charges || 0) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">Delivery Charges</span>
-                                                <span className="text-gray-900">+₹{parseFloat(String(invoice.delivery_charges)).toFixed(2)}</span>
+                                                <span className="text-gray-900">+₹{parseFloat(String(invoice.freight_charges)).toFixed(2)}</span>
                                             </div>
                                         )}
 

@@ -3,10 +3,10 @@ import {
   FileText, Package, ShoppingCart, Truck, TrendingUp, List, DollarSign, BarChart3
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import InvoiceFlow from './InvoiceFlow';
-import InvoiceListV2 from './InvoiceListV2';
+import InvoiceFlow from './invoice/InvoiceFlow';
+import InvoiceList from './invoice/InvoiceList';
 import SalesOrderFlow from './SalesOrderFlow';
-import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5';
+import { ChallanFlow } from './challan';
 
 interface SalesHubProps {
   open?: boolean;
@@ -41,7 +41,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'Dispatch Note',
       icon: Truck,
       color: 'emerald',
-      component: ModularChallanCreatorV5
+      component: ChallanFlow
     },
     {
       id: 'sales-order',
@@ -59,7 +59,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'View & Manage',
       icon: List,
       color: 'gray',
-      component: InvoiceListV2
+      component: InvoiceList
     }
   ];
 

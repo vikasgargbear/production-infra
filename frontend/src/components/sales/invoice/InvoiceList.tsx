@@ -74,7 +74,7 @@ const BulkActionBar: React.FC<{
   );
 };
 
-const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
+const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
@@ -227,7 +227,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         getStatusText(invoice.payment_status)
       ].join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -259,13 +259,13 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const whatsappSelected = () => {
     const itemsToSend = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
     if (itemsToSend.length === 0) return;
-    
+
     const message = encodeURIComponent(
-      `Invoices Report:\n\n${itemsToSend.map(invoice => 
+      `Invoices Report:\n\n${itemsToSend.map(invoice =>
         `${invoice.invoice_number} - ${formatDate(invoice.invoice_date)} - ${invoice.customer_name} - ${formatCurrency(invoice.final_amount || 0)} (${getStatusText(invoice.payment_status)})`
       ).join('\n')}`
     );
-    
+
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
@@ -309,7 +309,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const fetchInvoices = async (page = 1, filters: any = {}) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Prepare search parameters
       const searchParams: any = {
@@ -317,16 +317,16 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         offset: (page - 1) * pagination.per_page,
         ...filters
       };
-      
+
       // If there's a search query, add it to the filters
       if (filters.search && filters.search.trim()) {
         searchParams.search = filters.search.trim();
       }
-      
+
       // debugLogger.api('Fetching invoices with params:', searchParams);
-      
+
       const response = await InvoiceApiService.getInvoices(searchParams);
-      
+
       if (response.success) {
         // Transform backend data to match our interface
         const transformedInvoices = response.data.invoices.map((invoice: any) => {
@@ -342,7 +342,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           //   order_number: invoice.order_number,
           //   order_date: invoice.order_date
           // });
-          
+
           return {
             id: invoice.invoice_id?.toString() || invoice.invoice_number,
             invoice_id: invoice.invoice_id,
@@ -391,10 +391,10 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     setRefreshSuccess(false);
-    
+
     try {
       await fetchInvoices(pagination.page);
-      
+
       // Show success feedback
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 2000);
@@ -409,12 +409,12 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleExportAll = async () => {
     setExporting(true);
     setExportSuccess(false);
-    
+
     try {
       // Generate CSV data from invoices
       const csvData = generateCSVData(invoices);
       downloadCSV(csvData, `invoices-export-${new Date().toISOString().split('T')[0]}.csv`);
-      
+
       // Show success feedback
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
@@ -429,14 +429,14 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const generateCSVData = (data: Invoice[]) => {
     const headers = [
       'Invoice Number',
-      'Customer Name', 
+      'Customer Name',
       'Date',
       'Due Date',
       'Amount',
       'Status',
       'Payment Status'
     ];
-    
+
     const rows = data.map(invoice => [
       invoice.invoice_number || invoice.invoiceNo || '',
       invoice.customer_name || invoice.customerName || '',
@@ -446,23 +446,23 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       invoice.invoice_status || invoice.status || '',
       invoice.payment_status || invoice.paymentStatus || ''
     ]);
-    
+
     return [headers, ...rows];
   };
 
   // Download CSV file
   const downloadCSV = (data: any[][], filename: string) => {
-    const csvContent = data.map(row => 
-      row.map(field => 
-        typeof field === 'string' && field.includes(',') 
-          ? `"${field}"` 
+    const csvContent = data.map(row =>
+      row.map(field =>
+        typeof field === 'string' && field.includes(',')
+          ? `"${field}"`
           : field
       ).join(',')
     ).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    
+
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
@@ -480,14 +480,14 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     // Update local state
     if (filters.status) setFilterStatus(filters.status);
     if (filters.dateFilter) setDateFilter(filters.dateFilter);
-    
+
     // Build search params including current search query
     const searchParams = {
       search: searchQuery,
       payment_status: filterStatus === 'all' ? undefined : filterStatus,
       ...filters
     };
-    
+
     // Reset to first page when filters change and fetch with all current filters
     fetchInvoices(1, searchParams);
   };
@@ -495,7 +495,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Handle search changes with auto-search and debouncing
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    
+
     // Debounce search to avoid too many API calls
     const timeoutId = setTimeout(() => {
       const searchParams = {
@@ -504,7 +504,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       };
       fetchInvoices(1, searchParams);
     }, 500); // Increased debounce time for better UX
-    
+
     return () => clearTimeout(timeoutId);
   };
 
@@ -545,10 +545,10 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     try {
       // Fetch full invoice details
       const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
-      
+
       if (response.success && response.data) {
         const fullInvoice = response.data;
-        
+
         // Use the print function for print dialog
         const { printInvoice } = await import('../../utils/invoicePdfGenerator');
         printInvoice(fullInvoice);
@@ -565,10 +565,10 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     try {
       // Fetch full invoice details
       const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
-      
+
       if (response.success && response.data) {
         const fullInvoice = response.data;
-        
+
         // Use the download function for direct PDF save
         const { downloadInvoicePDF } = await import('../../utils/invoicePdfGenerator');
         downloadInvoicePDF(fullInvoice);
@@ -602,9 +602,9 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Helper function to get proper status text
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
-    
+
     // debugLogger.debug('Raw status from backend:', status, 'Type:', typeof status);
-    
+
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
       // Common lowercase variations
@@ -617,7 +617,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       'canceled': 'Cancelled', // Handle US spelling
       'pending': 'Pending',
       'partial': 'Partial',
-      
+
       // Common uppercase variations
       'DRAFT': 'Draft',
       'SENT': 'Sent',
@@ -628,12 +628,12 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       'CANCELED': 'Cancelled',
       'PENDING': 'Pending',
       'PARTIAL': 'Partial',
-      
+
       // Handle null/undefined cases
       'null': 'Unknown',
       'undefined': 'Unknown',
       '': 'Unknown',
-      
+
       // Handle numeric statuses if backend uses them
       '0': 'Draft',
       '1': 'Sent',
@@ -643,14 +643,14 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       '5': 'Pending',
       '6': 'Partial'
     };
-    
+
     const normalizedStatus = status.toString().toLowerCase().trim();
     const mappedStatus = statusMap[normalizedStatus];
-    
+
     if (mappedStatus) {
       return mappedStatus;
     }
-    
+
     // If no mapping found, log it and return the original value
     // debugLogger.warn('No status mapping found for:', status, 'Returning original value');
     return status;
@@ -717,8 +717,8 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         //   invoice_id: invoice.invoice_id
         // });
         return (
-          <StatusBadge 
-            status={statusText} 
+          <StatusBadge
+            status={statusText}
             variant="light"
           />
         );
@@ -736,8 +736,8 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         //   invoice_id: invoice.invoice_id
         // });
         return (
-          <StatusBadge 
-            status={paymentText} 
+          <StatusBadge
+            status={paymentText}
             variant="light"
           />
         );
@@ -756,7 +756,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           >
             <Eye className="w-4 h-4" />
           </button>
-          
+
           <button
             onClick={() => handlePrintInvoice(invoice)}
             className="p-2 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
@@ -772,7 +772,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           >
             <Download className="w-4 h-4" />
           </button>
-          
+
           <button
             onClick={() => {
               setSelectedIds(new Set([invoice.id]));
@@ -782,10 +782,10 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
             title="Send WhatsApp"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.149-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.149-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
             </svg>
           </button>
-          
+
           <button
             onClick={() => handleMoreOptions(invoice)}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -834,9 +834,9 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         .animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
         .animate-spin { animation: spin 1s linear infinite; }
       `}</style>
-      
+
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Simplified */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
@@ -858,8 +858,8 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 disabled={refreshing || loading}
                 className={`
                   relative p-2.5 rounded-xl transition-all duration-300 ease-out
-                  ${refreshSuccess 
-                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 shadow-lg shadow-green-200/50' 
+                  ${refreshSuccess
+                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 shadow-lg shadow-green-200/50'
                     : refreshing
                       ? 'bg-gradient-to-r from-blue-400 to-indigo-400 shadow-lg shadow-blue-200/50'
                       : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
@@ -874,15 +874,14 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                     <CheckCircle className="w-5 h-5 text-white" />
                   ) : (
                     <>
-                      <RefreshCw className={`w-4 h-4 transition-all duration-500 ${
-                        refreshing
+                      <RefreshCw className={`w-4 h-4 transition-all duration-500 ${refreshing
                           ? 'animate-spin text-white'
                           : 'text-white group-hover:rotate-180'
-                      }`} />
+                        }`} />
                       <span className="ml-2 text-white">Refresh</span>
                     </>
                   )}
-                  
+
                   {/* Modern ripple effect */}
                   {(refreshing || refreshSuccess) && (
                     <div className="absolute inset-0 -m-2">
@@ -899,8 +898,8 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 className={`
                   relative px-4 py-2.5 rounded-xl transition-all duration-300 ease-out
                   flex items-center space-x-2.5
-                  ${exportSuccess 
-                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 text-white shadow-lg shadow-green-200/50' 
+                  ${exportSuccess
+                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 text-white shadow-lg shadow-green-200/50'
                     : exporting
                       ? 'bg-gradient-to-r from-blue-400 to-indigo-400 text-white shadow-lg shadow-blue-200/50'
                       : 'bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 border border-gray-200 hover:border-blue-300 hover:shadow-md text-gray-700 hover:text-blue-700'
@@ -910,10 +909,10 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   font-medium text-sm
                 `}
                 title={
-                  invoices.length === 0 
-                    ? "No invoices to export" 
-                    : exportSuccess 
-                      ? "Successfully exported!" 
+                  invoices.length === 0
+                    ? "No invoices to export"
+                    : exportSuccess
+                      ? "Successfully exported!"
                       : "Export all invoices to CSV"
                 }
               >
@@ -929,21 +928,20 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                       </div>
                     </div>
                   ) : (
-                    <Download className={`w-4 h-4 transition-transform duration-300 ${
-                      invoices.length > 0 ? 'group-hover:translate-y-1' : ''
-                    }`} />
+                    <Download className={`w-4 h-4 transition-transform duration-300 ${invoices.length > 0 ? 'group-hover:translate-y-1' : ''
+                      }`} />
                   )}
                 </div>
-                
+
                 {/* Text label */}
                 <span className="relative">
-                  {exporting 
-                    ? 'Exporting' 
-                    : exportSuccess 
-                      ? 'Exported' 
+                  {exporting
+                    ? 'Exporting'
+                    : exportSuccess
+                      ? 'Exported'
                       : 'Export All'
                   }
-                  
+
                   {/* Modern dots animation for loading */}
                   {exporting && (
                     <span className="inline-flex ml-1">
@@ -972,7 +970,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
-            
+
             {/* Enhanced Filter Bar */}
             <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
               <div className="flex items-center space-x-4">
@@ -1034,32 +1032,32 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 {selectedCount > 0 ? (
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
-                    <button 
-                      onClick={() => exportSelectedPDF()} 
+                    <button
+                      onClick={() => exportSelectedPDF()}
                       className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm flex items-center space-x-2 shadow-sm"
                     >
                       <Download className="w-4 h-4" />
                       <span>Export PDF</span>
                     </button>
-                    <button 
-                      onClick={printSelected} 
+                    <button
+                      onClick={printSelected}
                       className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center space-x-1 shadow-sm"
                     >
                       <Printer className="w-4 h-4" />
                       <span>Print</span>
                     </button>
-                    <button 
-                      onClick={whatsappSelected} 
+                    <button
+                      onClick={whatsappSelected}
                       className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm flex items-center space-x-1 shadow-sm"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.149-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.149-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                       </svg>
                       <span>WhatsApp</span>
                     </button>
                   </div>
                 ) : (
-                  <button 
+                  <button
                     onClick={() => exportSelectedPDF()}
                     className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
                   >
@@ -1068,7 +1066,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   </button>
                 )}
               </div>
-              
+
             </div>
 
             {/* Error Display */}
@@ -1084,9 +1082,9 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedInvoices.length}
-              onMarkPaid={() => {/* TODO: Mark as paid */}}
-              onSendReminder={() => {/* TODO: Send reminder */}}
-              onExport={() => {/* TODO: Export selected */}}
+              onMarkPaid={() => {/* TODO: Mark as paid */ }}
+              onSendReminder={() => {/* TODO: Send reminder */ }}
+              onExport={() => {/* TODO: Export selected */ }}
               onClear={() => setSelectedInvoices([])}
             />
 
@@ -1106,16 +1104,16 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                     {searchQuery ? `No invoices found matching "${searchQuery}"` : 'No invoices found'}
                   </p>
                   <p className="text-sm text-gray-400">
-                    {error ? 'There was an error loading invoices' : 
-                     searchQuery ? 'Try adjusting your search terms or filters' : 'No invoices match your criteria'}
+                    {error ? 'There was an error loading invoices' :
+                      searchQuery ? 'Try adjusting your search terms or filters' : 'No invoices match your criteria'}
                   </p>
                   {searchQuery && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setSearchQuery('');
                         fetchInvoices(1);
-                      }} 
+                      }}
                       className="mt-4"
                     >
                       Clear Search
@@ -1134,7 +1132,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   paginated={false}
                   pageSize={pagination.per_page}
                 />
-                
+
                 {/* Pagination Controls */}
                 <Pagination
                   currentPage={pagination.page}
@@ -1154,4 +1152,4 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   );
 };
 
-export default InvoiceListV2;
+export default InvoiceList;
