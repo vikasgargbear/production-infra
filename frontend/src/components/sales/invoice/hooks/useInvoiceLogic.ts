@@ -862,37 +862,31 @@ export const useInvoiceLogic = (
                 return;
             }
 
-            // ONLINE: Normal API save
-            console.log('[Invoice] Saving online - backend will assign invoice number');
-            const response = await invoicesApi.create(invoiceData);
-            console.log('[Invoice] Save successful!');
+            // ============================================================
+            // OPTIMISTIC UI: Save locally FIRST, sync to backend in background
+            // This gives instant feedback to user while ensuring data integrity
+            // ============================================================
 
-            // Extract data from response (handles both direct response or axios response format)
-            const responseData = response?.data || response;
+            console.log('[Invoice] 🚀 Optimistic save - local first, then background sync');
 
-            const createdData: CreatedInvoiceData = {
-                invoiceId: responseData?.invoice_id,
-                invoiceNumber: responseData?.invoice_number,
-                customerName: selectedCustomer.customer_name,
-                customerPhone: selectedCustomer.phone || '',
-                customerEmail: selectedCustomer.email || '',
-                totalAmount: responseData?.total_amount || invoiceData.total_amount,
-                items: responseData?.items || invoice.items,
-                isOffline: false
+            // Generate temporary local ID and invoice number
+            const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const localInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false);
+
+            // Save locally first (instant)
+            const localInvoice = {
+                ...invoiceData,
+                invoice_no: localInvoiceNo,
+                invoice_number: localInvoiceNo,
+                temp_id: tempId,
+                _localId: tempId,
+                sync_status: 'pending',
+                created_at: new Date().toISOString()
             };
 
-            setInvoice(prev => ({
-                ...prev,
-                invoice_number: createdData.invoiceNumber,
-                invoice_no: createdData.invoiceNumber
-            }));
+            await offlineDB.add('invoices', localInvoice);
 
-            setCreatedInvoiceData(createdData);
-            setShowSuccessModal(true);
-            localStorage.removeItem('invoice_draft');
-
-            // OFFLINE-FIRST: Immediately deduct stock from local IndexedDB
-            // Works even if sync fails - ensures accurate local quantities
+            // Immediately deduct stock from local IndexedDB
             const stockDeductions = invoice.items
                 .filter(item => item.batch_id && item.quantity > 0)
                 .map(item => ({
@@ -903,15 +897,56 @@ export const useInvoiceLogic = (
 
             if (stockDeductions.length > 0) {
                 await offlineDB.deductStockLocally(stockDeductions);
-                console.log('[Invoice] ✅ Local stock updated immediately');
             }
 
-            // OPTIONAL: Try to sync from server for full accuracy (non-blocking)
-            // This runs in background and doesn't block the success flow
-            import('../../../../services/offline/sync/syncPullService')
-                .then(module => module.default.syncProducts(100, false))
-                .then(() => console.log('[Invoice] ✅ Background sync complete'))
-                .catch(err => console.log('[Invoice] Background sync skipped:', err.message));
+            // Show success to user IMMEDIATELY (optimistic)
+            const createdData: CreatedInvoiceData = {
+                invoiceId: tempId,
+                invoiceNumber: localInvoiceNo,
+                customerName: selectedCustomer.customer_name,
+                customerPhone: selectedCustomer.phone || '',
+                customerEmail: selectedCustomer.email || '',
+                totalAmount: invoiceData.total_amount,
+                items: invoice.items,
+                isOffline: false
+            };
+
+            setInvoice(prev => ({
+                ...prev,
+                invoice_number: localInvoiceNo,
+                invoice_no: localInvoiceNo
+            }));
+
+            setCreatedInvoiceData(createdData);
+            setShowSuccessModal(true);
+            localStorage.removeItem('invoice_draft');
+
+            console.log('[Invoice] ✅ Local save complete, showing success to user');
+
+            // BACKGROUND SYNC: Send to backend in background (non-blocking)
+            // User already sees success, this runs silently
+            if (isOnline) {
+                (async () => {
+                    try {
+                        console.log('[Invoice] 📡 Background sync to backend...');
+                        const response = await invoicesApi.create(invoiceData);
+                        const responseData = response?.data || response;
+
+                        // Update local record with server ID
+                        if (responseData?.invoice_id) {
+                            await offlineDB.updateLocalId('invoices', tempId, responseData.invoice_id);
+                            console.log('[Invoice] ✅ Background sync complete - ID:', responseData.invoice_id);
+                        }
+                    } catch (syncError) {
+                        console.warn('[Invoice] ⚠️ Background sync failed, will retry later:', syncError);
+                        // Add to sync queue for later retry
+                        await offlineDB.addToSyncQueue('invoices', tempId, 'create', localInvoice);
+                    }
+                })();
+            } else {
+                // Offline - add to sync queue
+                await offlineDB.addToSyncQueue('invoices', tempId, 'create', localInvoice);
+            }
 
             toast.success('✅ Invoice created successfully');
         } catch (error) {
