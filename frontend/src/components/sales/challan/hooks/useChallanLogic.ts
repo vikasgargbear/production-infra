@@ -81,8 +81,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     // ==================== GENERATE CHALLAN NUMBER ====================
     const generateChallanNumber = useCallback(async () => {
         try {
-            const { generateChallanNumber: genNum } = await import('../../../../services/offline/documents/documentNumberGenerator');
-            const challanNumber = await genNum();
+            const documentNumberGenerator = (await import('../../../../services/offline/documents/documentNumberGenerator')).default;
+            const challanNumber = await documentNumberGenerator.generateChallanNumber();
             setChallan(prev => ({ ...prev, challan_number: challanNumber }));
         } catch (error) {
             console.error('Failed to generate challan number:', error);

@@ -188,7 +188,11 @@ class EnterpriseCalculator {
         // NOTE: No rounding on intermediate values - only final_amount is rounded
         subtotal_amount: grossAmount,                           // DB: subtotal_amount
         discount_amount: totalDiscount,                         // DB: discount_amount (item-level)
+
+        // UI display: Show taxable BEFORE scheme discount for clear breakdown
+        taxable_before_scheme: taxableAmount,                   // UI only: for showing discount calculation
         scheme_discount: invoiceDiscount,                       // DB: scheme_discount (invoice-level)
+
         taxable_amount: taxableAfterSchemeDiscount,             // DB: taxable_amount (AFTER all discounts)
         total_tax_amount: adjustedGst,                          // DB: total_tax_amount
         cgst_amount: adjustedCgst,                              // DB: cgst_amount

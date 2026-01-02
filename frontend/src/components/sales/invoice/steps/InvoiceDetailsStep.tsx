@@ -486,27 +486,23 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             </div>
                                         )}
 
-                                        {/* Taxable Amount (after item discounts, before invoice discount) */}
-                                        {invoice.totals?.taxable_amount && (
+                                        {/* Taxable Amount (after item discounts, BEFORE invoice discount) */}
+                                        {(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount) && (
                                             <div className="flex justify-between items-center text-sm font-medium">
                                                 <span className="text-gray-700">Taxable Amount</span>
-                                                <span className="text-gray-900">₹{parseFloat(String(invoice.totals.taxable_amount)).toFixed(2)}</span>
+                                                <span className="text-gray-900">₹{parseFloat(String(invoice.totals.taxable_before_scheme || invoice.totals.taxable_amount)).toFixed(2)}</span>
                                             </div>
                                         )}
 
-                                        {/* Invoice Discount (applied on taxable amount) */}
-                                        {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) && (
+                                        {/* Invoice Discount (scheme_discount from calculator) */}
+                                        {(invoice.totals?.scheme_discount || 0) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">
                                                     Invoice Discount
                                                     {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
                                                 </span>
                                                 <span className="text-green-600">
-                                                    -₹{(
-                                                        invoice.discount_type === 'fixed'
-                                                            ? invoice.discount_amount || 0
-                                                            : (parseFloat(String(invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
-                                                    ).toFixed(2)}
+                                                    -₹{parseFloat(String(invoice.totals.scheme_discount)).toFixed(2)}
                                                 </span>
                                             </div>
                                         )}
