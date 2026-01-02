@@ -8,9 +8,24 @@
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface BankAccountParams {
+    limit?: number;
+    offset?: number;
+    search?: string;
+    is_active?: boolean;
+}
+
+// ============================================================================
+// API
+// ============================================================================
+
 const ENDPOINTS = {
     BASE: '/bank-accounts',
-    DETAILS: (id) => `/bank-accounts/${id}`,
+    DETAILS: (id: number | string) => `/bank-accounts/${id}`,
     TRANSACTIONS: (id) => `/bank-accounts/${id}/transactions`,
     BALANCE: (id) => `/bank-accounts/${id}/balance`,
     RECONCILE: (id) => `/bank-accounts/${id}/reconcile`,
@@ -23,29 +38,29 @@ export const bankAccountsApi = {
     // =========================================================================
 
     // Get all bank accounts
-    getAll: (params = {}) => {
+    getAll: (params: BankAccountParams = {}) => {
         return apiHelpers.get(ENDPOINTS.BASE, { params });
     },
 
     // Get bank account by ID
-    getById: (id) => {
+    getById: (id: number | string) => {
         return apiHelpers.get(ENDPOINTS.DETAILS(id));
     },
 
     // Create new bank account
-    create: (data) => {
+    create: (data: any) => {
         const cleanedData = cleanData(data);
         return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
     },
 
     // Update bank account
-    update: (id, data) => {
+    update: (id: number | string, data: any) => {
         const cleanedData = cleanData(data);
         return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
     },
 
     // Delete bank account
-    delete: (id) => {
+    delete: (id: number | string) => {
         return apiHelpers.delete(ENDPOINTS.DETAILS(id));
     },
 
@@ -54,12 +69,12 @@ export const bankAccountsApi = {
     // =========================================================================
 
     // Get transactions for account
-    getTransactions: (accountId, params = {}) => {
+    getTransactions: (accountId: number | string, params: any = {}) => {
         return apiHelpers.get(ENDPOINTS.TRANSACTIONS(accountId), { params });
     },
 
     // Record transaction
-    recordTransaction: (accountId, data) => {
+    recordTransaction: (accountId: number | string, data: any) => {
         return apiHelpers.post(ENDPOINTS.TRANSACTIONS(accountId), data);
     },
 
@@ -68,17 +83,17 @@ export const bankAccountsApi = {
     // =========================================================================
 
     // Get current balance
-    getBalance: (accountId) => {
+    getBalance: (accountId: number | string) => {
         return apiHelpers.get(ENDPOINTS.BALANCE(accountId));
     },
 
     // Reconcile account
-    reconcile: (accountId, data) => {
+    reconcile: (accountId: number | string, data: any) => {
         return apiHelpers.post(ENDPOINTS.RECONCILE(accountId), data);
     },
 
     // Get bank statement
-    getStatement: (accountId, params = {}) => {
+    getStatement: (accountId: number | string, params: any = {}) => {
         return apiHelpers.get(ENDPOINTS.STATEMENT(accountId), { params });
     },
 
@@ -92,7 +107,7 @@ export const bankAccountsApi = {
     },
 
     // Search accounts
-    search: (query) => {
+    search: (query: string) => {
         return apiHelpers.get(ENDPOINTS.BASE, { params: { search: query } });
     }
 };

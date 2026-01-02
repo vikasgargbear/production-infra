@@ -135,5 +135,5 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         gst_percent: parseFloat(String(product.gst_percent || product.tax_rate || 0)),
         hsn_code: product.hsn_code || '',
         discount_percent: parseFloat(String(product.discount_percent || 0))
-    } as T;
+    } as unknown as T;
 };

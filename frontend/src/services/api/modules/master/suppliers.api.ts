@@ -8,9 +8,24 @@
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface SupplierParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  has_outstanding?: boolean;
+}
+
+// ============================================================================
+// API
+// ============================================================================
+
 const ENDPOINTS = {
   BASE: '/suppliers',
-  DETAILS: (id) => `/suppliers/${id}`,
+  DETAILS: (id: number | string) => `/suppliers/${id}`,
   LEDGER: (id) => `/suppliers/${id}/ledger`,
   OUTSTANDING: (id) => `/suppliers/${id}/outstanding`,
   SEARCH: '/suppliers/search'
@@ -22,29 +37,29 @@ export const suppliersApi = {
   // =========================================================================
 
   // Get all suppliers
-  getAll: (params = {}) => {
+  getAll: (params: SupplierParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
   // Get supplier by ID
-  getById: (id) => {
+  getById: (id: number | string) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 
   // Create new supplier
-  create: (data) => {
+  create: (data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
 
   // Update supplier
-  update: (id, data) => {
+  update: (id: number | string, data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
   },
 
   // Delete supplier
-  delete: (id) => {
+  delete: (id: number | string) => {
     return apiHelpers.delete(ENDPOINTS.DETAILS(id));
   },
 
@@ -53,7 +68,7 @@ export const suppliersApi = {
   // =========================================================================
 
   // Search suppliers
-  search: (query, params = {}) => {
+  search: (query: string, params: SupplierParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, {
       params: { search: query, ...params }
     });
@@ -71,14 +86,14 @@ export const suppliersApi = {
   // =========================================================================
 
   // Get supplier ledger
-  getLedger: (supplierId, dateFrom, dateTo) => {
+  getLedger: (supplierId: number | string, dateFrom?: string, dateTo?: string) => {
     return apiHelpers.get(ENDPOINTS.LEDGER(supplierId), {
       params: { date_from: dateFrom, date_to: dateTo }
     });
   },
 
   // Get supplier outstanding balance
-  getOutstandingBalance: (supplierId) => {
+  getOutstandingBalance: (supplierId: number | string) => {
     return apiHelpers.get(ENDPOINTS.OUTSTANDING(supplierId));
   },
 
@@ -92,7 +107,7 @@ export const suppliersApi = {
   // =========================================================================
 
   // Get supplier transactions
-  getTransactions: (supplierId, params = {}) => {
+  getTransactions: (supplierId: number | string, params: any = {}) => {
     return apiHelpers.get(`${ENDPOINTS.DETAILS(supplierId)}/transactions`, { params });
   }
 };

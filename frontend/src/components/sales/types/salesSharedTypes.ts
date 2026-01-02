@@ -75,6 +75,7 @@ export interface BaseLineItem {
 
     // Quantity
     quantity: number;
+    free_quantity?: number;
     unit?: string;
 
     // Pricing

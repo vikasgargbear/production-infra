@@ -45,8 +45,12 @@ export { default as ConvertToInvoiceButton } from './ui/ConvertToInvoiceButton';
 export { PaymentRecordingModal } from './modals';
 
 // Shared Hooks
-export { useSalesTransaction } from './hooks';
-export type { UseSalesTransactionConfig, UseSalesTransactionReturn } from './hooks';
+export { useSalesTransaction, useEmployees, useDraftAutoSave } from './hooks';
+export type { UseSalesTransactionConfig, UseSalesTransactionReturn, UseEmployeesReturn, UseDraftAutoSaveOptions } from './hooks';
+
+// Shared Utils
+export { generateTempId, deductStockLocally, prepareOfflineDocument, prepareItemForTransaction } from './utils';
+export type { ProductInput } from './utils';
 
 // Shared Types
 export * from './types';

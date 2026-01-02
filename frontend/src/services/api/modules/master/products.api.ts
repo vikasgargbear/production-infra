@@ -8,13 +8,41 @@
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface ProductParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  category?: string;
+  is_active?: boolean;
+  low_stock?: boolean;
+  threshold?: number;
+  expired?: boolean;
+  expiring_soon?: boolean;
+  days?: number;
+}
+
+export interface ProductSyncParams {
+  page?: number;
+  pageSize?: number;
+  since?: string;
+  includeInactive?: boolean;
+}
+
+// ============================================================================
+// API
+// ============================================================================
+
 const ENDPOINTS = {
   BASE: '/products',
-  DETAILS: (id) => `/products/${id}`,
+  DETAILS: (id: number | string) => `/products/${id}`,
   CATEGORIES: '/products/categories',
   BATCH_UPLOAD: '/products/batch-upload',
   STOCK_UPDATE: '/products/stock-update'
-};
+} as const;
 
 export const productsApi = {
   // =========================================================================
@@ -22,34 +50,34 @@ export const productsApi = {
   // =========================================================================
 
   // Get all products
-  getAll: (params = {}) => {
+  getAll: (params: ProductParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
   // Alias for localFirstService compatibility
-  list: (params = {}) => {
+  list: (params: ProductParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
   // Get product by ID
-  getById: (id) => {
+  getById: (id: number | string) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 
   // Create new product
-  create: (data) => {
+  create: (data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
 
   // Update product
-  update: (id, data) => {
+  update: (id: number | string, data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
   },
 
   // Delete product
-  delete: (id) => {
+  delete: (id: number | string) => {
     return apiHelpers.delete(ENDPOINTS.DETAILS(id));
   },
 
@@ -58,14 +86,14 @@ export const productsApi = {
   // =========================================================================
 
   // Search products
-  search: (query, params = {}) => {
+  search: (query: string, params: ProductParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, {
       params: { search: query, ...params }
     });
   },
 
   // Search products with embedded batches (OPTIMIZED - single API call)
-  searchWithBatches: (query, params = {}) => {
+  searchWithBatches: (query: string, params: any = {}) => {
     return apiHelpers.get('/products/search-with-batches', {
       params: { q: query, ...params }
     });
@@ -73,7 +101,7 @@ export const productsApi = {
 
   // Bulk fetch ALL products with batches for offline sync
   // Usage: getAllWithBatches({ page: 1, pageSize: 100, since: '2026-01-01T00:00:00Z' })
-  getAllWithBatches: (params = {}) => {
+  getAllWithBatches: (params: ProductSyncParams = {}) => {
     return apiHelpers.get('/products/all-with-batches', {
       params: {
         page: params.page || 1,
@@ -98,7 +126,7 @@ export const productsApi = {
   // =========================================================================
 
   // Update stock levels
-  updateStock: (productId, data) => {
+  updateStock: (productId: number | string, data: any) => {
     return apiHelpers.post(ENDPOINTS.STOCK_UPDATE, {
       product_id: productId,
       ...data
@@ -106,7 +134,7 @@ export const productsApi = {
   },
 
   // Get low stock products
-  getLowStock: (threshold = 10) => {
+  getLowStock: (threshold: number = 10) => {
     return apiHelpers.get(ENDPOINTS.BASE, {
       params: { low_stock: true, threshold }
     });
@@ -120,7 +148,7 @@ export const productsApi = {
   },
 
   // Get expiring soon products
-  getExpiringSoon: (days = 30) => {
+  getExpiringSoon: (days: number = 30) => {
     return apiHelpers.get(ENDPOINTS.BASE, {
       params: { expiring_soon: true, days }
     });
@@ -131,7 +159,7 @@ export const productsApi = {
   // =========================================================================
 
   // Batch upload products
-  batchUpload: (file) => {
+  batchUpload: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return apiHelpers.post(ENDPOINTS.BATCH_UPLOAD, formData, {

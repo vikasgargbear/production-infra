@@ -17,6 +17,7 @@ import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { getTodayBusinessDate } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
+import { generateTempId, deductStockLocally } from '../../utils/offlineSaveHelpers';
 import type { Invoice, InvoiceItem } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 
@@ -104,7 +105,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 console.log('[Invoice] Saving offline - no internet connection');
 
                 // Generate temporary offline invoice number
-                const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const tempId = generateTempId();
                 const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false);
 
                 const offlineInvoice = {
@@ -120,19 +121,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 await offlineDB.addToSyncQueue('invoices', tempId, 'create', offlineInvoice as unknown as null);
 
                 // OFFLINE-FIRST: Immediately deduct stock from local IndexedDB
-                // This ensures accurate stock levels even when offline
-                const stockDeductions = invoice.items
-                    .filter(item => item.batch_id && item.quantity > 0)
-                    .map(item => ({
-                        product_id: item.product_id,
-                        batch_id: item.batch_id!,
-                        quantity: parseFloat(String(item.quantity)) + parseFloat(String(item.free_quantity || 0))
-                    }));
-
-                if (stockDeductions.length > 0) {
-                    await offlineDB.deductStockLocally(stockDeductions);
-                    console.log('[Invoice] ✅ Local stock updated (offline mode)');
-                }
+                await deductStockLocally(invoice.items);
 
                 toast.success('✅ Invoice saved offline - Will sync when online', {
                     autoClose: 5000,
@@ -165,7 +154,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             console.log('[Invoice] 🚀 Optimistic save - local first, then background sync');
 
             // Generate temporary local ID and invoice number
-            const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const tempId = generateTempId();
             const localInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false);
 
             // Save locally first (instant)
@@ -182,17 +171,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             await offlineDB.add('invoices', localInvoice);
 
             // Immediately deduct stock from local IndexedDB
-            const stockDeductions = invoice.items
-                .filter(item => item.batch_id && item.quantity > 0)
-                .map(item => ({
-                    product_id: item.product_id,
-                    batch_id: item.batch_id!,
-                    quantity: parseFloat(String(item.quantity)) + parseFloat(String(item.free_quantity || 0))
-                }));
-
-            if (stockDeductions.length > 0) {
-                await offlineDB.deductStockLocally(stockDeductions);
-            }
+            await deductStockLocally(invoice.items);
 
             // Show success to user IMMEDIATELY (optimistic)
             const createdData: CreatedInvoiceData = {
@@ -256,7 +235,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 toast.warning('⚠️ Server unavailable - saving locally...', { autoClose: 3000 });
 
                 try {
-                    const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    const tempId = generateTempId();
                     const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false);
 
                     const offlineInvoice = {

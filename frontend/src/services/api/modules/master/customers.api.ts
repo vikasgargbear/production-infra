@@ -8,13 +8,28 @@
 import { apiHelpers } from '../../apiClient';
 import { cleanData } from '../../utils/dataUtils';
 
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface CustomerParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  has_outstanding?: boolean;
+}
+
+// ============================================================================
+// API
+// ============================================================================
+
 const ENDPOINTS = {
   BASE: '/customers',
-  DETAILS: (id) => `/customers/${id}`,
-  LEDGER: (id) => `/customers/${id}/ledger`,
-  OUTSTANDING: (id) => `/customers/${id}/outstanding`,
+  DETAILS: (id: number | string) => `/customers/${id}`,
+  LEDGER: (id: number | string) => `/customers/${id}/ledger`,
+  OUTSTANDING: (id: number | string) => `/customers/${id}/outstanding`,
   CREDIT_CHECK: '/customers/credit-check'
-};
+} as const;
 
 export const customersApi = {
   // =========================================================================
@@ -22,39 +37,39 @@ export const customersApi = {
   // =========================================================================
 
   // Get all customers
-  getAll: (params = {}) => {
+  getAll: (params: CustomerParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
   // Alias for backward compatibility
-  list: (params = {}) => {
+  list: (params: CustomerParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
   // Get all customers with embedded addresses (for offline sync)
-  getAllWithAddresses: (params = {}) => {
+  getAllWithAddresses: (params: any = {}) => {
     return apiHelpers.get(`${ENDPOINTS.BASE}/all-with-addresses`, { params });
   },
 
   // Get customer by ID
-  getById: (id) => {
+  getById: (id: number | string) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 
   // Create new customer
-  create: (data) => {
+  create: (data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
 
   // Update customer
-  update: (id, data) => {
+  update: (id: number | string, data: any) => {
     const cleanedData = cleanData(data);
     return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
   },
 
   // Delete customer
-  delete: (id) => {
+  delete: (id: number | string) => {
     return apiHelpers.delete(ENDPOINTS.DETAILS(id));
   },
 
@@ -63,7 +78,7 @@ export const customersApi = {
   // =========================================================================
 
   // Search customers
-  search: (query, params = {}) => {
+  search: (query: string, params: CustomerParams = {}) => {
     return apiHelpers.get(ENDPOINTS.BASE, {
       params: { search: query, ...params }
     });
@@ -81,28 +96,28 @@ export const customersApi = {
   // =========================================================================
 
   // Check customer credit
-  checkCredit: (customerId) => {
+  checkCredit: (customerId: number | string) => {
     return apiHelpers.get(ENDPOINTS.CREDIT_CHECK, {
       params: { customer_id: customerId }
     });
   },
 
   // Update credit limit
-  updateCreditLimit: (customerId, creditLimit) => {
+  updateCreditLimit: (customerId: number | string, creditLimit: number) => {
     return apiHelpers.patch(ENDPOINTS.DETAILS(customerId), {
       credit_limit: creditLimit
     });
   },
 
   // Get customer ledger
-  getLedger: (customerId, dateFrom, dateTo) => {
+  getLedger: (customerId: number | string, dateFrom?: string, dateTo?: string) => {
     return apiHelpers.get(ENDPOINTS.LEDGER(customerId), {
       params: { date_from: dateFrom, date_to: dateTo }
     });
   },
 
   // Get customer outstanding balance
-  getOutstandingBalance: (customerId) => {
+  getOutstandingBalance: (customerId: number | string) => {
     return apiHelpers.get(ENDPOINTS.OUTSTANDING(customerId));
   },
 
@@ -116,12 +131,12 @@ export const customersApi = {
   // =========================================================================
 
   // Get customer transactions
-  getTransactions: (customerId, params = {}) => {
+  getTransactions: (customerId: number | string, params: any = {}) => {
     return apiHelpers.get(`${ENDPOINTS.DETAILS(customerId)}/transactions`, { params });
   },
 
   // Send SMS to customer
-  sendSMS: (customerId, message) => {
+  sendSMS: (customerId: number | string, message: string) => {
     return apiHelpers.post(`${ENDPOINTS.DETAILS(customerId)}/sms`, { message });
   }
 };
