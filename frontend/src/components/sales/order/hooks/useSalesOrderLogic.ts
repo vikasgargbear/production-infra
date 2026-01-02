@@ -309,7 +309,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
                     subtotal_amount: formattedTotals.gross_amount || 0,
                     discount_amount: formattedTotals.total_discount || 0,
-                    tax_amount: formattedTotals.total_gst || formattedTotals.total_tax || 0,
+                    tax_amount: formattedTotals.total_gst || 0,
                     total_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
                     final_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
                     cgst_amount: formattedTotals.cgst_amount || 0,

@@ -127,7 +127,7 @@ const generateInvoiceStylePDF = async (
     cgst: parseFloat(data.cgst_amount || 0),
     sgst: parseFloat(data.sgst_amount || 0),
     igst: parseFloat(data.igst_amount || 0),
-    tax: parseFloat(data.tax_amount || data.total_tax || 0),
+    tax: parseFloat(data.total_gst || 0),
     roundOff: parseFloat(data.round_off_amount || data.round_off || 0),
     total: parseFloat(data.final_amount || data.total_amount || data.net_amount || 0)
   };
@@ -229,7 +229,7 @@ const generateReceiptPDF = async (
     ['Payment Mode', data.payment_mode || 'Cash'],
     ['Reference No', data.reference_number || '-']
   ];
-  
+
   pdfGenerator.currentY += 45;
   pdfGenerator.addTable(headers, rows);
 
@@ -256,7 +256,7 @@ const generateNotePDF = async (
     invoice_number: data.note_number || data[`${type}_number`],
     invoice_date: data.note_date || data[`${type}_date`]
   };
-  
+
   await generateInvoiceStylePDF(pdfGenerator, modifiedData, {
     showBatchInfo: true,
     showBankDetails: false,
