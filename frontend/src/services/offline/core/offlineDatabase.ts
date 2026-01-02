@@ -517,7 +517,7 @@ class OfflineDatabase {
     }
 
     /**
-     * Store/update batches for a product (updates product.batches)
+     * Store/update batches for a product (MERGES with existing batches)
      */
     async storeBatches(batches: any[]): Promise<void> {
         if (!batches || batches.length === 0) return;
@@ -532,11 +532,27 @@ class OfflineDatabase {
             batchesByProduct.get(productId)!.push(batch);
         }
 
-        // Update each product with its batches
-        for (const [productId, productBatches] of batchesByProduct) {
+        // Update each product - MERGE batches, don't replace
+        for (const [productId, newBatches] of batchesByProduct) {
             const product = await this.get('products', productId);
             if (product) {
-                product.batches = productBatches;
+                const existingBatches = product.batches || [];
+
+                // Create a map of existing batches by batch_id
+                const batchMap = new Map<string, any>();
+                for (const batch of existingBatches) {
+                    batchMap.set(String(batch.batch_id), batch);
+                }
+
+                // Merge new batches (update existing or add new)
+                for (const newBatch of newBatches) {
+                    batchMap.set(String(newBatch.batch_id), {
+                        ...batchMap.get(String(newBatch.batch_id)),
+                        ...newBatch
+                    });
+                }
+
+                product.batches = Array.from(batchMap.values());
                 product.updated_at = new Date().toISOString();
                 await this.update('products', product);
             }
