@@ -305,23 +305,29 @@ class InvoiceService:
             total_tax += calc["total_tax"]
         
         # Calculate taxable amount after item-level discounts
-        taxable_amount = subtotal - total_item_discount
+        taxable_after_items = subtotal - total_item_discount
         
-        # Calculate invoice-level discount (applied to taxable amount)
+        # Calculate invoice-level discount (scheme discount)
         if discount_type == "percentage" and discount_percent > 0:
-            invoice_discount = taxable_amount * discount_percent / 100
+            invoice_discount = taxable_after_items * discount_percent / 100
         else:
             invoice_discount = discount_amount
         
-        # Total discount = item-level + invoice-level
-        total_discount = total_item_discount + invoice_discount
+        # CRITICAL: Apply scheme discount BEFORE GST calculation
+        # Per Indian GST: All discounts must reduce the taxable base before tax
+        taxable_after_all_discounts = taxable_after_items - invoice_discount
         
-        # Recalculate taxable amount after invoice discount
-        taxable_after_all_discounts = subtotal - total_discount
+        # Recalculate GST on the fully discounted amount
+        # (proportionally reduce based on effective GST rate)
+        effective_gst_rate = total_tax / taxable_after_items if taxable_after_items > 0 else 0
+        adjusted_total_tax = taxable_after_all_discounts * effective_gst_rate
+        adjusted_cgst = adjusted_total_tax / 2 if total_cgst > 0 else 0
+        adjusted_sgst = adjusted_total_tax / 2 if total_sgst > 0 else 0
+        adjusted_igst = adjusted_total_tax if total_igst > 0 else 0
         
-        # Final amount calculation
+        # Final amount calculation - ONLY final_amount is rounded
         amount_before_round = (
-            taxable_after_all_discounts + total_tax + 
+            taxable_after_all_discounts + adjusted_total_tax + 
             freight_charges + insurance_charges + other_charges
         )
         final_amount = round(amount_before_round)
@@ -329,19 +335,20 @@ class InvoiceService:
         
         return {
             # Canonical field names (matching database schema: sales.invoices)
-            "subtotal_amount": subtotal,              # DB: subtotal_amount
-            "discount_amount": total_item_discount,   # DB: discount_amount (item-level)
-            "scheme_discount": invoice_discount,      # DB: scheme_discount (invoice-level)
-            "taxable_amount": taxable_after_all_discounts,  # DB: taxable_amount
-            "total_tax_amount": total_tax,            # DB: total_tax_amount
-            "cgst_amount": total_cgst,                # DB: cgst_amount
-            "sgst_amount": total_sgst,                # DB: sgst_amount
-            "igst_amount": total_igst,                # DB: igst_amount
-            "freight_charges": freight_charges,       # DB: freight_charges
-            "insurance_charges": insurance_charges,   # DB: insurance_charges
-            "other_charges": other_charges,           # DB: other_charges
-            "round_off_amount": round_off_amount,     # DB: round_off_amount
-            "final_amount": final_amount,             # DB: final_amount
+            # NOTE: No rounding on intermediate values - only final_amount is rounded
+            "subtotal_amount": subtotal,                    # DB: subtotal_amount
+            "discount_amount": total_item_discount,         # DB: discount_amount (item-level)
+            "scheme_discount": invoice_discount,            # DB: scheme_discount (invoice-level)
+            "taxable_amount": taxable_after_all_discounts,  # DB: taxable_amount (AFTER all discounts)
+            "total_tax_amount": adjusted_total_tax,         # DB: total_tax_amount (recalculated)
+            "cgst_amount": adjusted_cgst,                   # DB: cgst_amount
+            "sgst_amount": adjusted_sgst,                   # DB: sgst_amount
+            "igst_amount": adjusted_igst,                   # DB: igst_amount
+            "freight_charges": freight_charges,             # DB: freight_charges
+            "insurance_charges": insurance_charges,         # DB: insurance_charges
+            "other_charges": other_charges,                 # DB: other_charges
+            "round_off_amount": round_off_amount,           # DB: round_off_amount
+            "final_amount": final_amount,                   # DB: final_amount (ONLY this is rounded)
             "line_calculations": calculated_lines
         }
 

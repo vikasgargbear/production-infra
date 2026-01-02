@@ -6,5 +6,3 @@
  */
 
 export { default as ConvertToInvoiceButton } from './ConvertToInvoiceButton';
-export { default as SalesHeader } from './SalesHeader';
-export { default as SalesTypeSelector } from './SalesTypeSelector';

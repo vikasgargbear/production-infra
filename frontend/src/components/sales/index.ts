@@ -38,13 +38,18 @@ export { SalesOrderFlow, SalesOrderManagement } from './order';
 export { ChallanFlow } from './challan';
 export { default as SalesHub } from './SalesHub';
 
-// Sub Components - shared UI
-export { default as SalesHeader } from './ui/SalesHeader';
-export { default as SalesTypeSelector } from './ui/SalesTypeSelector';
+// Sub Components - shared UI (only remaining shared component)
 export { default as ConvertToInvoiceButton } from './ui/ConvertToInvoiceButton';
 
 // Modals - re-export from modals folder
 export { PaymentRecordingModal } from './modals';
+
+// Shared Hooks
+export { useSalesTransaction } from './hooks';
+export type { UseSalesTransactionConfig, UseSalesTransactionReturn } from './hooks';
+
+// Shared Types
+export * from './types';
 
 // TransportDetails - use from global (removed duplicate from sales/ui)
 
