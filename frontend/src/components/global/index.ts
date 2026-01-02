@@ -5,14 +5,15 @@
 
 // Search Components
 export { CustomerSearch } from './search/CustomerSearch';
+export { EntitySearch } from './search/EntitySearch';
 // ProductSearch.tsx removed - was broken (batch selection not implemented)
 export { default as ProductSearchSimple } from './search/ProductSearchSimple';
-export { default as PartySearch } from './search/PartySearch';
+// PartySearch removed - was unused
 export { default as SupplierSearch } from './search/SupplierSearch';
 export { default as PurchaseProductSearch } from './search/PurchaseProductSearch';
 export { default as InvoiceSearch } from './search/InvoiceSearch';
 export { default as PurchaseSearch } from './search/PurchaseSearch';
-export { default as HistoricalDataSearch } from './search/HistoricalDataSearch';
+// HistoricalDataSearch removed - was unused
 
 // Selector Components
 export { default as InvoiceSelector } from './modals/InvoiceSelector';

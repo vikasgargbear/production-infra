@@ -460,7 +460,7 @@ async def get_all_products_with_batches(
                 sb.quantity_available, sb.pack_size, sb.pack_type, sb.pack_uom,
                 CASE 
                     WHEN sb.expiry_date IS NULL THEN NULL
-                    ELSE EXTRACT(DAY FROM sb.expiry_date - CURRENT_DATE)::int
+                    ELSE (sb.expiry_date - CURRENT_DATE)
                 END as days_to_expiry
             FROM inventory.batches sb
             WHERE sb.org_id = :org_id
