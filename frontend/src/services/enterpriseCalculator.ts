@@ -205,8 +205,6 @@ class EnterpriseCalculator {
    * Calculate invoice - uses base methods
    */
   static calculateInvoice(invoiceData: Partial<Invoice>): CalculatedTotals {
-    console.log('🧮 [CALCULATOR] Received invoice data:', invoiceData);
-
     // Calculate invoice discount from percentage or amount
     let invoiceDiscount = 0;
     if (invoiceData.discount_type === 'percentage' && invoiceData.discount_percent) {
@@ -218,10 +216,8 @@ class EnterpriseCalculator {
         invoice_discount: 0
       });
       invoiceDiscount = (Number(prelimResult.totals.taxable_amount) * Number(invoiceData.discount_percent)) / 100;
-      console.log('🧮 [CALCULATOR] Percentage discount:', invoiceData.discount_percent, '% of taxable amount', prelimResult.totals.taxable_amount, '=', invoiceDiscount);
     } else if (invoiceData.discount_type === 'fixed' && invoiceData.discount_amount) {
       invoiceDiscount = Number(invoiceData.discount_amount);
-      console.log('🧮 [CALCULATOR] Fixed discount:', invoiceDiscount);
     }
 
     const result = this.calculateTotals(invoiceData.items || [], {
@@ -229,8 +225,6 @@ class EnterpriseCalculator {
       freight_charges: Number(invoiceData.freight_charges || 0),
       invoice_discount: invoiceDiscount  // Apply invoice-level discount (in addition to item discounts)
     });
-
-    console.log('🧮 [CALCULATOR] Calculated result:', result);
 
     return result;
   }
