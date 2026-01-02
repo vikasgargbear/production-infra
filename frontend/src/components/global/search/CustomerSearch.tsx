@@ -79,14 +79,13 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
           : 'hover:bg-gray-50 border-l-4 border-l-transparent'
           }`}
       >
-        {/* Row 1: Name + B2B badge + GST badge */}
-        <div className="flex items-center gap-2">
+        {/* Row 1: Name + GST status */}
+        <div className="flex items-center justify-between">
           <span className="font-medium text-gray-900">{customer.customer_name}</span>
-          {customer.customer_type === 'B2B' && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">B2B</span>
-          )}
-          {hasGst && (
-            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">GST</span>
+          {hasGst ? (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">GST Registered</span>
+          ) : (
+            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">No GST</span>
           )}
         </div>
 
