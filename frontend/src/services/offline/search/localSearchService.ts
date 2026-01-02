@@ -37,10 +37,37 @@ export interface ProductSearchResult {
 export interface CustomerSearchResult {
     customer_id: string | number;
     customer_name: string;
+    customer_code?: string;
     primary_phone?: string;
+    primary_email?: string;
     gst_number?: string;
     customer_type?: string;
+    credit_limit?: number;
+    current_outstanding?: number;
+    // Address info (embedded like batches in products)
     city?: string;
+    state?: string;
+    billing_address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        pincode?: string;
+    };
+    shipping_address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        pincode?: string;
+    } | null;
+    // B2B contact person (embedded)
+    contact_person?: {
+        name: string;
+        phone?: string;
+        email?: string;
+    } | null;
+    // Compliance fields
+    pan_number?: string;
+    drug_license_number?: string;
 }
 
 // ==================== SERVICE CLASS ====================

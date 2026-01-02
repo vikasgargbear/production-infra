@@ -62,28 +62,21 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
   // Instant search using local-first service
   const performSearch = useCallback(async (query: string) => {
-    // // console.log('[CustomerSearch] performSearch called with query:', query);
-
     if (!query || query.length < minSearchLength) {
-      // // console.log('[CustomerSearch] Query too short, clearing results');
       setSearchResults([]);
-      setHighlightedIndex(-1); // Reset highlight
+      setHighlightedIndex(-1);
       return;
     }
 
     setIsLoading(true);
     try {
-      // // console.log('[CustomerSearch] Calling localSearchService.searchCustomers');
       const results = await localSearchService.searchCustomers(query, { limit: 20 });
-      // // console.log('[CustomerSearch] Got results:', results.length, results);
       setSearchResults(results as Customer[]);
 
       // Auto-highlight first result so Enter key works immediately
       if (results.length > 0) {
-        // // console.log('[CustomerSearch] Setting highlightedIndex to 0');
         setHighlightedIndex(0);
       } else {
-        // // console.log('[CustomerSearch] No results, setting highlightedIndex to -1');
         setHighlightedIndex(-1);
       }
     } catch (error) {
@@ -97,16 +90,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
   // Debounce search for 50ms (near-instant but prevents excessive updates)
   const debouncedSearch = useMemo(
-    () => debounce((query: string) => {
-      // // console.log('[CustomerSearch] Debounced search triggered for:', query);
-      performSearch(query);
-    }, 50),
+    () => debounce((query: string) => performSearch(query), 50),
     [performSearch]
   );
 
   // Trigger search when query changes
   useEffect(() => {
-    // // console.log('[CustomerSearch] searchQuery changed to:', searchQuery);
     debouncedSearch(searchQuery);
   }, [searchQuery, debouncedSearch]);
 
@@ -145,8 +134,6 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // // console.log('[CustomerSearch] Key pressed:', e.key, 'highlightedIndex:', highlightedIndex, 'results:', searchResults.length);
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightedIndex(prev =>
@@ -159,16 +146,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       );
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      // // console.log('[CustomerSearch] Enter pressed, highlightedIndex:', highlightedIndex, 'searchResults:', searchResults);
-
       // If we have results and one is highlighted, select it
       if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
-        // // console.log('[CustomerSearch] Selecting customer:', searchResults[highlightedIndex]);
         handleCustomerSelect(searchResults[highlightedIndex]);
       }
       // If no results and we have a search query, trigger create customer
       else if (searchResults.length === 0 && searchQuery.length >= minSearchLength && onCreateNew) {
-        // // console.log('[CustomerSearch] No results, opening create customer modal');
         onCreateNew();
       }
     } else if (e.key === 'Escape') {
@@ -190,16 +173,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     }
   }, [highlightedIndex]);
 
-  // Auto-highlight first result when results change
-  useEffect(() => {
-    if (searchResults.length > 0) {
-      setHighlightedIndex(0);
-      // // console.log('[CustomerSearch] useEffect: Auto-highlighting first of', searchResults.length, 'results');
-    } else {
-      setHighlightedIndex(-1);
-      // // console.log('[CustomerSearch] useEffect: No results, clearing highlight');
-    }
-  }, [searchResults]);
+  // Note: highlightedIndex is set directly in performSearch, no separate useEffect needed
 
   // Handle remove customer
   const handleRemoveCustomer = (e?: React.MouseEvent) => {

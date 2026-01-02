@@ -148,7 +148,7 @@ class SyncPullService {
 
                 const response = await productAPI.getAllWithBatches({
                     page,
-                    page_size: pageSize,
+                    pageSize,
                     since
                 });
 
@@ -338,23 +338,56 @@ class SyncPullService {
 
     /**
      * Transform customer from API format to IndexedDB format
+     * Includes embedded address and contact data (like products include batches)
      */
     private transformCustomer(customer: any): any {
         const customerId = String(customer.customer_id || customer.id);
+
+        // Build billing address object
+        const billingAddress = {
+            street: customer.billing_address || customer.address_info?.billing_address || '',
+            city: customer.billing_city || customer.city || customer.address_info?.billing_city || '',
+            state: customer.billing_state || customer.state || customer.address_info?.billing_state || '',
+            pincode: customer.billing_pincode || customer.address_info?.billing_pincode || ''
+        };
+
+        // Build shipping address object (if different from billing)
+        const shippingAddress = customer.shipping_address || customer.address_info?.shipping_address ? {
+            street: customer.shipping_address || customer.address_info?.shipping_address || '',
+            city: customer.shipping_city || customer.address_info?.shipping_city || '',
+            state: customer.shipping_state || customer.address_info?.shipping_state || '',
+            pincode: customer.shipping_pincode || customer.address_info?.shipping_pincode || ''
+        } : null;
+
+        // Build contact person object for B2B customers
+        const contactPerson = customer.contact_person_name ? {
+            name: customer.contact_person_name,
+            phone: customer.contact_person_phone || '',
+            email: customer.contact_person_email || ''
+        } : null;
 
         return {
             id: customerId,
             customer_id: customerId,
             customer_name: customer.customer_name || customer.name || '',
             customer_code: customer.customer_code || '',
-            primary_phone: customer.primary_phone || customer.phone || '',
-            primary_email: customer.primary_email || customer.email || '',
+            primary_phone: customer.primary_phone || customer.phone || customer.contact_info?.primary_phone || '',
+            primary_email: customer.primary_email || customer.email || customer.contact_info?.email || '',
             gst_number: customer.gst_number || customer.gstin || '',
             customer_type: customer.customer_type || 'regular',
             credit_limit: customer.credit_limit || 0,
             current_outstanding: customer.current_outstanding || 0,
-            city: customer.city || '',
-            state: customer.state || '',
+            // Embedded address data (like batches in products)
+            city: billingAddress.city,
+            state: billingAddress.state,
+            billing_address: billingAddress,
+            shipping_address: shippingAddress,
+            // Embedded contact person (for B2B)
+            contact_person: contactPerson,
+            // Compliance fields
+            pan_number: customer.pan_number || '',
+            drug_license_number: customer.drug_license_number || '',
+            drug_license_expiry: customer.drug_license_expiry || null,
             // Search fields
             _search_name: (customer.customer_name || customer.name || '').toLowerCase(),
             _search_phone: (customer.primary_phone || customer.phone || '').replace(/\D/g, ''),
