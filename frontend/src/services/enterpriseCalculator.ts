@@ -164,8 +164,20 @@ class EnterpriseCalculator {
     const freightCharges = parseFloat(String(options.freight_charges || options.delivery_charges || 0));
     const invoiceDiscount = parseFloat(String(options.invoice_discount || options.additional_discount || 0));
 
+    // CRITICAL: Apply scheme discount to taxable amount BEFORE GST calculation
+    // Per Indian GST: All discounts must be applied before calculating tax
+    const taxableAfterSchemeDiscount = taxableAmount - invoiceDiscount;
+
+    // Recalculate GST on the fully discounted amount
+    // Note: This is a simplified recalculation. For exact per-item GST rates,
+    // you'd need to proportionally reduce each item's taxable amount.
+    const effectiveGstRate = taxableAmount > 0 ? (totalGst / taxableAmount) : 0;
+    const adjustedGst = taxableAfterSchemeDiscount * effectiveGstRate;
+    const adjustedCgst = adjustedGst / 2;
+    const adjustedSgst = adjustedGst / 2;
+
     // Final calculations
-    const netAmount = taxableAmount + totalGst + freightCharges - invoiceDiscount;
+    const netAmount = taxableAfterSchemeDiscount + adjustedGst + freightCharges;
     const finalAmount = Math.round(netAmount);
     const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
 
@@ -173,17 +185,17 @@ class EnterpriseCalculator {
       items: calculatedItems,
       totals: {
         // Canonical field names (matching database schema: sales.invoices)
-        subtotal_amount: this.round(grossAmount),       // DB: subtotal_amount
-        discount_amount: this.round(totalDiscount),     // DB: discount_amount (item-level)
-        scheme_discount: this.round(invoiceDiscount),   // DB: scheme_discount (invoice-level)
-        taxable_amount: this.round(taxableAmount),      // DB: taxable_amount
-        total_tax_amount: this.round(totalGst),         // DB: total_tax_amount
-        cgst_amount: this.round(cgstTotal),             // DB: cgst_amount
-        sgst_amount: this.round(sgstTotal),             // DB: sgst_amount
-        igst_amount: this.round(igstTotal),             // DB: igst_amount
-        freight_charges: this.round(freightCharges),    // DB: freight_charges
-        round_off_amount: this.round(roundOff),         // DB: round_off_amount
-        final_amount: finalAmount                        // DB: final_amount
+        subtotal_amount: this.round(grossAmount),                // DB: subtotal_amount
+        discount_amount: this.round(totalDiscount),              // DB: discount_amount (item-level)
+        scheme_discount: this.round(invoiceDiscount),            // DB: scheme_discount (invoice-level)
+        taxable_amount: this.round(taxableAfterSchemeDiscount),  // DB: taxable_amount (AFTER all discounts)
+        total_tax_amount: this.round(adjustedGst),               // DB: total_tax_amount
+        cgst_amount: this.round(adjustedCgst),                   // DB: cgst_amount
+        sgst_amount: this.round(adjustedSgst),                   // DB: sgst_amount
+        igst_amount: this.round(igstTotal > 0 ? adjustedGst : 0), // DB: igst_amount
+        freight_charges: this.round(freightCharges),             // DB: freight_charges
+        round_off_amount: this.round(roundOff),                  // DB: round_off_amount
+        final_amount: finalAmount                                 // DB: final_amount
       }
     };
   }
