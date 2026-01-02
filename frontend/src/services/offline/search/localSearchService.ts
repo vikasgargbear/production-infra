@@ -214,17 +214,26 @@ class LocalSearchService {
             console.log(`[LocalSearch] ⚡ Searching ${allCustomers.length} customers for: "${query}"`);
 
             // Multi-field search
+            // Bug fix: Only match phone if phoneDigits has actual digits
+            const hasDigits = phoneDigits.length > 0;
             const matches = allCustomers.filter((customer: any) => {
-                return (
+                // Name matches
+                const nameMatch =
                     (customer._search_name?.includes(searchTerm) || false) ||
-                    (customer._search_phone?.includes(phoneDigits) || false) ||
-                    (customer._search_gst?.includes(searchTerm) || false) ||
-                    // Fallback for legacy data
                     (customer.customer_name?.toLowerCase().includes(searchTerm) || false) ||
-                    (customer.name?.toLowerCase().includes(searchTerm) || false) ||
+                    (customer.name?.toLowerCase().includes(searchTerm) || false);
+
+                // Phone matches (only if query contains digits)
+                const phoneMatch = hasDigits && (
+                    (customer._search_phone?.includes(phoneDigits) || false) ||
                     (customer.primary_phone?.includes(phoneDigits) || false) ||
                     (customer.phone?.includes(phoneDigits) || false)
                 );
+
+                // GST matches
+                const gstMatch = customer._search_gst?.includes(searchTerm) || false;
+
+                return nameMatch || phoneMatch || gstMatch;
             });
 
             // Sort by relevance

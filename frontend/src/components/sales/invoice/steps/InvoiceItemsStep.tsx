@@ -191,11 +191,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                             <div>
                                 <label className="block text-sm font-medium text-gray-600 mb-2">
                                     M.R. (Medical Representative)
-                                    {employees.length === 0 && (
-                                        <span className="ml-2 text-xs text-gray-500">
-                                            (No M.R. assigned yet)
-                                        </span>
-                                    )}
                                 </label>
                                 <select
                                     value={selectedMR?.employee_id || ''}

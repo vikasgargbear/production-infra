@@ -62,70 +62,54 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     return results as Customer[];
   }, []);
 
-  // Render customer result in dropdown
-  const renderCustomerResult = (customer: Customer, isHighlighted: boolean, index: number) => (
-    <div
-      className={`p-3 cursor-pointer transition-colors ${isHighlighted
-        ? 'bg-blue-50 border-l-4 border-l-blue-500'
-        : 'hover:bg-gray-50 border-l-4 border-l-transparent'
-        }`}
-    >
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          {/* Business/Party Name */}
-          <div className="flex items-center gap-2 mb-1">
-            <p className="font-medium text-gray-900">{customer.customer_name}</p>
-            {customer.customer_type === 'B2B' && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
-            )}
-          </div>
+  // Render customer result in dropdown - clean minimal display
+  const renderCustomerResult = (customer: Customer, isHighlighted: boolean, index: number) => {
+    const phone = (customer as any).contact_person?.phone ||
+      customer.phone ||
+      (customer as any).primary_phone;
+    const city = (customer as any).billing_address?.city ||
+      customer.billing_address?.city ||
+      (customer as any).city;
+    const hasGst = customer.gstin || (customer as any).gst_number;
 
-          <div className="text-sm text-gray-600 mt-1 space-y-0.5">
-            {/* Contact Person for B2B */}
-            {(customer as any).contact_person?.name && (
-              <p className="flex items-center gap-1">
-                <User className="w-3 h-3" />
-                <span className="font-medium">Contact:</span> {(customer as any).contact_person.name}
+    return (
+      <div
+        className={`p-3 cursor-pointer transition-colors ${isHighlighted
+          ? 'bg-blue-50 border-l-4 border-l-blue-500'
+          : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+          }`}
+      >
+        <div className="flex justify-between items-center">
+          {/* Left: Name and Phone */}
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-gray-900">{customer.customer_name}</p>
+              {customer.customer_type === 'B2B' && (
+                <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">B2B</span>
+              )}
+            </div>
+            {phone && (
+              <p className="text-sm text-gray-600 flex items-center gap-1 mt-0.5">
+                <Phone className="w-3 h-3" /> {phone}
               </p>
             )}
+          </div>
 
-            {/* Phone */}
-            {(() => {
-              const phone = (customer as any).contact_person?.phone ||
-                customer.phone ||
-                (customer as any).primary_phone;
-              if (phone) {
-                return (
-                  <p className="flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {phone}
-                  </p>
-                );
-              }
-              return null;
-            })()}
-
-            {customer.customer_code && <p>Code: {customer.customer_code}</p>}
-
-            {/* City from cached address */}
-            {(() => {
-              const city = (customer as any).billing_address?.city ||
-                customer.billing_address?.city ||
-                (customer as any).city;
-              if (city) {
-                return <p>City: {city}</p>;
-              }
-              return null;
-            })()}
+          {/* Right: City and GST badge */}
+          <div className="flex items-center gap-2 text-right">
+            {city && (
+              <span className="text-xs text-gray-500">{city}</span>
+            )}
+            {hasGst && (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                GST
+              </span>
+            )}
           </div>
         </div>
-        {(customer.gstin || (customer as any).gst_number) && (
-          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-            GST Registered
-          </span>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // Render selected customer
   const renderSelectedCustomer = (customer: Customer, onClear: () => void) => {
