@@ -7,7 +7,7 @@ import {
 import { DataTable, StatusBadge, Button, ModuleHeader } from '../../global';
 import { stockApi, batchesApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
-import offlineDB from '../../services/offline/core/offlineDatabase';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
 import jsPDF from 'jspdf';
 
 const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () => void }) => {

@@ -20,7 +20,7 @@ router = APIRouter()
 
 # ============== EMPLOYEE ENDPOINTS ==============
 
-@router.get("/", response_model=Dict[str, Any])
+@router.get("", response_model=Dict[str, Any])  # Empty string - handles both with/without trailing slash
 @with_tenant_context
 async def list_employees(
     limit: int = Query(100, ge=1, le=1000),
