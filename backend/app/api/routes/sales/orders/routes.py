@@ -1,152 +1,302 @@
 """
-Order management endpoints for enterprise pharma system
-Handles complete order lifecycle from creation to delivery
-
-UPDATED: Modernized to use TenantAwareSession for AI-agent safety
+Sales Order management endpoints for enterprise pharma system
+Handles sales order lifecycle from creation to conversion
 """
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
 from .....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.org_context import get_org_context, OrgContext
-from .....core.permissions import PermissionChecker  # RBAC
+from .....core.permissions import PermissionChecker
+from .....core.constants import OrderStatus, PaymentStatus
+from ....services.document_number_service import DocumentNumberService
+from ....services.gst_service import GSTService
 from ....schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
-    InvoiceResponse, DeliveryUpdate, ReturnRequest
+    InvoiceResponse, DeliveryUpdate, OrderUpdate
 )
 from ....services.sales.order_service import OrderService
 from ....services.master.customer_service import CustomerService
 from ....services.sales.invoice_service import InvoiceService
-from ....services.gst_service import GSTService
+from .....services.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/orders", tags=["orders"])
+router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
+
+@router.get("/generate-number")
+@with_tenant_context
+async def generate_sales_order_number(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
+):
+    """Generate next sales order number using unified service"""
+    try:
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "sales_order", str(context.org_id))
+        return {"order_number": new_number}
+    except Exception as e:
+        logger.error(f"Failed to generate sales order number: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate order number: {str(e)}")
+
+@router.get("/employees")
+@with_tenant_context
+async def get_employees_for_created_by(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
+):
+    """Get list of employees for 'Created By' dropdown"""
+    try:
+        # Convert org_id to UUID if needed
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+            
+        result = db.execute(text("""
+            SELECT user_id, full_name, email, role_id, is_active
+            FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY full_name
+        """), {"org_id": str(context.org_id)})
+        
+        employees = [dict(row._mapping) for row in result]
+        return employees
+        
+    except Exception as e:
+        logger.error(f"Error fetching employees: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=OrderResponse)
 @with_tenant_context
-async def create_order(
+async def create_sales_order(
     order: OrderCreate,
-    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
     """
-    Create a new order with items
+    Create a new sales order (no inventory reduction)
     
-    - Validates customer credit limit
-    - Checks inventory availability
+    - Validates customer exists
+    - Validates product availability
     - Calculates taxes and totals
-    - Allocates inventory using FIFO
+    - Creates order with 'pending' status
+    - NO inventory allocation until approval
     """
     try:
-        # Use org_id from token (never trust client-provided org_id)
-        # org_id parameter comes from Depends(get_org_id_string)
+        # Set org_id early - ensure it's a UUID object
+        # org_id from header is a string, need to convert to UUID
+        if order.org_id:
+            org_id = order.org_id if isinstance(order.org_id, UUID) else UUID(str(order.org_id))
+        elif org_id:  # From header/token
+            org_id = UUID(str(org_id)) if not isinstance(org_id, UUID) else org_id
+        else:
+            raise HTTPException(status_code=400, detail="Organization ID is required")
         
-        # Validate customer exists and has credit
-        credit_check = CustomerService.validate_credit_limit(
-            db, order.customer_id, Decimal("0"), org_id  # Will calculate actual amount
-        )
+        logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}, type={type(org_id)}")
         
-        if not credit_check["valid"] and credit_check.get("message") == "Customer not found":
-            raise HTTPException(status_code=404, detail="Customer not found")
+        # Handle addresses if provided (create in master.addresses if they're new)
+        billing_address_id = None
+        shipping_address_id = None
+        delivery_address_id = None
         
-        # REMOVED: Orders should NOT validate inventory
-        # Only invoices should validate and deduct inventory
-        # This allows creating orders/challans even when stock is low
-        # Enterprise systems allow orders to be placed regardless of current stock
-        items_dict = [item.dict() for item in order.items]
+        if order.billing_address:
+            # Check if address exists or create new one
+            billing_address_id = _get_or_create_address(
+                db, org_id, order.customer_id, 
+                order.billing_address, 'billing'
+            )
         
-        # Get customer details
+        if order.shipping_address:
+            # Check if address exists or create new one
+            shipping_address_id = _get_or_create_address(
+                db, org_id, order.customer_id,
+                order.shipping_address, 'shipping'
+            )
+            # Use shipping as delivery address
+            delivery_address_id = shipping_address_id
+        
+        # Validate customer exists and get all details
+        # SECURITY FIX: ALWAYS filter by org_id to prevent cross-org data access
         customer = db.execute(text("""
-            SELECT customer_name, primary_phone
-            FROM parties.customers 
+            SELECT customer_id, customer_name, primary_phone, gst_number
+            FROM parties.customers
             WHERE customer_id = :id AND org_id = :org_id
-        """), {"id": order.customer_id, "org_id": org_id}).fetchone()
+        """), {"id": order.customer_id, "org_id": str(context.org_id)}).fetchone()
         
         if not customer:
+            logger.error(f"Customer {order.customer_id} does not exist")
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # No discount_percent column in customers table, set to 0
-        customer_discount = Decimal("0")
+        customer_discount = Decimal("0")  # Default to no customer discount for now
         
-        totals = OrderService.calculate_order_totals(
-            db, items_dict, org_id, customer_discount
-        )
+        # Validate products exist (but don't check inventory yet)
+        # SECURITY FIX: ALWAYS filter by org_id
+        items_dict = [item.dict() for item in order.items]
+        for item in items_dict:
+            product = db.execute(text("""
+                SELECT product_id, product_name FROM inventory.products
+                WHERE product_id = :id AND org_id = :org_id
+            """), {"id": item["product_id"], "org_id": str(context.org_id)}).fetchone()
+            
+            if not product:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Product {item['product_id']} not found"
+                )
         
-        # Check credit limit with actual amount
-        credit_check = CustomerService.validate_credit_limit(
-            db, order.customer_id, totals["total"], org_id
-        )
+        # Calculate totals by summing up item values
+        total_subtotal = Decimal("0")
+        total_discount = Decimal("0")
+        total_taxable = Decimal("0")
+        total_cgst = Decimal("0")
+        total_sgst = Decimal("0")
+        total_igst = Decimal("0")
+        total_tax = Decimal("0")
         
-        if not credit_check["valid"]:
-            raise HTTPException(status_code=400, detail=credit_check["message"])
+        for item in order.items:
+            base_quantity = Decimal(str(item.quantity))  # What customer pays for
+            unit_price = Decimal(str(item.unit_price))
+            discount_percent = Decimal(str(item.discount_percent or 0))
+            tax_percent = Decimal(str(item.tax_percent or 0))  # No default - must come from product
+            gst_type = getattr(item, 'gst_type', 'CGST/SGST')
+            
+            gross_amount = base_quantity * unit_price  # Calculate on what customer pays for
+            discount_amount = (gross_amount * discount_percent) / 100
+            taxable_amount = gross_amount - discount_amount
+            
+            # Use GSTService for consistent GST calculations
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            cgst_amount = gst_components["cgst_amount"]
+            sgst_amount = gst_components["sgst_amount"]
+            igst_amount = gst_components["igst_amount"]
+            tax_amount = gst_components["total_tax_amount"]
+            
+            # Add to totals
+            total_subtotal += gross_amount
+            total_discount += discount_amount
+            total_taxable += taxable_amount
+            total_cgst += cgst_amount
+            total_sgst += sgst_amount
+            total_igst += igst_amount
+            total_tax += tax_amount
+        
+        # Final amount calculation
+        final_amount = total_taxable + total_tax
+        
+        totals = {
+            "subtotal": total_subtotal,
+            "discount": total_discount,
+            "taxable": total_taxable,
+            "cgst": total_cgst,
+            "sgst": total_sgst,
+            "igst": total_igst,
+            "tax": total_tax,
+            "total": final_amount,
+            "round_off": Decimal("0")
+        }
         
         # Generate order number
         order_number = OrderService.generate_order_number(db, org_id)
         
-        # Create order
+        # Get valid branch_id for the org (following invoice pattern)
+        # Try with org_id first, then without (for legacy data)
+        branch_result = db.execute(text("""
+            SELECT branch_id FROM master.org_branches 
+            WHERE org_id = :org_id 
+            LIMIT 1
+        """), {"org_id": str(context.org_id)})
+        branch = branch_result.fetchone()
+        
+        if not branch:
+            # Try without org_id filter (for legacy data)
+            branch_result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                LIMIT 1
+            """))
+            branch = branch_result.fetchone()
+        
+        branch_id = branch[0] if branch else None  # Use NULL if no branch found (like invoice does)
+        
+        # Create sales order data with ALL actual schema columns
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
-            "order_status": "pending",
-            "customer_name": customer.customer_name,
-            "customer_phone": customer.primary_phone,
+            "order_status": OrderStatus.DRAFT.value,  # Single source of truth
+            "branch_id": branch_id,  # Use actual branch from DB
+            "customer_name": customer.customer_name,  # Schema has this column!
+            "customer_phone": customer.primary_phone,  # Schema has this column!
+            "delivery_address_id": delivery_address_id,  # Add address reference
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
+            "taxable_amount": totals["taxable"],  # Add taxable amount!
             "tax_amount": totals["tax"],
-            "round_off_amount": Decimal("0"),
+            "cgst_amount": totals.get("cgst", Decimal("0")),  # Schema has this!
+            "sgst_amount": totals.get("sgst", Decimal("0")),  # Schema has this!
+            "igst_amount": totals.get("igst", Decimal("0")),  # Schema has this!
+            "items_count": len(order.items),  # Add items count!
+            "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
-            "paid_amount": Decimal("0"),
-            "balance_amount": totals["total"],
-            "payment_mode": "credit",
-            "payment_status": "pending",
-            "created_by": context.user_id,  # SECURITY FIX: Use authenticated user from JWT
+            "fulfillment_status": PaymentStatus.PENDING.value,
+            "payment_status": PaymentStatus.PENDING.value,  # Single source of truth
+            "paid_amount": Decimal("0"),  # Schema has this!
+            "balance_amount": totals["total"],  # Schema has this!
+            "payment_mode": "credit",  # Schema has this with default!
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
         
-        # Ensure org_id is set (critical for multi-tenant queries)
-        # Always use org_id from token, not from request
-        order_data["org_id"] = org_id
-        
-        # Ensure payment_terms has a value (it might be None even with schema default)
+        # Ensure org_id and payment_terms
+        # IMPORTANT: Always set org_id from authenticated source, not from request
+        order_data["org_id"] = org_id  # Use the UUID we converted above
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
-            
-        # SECURITY FIX: Get branch_id from JWT context first, fallback to DB query
-        if context.primary_branch_id:
-            order_data["branch_id"] = context.primary_branch_id
-        else:
-            branch_result = db.execute(text("""
-                SELECT branch_id FROM master.org_branches 
-                WHERE org_id = :org_id 
-                LIMIT 1
-            """), {"org_id": order_data["org_id"]}).fetchone()
-            order_data["branch_id"] = branch_result.branch_id if branch_result else None
         
-        # Insert order
+        # Get a valid user ID for created_by field (following invoice pattern)
+        # Try with org_id first, then without (for legacy data)
+        user_result = db.execute(text("""
+            SELECT user_id FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true 
+            LIMIT 1
+        """), {"org_id": str(context.org_id)})
+        user = user_result.fetchone()
+        
+        if not user:
+            # Try without org_id filter (for legacy data)
+            user_result = db.execute(text("""
+                SELECT user_id FROM master.org_users 
+                WHERE is_active = true 
+                LIMIT 1
+            """))
+            user = user_result.fetchone()
+        
+        created_by_user = user[0] if user else None  # Use NULL if no user found (like invoice does)
+        
+        # Insert sales order using actual schema columns
         result = db.execute(text("""
             INSERT INTO sales.orders (
-                org_id, branch_id, order_number, customer_id, customer_name, customer_phone,
-                order_date, delivery_date, order_type, payment_terms, order_status,
-                subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
-                paid_amount, balance_amount, payment_mode, payment_status,
-                notes, created_by, created_at, updated_at
+                org_id, branch_id, order_number, order_date, customer_id,
+                customer_name, customer_phone,
+                order_type, delivery_date, delivery_address_id, payment_terms,
+                subtotal_amount, discount_amount, taxable_amount, tax_amount, round_off_amount, final_amount,
+                cgst_amount, sgst_amount, igst_amount,
+                order_status, payment_status, fulfillment_status,
+                paid_amount, balance_amount, payment_mode,
+                notes, created_by, created_at, updated_at, items_count
             ) VALUES (
-                :org_id, :branch_id, :order_number, :customer_id, :customer_name, :customer_phone,
-                :order_date, :delivery_date, :order_type, :payment_terms, :order_status,
-                :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
-                :paid_amount, :balance_amount, :payment_mode, :payment_status,
-                :notes, :created_by, :created_at, :updated_at
+                :org_id, :branch_id, :order_number, :order_date, :customer_id,
+                :customer_name, :customer_phone,
+                :order_type, :delivery_date, :delivery_address_id, :payment_terms,
+                :subtotal_amount, :discount_amount, :taxable_amount, :tax_amount, :round_off_amount, :final_amount,
+                :cgst_amount, :sgst_amount, :igst_amount,
+                :order_status, :payment_status, :fulfillment_status,
+                :paid_amount, :balance_amount, :payment_mode,
+                :notes, :created_by, :created_at, :updated_at, :items_count
             ) RETURNING order_id
-        """), order_data)
+        """), {**order_data, "created_by": created_by_user})
         
         order_id = result.scalar()
         
@@ -155,135 +305,188 @@ async def create_order(
             item_data = item.dict()
             item_data["order_id"] = order_id
             
-            # Calculate line_total if not provided
-            if "line_total" not in item_data:
-                item_data["line_total"] = (
-                    item_data["quantity"] * item_data["unit_price"] - 
-                    item_data.get("discount_amount", 0) + item_data.get("tax_amount", 0)
-                )
+            # Get product details including HSN code and product_code
+            # SECURITY FIX: ALWAYS filter by org_id
+            product_details = db.execute(text("""
+                SELECT product_name, hsn_code, product_code FROM inventory.products
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {"product_id": item_data["product_id"], "org_id": str(context.org_id)}).fetchone()
             
-            # Use GSTService for consistent GST rate/amount split
-            tax_percent = Decimal(str(item_data.get("tax_percent", 0)))
-            tax_amount = Decimal(str(item_data.get("tax_amount", 0)))
-            gst_components = GSTService.calculate_gst_components(tax_amount, Decimal("100"), "CGST/SGST")  # Use tax_amount as base
+            # CORRECTED calculation logic - matching invoice pattern
+            base_quantity = Decimal(str(item_data["quantity"]))  # What customer PAYS for
+            free_quantity = Decimal(str(item_data.get("free_quantity", 0)))  # ADDITIONAL free items
+            total_quantity = base_quantity + free_quantity  # TOTAL items to deliver
             
-            # For rates, just split tax_percent
-            item_data["cgst_rate"] = float(tax_percent / 2)
-            item_data["sgst_rate"] = float(tax_percent / 2)
-            item_data["igst_rate"] = 0  # For now, assume intra-state
+            unit_price = Decimal(str(item_data["unit_price"]))
+            discount_percent = Decimal(str(item_data.get("discount_percent", 0)))
+            tax_percent = Decimal(str(item_data.get("tax_percent", 0)))  # No default - must come from product
             
-            # For amounts, split tax_amount
-            item_data["cgst_amount"] = float(tax_amount / 2)
-            item_data["sgst_amount"] = float(tax_amount / 2)
-            item_data["igst_amount"] = 0
+            # CORRECT: base_quantity is what customer PAYS for (2)
+            # free_quantity is ADDITIONAL items (4)
+            # quantity (total) = base_quantity + free_quantity (6)
             
-            # Get product name
-            product_result = db.execute(text("""
-                SELECT product_name FROM inventory.products 
-                WHERE product_id = :product_id
-            """), {"product_id": item_data["product_id"]}).fetchone()
+            # Step 1: Base amount calculation using base_quantity (what customer pays for)
+            gross_amount = base_quantity * unit_price
             
-            item_data["product_name"] = product_result.product_name if product_result else f"Product {item_data['product_id']}"
+            # Step 2: Discount calculation
+            discount_amount = (gross_amount * discount_percent) / 100
+            
+            # Step 3: Taxable amount (after discount)
+            taxable_amount = gross_amount - discount_amount
+            
+            # Step 4: Tax calculations (GST components)
+            # Use GSTService for consistent calculations
+            gst_type = item_data.get("gst_type", "CGST/SGST")
+            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            
+            cgst_percent = gst_components["cgst_percent"]
+            sgst_percent = gst_components["sgst_percent"]
+            igst_percent = gst_components["igst_percent"]
+            cgst_amount = gst_components["cgst_amount"]
+            sgst_amount = gst_components["sgst_amount"]
+            igst_amount = gst_components["igst_amount"]
+            tax_amount = gst_components["total_tax_amount"]
+            
+            # Step 5: Final line total
+            line_total = taxable_amount + tax_amount
+            
+            # Ensure no zero calculations
+            if line_total <= 0:
+                logger.warning(f"Line total is zero for product {item_data['product_id']}: qty={base_quantity}, price={unit_price}")
+                line_total = Decimal("0.01")  # Minimum value to prevent zero
+            
+            # Build complete item data with all required fields - ensure proper decimal conversion
+            complete_item_data = {
+                "order_id": order_id,
+                "product_id": item_data["product_id"],
+                "product_name": product_details.product_name if product_details else f"Product {item_data['product_id']}",
+                "product_code": product_details.product_code if product_details else item_data.get("product_code"),  # Add product_code!
+                "hsn_code": product_details.hsn_code if product_details else None,
+                "batch_id": item_data.get("batch_id"),  # Add batch_id from request
+                "batch_number": item_data.get("batch_number"),  # Add batch_number from request
+                "quantity": float(total_quantity),  # TOTAL quantity (base + free)
+                "uom": item_data.get("uom"),  # No default UOM
+                "pack_type": item_data.get("pack_type"),  # No default pack type
+                "pack_size": item_data.get("pack_size"),  # No default pack size
+                "base_quantity": float(base_quantity),  # What customer PAYS for
+                "unit_price": float(unit_price),
+                "mrp": float(item_data.get("mrp", unit_price)),  # MRP from frontend!
+                "discount_percent": float(discount_percent),
+                "discount_amount": float(discount_amount),
+                "scheme_discount_percent": item_data.get("scheme_discount_percent", 0),
+                "scheme_discount_amount": item_data.get("scheme_discount_amount", 0),
+                "free_quantity": float(free_quantity),  # ADDITIONAL free items
+                "scheme_code": item_data.get("scheme_code"),
+                "taxable_amount": float(taxable_amount),
+                "tax_percent": float(tax_percent),
+                "tax_amount": float(tax_amount),
+                "igst_percent": float(igst_percent),
+                "cgst_percent": float(cgst_percent),
+                "sgst_percent": float(sgst_percent),
+                "cgst_amount": float(cgst_amount),  # Schema has this column!
+                "sgst_amount": float(sgst_amount),  # Schema has this column!
+                "igst_amount": float(igst_amount),  # Schema has this column!
+                "cess_percent": item_data.get("cess_percent", 0),
+                "cess_amount": item_data.get("cess_amount", 0),  # Schema has this column!
+                "line_total": float(line_total)
+            }
             
             db.execute(text("""
                 INSERT INTO sales.order_items (
-                    order_id, product_id, product_name, batch_id, quantity,
-                    unit_price, discount_percent, discount_amount,
-                    line_total, cgst_rate, sgst_rate, igst_rate,
-                    cgst_amount, sgst_amount, igst_amount
+                    order_id, product_id, product_name, product_code, hsn_code,
+                    batch_id, batch_number,
+                    quantity, uom, pack_type, pack_size, base_quantity,
+                    unit_price, mrp, discount_percent, discount_amount,
+                    scheme_discount_percent, scheme_discount_amount, free_quantity, scheme_code,
+                    taxable_amount, tax_percent, tax_amount,
+                    igst_percent, cgst_percent, sgst_percent, cess_percent,
+                    cgst_amount, sgst_amount, igst_amount, cess_amount,
+                    line_total
                 ) VALUES (
-                    :order_id, :product_id, :product_name, :batch_id, :quantity,
-                    :unit_price, :discount_percent, :discount_amount,
-                    :line_total, :cgst_rate, :sgst_rate, :igst_rate,
-                    :cgst_amount, :sgst_amount, :igst_amount
+                    :order_id, :product_id, :product_name, :product_code, :hsn_code,
+                    :batch_id, :batch_number,
+                    :quantity, :uom, :pack_type, :pack_size, :base_quantity,
+                    :unit_price, :mrp, :discount_percent, :discount_amount,
+                    :scheme_discount_percent, :scheme_discount_amount, :free_quantity, :scheme_code,
+                    :taxable_amount, :tax_percent, :tax_amount,
+                    :igst_percent, :cgst_percent, :sgst_percent, :cess_percent,
+                    :cgst_amount, :sgst_amount, :igst_amount, :cess_amount,
+                    :line_total
                 )
-            """), item_data)
+            """), complete_item_data)
         
-        # Skip inventory allocation - only invoices should deduct inventory
-        # OrderService.allocate_inventory(db, order_id, items_dict, org_id)
+        # NO inventory allocation for sales orders - that happens on approval
         
-        db.commit()
+        # TenantAwareSession auto-commits
         
-        # Return created order details
-        # Can't call get_order directly because it uses Depends
+        # Return created order by fetching it directly
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = :id AND o.org_id = :org_id
-        """), {"id": order_id, "org_id": org_id})
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         order = result.fetchone()
         if not order:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
         order_dict = dict(order._mapping)
         
-        # Add total_amount field (schema expects this, not final_amount)
-        order_dict["total_amount"] = order_dict.get("final_amount", 0)
-        
         # Get order items
         items_result = db.execute(text("""
-            SELECT * FROM sales.order_items 
-            WHERE order_id = :order_id
-            ORDER BY order_item_id
-        """), {"order_id": order_id})
+            SELECT oi.*, p.product_name, p.product_code,
+                   b.batch_number, b.expiry_date
+            FROM sales.order_items oi
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
         
-        # Process items to ensure product_code is not None
-        items = []
-        for item in items_result:
-            item_dict = dict(item._mapping)
-            # Ensure product_code is a string, not None
-            if item_dict.get("product_code") is None:
-                item_dict["product_code"] = ""
-            items.append(item_dict)
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
+        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
         
-        order_dict["items"] = items
-        
-        return order_dict
+        return OrderResponse(**order_dict)
         
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating order: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create order: {str(e)}")
+        logger.error(f"Error creating sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create sales order: {str(e)}")
 
 @router.get("/", response_model=OrderListResponse)
 @with_tenant_context
-async def list_orders(
+async def list_sales_orders(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=500),  # Reasonable limit for performance
     customer_id: Optional[int] = None,
     status: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
     """
-    List orders with filters and pagination
-    
-    - Filter by customer, status, date range
-    - Includes customer details and totals
+    List sales orders with filters and pagination
     """
     try:
-        # Build query
+        # Build query - only get sales orders
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.org_id = :org_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         count_query = """
             SELECT COUNT(*) FROM sales.orders o
-            WHERE o.org_id = :org_id
+            WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         
-        params = {"org_id": org_id}
+        params = {"org_id": str(context.org_id)}
         
         # Add filters
         if customer_id:
@@ -314,43 +517,33 @@ async def list_orders(
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
-        
-        orders = []
-        # Collect all order data first
         order_rows = list(result)
         
-        # Get all order items in a single batch query
+        # Get items for all orders in batch
         items_by_order = {}
         if order_rows:
             order_ids = [row.order_id for row in order_rows]
             items_result = db.execute(text("""
-                SELECT oi.*, p.product_name, p.product_code,
-                       COALESCE(oi.tax_percent, 0) as tax_percent,
-                       COALESCE(oi.tax_amount, 0) as tax_amount
+                SELECT oi.*, p.product_name, p.product_code
                 FROM sales.order_items oi
-                JOIN inventory.products p ON oi.product_id = p.product_id
-                WHERE oi.order_id = ANY(:order_ids)
+                JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+                WHERE oi.order_id = ANY(:order_ids) AND oi.org_id = :org_id
                 ORDER BY oi.order_id, oi.order_item_id
-            """), {"order_ids": order_ids})
+            """), {"order_ids": order_ids, "org_id": str(context.org_id)})
             
-            # Group items by order_id
             for item in items_result:
                 order_id = item.order_id
                 if order_id not in items_by_order:
                     items_by_order[order_id] = []
                 items_by_order[order_id].append(dict(item._mapping))
         
-        # Build order responses
+        # Build responses
+        orders = []
         for row in order_rows:
             order_dict = dict(row._mapping)
-            
-            # Add items from batch lookup
             order_dict["items"] = items_by_order.get(row.order_id, [])
-            
-            # Map final_amount to total_amount for schema compatibility
             order_dict["total_amount"] = order_dict.get("final_amount", 0)
             order_dict["balance_amount"] = order_dict["total_amount"] - order_dict.get("0 as paid_amount", 0)
-            
             orders.append(OrderResponse(**order_dict))
         
         return OrderListResponse(
@@ -361,52 +554,48 @@ async def list_orders(
         )
         
     except Exception as e:
-        logger.error(f"Error listing orders: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list orders: {str(e)}")
+        logger.error(f"Error listing sales orders: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list sales orders: {str(e)}")
 
 @router.get("/{order_id}", response_model=OrderResponse)
 @with_tenant_context
-async def get_order(
+async def get_sales_order(
     order_id: int,
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Get order details with items"""
+    """Get sales order details with items"""
     try:
-        # Get order with customer details
+        # Convert org_id to UUID if it's a string
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
+        # Get order with customer details - only sales orders
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = :id AND o.org_id = :org_id
-        """), {"id": order_id, "org_id": org_id})
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
         order = result.fetchone()
         if not order:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
         order_dict = dict(order._mapping)
         
         # Get order items
         items_result = db.execute(text("""
             SELECT oi.*, p.product_name, p.product_code,
-                   b.batch_number, b.expiry_date,
-                   COALESCE(oi.tax_percent, 0) as tax_percent,
-                   COALESCE(oi.tax_amount, 0) as tax_amount
+                   b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": order_id})
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
-        # Map final_amount to total_amount for schema compatibility
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
-        # balance_amount is already in the database, no need to recalculate
-        
-        # Add missing timestamp fields that might not be in the database
         order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
         order_dict["delivered_at"] = order_dict.get("delivered_at", None)
         
@@ -415,54 +604,48 @@ async def get_order(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting order: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get order: {str(e)}")
+        logger.error(f"Error getting sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get sales order: {str(e)}")
 
-@router.put("/{order_id}")
-async def update_order(
+@router.put("/{order_id}", response_model=OrderResponse)
+@with_tenant_context
+async def update_sales_order(
     order_id: int,
-    order_data: dict,
-    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    order_data: OrderUpdate,
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Update order details"""
+    """Update sales order details (only for pending orders)"""
     try:
-        # Check if order exists
+        # Check if order exists and is editable
         existing = db.execute(text("""
-            SELECT order_id FROM sales.orders 
-            WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id}).scalar()
+            SELECT order_status FROM sales.orders 
+            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not existing:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        # Build update query dynamically based on provided fields
+        if existing.order_status not in [OrderStatus.PENDING.value, OrderStatus.DRAFT.value]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot edit order with status: {existing.order_status}"
+            )
+        
+        # Build update query
         update_fields = []
-        params = {"order_id": order_id, "org_id": org_id}
+        params = {"order_id": order_id, "org_id": str(context.org_id)}
         
-        # List of allowed update fields
-        allowed_fields = [
-            "customer_id", "order_date", "delivery_date", "status", 
-            "payment_status", "payment_mode", "total_amount", "discount", 
-            "final_amount", "notes"
-        ]
-        
-        for field, value in order_data.items():
-            if field in allowed_fields:
-                # Map frontend field names to database column names
-                db_field = field
-                if field == "status":
-                    db_field = "order_status"
-                
-                update_fields.append(f"{db_field} = :{field}")
+        update_data = order_data.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            if value is not None:
+                update_fields.append(f"{field} = :{field}")
                 params[field] = value
         
         if not update_fields:
-            raise HTTPException(status_code=400, detail="No valid fields to update")
+            raise HTTPException(status_code=400, detail="No fields to update")
         
-        # Add updated_at timestamp
+        # Add updated timestamp
         update_fields.append("updated_at = CURRENT_TIMESTAMP")
         
         # Execute update
@@ -473,108 +656,168 @@ async def update_order(
         """
         
         db.execute(text(update_query), params)
-        db.commit()
+        # TenantAwareSession auto-commits
         
-        # Return updated order
-        return await get_order(order_id, db)
+        # Return updated order by fetching it directly
+        result = db.execute(text("""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)})
+        
+        order = result.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
+        
+        order_dict = dict(order._mapping)
+        
+        # Get order items
+        items_result = db.execute(text("""
+            SELECT oi.*, p.product_name, p.product_code,
+                   b.batch_number, b.expiry_date
+            FROM sales.order_items oi
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": str(context.org_id)})
+        
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
+        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
+        
+        return OrderResponse(**order_dict)
         
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating order: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to update order: {str(e)}")
+        logger.error(f"Error updating sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update sales order: {str(e)}")
 
-@router.put("/{order_id}/confirm")
-async def confirm_order(
+@router.post("/{order_id}/approve")
+@with_tenant_context
+async def approve_sales_order(
     order_id: int,
-    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Confirm a pending order"""
+    """
+    Approve sales order and allocate inventory
+    This is when inventory gets reserved
+    """
     try:
         # Check order exists and is pending
-        status = db.execute(text("""
-            SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id}).scalar()
+        order = db.execute(text("""
+            SELECT order_status, customer_id FROM sales.orders 
+            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
-        if not status:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if status != "pending":
+        if order.order_status != OrderStatus.PENDING.value:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Order cannot be confirmed. Current status: {status}"
+                detail=f"Order cannot be approved. Current status: {order.order_status}"
             )
         
-        # Update status
+        # Get order items for inventory validation
+        items = db.execute(text("""
+            SELECT product_id, batch_id, quantity, unit_price
+            FROM sales.order_items 
+            WHERE order_id = :order_id
+        """), {"order_id": order_id, "org_id": str(context.org_id)}).fetchall()
+        
+        items_dict = [dict(item._mapping) for item in items]
+        
+        # SETTINGS-AWARE: Check if negative stock is allowed
+        billing_settings = await SettingsService.get_billing_settings(db, str(context.org_id))
+        allow_negative_stock = billing_settings.get("allow_negative_stock", False)
+        
+        # Only validate inventory if negative stock NOT allowed
+        if not allow_negative_stock:
+            inventory_check = OrderService.validate_inventory(db, items_dict, org_id)
+            
+            if not inventory_check["valid"]:
+                failed_items = [
+                    f"Product {item['product_id']}: {item['message']}" 
+                    for item in inventory_check["items"] 
+                    if not item["valid"]
+                ]
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Inventory validation failed: {'; '.join(failed_items)}"
+                )
+        
+        # Check customer credit limit
+        total_amount = db.execute(text("""
+            SELECT final_amount FROM sales.orders WHERE order_id = :id
+        """), {"id": order_id}).scalar()
+        
+        credit_check = CustomerService.validate_credit_limit(
+            db, order.customer_id, total_amount, org_id
+        )
+        
+        if not credit_check["valid"]:
+            raise HTTPException(status_code=400, detail=credit_check["message"])
+        
+        # Update order status to approved
         db.execute(text("""
             UPDATE sales.orders
-            SET order_status = 'confirmed',
+            SET order_status = 'approved',
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id})
+        """), {"id": order_id, "org_id": str(context.org_id)})
         
-        db.commit()
+        # NOW allocate inventory
+        OrderService.allocate_inventory(db, order_id, items_dict, org_id)
         
-        return {"message": f"Order {order_id} confirmed successfully"}
+        # TenantAwareSession auto-commits
+        
+        return {
+            "message": f"Sales order {order_id} approved successfully", 
+            "status": "approved",
+            "inventory_allocated": True
+        }
         
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error confirming order: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to confirm order: {str(e)}")
+        logger.error(f"Error approving sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve sales order: {str(e)}")
 
-@router.post("/{order_id}/invoice", response_model=InvoiceResponse)
-async def generate_invoice(
+@router.post("/{order_id}/convert-to-invoice", response_model=InvoiceResponse)
+@with_tenant_context
+async def convert_to_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
-    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Generate invoice for an order"""
+    """Convert approved sales order to invoice"""
     try:
-        # Check order exists and is confirmed
+        # Check order exists and is approved
         order = db.execute(text("""
-            SELECT order_status, order_number FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id}).fetchone()
+            SELECT order_status, order_number FROM sales.orders 
+            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
         if not order:
-            # Get helpful debugging info
-            latest = db.execute(text("""
-                SELECT MAX(order_id) as max_id FROM sales.orders WHERE org_id = :org_id
-            """), {"org_id": org_id}).scalar()
-            
-            raise HTTPException(
-                status_code=404, 
-                detail={
-                    "error": f"Order {order_id} not found",
-                    "latest_order_id": latest,
-                    "message": f"Order {order_id} does not exist. The latest order in the system is #{latest}.",
-                    "possible_issues": [
-                        "The order creation may have failed",
-                        "The frontend is using a cached/incorrect order ID",
-                        "Try using the create-with-order endpoint instead"
-                    ],
-                    "solution": "Use POST /api/invoices/create-with-order to create both order and invoice together"
-                }
-            )
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if order.order_status not in ["confirmed", "processing", "packed"]:
+        if order.order_status not in ["approved", "confirmed"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot generate invoice. Order status: {order.order_status}"
+                detail=f"Cannot convert to invoice. Order status: {order.order_status}"
             )
         
-        # Generate comprehensive invoice
+        # Generate invoice
         invoice_data = InvoiceService.generate_invoice_for_order(
             db, 
             order_id, 
@@ -582,7 +825,15 @@ async def generate_invoice(
             org_id
         )
         
-        db.commit()
+        # Update order status
+        db.execute(text("""
+            UPDATE sales.orders
+            SET order_status = 'invoiced',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_id = :id
+        """), {"id": order_id})
+        
+        # TenantAwareSession auto-commits
         
         return InvoiceResponse(**invoice_data)
         
@@ -591,109 +842,185 @@ async def generate_invoice(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error generating invoice: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate invoice: {str(e)}")
+        logger.error(f"Error converting to invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to convert to invoice: {str(e)}")
 
-@router.put("/{order_id}/deliver")
-async def mark_delivered(
+@router.post("/{order_id}/convert-to-challan")
+@with_tenant_context
+async def convert_to_challan(
     order_id: int,
-    delivery: DeliveryUpdate,
-    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    challan_date: Optional[date] = None,
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Mark order as delivered"""
+    """Convert approved sales order to delivery challan"""
     try:
-        # Check order exists and is ready for delivery
-        status = db.execute(text("""
-            SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": org_id}).scalar()
+        # Check order exists and is approved
+        order = db.execute(text("""
+            SELECT order_status FROM sales.orders 
+            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
+        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
         
-        if not status:
-            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if status not in ["invoiced", "shipped"]:
+        if order.order_status not in ["approved", "confirmed"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Order cannot be delivered. Current status: {status}"
+                detail=f"Cannot convert to challan. Order status: {order.order_status}"
             )
         
-        # Update order
+        # TODO: Implement challan generation service
+        # For now, just update status
         db.execute(text("""
             UPDATE sales.orders
-            SET order_status = 'delivered',
-                delivered_at = CURRENT_TIMESTAMP,
-                delivery_notes = :notes,
+            SET order_status = 'shipped',
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id
-        """), {
-            "id": order_id,
-            "notes": delivery.delivery_notes
-        })
+        """), {"id": order_id})
         
-        # Release allocated inventory
-        db.execute(text("""
-            UPDATE inventory.batches b
-            SET quantity_sold = quantity_sold - im.quantity_out
-            FROM (
-                SELECT batch_id, COALESCE(quantity_out, 0) as quantity_out
-                FROM inventory.inventory_movements
-                WHERE reference_type = 'order' 
-                    AND reference_id = :order_id
-                    AND movement_type = 'sale'
-            ) im
-            WHERE b.batch_id = im.batch_id
-        """), {"order_id": order_id})
+        # TenantAwareSession auto-commits
         
-        db.commit()
-        
-        return {"message": f"Order {order_id} marked as delivered"}
+        return {
+            "message": f"Sales order {order_id} converted to challan",
+            "challan_date": challan_date or date.today(),
+            "status": "shipped"
+        }
         
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error marking delivered: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to mark delivered: {str(e)}")
+        logger.error(f"Error converting to challan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to convert to challan: {str(e)}")
 
-@router.post("/{order_id}/return")
-async def process_return(
-    order_id: int,
-    return_request: ReturnRequest,
-    _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+@router.post("/validate")
+@with_tenant_context
+async def validate_sales_order(
+    order_data: OrderCreate,
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Process order return"""
+    """Validate sales order data without creating it"""
     try:
-        result = OrderService.process_return(db, order_id, return_request)
+        org_id = order_data.org_id if order_data.org_id else org_id
         
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["message"])
+        # Validate customer
+        customer = db.execute(text("""
+            SELECT customer_id FROM parties.customers 
+            WHERE customer_id = :id AND org_id = :org_id
+        """), {"id": order_data.customer_id, "org_id": str(context.org_id)}).fetchone()
         
-        return result
+        if not customer:
+            return {"valid": False, "message": "Customer not found"}
         
-    except HTTPException:
-        raise
+        # Validate products
+        for item in order_data.items:
+            product = db.execute(text("""
+                SELECT product_id FROM inventory.products 
+                WHERE product_id = :id AND org_id = :org_id
+            """), {"id": item.product_id, "org_id": str(context.org_id)}).fetchone()
+            
+            if not product:
+                return {"valid": False, "message": f"Product {item.product_id} not found"}
+        
+        return {"valid": True, "message": "Sales order data is valid"}
+        
     except Exception as e:
-        logger.error(f"Error processing return: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to process return: {str(e)}")
+        logger.error(f"Error validating sales order: {str(e)}")
+        return {"valid": False, "message": f"Validation error: {str(e)}"}
 
 @router.get("/dashboard/stats")
 @with_tenant_context
-async def get_order_dashboard(
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+async def get_sales_order_dashboard(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    org_id = str(context.org_id)  # Compatibility alias
-    """Get order dashboard statistics"""
+    """Get sales order dashboard statistics"""
     try:
-        stats = OrderService.get_order_dashboard(db, org_id)
-        return stats
+        # Get sales order specific stats
+        stats = db.execute(text("""
+            SELECT 
+                COUNT(*) as total_orders,
+                COUNT(*) FILTER (WHERE order_status = 'pending') as pending_orders,
+                COUNT(*) FILTER (WHERE order_status = 'approved') as approved_orders,
+                COUNT(*) FILTER (WHERE order_status = 'invoiced') as invoiced_orders,
+                COALESCE(SUM(final_amount), 0) as total_value,
+                COALESCE(SUM(final_amount) FILTER (WHERE order_date = CURRENT_DATE), 0) as today_value
+            FROM sales.orders 
+            WHERE order_type = 'sales'
+        """), {}).fetchone()
+        
+        return {
+            "total_orders": stats.total_orders,
+            "pending_orders": stats.pending_orders,
+            "approved_orders": stats.approved_orders,
+            "invoiced_orders": stats.invoiced_orders,
+            "total_value": float(stats.total_value),
+            "today_value": float(stats.today_value)
+        }
+        
     except Exception as e:
-        logger.error(f"Error getting dashboard: {str(e)}")
+        logger.error(f"Error getting sales order dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
+
+def _get_or_create_address(db: TenantAwareSession, org_id: str, customer_id: int, 
+                           address_text: str, address_type: str) -> Optional[int]:
+    """
+    Helper function to get existing address or create new one
+    Follows customer creation pattern for address management
+    """
+    if not address_text:
+        return None
+    
+    try:
+        # First check if similar address exists for this customer
+        existing = db.execute(text("""
+            SELECT address_id FROM master.addresses
+            WHERE entity_type = 'customer'
+            AND entity_id = :customer_id
+            AND address_type = :address_type
+            AND is_active = true
+            LIMIT 1
+        """), {
+            "customer_id": customer_id,
+            "address_type": address_type
+        }).fetchone()
+        
+        if existing:
+            return existing[0]
+        
+        # Parse address text (simple parsing - could be enhanced)
+        # Expected format: "Line1, Line2, City, State, Pincode"
+        parts = [p.strip() for p in address_text.split(',')]
+        
+        # Create new address
+        result = db.execute(text("""
+            INSERT INTO master.addresses (
+                org_id, entity_type, entity_id, address_type,
+                address_line1, address_line2, city, state_name, pincode,
+                country, is_default, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, 'customer', :customer_id, :address_type,
+                :line1, :line2, :city, :state, :pincode,
+                'India', false, true,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING address_id
+        """), {
+            "org_id": str(context.org_id),
+            "customer_id": customer_id,
+            "address_type": address_type,
+            "line1": parts[0] if len(parts) > 0 else address_text,
+            "line2": parts[1] if len(parts) > 1 else None,
+            "city": parts[-3] if len(parts) >= 3 else None,
+            "state": parts[-2] if len(parts) >= 2 else None,
+            "pincode": parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
+        })
+        
+        return result.scalar()
+        
+    except Exception as e:
+        logger.warning(f"Could not create address: {str(e)}")
+        return None

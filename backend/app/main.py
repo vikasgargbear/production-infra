@@ -28,7 +28,6 @@ from .api.routes.master import bank_accounts
 # Sales Module (modular structure)
 from .api.routes.sales import (
     orders_router,
-    sales_orders_router,
     invoices_router,
     challan_router,
     returns_router,
@@ -160,8 +159,7 @@ api.include_router(employees.router, prefix="/employees", tags=["Employees"])
 api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
 
 # --- Sales ---
-api.include_router(orders_router, tags=["Orders"])
-api.include_router(sales_orders_router, tags=["Sales Orders"])
+api.include_router(orders_router, tags=["Sales Orders"])
 api.include_router(invoices_router, tags=["Invoices"])
 api.include_router(challan_router, prefix="/challan", tags=["Challan"])
 api.include_router(returns_router, prefix="/sale-returns", tags=["Sale Returns"])

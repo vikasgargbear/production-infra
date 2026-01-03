@@ -1,8 +1,7 @@
 """
-Orders API Routes Module
-Contains /orders and /sales-orders endpoints
+Sales Orders API Routes Module
+Handles complete order lifecycle with approval workflow
 """
-from .routes import router as orders_router
-from .sales_orders import router as sales_orders_router
+from .routes import router
 
-__all__ = ["orders_router", "sales_orders_router"]
+__all__ = ["router"]
