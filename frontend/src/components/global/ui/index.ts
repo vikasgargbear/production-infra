@@ -6,13 +6,12 @@ export { default as StandardMonthYearPicker } from './forms/StandardMonthYearPic
 export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as SearchBar } from './SearchBar';
-export { default as AddNewButton } from './AddNewButton';
 export { default as CustomerCreation } from './forms/CustomerCreation';
 export { default as NotesSection } from './forms/NotesSection';
 
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';
-export { default as NumericInput } from './inputs/NumericInput';
+export { NumberInput } from './forms/NumberInput';  // NumericInput deleted - use NumberInput
 export { default as MonthYearPicker } from './forms/MonthYearPicker';
 
 // Display Components

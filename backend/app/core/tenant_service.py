@@ -457,15 +457,41 @@ class TenantAwareSession:
     """
     Database session wrapper with automatic tenant filtering
     Drop-in replacement for SQLAlchemy Session
+    
+    Security: 
+    - Application layer: Injects org_id into all queries
+    - Database layer: Sets session variable for RLS policies
     """
     
     def __init__(self, session: Session):
         self.session = session
         self._query_count = 0
+        self._rls_context_set = False
+    
+    def _ensure_rls_context(self):
+        """Set RLS session variable if not already set"""
+        if self._rls_context_set:
+            return
+            
+        try:
+            org_id = TenantContext.get_org_id()
+            # Set PostgreSQL session variable for RLS
+            self.session.execute(
+                text("SELECT set_config('app.org_id', :org_id, true)"),
+                {"org_id": str(org_id)}
+            )
+            self._rls_context_set = True
+            logger.debug(f"[RLS] Set session org_id={org_id}")
+        except SecurityError:
+            # No tenant context - RLS will block all access (safe default)
+            logger.warning("[RLS] No tenant context set - RLS will block access")
         
     def execute(self, statement, parameters=None):
         """Execute query with automatic tenant filtering"""
         self._query_count += 1
+        
+        # Ensure RLS session variable is set for defense in depth
+        self._ensure_rls_context()
         
         # Handle text() objects by extracting the string
         if hasattr(statement, 'text'):
