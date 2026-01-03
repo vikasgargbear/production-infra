@@ -539,8 +539,12 @@ async def create_sale_return(
             
             # Calculate item values
             return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
+            free_qty = Decimal(str(item.get("free_quantity", 0)))
             unit_price = Decimal(str(item.get("rate", 0)))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
+            
+            # Calculate creditable quantity (only paid items get credit, not free items)
+            creditable_qty = max(Decimal("0"), return_qty - free_qty)
             
             # Check if tax_percent was explicitly provided by frontend
             # Frontend can explicitly set tax_percent=0 to indicate "no GST return"
@@ -560,7 +564,8 @@ async def create_sale_return(
                         SELECT 
                             ii.gst_percent,
                             ii.discount_percent,
-                            ii.unit_price
+                            ii.unit_price,
+                            ii.free_quantity as invoice_free_qty
                         FROM sales.invoice_items ii
                         WHERE ii.invoice_item_id = :invoice_item_id
                     """),
@@ -602,11 +607,18 @@ async def create_sale_return(
                             detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
                         )
             
-            # Calculate return value using ReturnService (eliminates inline calculation)
-            return_calc = ReturnService.calculate_return_value(
-                return_qty, unit_price, discount_percent, tax_percent
-            )
-            return_value = return_calc["return_value"]
+            # Calculate return value - check for manual override first
+            if "return_value" in item and item["return_value"] is not None:
+                # Manual override - use frontend-provided value
+                return_value = Decimal(str(item["return_value"]))
+                logger.info(f"Using manual return_value override: {return_value}")
+            else:
+                # Auto-calculate using creditable_qty (excludes free items)
+                return_calc = ReturnService.calculate_return_value(
+                    creditable_qty, unit_price, discount_percent, tax_percent
+                )
+                return_value = return_calc["return_value"]
+                logger.info(f"Calculated return_value: {return_value} (creditable_qty={creditable_qty}, free_qty={free_qty})")
             
             # Calculate tax using GSTService for consistency
             gst = GSTService.calculate_gst_components(return_value, tax_percent, "CGST/SGST")

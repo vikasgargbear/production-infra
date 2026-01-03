@@ -28,7 +28,7 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
-import PaymentAllocationModal from '../modals/PaymentAllocationModal';
+import PaymentAllocationModal from '../payment/modals/PaymentAllocationModal';
 
 interface OutstandingProps {
   partyType?: 'customer' | 'supplier';
@@ -111,15 +111,15 @@ const Outstanding: React.FC<OutstandingProps> = ({
             // No customer_id filter - get all customers
           }
         });
-        
+
         // The API returns { invoices: [], total_outstanding: number, count: number }
         const responseData = response.data || {};
         const invoices = Array.isArray(responseData.invoices) ? responseData.invoices :
-                         Array.isArray(responseData) ? responseData : [];
+          Array.isArray(responseData) ? responseData : [];
 
         // Group by customer for summary view
         const partiesMap = new Map<string, PartyOutstanding>();
-        
+
         // Process invoices and group by customer
         invoices.forEach((invoice: any) => {
           const partyId = String(invoice.customer_id);
@@ -188,9 +188,9 @@ const Outstanding: React.FC<OutstandingProps> = ({
             status: status
           });
         });
-        
+
         const parties = Array.from(partiesMap.values());
-        
+
         // Calculate summary
         const summary: Summary = {
           total_receivable: 0,
@@ -206,7 +206,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             over_90: { count: 0, amount: 0 }
           }
         };
-        
+
         // Don't use local calculation - use backend values if available
         // Backend calculates correctly at customer level
         if (responseData.total_outstanding !== undefined) {
@@ -224,30 +224,30 @@ const Outstanding: React.FC<OutstandingProps> = ({
           if (party.overdue_count > 0) {
             summary.overdue_party_count++;
           }
-          
-            // Update aging summary
-            party.invoices?.forEach(invoice => {
-              const bucket = invoice.aging_bucket;
-              const amount = invoice.outstanding_amount;
 
-              if (bucket === 'current') {
-                summary.aging_summary.current.count++;
-                summary.aging_summary.current.amount += amount;
-              } else if (bucket === '1-30') {
-                summary.aging_summary['1-30'].count++;
-                summary.aging_summary['1-30'].amount += amount;
-              } else if (bucket === '31-60') {
-                summary.aging_summary['31-60'].count++;
-                summary.aging_summary['31-60'].amount += amount;
-              } else if (bucket === '61-90') {
-                summary.aging_summary['61-90'].count++;
-                summary.aging_summary['61-90'].amount += amount;
-              } else if (bucket === 'over_90') {
-                summary.aging_summary.over_90.count++;
-                summary.aging_summary.over_90.amount += amount;
-              }
-            });
+          // Update aging summary
+          party.invoices?.forEach(invoice => {
+            const bucket = invoice.aging_bucket;
+            const amount = invoice.outstanding_amount;
+
+            if (bucket === 'current') {
+              summary.aging_summary.current.count++;
+              summary.aging_summary.current.amount += amount;
+            } else if (bucket === '1-30') {
+              summary.aging_summary['1-30'].count++;
+              summary.aging_summary['1-30'].amount += amount;
+            } else if (bucket === '31-60') {
+              summary.aging_summary['31-60'].count++;
+              summary.aging_summary['31-60'].amount += amount;
+            } else if (bucket === '61-90') {
+              summary.aging_summary['61-90'].count++;
+              summary.aging_summary['61-90'].amount += amount;
+            } else if (bucket === 'over_90') {
+              summary.aging_summary.over_90.count++;
+              summary.aging_summary.over_90.amount += amount;
+            }
           });
+        });
 
         // Include the API response data for use in summary
         return {
@@ -357,19 +357,19 @@ const Outstanding: React.FC<OutstandingProps> = ({
         'Overdue Count': party.overdue_count,
         'Oldest Days': party.oldest_invoice_days
       }));
-      
+
       if (csvData.length === 0) {
         alert('No data to export');
         return;
       }
-      
+
       // Convert to CSV
       const headers = Object.keys(csvData[0]);
       const csvContent = [
         headers.join(','),
         ...csvData.map(row => headers.map(h => `"${row[h] || ''}"`).join(','))
       ].join('\n');
-      
+
       // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
@@ -419,8 +419,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
           onClick={() => togglePartyExpansion(party.party_id)}
           className="p-1 hover:bg-gray-100 rounded"
         >
-          {expandedParties.has(party.party_id) ? 
-            <ChevronDown className="w-4 h-4" /> : 
+          {expandedParties.has(party.party_id) ?
+            <ChevronDown className="w-4 h-4" /> :
             <ChevronRight className="w-4 h-4" />
           }
         </button>
@@ -522,8 +522,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
       align: 'center' as const,
       render: (_: any, party: PartyOutstanding) => {
         if (!party.oldest_invoice_days) return <span className="text-gray-400">-</span>;
-        const color = party.oldest_invoice_days > 60 ? 'text-red-600' : 
-                     party.oldest_invoice_days > 30 ? 'text-orange-600' : 'text-gray-600';
+        const color = party.oldest_invoice_days > 60 ? 'text-red-600' :
+          party.oldest_invoice_days > 30 ? 'text-orange-600' : 'text-gray-600';
         return (
           <span className={color}>
             {party.oldest_invoice_days} days
@@ -620,7 +620,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
               iconColor="text-blue-600"
               onClose={onClose}
               historyType="outstanding"
-              onSaveDraft={() => {}}
+              onSaveDraft={() => { }}
               additionalActions={[]}
             />
             <div className="flex-1 flex items-center justify-center">
@@ -649,7 +649,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             iconColor="text-blue-600"
             onClose={() => setShowDetailsView(false)}
             historyType="customer-details"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: "Back to Outstanding",
@@ -720,7 +720,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   <div className="text-2xl font-bold">
                     {(() => {
                       const netPosition = (selectedParty as any).customer_net_position ||
-                                        ((selectedParty as any).total_advance || 0) - selectedParty.total_outstanding;
+                        ((selectedParty as any).total_advance || 0) - selectedParty.total_outstanding;
                       const isCredit = netPosition <= 0;
                       return (
                         <span className={isCredit ? 'text-green-600' : 'text-blue-600'}>
@@ -805,7 +805,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             iconColor="text-blue-600"
             onClose={onClose}
             historyType="outstanding"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: viewMode === 'summary' ? "View Aging Analysis" : "View Summary",
@@ -825,7 +825,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
 
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              
+
               {/* Summary Bar - More professional and compact */}
               <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 p-4">
                 <div className="flex items-center justify-between">
@@ -855,7 +855,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       <div className="text-xl font-semibold text-gray-900">{summary.party_count}</div>
                     </div>
                   </div>
-                  
+
                   {/* Aging Distribution */}
                   <div className="border-t pt-4">
                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Aging Distribution</div>
@@ -866,35 +866,35 @@ const Outstanding: React.FC<OutstandingProps> = ({
                             {summary.aging_summary.current.amount > 0 && (
                               <div
                                 className="bg-green-500 hover:bg-green-600 transition-colors"
-                                style={{width: `${(summary.aging_summary.current.amount / summary.total_receivable) * 100}%`}}
+                                style={{ width: `${(summary.aging_summary.current.amount / summary.total_receivable) * 100}%` }}
                                 title={`Current: ${formatCurrency(summary.aging_summary.current.amount)}`}
                               />
                             )}
                             {summary.aging_summary['1-30'].amount > 0 && (
                               <div
                                 className="bg-yellow-500 hover:bg-yellow-600 transition-colors"
-                                style={{width: `${(summary.aging_summary['1-30'].amount / summary.total_receivable) * 100}%`}}
+                                style={{ width: `${(summary.aging_summary['1-30'].amount / summary.total_receivable) * 100}%` }}
                                 title={`1-30 days: ${formatCurrency(summary.aging_summary['1-30'].amount)}`}
                               />
                             )}
                             {summary.aging_summary['31-60'].amount > 0 && (
                               <div
                                 className="bg-orange-500 hover:bg-orange-600 transition-colors"
-                                style={{width: `${(summary.aging_summary['31-60'].amount / summary.total_receivable) * 100}%`}}
+                                style={{ width: `${(summary.aging_summary['31-60'].amount / summary.total_receivable) * 100}%` }}
                                 title={`31-60 days: ${formatCurrency(summary.aging_summary['31-60'].amount)}`}
                               />
                             )}
                             {summary.aging_summary['61-90'].amount > 0 && (
                               <div
                                 className="bg-red-500 hover:bg-red-600 transition-colors"
-                                style={{width: `${(summary.aging_summary['61-90'].amount / summary.total_receivable) * 100}%`}}
+                                style={{ width: `${(summary.aging_summary['61-90'].amount / summary.total_receivable) * 100}%` }}
                                 title={`61-90 days: ${formatCurrency(summary.aging_summary['61-90'].amount)}`}
                               />
                             )}
                             {summary.aging_summary.over_90.amount > 0 && (
                               <div
                                 className="bg-red-800 hover:bg-red-900 transition-colors"
-                                style={{width: `${(summary.aging_summary.over_90.amount / summary.total_receivable) * 100}%`}}
+                                style={{ width: `${(summary.aging_summary.over_90.amount / summary.total_receivable) * 100}%` }}
                                 title={`90+ days: ${formatCurrency(summary.aging_summary.over_90.amount)}`}
                               />
                             )}
@@ -951,7 +951,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                         />
                       </div>
                     </div>
-                    
+
                     <Select
                       value={filters.status}
                       onChange={(value) => setFilters({ ...filters, status: value })}
@@ -963,7 +963,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       ]}
                     />
                   </div>
-                  
+
                   <button
                     onClick={handleExport}
                     className="ml-4 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -978,107 +978,107 @@ const Outstanding: React.FC<OutstandingProps> = ({
               {viewMode === 'summary' && (
                 <div className="bg-white rounded-lg shadow-sm">
                   {isLoading ? (
-                  <div className="p-8 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                    <p className="text-gray-600">Loading outstanding data...</p>
-                  </div>
-                ) : error ? (
-                  <div className="p-8 text-center">
-                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                    <p className="text-red-600">Failed to load outstanding data</p>
-                    <button
-                      onClick={() => refetch()}
-                      className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : filteredParties.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500">
-                    {filters.searchQuery || filters.status !== 'all' ? 
-                      'No matching records found' : 
-                      'No outstanding records found'}
-                  </div>
-                ) : (
-                  <div>
-                    {/* Compact table - click for details */}
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {partyType === 'customer' ? 'Customer' : 'Supplier'}
-                          </th>
-                          <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Net Position
-                          </th>
-                          <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredParties.map((party: PartyOutstanding) => (
-                          <React.Fragment key={party.party_id}>
-                            {/* Compact Party Row */}
-                            <tr
-                              className="hover:bg-gray-50 cursor-pointer"
-                              onClick={() => handlePartyClick(party)}
-                            >
-                              <td className="px-6 py-3">
-                                <div className="font-medium">{party.party_name}</div>
-                              </td>
-                              <td className="px-6 py-3 text-right">
-                                {(() => {
-                                  const netPosition = (party as any).customer_net_position || ((party as any).total_advance || 0) - party.total_outstanding;
-                                  const isCredit = netPosition <= 0;
+                    <div className="p-8 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                      <p className="text-gray-600">Loading outstanding data...</p>
+                    </div>
+                  ) : error ? (
+                    <div className="p-8 text-center">
+                      <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                      <p className="text-red-600">Failed to load outstanding data</p>
+                      <button
+                        onClick={() => refetch()}
+                        className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : filteredParties.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500">
+                      {filters.searchQuery || filters.status !== 'all' ?
+                        'No matching records found' :
+                        'No outstanding records found'}
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Compact table - click for details */}
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              {partyType === 'customer' ? 'Customer' : 'Supplier'}
+                            </th>
+                            <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Net Position
+                            </th>
+                            <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredParties.map((party: PartyOutstanding) => (
+                            <React.Fragment key={party.party_id}>
+                              {/* Compact Party Row */}
+                              <tr
+                                className="hover:bg-gray-50 cursor-pointer"
+                                onClick={() => handlePartyClick(party)}
+                              >
+                                <td className="px-6 py-3">
+                                  <div className="font-medium">{party.party_name}</div>
+                                </td>
+                                <td className="px-6 py-3 text-right">
+                                  {(() => {
+                                    const netPosition = (party as any).customer_net_position || ((party as any).total_advance || 0) - party.total_outstanding;
+                                    const isCredit = netPosition <= 0;
 
-                                  return (
-                                    <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
-                                      {formatCurrency(Math.abs(netPosition))}
-                                      <span className="ml-1 text-xs">
-                                        {isCredit ? 'Adv' : 'Due'}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                {party.total_overdue > 0 ? (
-                                  <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
-                                    Overdue
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">
-                                    Current
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedParty(party); // Set selected party so we have invoice data
-                                    setAllocationModal({
-                                      isOpen: true,
-                                      customerId: parseInt(party.party_id),
-                                      customerName: party.party_name
-                                    });
-                                  }}
-                                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                                >
-                                  Allocate Payment
-                                </button>
-                              </td>
-                            </tr>
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                                    return (
+                                      <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+                                        {formatCurrency(Math.abs(netPosition))}
+                                        <span className="ml-1 text-xs">
+                                          {isCredit ? 'Adv' : 'Due'}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  {party.total_overdue > 0 ? (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
+                                      Overdue
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">
+                                      Current
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-3 text-center">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedParty(party); // Set selected party so we have invoice data
+                                      setAllocationModal({
+                                        isOpen: true,
+                                        customerId: parseInt(party.party_id),
+                                        customerName: party.party_name
+                                      });
+                                    }}
+                                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                  >
+                                    Allocate Payment
+                                  </button>
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1093,7 +1093,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   ) : (
                     <div className="p-6">
                       <h3 className="text-lg font-semibold mb-4">Aging Analysis by Party</h3>
-                      
+
                       {/* Aging Analysis Table */}
                       <table className="w-full">
                         <thead className="bg-gray-50 border-b">
@@ -1131,11 +1131,11 @@ const Outstanding: React.FC<OutstandingProps> = ({
                               '61-90': 0,
                               'over_90': 0
                             };
-                            
+
                             party.invoices?.forEach(invoice => {
                               buckets[invoice.aging_bucket] += invoice.outstanding_amount;
                             });
-                            
+
                             return (
                               <tr key={party.party_id} className="hover:bg-gray-50">
                                 <td className="px-4 py-3">
@@ -1173,7 +1173,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                               </tr>
                             );
                           })}
-                          
+
                           {/* Total Row */}
                           <tr className="bg-gray-50 font-semibold">
                             <td className="px-4 py-3">TOTAL</td>

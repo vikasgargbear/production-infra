@@ -3844,6 +3844,8 @@ Tables: 27
 | created_at | timestamp with time zone | ✓ |
 | updated_at | timestamp with time zone | ✓ |
 | created_by | integer | ✗ |
+| return_quantity | numeric | ✗ |
+
 
 ### sales.sales_schemes
 

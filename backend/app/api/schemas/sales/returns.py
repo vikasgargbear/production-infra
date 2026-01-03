@@ -62,11 +62,15 @@ class SalesReturnItem(BaseModel):
     batch_id: Optional[int] = Field(None, description="Batch ID")
     batch_no: Optional[str] = Field(None, max_length=50, description="Batch number")
     
-    return_quantity: Decimal = Field(..., gt=0, description="Quantity being returned")
+    return_quantity: Decimal = Field(..., gt=0, description="Total quantity being returned (paid + free)")
     quantity: Optional[Decimal] = Field(None, description="Alias for return_quantity")
+    free_quantity: Decimal = Field(default=Decimal("0"), ge=0, description="Free items in return (no credit)")
     
     rate: Decimal = Field(..., ge=0, description="Unit rate")
     mrp: Optional[Decimal] = Field(None, ge=0, description="MRP per unit")
+    
+    # Optional manual override - if provided, use this instead of calculated value
+    return_value: Optional[Decimal] = Field(None, ge=0, description="Manual override for credit amount")
     
     tax_percent: Decimal = Field(default=Decimal("0"), ge=0, le=28)
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
