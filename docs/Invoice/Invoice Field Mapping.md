@@ -25,10 +25,14 @@
 |------|------|-------|----------|----------------|
 | `invoices/routes.py` | 819 | `credit_amount` | Should this be a DB column? | ⚠️ Consider adding to `sales.invoices` if used frequently |
 | `returns.py` | 158 | `total_items` | Aggregate | ✅ OK as computed (COUNT) |
-| `returns.py` | 269 | `paid_quantity` | Should exclude free items from return credit? | ✅ Yes - standard practice: credit = qty - free_qty |
+| `returns.py` | 269 | `paid_quantity` | Exclude free items from return credit? | ✅ **Implemented** - credit = qty - free_qty |
 | `challan.py` | 748+ | `total_challans`, `draft_count` | Dashboard aggregates | ✅ OK - computed for display only |
 
-> **Note on `return_quantity`:** Having same name in both `sales_returns` (header total) and `sales_return_items` (line item) is OK - follows standard pattern like `quantity` on order vs order_items.
+### Returns Credit Logic (Implemented)
+
+**Credit = creditable_qty × rate** where `creditable_qty = return_quantity - free_quantity`
+
+Frontend can override with explicit `return_value` field.
 
 ---
 
