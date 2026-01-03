@@ -164,6 +164,145 @@ class InvoiceService:
             raise
     
     @staticmethod
+    def calculate_invoice_totals(
+        items: list,
+        gst_type: str = "CGST/SGST",
+        freight_charges: float = 0,
+        insurance_charges: float = 0,
+        other_charges: float = 0,
+        discount_type: str = "percentage",
+        discount_percent: float = 0,
+        discount_amount: float = 0
+    ) -> Dict[str, Any]:
+        """
+        Calculate all invoice totals from item list.
+        
+        This is the SINGLE SOURCE OF TRUTH for invoice calculations.
+        Routes call this once and use the returned values for database insertion.
+        
+        Args:
+            items: List of invoice items (dicts with product_id, quantity, unit_price, etc.)
+            gst_type: "CGST/SGST" for intra-state or "IGST" for inter-state
+            freight_charges: Delivery/freight charges
+            insurance_charges: Insurance charges
+            other_charges: Other additional charges
+            discount_type: "percentage" or "fixed"
+            discount_percent: Invoice-level discount percentage
+            discount_amount: Invoice-level fixed discount amount
+            
+        Returns:
+            Dict with all calculated totals and line_calculations
+        """
+        subtotal = Decimal("0")
+        total_discount = Decimal("0")
+        taxable_amount = Decimal("0")
+        cgst_amount = Decimal("0")
+        sgst_amount = Decimal("0")
+        igst_amount = Decimal("0")
+        line_calculations = []
+        
+        # Calculate each line item
+        for item in items:
+            qty = Decimal(str(item.get("quantity", 0)))
+            free_qty = Decimal(str(item.get("free_quantity", 0)))
+            unit_price = Decimal(str(item.get("unit_price", 0)))
+            item_discount_pct = Decimal(str(item.get("discount_percent", 0)))
+            gst_pct = Decimal(str(item.get("gst_percent", 0)))
+            
+            # Line total (excluding free quantity for billing)
+            line_total = qty * unit_price
+            
+            # Item-level discount
+            line_discount = line_total * item_discount_pct / Decimal("100")
+            line_taxable = line_total - line_discount
+            
+            # GST calculation
+            if gst_type == "IGST":
+                line_igst = line_taxable * gst_pct / Decimal("100")
+                line_cgst = Decimal("0")
+                line_sgst = Decimal("0")
+            else:
+                half_rate = gst_pct / Decimal("2")
+                line_cgst = line_taxable * half_rate / Decimal("100")
+                line_sgst = line_taxable * half_rate / Decimal("100")
+                line_igst = Decimal("0")
+            
+            line_tax = line_cgst + line_sgst + line_igst
+            line_final = line_taxable + line_tax
+            
+            # Accumulate totals
+            subtotal += line_total
+            total_discount += line_discount
+            taxable_amount += line_taxable
+            cgst_amount += line_cgst
+            sgst_amount += line_sgst
+            igst_amount += line_igst
+            
+            # Store line calculation for later insertion
+            line_calculations.append({
+                "product_id": item.get("product_id"),
+                "batch_id": item.get("batch_id"),
+                "quantity": float(qty),
+                "free_quantity": float(free_qty),
+                "unit_price": float(unit_price),
+                "mrp": float(item.get("mrp", 0)),
+                "discount_percent": float(item_discount_pct),
+                "discount_amount": float(line_discount),
+                "gst_percent": float(gst_pct),
+                "cgst_percent": float(gst_pct / Decimal("2")) if gst_type != "IGST" else 0,
+                "sgst_percent": float(gst_pct / Decimal("2")) if gst_type != "IGST" else 0,
+                "igst_percent": float(gst_pct) if gst_type == "IGST" else 0,
+                "cgst_amount": float(line_cgst),
+                "sgst_amount": float(line_sgst),
+                "igst_amount": float(line_igst),
+                "taxable_amount": float(line_taxable),
+                "total_amount": float(line_final),
+            })
+        
+        # Invoice-level discount (scheme discount)
+        if discount_type == "percentage" and discount_percent > 0:
+            invoice_discount = taxable_amount * Decimal(str(discount_percent)) / Decimal("100")
+        elif discount_type == "fixed" and discount_amount > 0:
+            invoice_discount = Decimal(str(discount_amount))
+        else:
+            invoice_discount = Decimal("0")
+        
+        # Recalculate taxable after invoice discount
+        taxable_after_scheme = taxable_amount - invoice_discount
+        
+        # Add freight and other charges
+        freight = Decimal(str(freight_charges))
+        insurance = Decimal(str(insurance_charges))
+        other = Decimal(str(other_charges))
+        
+        # Total tax
+        total_tax = cgst_amount + sgst_amount + igst_amount
+        
+        # Amount before rounding
+        amount_before_round = taxable_after_scheme + total_tax + freight + insurance + other
+        
+        # Round to nearest integer (Indian practice)
+        final_amount = int(amount_before_round + Decimal("0.5"))
+        round_off = Decimal(final_amount) - amount_before_round
+        
+        return {
+            "subtotal_amount": float(subtotal),
+            "discount_amount": float(total_discount),
+            "scheme_discount": float(invoice_discount),
+            "taxable_amount": float(taxable_after_scheme),
+            "cgst_amount": float(cgst_amount),
+            "sgst_amount": float(sgst_amount),
+            "igst_amount": float(igst_amount),
+            "total_tax_amount": float(total_tax),
+            "freight_charges": float(freight),
+            "insurance_charges": float(insurance),
+            "other_charges": float(other),
+            "round_off_amount": float(round_off),
+            "final_amount": float(final_amount),
+            "line_calculations": line_calculations,
+        }
+    
+    @staticmethod
     def _calculate_due_date(
         invoice_date: date,
         payment_terms: str,

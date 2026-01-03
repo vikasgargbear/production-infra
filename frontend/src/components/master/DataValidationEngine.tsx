@@ -42,7 +42,6 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
   const [activeTab, setActiveTab] = useState<TabType>('rules');
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
-  const [validationResults, setValidationResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
@@ -288,8 +287,8 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
             <button
               onClick={() => setActiveTab('rules')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'rules'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               Validation Rules
@@ -297,8 +296,8 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
             <button
               onClick={() => setActiveTab('results')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'results'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               Validation Results
@@ -397,8 +396,8 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
                           <button
                             onClick={() => handleToggleRule(rule.id, !rule.enabled)}
                             className={`px-3 py-1 rounded-md text-sm font-medium ${rule.enabled
-                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                               }`}
                           >
                             {rule.enabled ? 'Enabled' : 'Disabled'}
