@@ -33,7 +33,7 @@ class InvoiceService:
                 c.gst_number, c.pan_number,
                 c.primary_phone, c.primary_email,
                 c.credit_days,
-                a.address_line1, a.address_line2, a.city, a.state_name as state, a.pincode
+                a.address_line1, a.address_line2, a.city, a.state_name, a.pincode
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             LEFT JOIN master.addresses a ON a.entity_type = 'customer' 

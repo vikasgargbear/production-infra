@@ -10,7 +10,7 @@ import Home from './components/Home';
 import SalesHub from './components/sales/SalesHub';
 import PurchaseHub from './components/purchase/PurchaseHub';
 import FinancialHub from './components/payment/FinancialHub';
-import CompanySettings from './components/CompanySettings';
+import CompanySettings from './components/master/CompanySettings';
 import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
@@ -44,16 +44,16 @@ import 'react-toastify/dist/ReactToastify.css';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Products = lazy(() => import('./components/Products'));
 const Orders = lazy(() => import('./components/Orders'));
-const BatchesInventory = lazy(() => import('./components/BatchesInventory'));
-const PaymentTracking = lazy(() => import('./components/PaymentTracking'));
-const PaymentDashboard = lazy(() => import('./components/PaymentDashboard'));
-const CreditManagement = lazy(() => import('./components/CreditManagement'));
-const WhatsAppBusiness = lazy(() => import('./components/WhatsAppSimple'));
+const BatchesInventory = lazy(() => import('./components/inventory/BatchesInventory'));
+const PaymentTracking = lazy(() => import('./components/payments/PaymentTracking'));
+const PaymentDashboard = lazy(() => import('./components/payments/PaymentDashboard'));
+const CreditManagement = lazy(() => import('./components/ledger/CreditManagement'));
+const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
 // const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
-const Profile = lazy(() => import('./components/Profile'));
-const InventoryManagement = lazy(() => import('./components/InventoryManagement'));
-const AccountingLedgers = lazy(() => import('./components/AccountingLedgers'));
+const Profile = lazy(() => import('./components/master/Profile'));
+// InventoryManagement deleted - now uses StockHub
+const AccountingLedgers = lazy(() => import('./components/ledger/AccountingLedgers'));
 // const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
 
 // Define types for better TypeScript support
@@ -248,7 +248,7 @@ const AppContent = (): JSX.Element => {
       case 'profile':
         return <Profile key="profile" />;
       case 'inventory':
-        return <InventoryManagement key="inventory" />;
+        return <StockHub key="inventory" open={true} onClose={() => setActiveTab('home')} />;
       case 'accounting':
         return <AccountingLedgers key="accounting" />;
       case 'analytics':

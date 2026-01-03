@@ -65,7 +65,7 @@ async def create_order(
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_name, primary_phone as phone
+            SELECT customer_name, primary_phone
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -97,7 +97,7 @@ async def create_order(
             "order_number": order_number,
             "order_status": "pending",
             "customer_name": customer.customer_name,
-            "customer_phone": customer.phone,
+            "customer_phone": customer.primary_phone,
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
