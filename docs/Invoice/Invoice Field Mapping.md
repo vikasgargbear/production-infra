@@ -16,16 +16,16 @@
 | `orders.py` | 328 | `tax_percent as tax_percent` | `gst_percent` | ⚠️ To Fix |
 | `order_service.py` | 148 | `gst_percentage as gst_percent` | `gst_percent` | ⚠️ To Fix |
 
-### Computed Fields (OK - Not In Schema)
+### Computed Fields (Review Required)
 
-These are calculated values that don't exist as columns:
+| File | Line | Field | Question | Recommendation |
+|------|------|-------|----------|----------------|
+| `invoices/routes.py` | 819 | `credit_amount` | Should this be a DB column? | ⚠️ Consider adding to `sales.invoices` if used frequently |
+| `returns.py` | 158 | `total_items` | Aggregate | ✅ OK as computed (COUNT) |
+| `returns.py` | 269 | `paid_quantity` | Should exclude free items from return credit? | ✅ Yes - standard practice: credit = qty - free_qty |
+| `challan.py` | 748+ | `total_challans`, `draft_count` | Dashboard aggregates | ✅ OK - computed for display only |
 
-| File | Line | Computed Field | Notes |
-|------|------|----------------|-------|
-| `invoices/routes.py` | 819 | `credit_amount` | Computed: `final_amount - paid_amount` |
-| `returns.py` | 158 | `total_items` | COUNT aggregate |
-| `returns.py` | 269 | `paid_quantity` | Computed |
-| `challan.py` | 748+ | `total_challans`, `draft_count`, etc. | Aggregates |
+> **Note on `return_quantity`:** Having same name in both `sales_returns` (header total) and `sales_return_items` (line item) is OK - follows standard pattern like `quantity` on order vs order_items.
 
 ---
 
