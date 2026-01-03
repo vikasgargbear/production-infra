@@ -1,15 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   CheckCircle, AlertTriangle, XCircle, Eye, Play,
   Filter, Download, RefreshCw, Settings, Code,
-  Database, Users, Package, FileText, Search, Loader2, X
+  Database, Users, Package, FileText, Search, Loader2, X,
+  LucideIcon
 } from 'lucide-react';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
 import { settingsApi } from '../../services/api';
 
-const DataValidationEngine = ({ open, onClose }) => {
-  const [activeTab, setActiveTab] = useState('rules');
-  const [validationRules, setValidationRules] = useState([]);
+// Types
+interface DataValidationEngineProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+type Severity = 'error' | 'warning' | 'info';
+type TabType = 'rules' | 'results';
+
+interface ValidationRule {
+  id: string;
+  name: string;
+  description: string;
+  severity: Severity;
+  category: string;
+  enabled: boolean;
+  passRate: number;
+  lastRun: string;
+}
+
+interface ValidationResult {
+  id: string;
+  entity: string;
+  message: string;
+  severity: Severity;
+  category: string;
+  ruleName: string;
+  timestamp: string;
+}
+
+const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClose }) => {
+  const [activeTab, setActiveTab] = useState<TabType>('rules');
+  const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [validationResults, setValidationResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,7 +102,7 @@ const DataValidationEngine = ({ open, onClose }) => {
   const handleRunValidation = async () => {
     setIsRunning(true);
     setError(null);
-    
+
     try {
       const response = await settingsApi.validation.runValidation();
       if (response.success) {
@@ -93,7 +125,7 @@ const DataValidationEngine = ({ open, onClose }) => {
     try {
       const response = await settingsApi.validation.updateRule(ruleId, { enabled });
       if (response.success) {
-        setValidationRules(prev => prev.map(rule => 
+        setValidationRules(prev => prev.map(rule =>
           rule.id === ruleId ? { ...rule, enabled } : rule
         ));
       }
@@ -162,7 +194,7 @@ const DataValidationEngine = ({ open, onClose }) => {
   };
 
   const filteredRules = validationRules.filter(rule => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rule.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSeverity = filterSeverity === 'all' || rule.severity === filterSeverity;
@@ -170,7 +202,7 @@ const DataValidationEngine = ({ open, onClose }) => {
   });
 
   const filteredResults = validationResults.filter(result => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       result.entity.toLowerCase().includes(searchTerm.toLowerCase()) ||
       result.message.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSeverity = filterSeverity === 'all' || result.severity === filterSeverity;
@@ -255,21 +287,19 @@ const DataValidationEngine = ({ open, onClose }) => {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('rules')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'rules'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'rules'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               Validation Rules
             </button>
             <button
               onClick={() => setActiveTab('results')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'results'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'results'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               Validation Results
             </button>
@@ -319,7 +349,7 @@ const DataValidationEngine = ({ open, onClose }) => {
               <h3 className="text-lg font-medium text-gray-900">Validation Rules</h3>
               <span className="text-sm text-gray-500">{filteredRules.length} rules</span>
             </div>
-            
+
             {filteredRules.length === 0 ? (
               <div className="text-center py-12">
                 <Code className="h-16 w-16 mx-auto mb-4 text-gray-300" />
@@ -366,11 +396,10 @@ const DataValidationEngine = ({ open, onClose }) => {
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => handleToggleRule(rule.id, !rule.enabled)}
-                            className={`px-3 py-1 rounded-md text-sm font-medium ${
-                              rule.enabled
+                            className={`px-3 py-1 rounded-md text-sm font-medium ${rule.enabled
                                 ? 'bg-green-100 text-green-800 hover:bg-green-200'
                                 : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                            }`}
+                              }`}
                           >
                             {rule.enabled ? 'Enabled' : 'Disabled'}
                           </button>
@@ -396,7 +425,7 @@ const DataValidationEngine = ({ open, onClose }) => {
               <h3 className="text-lg font-medium text-gray-900">Validation Results</h3>
               <span className="text-sm text-gray-500">{filteredResults.length} results</span>
             </div>
-            
+
             {filteredResults.length === 0 ? (
               <div className="text-center py-12">
                 <CheckCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />

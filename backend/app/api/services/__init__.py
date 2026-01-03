@@ -11,7 +11,7 @@ Organized by domain:
 # Domain-organized services
 from .sales.invoice_service import InvoiceService
 from .sales.order_service import OrderService
-from .sales.return_service import ReturnService
+from .returns.return_service import ReturnService
 from .master.product_service import ProductService
 from .master.customer_service import CustomerService
 from .purchase.purchase_service import PurchaseService

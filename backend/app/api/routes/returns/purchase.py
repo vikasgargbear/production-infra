@@ -20,7 +20,7 @@ from ....core.permissions import PermissionChecker  # RBAC
 from ...services.document_number_service import DocumentNumberService
 from ...services.gst_service import GSTService
 from ...services.inventory.inventory_service import InventoryService
-from ...services.sales.return_service import ReturnService
+from ...services.returns.return_service import ReturnService
 from ...schemas.inventory.inventory import StockMovementCreate
 from ....utils.branch_utils import get_default_branch_id
 from datetime import date

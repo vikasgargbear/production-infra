@@ -30,15 +30,16 @@ from .api.routes.sales import (
     orders_router,
     invoices_router,
     challan_router,
-    returns_router,
     conversions_router,
 )
+
+# Returns Module (top-level, handles both sales and purchase returns)
+from .api.routes.returns import sales_returns_router, purchase_returns_router
 
 # Purchase Module
 from .api.routes.purchase import orders as purchases
 from .api.routes.purchase import supplier_invoices
 from .api.routes.purchase import grn
-from .api.routes.purchase import returns as purchase_returns
 from .api.routes.purchase import upload as purchase_upload
 
 # Inventory Module
@@ -162,14 +163,16 @@ api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Ac
 api.include_router(orders_router, tags=["Sales Orders"])
 api.include_router(invoices_router, tags=["Invoices"])
 api.include_router(challan_router, prefix="/challan", tags=["Challan"])
-api.include_router(returns_router, prefix="/sale-returns", tags=["Sale Returns"])
 api.include_router(conversions_router, prefix="/conversions", tags=["Conversions"])
+
+# --- Returns (Sales & Purchase) ---
+api.include_router(sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
+api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
 
 # --- Purchase ---
 api.include_router(purchases.router, prefix="/purchases", tags=["Purchases"])
 api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
 api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
-api.include_router(purchase_returns.router, prefix="/purchase-returns", tags=["Purchase Returns"])
 api.include_router(purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
 
 # --- Inventory ---
