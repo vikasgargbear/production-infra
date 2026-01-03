@@ -816,7 +816,7 @@ async def get_invoices(
                 i.customer_name,
                 i.final_amount,
                 i.paid_amount,
-                GREATEST(0, i.final_amount - COALESCE(i.paid_amount, 0)) as credit_amount,
+                i.credit_amount,  # Use actual DB column, not computed
                 i.payment_status,
                 i.invoice_status,
                 i.cgst_amount,

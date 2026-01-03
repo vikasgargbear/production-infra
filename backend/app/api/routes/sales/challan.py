@@ -469,9 +469,9 @@ async def list_delivery_challans(
                 c.order_id,
                 c.customer_id,
                 cust.customer_name,
-                c.challan_status as status,
+                c.challan_status,
                 c.dispatch_date,
-                c.transporter_name as delivery_company,
+                c.transporter_name,
                 c.vehicle_number,
                 c.lr_number,
                 c.total_quantity,
@@ -528,8 +528,8 @@ async def get_challan_details(
         # Get challan header
         challan_result = db.execute(
             text("""
-                SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
-                       cust.address_line1 as customer_address, cust.primary_phone as customer_phone
+                SELECT c.*, cust.customer_name, cust.gstin,
+                       cust.address_line1, cust.primary_phone
                 FROM sales.delivery_challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id
