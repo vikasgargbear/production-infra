@@ -11,7 +11,6 @@ export { default as NotesSection } from './forms/NotesSection';
 
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';
-export { NumberInput } from './forms/NumberInput';  // NumericInput deleted - use NumberInput
 export { default as MonthYearPicker } from './forms/MonthYearPicker';
 
 // Display Components

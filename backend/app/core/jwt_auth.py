@@ -14,10 +14,17 @@ from .token_blacklist import is_token_blacklisted, blacklist_token
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+IS_PRODUCTION = os.getenv("ENV", "development").lower() in ("production", "prod")
+
 if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
-    import warnings
-    warnings.warn("JWT_SECRET_KEY not set! Using insecure default - DO NOT USE IN PRODUCTION")
-    SECRET_KEY = "your-secret-key-here-INSECURE-DEFAULT"
+    if IS_PRODUCTION:
+        raise RuntimeError(
+            "SECURITY ERROR: JWT_SECRET_KEY must be set in production! "
+            "Set it to a secure random string (min 32 chars)."
+        )
+    # Development fallback - silent unless DEBUG
+    SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
 
