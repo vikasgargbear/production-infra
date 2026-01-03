@@ -208,7 +208,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     </option>
                                     {employees.map((employee) => (
                                         <option key={employee.employee_id} value={employee.employee_id}>
-                                            {employee.full_name}
+                                            {employee.employee_name || employee.full_name || `Employee ${employee.employee_id}`}
                                         </option>
                                     ))}
                                 </select>
