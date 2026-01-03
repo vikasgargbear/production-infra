@@ -307,29 +307,34 @@ class InvoiceService:
         """
         Get customer details for invoice creation.
         
-        Uses TenantAwareSession so org_id is auto-filtered.
+        Uses TenantAwareSession which auto-filters by org_id.
+        Table: master.addresses (entity_type='customer', entity_id=customer_id)
         
         Args:
             db: Database session (TenantAwareSession)
             customer_id: Customer ID
-            org_id: Organization ID (for explicit queries if needed)
+            org_id: Organization ID (handled by TenantAwareSession)
             
         Returns:
             Dict with customer_name, billing_address_id, shipping_address_id
         """
         from sqlalchemy import text
         
-        # Get customer with default addresses
+        # Get customer with default addresses using correct schema
+        # master.addresses with entity_type='customer' and entity_id=customer_id
+        # TenantAwareSession auto-adds org_id filter
         result = db.execute(text("""
             SELECT 
                 c.customer_name,
                 c.customer_id,
-                (SELECT address_id FROM parties.customer_addresses 
-                 WHERE customer_id = c.customer_id AND is_default = true 
-                 AND address_type = 'billing' LIMIT 1) as billing_address_id,
-                (SELECT address_id FROM parties.customer_addresses 
-                 WHERE customer_id = c.customer_id AND is_default = true 
-                 AND address_type = 'shipping' LIMIT 1) as shipping_address_id
+                (SELECT address_id FROM master.addresses 
+                 WHERE entity_type = 'customer' AND entity_id = c.customer_id 
+                 AND is_default = true AND address_type = 'billing' 
+                 LIMIT 1) as billing_address_id,
+                (SELECT address_id FROM master.addresses 
+                 WHERE entity_type = 'customer' AND entity_id = c.customer_id 
+                 AND is_default = true AND address_type = 'shipping' 
+                 LIMIT 1) as shipping_address_id
             FROM parties.customers c
             WHERE c.customer_id = :customer_id
         """), {"customer_id": customer_id}).fetchone()
@@ -346,6 +351,7 @@ class InvoiceService:
             "billing_address_id": result.billing_address_id,
             "shipping_address_id": result.shipping_address_id or result.billing_address_id
         }
+    
     @staticmethod
     def _calculate_due_date(
         invoice_date: date,
