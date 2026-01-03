@@ -34,7 +34,6 @@ export { default as ViewHistoryButton } from './ViewHistoryButton';
 export { default as HistoryTable } from './HistoryTable';
 export { default as AddressSelector } from './AddressSelector';
 export { default as AddressForm } from './AddressForm';
-export { default as AddressFormEnhanced } from './AddressFormEnhanced';
 
 // Feedback Components
 export { default as Toast, ToastProvider, useToast } from './feedback/Toast';

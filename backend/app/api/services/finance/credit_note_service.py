@@ -1,6 +1,9 @@
 """
 Credit Note Service - Credit and debit note management
 
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id - TenantAwareSession handles it
+
 Provides business logic for:
 - Creating credit notes (reduces customer liability)
 - Creating debit notes (increases customer/reduces supplier liability)
@@ -46,7 +49,13 @@ DEBIT_NOTE_REASONS = [
 
 
 class CreditNoteService:
-    """Service for credit and debit note management"""
+    """
+    Service for credit and debit note management
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
+    """
     
     @staticmethod
     def get_notes(
@@ -59,9 +68,12 @@ class CreditNoteService:
         skip: int = 0,
         limit: int = 20
     ) -> Dict[str, Any]:
-        """Get list of credit/debit notes with filters"""
-        
+        """
+        Get list of credit/debit notes with filters.
+        TenantAwareSession auto-filters by org_id.
+        """
         # Build union query for both credit and debit notes from returns
+        # TenantAwareSession auto-adds org_id filter
         base_query = """
             SELECT 
                 'credit' as note_type,
@@ -78,7 +90,7 @@ class CreditNoteService:
                 sr.created_at
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.credit_note_number IS NOT NULL AND sr.org_id = :org_id
+            WHERE sr.credit_note_number IS NOT NULL
             
             UNION ALL
             
@@ -97,10 +109,10 @@ class CreditNoteService:
                 pr.created_at
             FROM procurement.purchase_returns pr
             LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.debit_note_number IS NOT NULL AND pr.org_id = :org_id
+            WHERE pr.debit_note_number IS NOT NULL
         """
         
-        params = {"org_id": org_id, "skip": skip, "limit": limit}
+        params = {"skip": skip, "limit": limit}
         filter_conditions = []
         
         if note_type:
@@ -149,13 +161,8 @@ class CreditNoteService:
         note_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Create a credit note (reduces customer liability)
-        
-        Args:
-            db: Database session
-            org_id: Organization ID
-            user_id: User creating the note
-            note_data: Dict with party_id, note_date, amount, reason, tax_percent, linked_invoice_id
+        Create a credit note (reduces customer liability).
+        org_id parameter used for INSERT (creating new record).
         """
         note_id = str(uuid.uuid4())
         note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
@@ -215,10 +222,8 @@ class CreditNoteService:
         note_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Create a debit note
-        
-        For customers: increases their liability
-        For suppliers: reduces their liability (we owe less)
+        Create a debit note.
+        org_id parameter used for INSERT (creating new record).
         """
         party_type = note_data.get("party_type", PartyType.CUSTOMER.value)
         
@@ -278,8 +283,10 @@ class CreditNoteService:
         org_id: str,
         note_id: str
     ) -> Optional[Dict[str, Any]]:
-        """Get detailed info about a specific note"""
-        
+        """
+        Get detailed info about a specific note.
+        TenantAwareSession auto-filters by org_id.
+        """
         note = db.execute(text("""
             SELECT 
                 n.*,
@@ -294,8 +301,8 @@ class CreditNoteService:
             FROM financial.credit_debit_notes n
             LEFT JOIN parties.customers c ON n.party_id = c.customer_id AND n.party_type = 'customer'
             LEFT JOIN parties.suppliers s ON n.party_id = s.supplier_id AND n.party_type = 'supplier'
-            WHERE n.note_id = :note_id AND n.org_id = :org_id
-        """), {"note_id": note_id, "org_id": org_id}).fetchone()
+            WHERE n.note_id = :note_id
+        """), {"note_id": note_id}).fetchone()
         
         if not note:
             return None
@@ -310,13 +317,15 @@ class CreditNoteService:
         reason: str,
         user_id: int
     ) -> Dict[str, Any]:
-        """Cancel a credit/debit note"""
-        
+        """
+        Cancel a credit/debit note.
+        TenantAwareSession auto-filters by org_id.
+        """
         # Get note details
         note = db.execute(text("""
             SELECT * FROM financial.credit_debit_notes
-            WHERE note_id = :note_id AND org_id = :org_id
-        """), {"note_id": note_id, "org_id": org_id}).fetchone()
+            WHERE note_id = :note_id
+        """), {"note_id": note_id}).fetchone()
         
         if not note:
             raise ValueError("Note not found")
@@ -357,8 +366,10 @@ class CreditNoteService:
         page: int = 1,
         limit: int = 10
     ) -> Dict[str, Any]:
-        """Get invoices for a party that can be linked to notes"""
-        
+        """
+        Get invoices for a party that can be linked to notes.
+        TenantAwareSession auto-filters by org_id.
+        """
         offset = (page - 1) * limit
         
         if invoice_type == "sales":
@@ -372,13 +383,13 @@ class CreditNoteService:
                     COALESCE(payment_status, 'pending') as payment_status,
                     COALESCE(invoice_status, 'draft') as invoice_status
                 FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
+                WHERE customer_id = :party_id
                 ORDER BY invoice_date DESC, invoice_id DESC
                 LIMIT :limit OFFSET :offset
             """
             count_query = """
                 SELECT COUNT(*) FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
+                WHERE customer_id = :party_id
             """
         else:
             query = """
@@ -391,19 +402,19 @@ class CreditNoteService:
                     payment_status,
                     invoice_status
                 FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id AND org_id = :org_id
+                WHERE supplier_id = :party_id
                 ORDER BY invoice_date DESC
                 LIMIT :limit OFFSET :offset
             """
             count_query = """
                 SELECT COUNT(*) FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id AND org_id = :org_id
+                WHERE supplier_id = :party_id
             """
         
-        params = {"party_id": party_id, "org_id": org_id, "limit": limit, "offset": offset}
+        params = {"party_id": party_id, "limit": limit, "offset": offset}
         
         invoices = db.execute(text(query), params).fetchall()
-        total_count = db.execute(text(count_query), {"party_id": party_id, "org_id": org_id}).scalar()
+        total_count = db.execute(text(count_query), {"party_id": party_id}).scalar()
         
         total_pages = (total_count + limit - 1) // limit
         

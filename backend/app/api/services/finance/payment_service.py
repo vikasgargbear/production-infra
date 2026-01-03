@@ -1,10 +1,8 @@
 """
 Payment service for tracking invoice payments
 
-Modernized service following patterns from return_service.py and invoice_service.py:
-- Uses DocumentNumberService for payment number generation
-- Centralized constants for payment statuses and modes
-- Multi-tenant security with org_id validation
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id - TenantAwareSession handles it
 """
 from typing import Dict, Any, List, Optional
 from datetime import date, datetime
@@ -23,16 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class PaymentService:
-    """Service class for payment-related operations"""
+    """
+    Service class for payment-related operations
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
+    """
     
     @staticmethod
     def generate_payment_number(db: Session, org_id: Optional[str] = None) -> str:
-        """
-        Generate unique payment number using DocumentNumberService.
-        
-        Replaces the legacy generate_payment_reference method for consistency
-        with other document types across the system.
-        """
+        """Generate unique payment number using DocumentNumberService."""
         return DocumentNumberService.generate_number(db, "payment", org_id)
     
     @staticmethod
@@ -50,33 +49,15 @@ class PaymentService:
         """
         Record a payment against an invoice.
         
-        Args:
-            db: Database session
-            invoice_id: Invoice to record payment against
-            payment_data: Payment details (amount, mode, date, etc.)
-            org_id: Organization ID for multi-tenant security
-        
-        Returns:
-            Dict with payment details and updated invoice status
+        TenantAwareSession auto-filters by org_id.
         """
-        # Get invoice details with security check
-        invoice_query = """
+        # Get invoice details (TenantAwareSession auto-adds org_id filter)
+        invoice = db.execute(text("""
             SELECT invoice_id, invoice_number, final_amount as total_amount, 
                    COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
-        """
-        params = {"invoice_id": invoice_id}
-        
-        # Add org_id security filter if provided
-        if org_id:
-            invoice_query = invoice_query.replace(
-                "WHERE invoice_id = :invoice_id",
-                "WHERE invoice_id = :invoice_id AND org_id = :org_id"
-            )
-            params["org_id"] = org_id
-        
-        invoice = db.execute(text(invoice_query), params).fetchone()
+        """), {"invoice_id": invoice_id}).fetchone()
         
         if not invoice:
             raise ValueError(f"Invoice {invoice_id} not found or access denied")
@@ -88,7 +69,7 @@ class PaymentService:
         if payment_amount > balance_amount:
             raise ValueError(f"Payment amount exceeds balance. Balance: {balance_amount}")
         
-        # Generate payment reference using DocumentNumberService
+        # Generate payment reference
         payment_reference = PaymentService.generate_payment_number(db, org_id)
         
         # Create payment record
@@ -130,7 +111,7 @@ class PaymentService:
         new_paid_amount = Decimal(str(invoice.paid_amount)) + payment_amount
         total_amount = Decimal(str(invoice.total_amount))
         
-        # Determine new payment status using constants
+        # Determine new payment status
         if new_paid_amount >= total_amount:
             new_payment_status = PaymentStatus.PAID.value
         elif new_paid_amount > 0:
@@ -183,22 +164,17 @@ class PaymentService:
         invoice_id: int,
         org_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get all payments for an invoice."""
-        query = """
+        """
+        Get all payments for an invoice.
+        TenantAwareSession auto-filters by org_id.
+        """
+        payments = db.execute(text("""
             SELECT p.* 
             FROM financial.payments p
             JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
             WHERE i.invoice_id = :invoice_id
-        """
-        params = {"invoice_id": invoice_id}
-        
-        if org_id:
-            query += " AND p.org_id = :org_id"
-            params["org_id"] = org_id
-            
-        query += " ORDER BY p.payment_date DESC, p.created_at DESC"
-        
-        payments = db.execute(text(query), params).fetchall()
+            ORDER BY p.payment_date DESC, p.created_at DESC
+        """), {"invoice_id": invoice_id}).fetchall()
         return [dict(payment._mapping) for payment in payments]
     
     @staticmethod
@@ -208,8 +184,11 @@ class PaymentService:
         from_date: Optional[date] = None,
         to_date: Optional[date] = None
     ) -> Dict[str, Any]:
-        """Get payment summary for organization."""
-        params = {"org_id": str(org_id)}
+        """
+        Get payment summary for organization.
+        TenantAwareSession auto-filters by org_id.
+        """
+        params = {}
         date_filter = ""
         
         if from_date:
@@ -219,7 +198,7 @@ class PaymentService:
             date_filter += " AND p.payment_date <= :to_date"
             params["to_date"] = to_date
         
-        # Get payment statistics from financial.payments table
+        # Get payment statistics (TenantAwareSession auto-adds org_id)
         result = db.execute(text(f"""
             SELECT 
                 COUNT(DISTINCT p.payment_id) as total_payments,
@@ -233,8 +212,7 @@ class PaymentService:
                 COALESCE(SUM(CASE WHEN pm.method_type IN ('upi', 'bank_transfer', 'card', 'online') THEN p.payment_amount ELSE 0 END), 0) as online_amount
             FROM financial.payments p
             LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
-            WHERE p.org_id = :org_id 
-                AND p.payment_status IN ('cleared', 'processed', 'approved', 'completed')
+            WHERE p.payment_status IN ('cleared', 'processed', 'approved', 'completed')
                 AND p.party_type = 'customer' {date_filter}
         """), params).fetchone()
         
@@ -244,10 +222,9 @@ class PaymentService:
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
                 COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as pending_amount
             FROM sales.invoices i
-            WHERE i.org_id = :org_id 
-                AND (i.payment_status IN ('unpaid', 'partial') OR i.payment_status IS NULL)
+            WHERE (i.payment_status IN ('unpaid', 'partial') OR i.payment_status IS NULL)
                 AND i.final_amount > COALESCE(i.paid_amount, 0)
-        """), {"org_id": str(org_id)}).fetchone()
+        """)).fetchone()
         
         return {
             "total_payments": result.total_payments or 0,
@@ -283,51 +260,32 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """
         Cancel a payment and adjust invoice.
-        
-        Args:
-            db: Database session
-            payment_id: Payment to cancel
-            reason: Cancellation reason
-            org_id: Organization ID for security
-            cancelled_by: User ID performing cancellation
+        TenantAwareSession auto-filters by org_id.
         """
-        # Get payment details with security check
-        query = """
+        # Get payment details (TenantAwareSession auto-adds org_id filter)
+        payment = db.execute(text("""
             SELECT p.*, i.invoice_id, i.paid_amount as invoice_paid_amount
             FROM financial.payments p
             LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
             WHERE p.payment_id = :payment_id 
                 AND p.payment_status NOT IN ('cancelled', 'failed')
-        """
-        params = {"payment_id": payment_id}
-        
-        if org_id:
-            query = query.replace(
-                "WHERE p.payment_id = :payment_id",
-                "WHERE p.payment_id = :payment_id AND p.org_id = :org_id"
-            )
-            params["org_id"] = org_id
-        
-        payment = db.execute(text(query), params).fetchone()
+        """), {"payment_id": payment_id}).fetchone()
         
         if not payment:
             raise ValueError("Payment not found, already cancelled, or access denied")
         
         # Update payment status
-        cancel_params = {
-            "payment_id": payment_id, 
-            "reason": reason,
-            "cancelled_by": cancelled_by,
-            "status": PaymentRecordStatus.CANCELLED.value
-        }
-        
         db.execute(text("""
             UPDATE financial.payments
             SET payment_status = :status,
                 narration = COALESCE(narration, '') || ' | Cancelled: ' || :reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE payment_id = :payment_id
-        """), cancel_params)
+        """), {
+            "payment_id": payment_id, 
+            "reason": reason,
+            "status": PaymentRecordStatus.CANCELLED.value
+        })
         
         # Adjust invoice paid amount if linked
         if payment.invoice_id:
@@ -357,8 +315,11 @@ class PaymentService:
         payment_id: int, 
         org_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """Get single payment by ID with security validation."""
-        query = """
+        """
+        Get single payment by ID with security validation.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
             SELECT p.*, 
                 c.customer_name,
                 s.supplier_name,
@@ -368,17 +329,7 @@ class PaymentService:
             LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
             LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
             WHERE p.payment_id = :payment_id
-        """
-        params = {"payment_id": payment_id}
-        
-        if org_id:
-            query = query.replace(
-                "WHERE p.payment_id = :payment_id",
-                "WHERE p.payment_id = :payment_id AND p.org_id = :org_id"
-            )
-            params["org_id"] = org_id
-        
-        result = db.execute(text(query), params).first()
+        """), {"payment_id": payment_id}).first()
         return dict(result._mapping) if result else None
     
     @staticmethod
@@ -395,20 +346,19 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """
         Create a customer payment receipt.
-        
-        Consolidated from route logic for reusability.
+        TenantAwareSession auto-filters by org_id.
         """
         # Generate receipt number
         receipt_number = PaymentService.generate_receipt_number(db, org_id)
         
-        # Get customer name
+        # Get customer name (TenantAwareSession auto-adds org_id)
         customer_result = db.execute(
             text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
             {"id": customer_id}
         ).first()
         customer_name = customer_result.customer_name if customer_result else f"Customer {customer_id}"
         
-        # Insert payment
+        # Insert payment - using org_id from parameter for INSERT (new record creation)
         result = db.execute(text("""
             INSERT INTO financial.payments (
                 org_id, payment_number, payment_date, payment_type, payment_mode,

@@ -1,6 +1,9 @@
 """
 Ledger Service - Party ledger statements and aging analysis
 
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id - TenantAwareSession handles it
+
 Provides business logic for:
 - Party statement generation
 - Balance calculations
@@ -23,7 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 class LedgerService:
-    """Service for party ledger statements and aging analysis"""
+    """
+    Service for party ledger statements and aging analysis
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
+    """
     
     @staticmethod
     def get_party_statement(
@@ -35,11 +44,12 @@ class LedgerService:
         to_date: Optional[date] = None
     ) -> Dict[str, Any]:
         """
-        Get party ledger statement with running balance
+        Get party ledger statement with running balance.
         
-        Returns all transactions (invoices, payments, notes) with running balance
+        TenantAwareSession auto-filters by org_id on all tables.
         """
         if party_type == PartyType.CUSTOMER.value:
+            # Customer statement (TenantAwareSession auto-adds org_id)
             query = """
                 WITH all_transactions AS (
                     -- Invoices (Debit)
@@ -53,7 +63,7 @@ class LedgerService:
                         0::numeric as credit,
                         1 as sort_order
                     FROM sales.invoices i
-                    WHERE i.customer_id = :party_id AND i.org_id = :org_id
+                    WHERE i.customer_id = :party_id
                     AND i.invoice_status != :cancelled
                     AND (:from_date IS NULL OR i.invoice_date >= :from_date)
                     AND (:to_date IS NULL OR i.invoice_date <= :to_date)
@@ -71,7 +81,7 @@ class LedgerService:
                         p.payment_amount as credit,
                         2 as sort_order
                     FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = :customer_type AND p.org_id = :org_id
+                    WHERE p.party_id = :party_id AND p.party_type = :customer_type
                     AND p.payment_status != :cancelled_payment
                     AND (:from_date IS NULL OR p.payment_date >= :from_date)
                     AND (:to_date IS NULL OR p.payment_date <= :to_date)
@@ -90,7 +100,7 @@ class LedgerService:
                         3 as sort_order
                     FROM financial.credit_debit_notes cn
                     WHERE cn.party_id = :party_id AND cn.party_type = :customer_type 
-                    AND cn.note_type = 'credit' AND cn.org_id = :org_id
+                    AND cn.note_type = 'credit'
                     AND cn.status = 'approved'
                     AND (:from_date IS NULL OR cn.note_date >= :from_date)
                     AND (:to_date IS NULL OR cn.note_date <= :to_date)
@@ -109,7 +119,7 @@ class LedgerService:
                         4 as sort_order
                     FROM financial.credit_debit_notes dn
                     WHERE dn.party_id = :party_id AND dn.party_type = :customer_type
-                    AND dn.note_type = 'debit' AND dn.org_id = :org_id
+                    AND dn.note_type = 'debit'
                     AND dn.status = 'approved'
                     AND (:from_date IS NULL OR dn.note_date >= :from_date)
                     AND (:to_date IS NULL OR dn.note_date <= :to_date)
@@ -120,7 +130,6 @@ class LedgerService:
             
             result = db.execute(text(query), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "from_date": from_date,
                 "to_date": to_date,
                 "cancelled": InvoiceStatus.CANCELLED.value,
@@ -145,7 +154,7 @@ class LedgerService:
                 "transaction_count": len(transactions)
             }
         else:
-            # Supplier statement
+            # Supplier statement (TenantAwareSession auto-adds org_id)
             query = """
                 WITH all_transactions AS (
                     -- Purchase Invoices (Credit - we owe them)
@@ -159,7 +168,7 @@ class LedgerService:
                         si.final_amount as credit,
                         1 as sort_order
                     FROM purchases.supplier_invoices si
-                    WHERE si.supplier_id = :party_id AND si.org_id = :org_id
+                    WHERE si.supplier_id = :party_id
                     AND si.invoice_status != :cancelled
                     AND (:from_date IS NULL OR si.invoice_date >= :from_date)
                     AND (:to_date IS NULL OR si.invoice_date <= :to_date)
@@ -177,7 +186,7 @@ class LedgerService:
                         0::numeric as credit,
                         2 as sort_order
                     FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = :supplier_type AND p.org_id = :org_id
+                    WHERE p.party_id = :party_id AND p.party_type = :supplier_type
                     AND p.payment_status != :cancelled_payment
                     AND (:from_date IS NULL OR p.payment_date >= :from_date)
                     AND (:to_date IS NULL OR p.payment_date <= :to_date)
@@ -188,7 +197,6 @@ class LedgerService:
             
             result = db.execute(text(query), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "from_date": from_date,
                 "to_date": to_date,
                 "cancelled": InvoiceStatus.CANCELLED.value,
@@ -220,20 +228,21 @@ class LedgerService:
         party_type: str,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get quick balance summary for a party"""
-        
+        """
+        Get quick balance summary for a party.
+        TenantAwareSession auto-filters by org_id.
+        """
         if party_type == PartyType.CUSTOMER.value:
             result = db.execute(text("""
                 SELECT 
                     COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as outstanding,
                     COUNT(*) as invoice_count
                 FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
+                WHERE customer_id = :party_id
                 AND invoice_status != :cancelled 
                 AND payment_status != :paid
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "cancelled": InvoiceStatus.CANCELLED.value,
                 "paid": InvoicePaymentStatus.PAID.value
             }).fetchone()
@@ -241,12 +250,11 @@ class LedgerService:
             advance = db.execute(text("""
                 SELECT COALESCE(SUM(unallocated_amount), 0)
                 FROM financial.payments
-                WHERE party_id = :party_id AND party_type = :party_type AND org_id = :org_id
+                WHERE party_id = :party_id AND party_type = :party_type
                 AND payment_status != :cancelled
             """), {
                 "party_id": party_id,
                 "party_type": PartyType.CUSTOMER.value,
-                "org_id": org_id,
                 "cancelled": PaymentRecordStatus.CANCELLED.value
             }).scalar() or 0
             
@@ -264,12 +272,11 @@ class LedgerService:
                     COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as payable,
                     COUNT(*) as invoice_count
                 FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id AND org_id = :org_id
+                WHERE supplier_id = :party_id
                 AND invoice_status != :cancelled 
                 AND payment_status != :paid
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "cancelled": InvoiceStatus.CANCELLED.value,
                 "paid": InvoicePaymentStatus.PAID.value
             }).fetchone()
@@ -288,8 +295,10 @@ class LedgerService:
         party_type: str,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get outstanding bills for a party"""
-        
+        """
+        Get outstanding bills for a party.
+        TenantAwareSession auto-filters by org_id.
+        """
         if party_type == PartyType.CUSTOMER.value:
             result = db.execute(text("""
                 SELECT 
@@ -299,13 +308,12 @@ class LedgerService:
                     i.payment_status,
                     GREATEST(0, CURRENT_DATE - i.due_date) as days_overdue
                 FROM sales.invoices i
-                WHERE i.customer_id = :party_id AND i.org_id = :org_id
+                WHERE i.customer_id = :party_id
                 AND i.payment_status IN (:unpaid, :partial, :pending)
                 AND i.invoice_status != :cancelled
                 ORDER BY i.due_date
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "unpaid": InvoicePaymentStatus.UNPAID.value,
                 "partial": InvoicePaymentStatus.PARTIAL.value,
                 "pending": "pending",
@@ -320,13 +328,12 @@ class LedgerService:
                     si.payment_status,
                     GREATEST(0, CURRENT_DATE - si.due_date) as days_overdue
                 FROM purchases.supplier_invoices si
-                WHERE si.supplier_id = :party_id AND si.org_id = :org_id
+                WHERE si.supplier_id = :party_id
                 AND si.payment_status IN (:unpaid, :partial, :pending)
                 AND si.invoice_status != :cancelled
                 ORDER BY si.due_date
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "unpaid": InvoicePaymentStatus.UNPAID.value,
                 "partial": InvoicePaymentStatus.PARTIAL.value,
                 "pending": "pending",
@@ -349,8 +356,10 @@ class LedgerService:
         party_type: str,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get aging analysis for all parties"""
-        
+        """
+        Get aging analysis for all parties.
+        TenantAwareSession auto-filters by org_id.
+        """
         if party_type == PartyType.CUSTOMER.value:
             result = db.execute(text("""
                 SELECT
@@ -366,14 +375,12 @@ class LedgerService:
                     COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date > 90 
                         THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as over_90
                 FROM sales.invoices i
-                JOIN parties.customers c ON i.customer_id = c.customer_id AND i.org_id = c.org_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.payment_status != :paid AND i.invoice_status != :cancelled
                 AND i.final_amount > COALESCE(i.paid_amount, 0)
-                AND i.org_id = :org_id
                 GROUP BY c.customer_id, c.customer_name, c.primary_phone
                 ORDER BY total_outstanding DESC
             """), {
-                "org_id": org_id,
                 "paid": InvoicePaymentStatus.PAID.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
             })
@@ -393,14 +400,12 @@ class LedgerService:
                     COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date > 90 
                         THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as over_90
                 FROM purchases.supplier_invoices si
-                JOIN parties.suppliers s ON si.supplier_id = s.supplier_id AND si.org_id = s.org_id
+                JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
                 WHERE si.payment_status != :paid AND si.invoice_status != :cancelled
                 AND si.final_amount > COALESCE(si.paid_amount, 0)
-                AND si.org_id = :org_id
                 GROUP BY s.supplier_id, s.supplier_name, s.primary_phone
                 ORDER BY total_payable DESC
             """), {
-                "org_id": org_id,
                 "paid": InvoicePaymentStatus.PAID.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
             })
@@ -430,8 +435,10 @@ class LedgerService:
         party_type: str,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get overall ledger summary for all parties"""
-        
+        """
+        Get overall ledger summary for all parties.
+        TenantAwareSession auto-filters by org_id.
+        """
         if party_type == PartyType.CUSTOMER.value:
             result = db.execute(text("""
                 SELECT
@@ -443,12 +450,10 @@ class LedgerService:
                     COUNT(DISTINCT i.invoice_id) as total_pending_invoices
                 FROM parties.customers c
                 LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id 
-                    AND c.org_id = i.org_id 
                     AND i.invoice_status != :cancelled
                     AND i.payment_status != :paid
-                WHERE c.org_id = :org_id AND c.is_active = true
+                WHERE c.is_active = true
             """), {
-                "org_id": org_id,
                 "paid": InvoicePaymentStatus.PAID.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
             }).fetchone()
@@ -478,12 +483,10 @@ class LedgerService:
                     COUNT(DISTINCT si.invoice_id) as total_pending_invoices
                 FROM parties.suppliers s
                 LEFT JOIN purchases.supplier_invoices si ON s.supplier_id = si.supplier_id 
-                    AND s.org_id = si.org_id 
                     AND si.invoice_status != :cancelled
                     AND si.payment_status != :paid
-                WHERE s.org_id = :org_id AND s.is_active = true
+                WHERE s.is_active = true
             """), {
-                "org_id": org_id,
                 "paid": InvoicePaymentStatus.PAID.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
             }).fetchone()
@@ -503,8 +506,10 @@ class LedgerService:
         org_id: str,
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """Get top debtors by outstanding amount"""
-        
+        """
+        Get top debtors by outstanding amount.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT
                 c.customer_id, c.customer_name, c.primary_phone as phone,
@@ -512,16 +517,14 @@ class LedgerService:
                 COUNT(i.invoice_id) as invoice_count,
                 MAX(i.invoice_date) as last_invoice_date
             FROM parties.customers c
-            JOIN sales.invoices i ON c.customer_id = i.customer_id AND c.org_id = i.org_id
+            JOIN sales.invoices i ON c.customer_id = i.customer_id
             WHERE i.payment_status != :paid 
             AND i.invoice_status != :cancelled
             AND i.final_amount > COALESCE(i.paid_amount, 0)
-            AND c.org_id = :org_id
             GROUP BY c.customer_id, c.customer_name, c.primary_phone
             ORDER BY outstanding DESC
             LIMIT :limit
         """), {
-            "org_id": org_id,
             "paid": InvoicePaymentStatus.PAID.value,
             "cancelled": InvoiceStatus.CANCELLED.value,
             "limit": limit
@@ -537,8 +540,10 @@ class LedgerService:
         org_id: str,
         interest_rate: float = 18.0
     ) -> Dict[str, Any]:
-        """Calculate interest on overdue amounts"""
-        
+        """
+        Calculate interest on overdue amounts.
+        TenantAwareSession auto-filters by org_id.
+        """
         if party_type == PartyType.CUSTOMER.value:
             result = db.execute(text("""
                 SELECT 
@@ -546,14 +551,13 @@ class LedgerService:
                     (final_amount - COALESCE(paid_amount, 0)) as outstanding,
                     GREATEST(0, CURRENT_DATE - due_date) as days_overdue
                 FROM sales.invoices
-                WHERE customer_id = :party_id AND org_id = :org_id
+                WHERE customer_id = :party_id
                 AND payment_status IN (:unpaid, :partial)
                 AND invoice_status != :cancelled
                 AND due_date < CURRENT_DATE
                 ORDER BY due_date
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "unpaid": InvoicePaymentStatus.UNPAID.value,
                 "partial": InvoicePaymentStatus.PARTIAL.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
@@ -565,14 +569,13 @@ class LedgerService:
                     (final_amount - COALESCE(paid_amount, 0)) as outstanding,
                     GREATEST(0, CURRENT_DATE - due_date) as days_overdue
                 FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id AND org_id = :org_id
+                WHERE supplier_id = :party_id
                 AND payment_status IN (:unpaid, :partial)
                 AND invoice_status != :cancelled
                 AND due_date < CURRENT_DATE
                 ORDER BY due_date
             """), {
                 "party_id": party_id,
-                "org_id": org_id,
                 "unpaid": InvoicePaymentStatus.UNPAID.value,
                 "partial": InvoicePaymentStatus.PARTIAL.value,
                 "cancelled": InvoiceStatus.CANCELLED.value

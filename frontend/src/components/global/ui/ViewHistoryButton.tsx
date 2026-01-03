@@ -4,7 +4,7 @@ import {
     ChevronDown, MoreVertical, Mail, MessageSquare,
     Share2, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
-import GlobalPDFGenerator from './GlobalPDFGenerator';
+import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
 import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================

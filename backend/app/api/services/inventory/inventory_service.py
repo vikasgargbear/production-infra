@@ -1,5 +1,9 @@
 """
 Inventory service layer for business logic
+
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id - TenantAwareSession handles it
+
 Handles batch management, stock movements, and expiry tracking
 """
 from typing import Optional, List
@@ -21,7 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 class InventoryService:
-    """Service class for inventory-related business logic"""
+    """
+    Service class for inventory-related business logic
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
+    
+    Note: org_id parameter still needed for INSERT operations
+    """
     
     @staticmethod
     def calculate_days_to_expiry(expiry_date: date) -> int:
@@ -47,7 +59,7 @@ class InventoryService:
     def create_batch(db: Session, batch_data: BatchCreate) -> BatchResponse:
         """Create a new batch with validation"""
         try:
-            # Validate product exists
+            # Validate product exists (TenantAwareSession auto-adds org_id)
             product = db.execute(text("""
                 SELECT product_id, product_name, product_code 
                 FROM inventory.products WHERE product_id = :product_id
@@ -68,7 +80,7 @@ class InventoryService:
             if existing:
                 raise ValueError(f"Batch {batch_data.batch_number} already exists for this product")
             
-            # Create batch
+            # Create batch - org_id needed for INSERT (creating new record)
             batch_dict = batch_data.dict()
             result = db.execute(text("""
                 INSERT INTO inventory.batches (
@@ -88,7 +100,7 @@ class InventoryService:
             
             batch_id = result.scalar()
             
-            # Record stock movement
+            # Record stock movement - org_id needed for INSERT
             db.execute(text("""
                 INSERT INTO inventory.inventory_movements (
                     org_id, product_id, batch_id, movement_type,
@@ -119,7 +131,10 @@ class InventoryService:
     
     @staticmethod
     def get_batch(db: Session, batch_id: int) -> BatchResponse:
-        """Get batch details with calculated fields"""
+        """
+        Get batch details with calculated fields.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT b.*, p.product_name, p.product_code,
                    b.initial_quantity - b.quantity_available as quantity_sold
@@ -152,7 +167,10 @@ class InventoryService:
     
     @staticmethod
     def get_current_stock(db: Session, product_id: int) -> CurrentStock:
-        """Get current stock summary for a product"""
+        """
+        Get current stock summary for a product.
+        TenantAwareSession auto-filters by org_id.
+        """
         # Get product details
         product = db.execute(text("""
             SELECT product_id, product_code, product_name
@@ -224,7 +242,7 @@ class InventoryService:
             if direction == 'out' and movement_data.quantity > stock_before:
                 raise ValueError(f"Insufficient stock for this movement. Available: {stock_before}")
             
-            # Build movement record
+            # Build movement record - org_id needed for INSERT
             movement_params = {
                 "org_id": str(movement_data.org_id) if movement_data.org_id else None,
                 "product_id": movement_data.product_id,
@@ -337,7 +355,10 @@ class InventoryService:
         org_id: UUID,
         days_ahead: int = 180
     ) -> List[ExpiryAlert]:
-        """Get products expiring within specified days"""
+        """
+        Get products expiring within specified days.
+        TenantAwareSession auto-filters by org_id.
+        """
         cutoff_date = date.today() + timedelta(days=days_ahead)
         
         result = db.execute(text("""
@@ -348,12 +369,10 @@ class InventoryService:
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id
-                AND b.quantity_available > 0
+            WHERE b.quantity_available > 0
                 AND b.expiry_date <= :cutoff_date
             ORDER BY b.expiry_date, p.product_name
         """), {
-            "org_id": org_id,
             "cutoff_date": cutoff_date
         })
         
@@ -373,7 +392,10 @@ class InventoryService:
         org_id: UUID,
         as_of_date: Optional[date] = None
     ) -> StockValuation:
-        """Get stock valuation report"""
+        """
+        Get stock valuation report.
+        TenantAwareSession auto-filters by org_id.
+        """
         if not as_of_date:
             as_of_date = date.today()
         
@@ -395,10 +417,8 @@ class InventoryService:
                     WHEN b.expiry_date > :as_of_date AND b.expiry_date <= :as_of_date + INTERVAL '90 days' 
                     THEN b.quantity_available * b.cost_per_unit ELSE 0 END), 0) as near_expiry_value
             FROM inventory.batches b
-            WHERE b.org_id = :org_id
-                AND b.quantity_available > 0
+            WHERE b.quantity_available > 0
         """), {
-            "org_id": org_id,
             "as_of_date": as_of_date
         }).fetchone()
         
@@ -414,13 +434,10 @@ class InventoryService:
                 COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as value
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id
-                AND b.quantity_available > 0
+            WHERE b.quantity_available > 0
             GROUP BY p.category_id
             ORDER BY value DESC
-        """), {
-            "org_id": org_id
-        })
+        """))
         
         valuation["category_wise"] = [
             dict(row._mapping) for row in category_result
@@ -430,7 +447,10 @@ class InventoryService:
     
     @staticmethod
     def get_inventory_dashboard(db: Session, org_id: UUID) -> InventoryDashboard:
-        """Get inventory dashboard data"""
+        """
+        Get inventory dashboard data.
+        TenantAwareSession auto-filters by org_id.
+        """
         # Stock overview
         overview = db.execute(text("""
             SELECT 
@@ -438,8 +458,8 @@ class InventoryService:
                 COUNT(*) as total_batches,
                 COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as total_stock_value
             FROM inventory.batches b
-            WHERE b.org_id = :org_id AND b.quantity_available > 0
-        """), {"org_id": org_id}).fetchone()
+            WHERE b.quantity_available > 0
+        """)).fetchone()
         
         # Alert counts
         alerts = db.execute(text("""
@@ -455,30 +475,28 @@ class InventoryService:
                     WHEN sq.total_quantity = 0 
                     THEN p.product_id END) as out_of_stock_products
             FROM inventory.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.org_id = :org_id
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             LEFT JOIN (
                 SELECT product_id, SUM(quantity_available) as total_quantity
                 FROM inventory.batches
-                WHERE org_id = :org_id
                 GROUP BY product_id
             ) sq ON p.product_id = sq.product_id
-            WHERE p.org_id = :org_id
-        """), {"org_id": org_id}).fetchone()
+        """)).fetchone()
         
         # Today's activity
         activity = db.execute(text("""
             SELECT 
                 COUNT(*) as todays_movements
             FROM inventory.movement_summary
-            WHERE org_id = :org_id AND DATE(movement_date) = CURRENT_DATE
-        """), {"org_id": org_id}).fetchone()
+            WHERE DATE(movement_date) = CURRENT_DATE
+        """)).fetchone()
         
         # Pending orders
         pending = db.execute(text("""
             SELECT COUNT(*) as pending_orders
             FROM sales.orders
-            WHERE org_id = :org_id AND order_status IN ('pending', 'confirmed')
-        """), {"org_id": org_id}).fetchone()
+            WHERE order_status IN ('pending', 'confirmed')
+        """)).fetchone()
         
         # Fast moving products (last 30 days)
         fast_moving = db.execute(text("""
@@ -487,14 +505,12 @@ class InventoryService:
                 COALESCE(SUM(im.quantity), 0) as movement_quantity
             FROM inventory.products p
             LEFT JOIN inventory.movement_summary im ON p.product_id = im.product_id
-                AND im.org_id = :org_id
                 AND im.movement_type = 'sale'
                 AND im.movement_date >= CURRENT_DATE - INTERVAL '30 days'
-            WHERE p.org_id = :org_id
             GROUP BY p.product_id, p.product_code, p.product_name
             ORDER BY movement_quantity DESC
             LIMIT 10
-        """), {"org_id": org_id})
+        """))
         
         # Get expiry alerts
         expiry_alerts = InventoryService.get_expiry_alerts(db, org_id, days_ahead=90)

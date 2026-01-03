@@ -1,6 +1,9 @@
 """
 Dashboard Service - Analytics and KPIs
 
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id - TenantAwareSession handles it
+
 Provides business logic for:
 - Dashboard statistics and KPIs
 - Revenue analytics
@@ -24,19 +27,27 @@ logger = logging.getLogger(__name__)
 
 
 class DashboardService:
-    """Service for dashboard analytics and KPIs"""
+    """
+    Service for dashboard analytics and KPIs
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
+    """
     
     @staticmethod
     def get_dashboard_stats(
         db: Session,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get overall dashboard statistics"""
-        
+        """
+        Get overall dashboard statistics.
+        TenantAwareSession auto-filters by org_id.
+        """
         today = date.today()
         month_start = today.replace(day=1)
         
-        # Get sales stats
+        # Get sales stats (TenantAwareSession auto-adds org_id)
         sales_stats = db.execute(text("""
             SELECT 
                 COUNT(*) as total_orders,
@@ -46,9 +57,8 @@ class DashboardService:
                 COALESCE(SUM(CASE WHEN order_date = CURRENT_DATE THEN final_amount ELSE 0 END), 0) as today_sales,
                 COALESCE(SUM(CASE WHEN order_date >= :month_start THEN final_amount ELSE 0 END), 0) as month_sales
             FROM sales.orders
-            WHERE org_id = :org_id AND order_status != :cancelled
+            WHERE order_status != :cancelled
         """), {
-            "org_id": org_id,
             "pending": OrderStatus.PENDING.value,
             "cancelled": OrderStatus.CANCELLED.value,
             "month_start": month_start
@@ -60,11 +70,9 @@ class DashboardService:
                 COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as total_receivable,
                 COUNT(*) as pending_invoices
             FROM sales.invoices
-            WHERE org_id = :org_id 
-            AND invoice_status != :cancelled
+            WHERE invoice_status != :cancelled
             AND payment_status != :paid
         """), {
-            "org_id": org_id,
             "cancelled": InvoiceStatus.CANCELLED.value,
             "paid": InvoicePaymentStatus.PAID.value
         }).fetchone()
@@ -78,9 +86,8 @@ class DashboardService:
                 COUNT(*) FILTER (WHERE expiry_date <= CURRENT_DATE + :expiry_days) as expiring_soon_count
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id AND b.batch_status = :active
+            WHERE b.batch_status = :active
         """), {
-            "org_id": org_id,
             "active": BatchStatus.ACTIVE.value,
             "expiry_days": BusinessLimits.EXPIRY_ALERT_DAYS
         }).fetchone()
@@ -88,8 +95,8 @@ class DashboardService:
         # Get customer count
         customer_count = db.execute(text("""
             SELECT COUNT(*) FROM parties.customers
-            WHERE org_id = :org_id AND is_active = true
-        """), {"org_id": org_id}).scalar() or 0
+            WHERE is_active = true
+        """)).scalar() or 0
         
         return {
             "orders": {
@@ -123,8 +130,10 @@ class DashboardService:
         org_id: str,
         limit: int = 10
     ) -> List[Dict[str, Any]]:
-        """Get recent orders for dashboard"""
-        
+        """
+        Get recent orders for dashboard.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT 
                 o.order_id, o.order_number, o.order_date, o.order_status,
@@ -132,10 +141,9 @@ class DashboardService:
                 c.customer_name
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.org_id = :org_id
             ORDER BY o.created_at DESC
             LIMIT :limit
-        """), {"org_id": org_id, "limit": limit})
+        """), {"limit": limit})
         
         return [dict(row._mapping) for row in result]
     
@@ -147,8 +155,10 @@ class DashboardService:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
     ) -> Dict[str, Any]:
-        """Get revenue data for charts"""
-        
+        """
+        Get revenue data for charts.
+        TenantAwareSession auto-filters by org_id.
+        """
         today = date.today()
         if not end_date:
             end_date = today
@@ -167,8 +177,7 @@ class DashboardService:
                     COALESCE(SUM(final_amount), 0) as revenue,
                     COUNT(*) as invoice_count
                 FROM sales.invoices
-                WHERE org_id = :org_id 
-                AND invoice_date BETWEEN :start_date AND :end_date
+                WHERE invoice_date BETWEEN :start_date AND :end_date
                 AND invoice_status != :cancelled
                 GROUP BY invoice_date
                 ORDER BY invoice_date
@@ -180,8 +189,7 @@ class DashboardService:
                     COALESCE(SUM(final_amount), 0) as revenue,
                     COUNT(*) as invoice_count
                 FROM sales.invoices
-                WHERE org_id = :org_id 
-                AND invoice_date BETWEEN :start_date AND :end_date
+                WHERE invoice_date BETWEEN :start_date AND :end_date
                 AND invoice_status != :cancelled
                 GROUP BY DATE_TRUNC('week', invoice_date)
                 ORDER BY period
@@ -193,15 +201,13 @@ class DashboardService:
                     COALESCE(SUM(final_amount), 0) as revenue,
                     COUNT(*) as invoice_count
                 FROM sales.invoices
-                WHERE org_id = :org_id 
-                AND invoice_date BETWEEN :start_date AND :end_date
+                WHERE invoice_date BETWEEN :start_date AND :end_date
                 AND invoice_status != :cancelled
                 GROUP BY DATE_TRUNC('month', invoice_date)
                 ORDER BY period
             """
         
         result = db.execute(text(query), {
-            "org_id": org_id,
             "start_date": start_date,
             "end_date": end_date,
             "cancelled": InvoiceStatus.CANCELLED.value
@@ -233,8 +239,10 @@ class DashboardService:
         limit: int = 10,
         period_days: int = 30
     ) -> List[Dict[str, Any]]:
-        """Get top selling products"""
-        
+        """
+        Get top selling products.
+        TenantAwareSession auto-filters by org_id.
+        """
         start_date = date.today() - timedelta(days=period_days)
         
         result = db.execute(text("""
@@ -245,14 +253,12 @@ class DashboardService:
             FROM sales.order_items oi
             JOIN sales.orders o ON oi.order_id = o.order_id
             JOIN inventory.products p ON oi.product_id = p.product_id
-            WHERE o.org_id = :org_id 
-            AND o.order_date >= :start_date
+            WHERE o.order_date >= :start_date
             AND o.order_status != :cancelled
             GROUP BY p.product_id, p.product_name, p.product_code
             ORDER BY total_revenue DESC
             LIMIT :limit
         """), {
-            "org_id": org_id,
             "start_date": start_date,
             "cancelled": OrderStatus.CANCELLED.value,
             "limit": limit
@@ -265,8 +271,10 @@ class DashboardService:
         db: Session,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get inventory alerts (low stock, expiring soon)"""
-        
+        """
+        Get inventory alerts (low stock, expiring soon).
+        TenantAwareSession auto-filters by org_id.
+        """
         # Low stock items
         low_stock = db.execute(text("""
             SELECT 
@@ -276,13 +284,12 @@ class DashboardService:
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.batch_status = :active
-            WHERE p.org_id = :org_id AND p.is_active = true
+            WHERE p.is_active = true
             GROUP BY p.product_id, p.product_name, p.product_code, p.reorder_level
             HAVING COALESCE(SUM(b.quantity_available), 0) <= p.reorder_level
             ORDER BY current_stock
             LIMIT 20
         """), {
-            "org_id": org_id,
             "active": BatchStatus.ACTIVE.value
         }).fetchall()
         
@@ -294,14 +301,12 @@ class DashboardService:
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id 
-            AND b.batch_status = :active
+            WHERE b.batch_status = :active
             AND b.quantity_available > 0
             AND b.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + :days
             ORDER BY b.expiry_date
             LIMIT 20
         """), {
-            "org_id": org_id,
             "active": BatchStatus.ACTIVE.value,
             "days": BusinessLimits.EXPIRY_ALERT_DAYS
         }).fetchall()
@@ -320,8 +325,10 @@ class DashboardService:
         limit: int = 10,
         period_days: int = 30
     ) -> List[Dict[str, Any]]:
-        """Get top customers by order value"""
-        
+        """
+        Get top customers by order value.
+        TenantAwareSession auto-filters by org_id.
+        """
         start_date = date.today() - timedelta(days=period_days)
         
         result = db.execute(text("""
@@ -331,14 +338,12 @@ class DashboardService:
                 COALESCE(SUM(o.final_amount), 0) as total_value
             FROM parties.customers c
             JOIN sales.orders o ON c.customer_id = o.customer_id
-            WHERE o.org_id = :org_id 
-            AND o.order_date >= :start_date
+            WHERE o.order_date >= :start_date
             AND o.order_status != :cancelled
             GROUP BY c.customer_id, c.customer_name, c.primary_phone
             ORDER BY total_value DESC
             LIMIT :limit
         """), {
-            "org_id": org_id,
             "start_date": start_date,
             "cancelled": OrderStatus.CANCELLED.value,
             "limit": limit
@@ -353,8 +358,10 @@ class DashboardService:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
     ) -> Dict[str, Any]:
-        """Get financial summary"""
-        
+        """
+        Get financial summary.
+        TenantAwareSession auto-filters by org_id.
+        """
         today = date.today()
         if not start_date:
             start_date = today.replace(day=1)  # Start of current month
@@ -369,11 +376,9 @@ class DashboardService:
                 COALESCE(SUM(total_tax_amount), 0) as total_tax,
                 COALESCE(SUM(discount_amount), 0) as total_discount
             FROM sales.invoices
-            WHERE org_id = :org_id 
-            AND invoice_date BETWEEN :start_date AND :end_date
+            WHERE invoice_date BETWEEN :start_date AND :end_date
             AND invoice_status != :cancelled
         """), {
-            "org_id": org_id,
             "start_date": start_date,
             "end_date": end_date,
             "cancelled": InvoiceStatus.CANCELLED.value
@@ -385,12 +390,10 @@ class DashboardService:
                 COUNT(*) as payment_count,
                 COALESCE(SUM(payment_amount), 0) as total_collected
             FROM financial.payments
-            WHERE org_id = :org_id 
-            AND payment_date BETWEEN :start_date AND :end_date
+            WHERE payment_date BETWEEN :start_date AND :end_date
             AND party_type = 'customer'
             AND payment_status != 'cancelled'
         """), {
-            "org_id": org_id,
             "start_date": start_date,
             "end_date": end_date
         }).fetchone()
@@ -399,11 +402,9 @@ class DashboardService:
         outstanding = db.execute(text("""
             SELECT COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0)
             FROM sales.invoices
-            WHERE org_id = :org_id 
-            AND invoice_status != :cancelled
+            WHERE invoice_status != :cancelled
             AND payment_status != :paid
         """), {
-            "org_id": org_id,
             "cancelled": InvoiceStatus.CANCELLED.value,
             "paid": InvoicePaymentStatus.PAID.value
         }).scalar() or 0
@@ -431,8 +432,10 @@ class DashboardService:
         db: Session,
         org_id: str
     ) -> Dict[str, Any]:
-        """Get pending payments summary"""
-        
+        """
+        Get pending payments summary.
+        TenantAwareSession auto-filters by org_id.
+        """
         # Customer receivables
         receivables = db.execute(text("""
             SELECT 
@@ -441,11 +444,9 @@ class DashboardService:
                 COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE 
                     THEN final_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as overdue
             FROM sales.invoices
-            WHERE org_id = :org_id 
-            AND invoice_status != :cancelled
+            WHERE invoice_status != :cancelled
             AND payment_status != :paid
         """), {
-            "org_id": org_id,
             "cancelled": InvoiceStatus.CANCELLED.value,
             "paid": InvoicePaymentStatus.PAID.value
         }).fetchone()
@@ -458,11 +459,9 @@ class DashboardService:
                 COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE 
                     THEN final_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as overdue
             FROM purchases.supplier_invoices
-            WHERE org_id = :org_id 
-            AND invoice_status != :cancelled
+            WHERE invoice_status != :cancelled
             AND payment_status != :paid
         """), {
-            "org_id": org_id,
             "cancelled": InvoiceStatus.CANCELLED.value,
             "paid": InvoicePaymentStatus.PAID.value
         }).fetchone()
@@ -487,8 +486,10 @@ class DashboardService:
         org_id: str,
         days: int = 90
     ) -> List[Dict[str, Any]]:
-        """Get products expiring within specified days"""
-        
+        """
+        Get products expiring within specified days.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT 
                 p.product_id, p.product_name, p.product_code,
@@ -497,13 +498,11 @@ class DashboardService:
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id 
-            AND b.batch_status = :active
+            WHERE b.batch_status = :active
             AND b.quantity_available > 0
             AND b.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + :days
             ORDER BY b.expiry_date
         """), {
-            "org_id": org_id,
             "active": BatchStatus.ACTIVE.value,
             "days": days
         })
@@ -515,8 +514,10 @@ class DashboardService:
         db: Session,
         org_id: str
     ) -> List[Dict[str, Any]]:
-        """Get products with low stock"""
-        
+        """
+        Get products with low stock.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT 
                 p.product_id, p.product_name, p.product_code,
@@ -526,12 +527,11 @@ class DashboardService:
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.batch_status = :active
-            WHERE p.org_id = :org_id AND p.is_active = true
+            WHERE p.is_active = true
             GROUP BY p.product_id, p.product_name, p.product_code, p.reorder_level
             HAVING COALESCE(SUM(b.quantity_available), 0) < p.reorder_level
             ORDER BY shortage DESC
         """), {
-            "org_id": org_id,
             "active": BatchStatus.ACTIVE.value
         })
         

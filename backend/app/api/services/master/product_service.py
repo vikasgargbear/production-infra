@@ -1,5 +1,10 @@
 """
 Product service layer for business logic
+
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id in SELECT queries - TenantAwareSession handles it
+Note: org_id parameter still needed for INSERT operations (creating new records)
+
 Handles product management, search, and creation
 Shared across Product API, Purchase API, and other modules
 """
@@ -30,7 +35,10 @@ PRODUCT_CODE_PREFIX = "PROD"
 class ProductService:
     """
     Service class for product-related business logic
-    Follows same pattern as InventoryService
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope
     """
     
     # --- Validation Methods ---
@@ -91,7 +99,10 @@ class ProductService:
         product_code: Optional[str] = None,
         exclude_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Check for duplicate products by name or code"""
+        """
+        Check for duplicate products by name or code.
+        TenantAwareSession auto-filters by org_id.
+        """
         duplicates = []
         
         # Check product name duplicate (exact match, case insensitive)
@@ -99,10 +110,9 @@ class ProductService:
             query = """
                 SELECT product_id, product_name, product_code 
                 FROM inventory.products 
-                WHERE org_id = :org_id 
-                  AND LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
+                WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
             """
-            params = {"org_id": org_id, "product_name": product_name}
+            params = {"product_name": product_name}
             if exclude_id:
                 query += " AND product_id != :exclude_id"
                 params["exclude_id"] = exclude_id
@@ -121,9 +131,9 @@ class ProductService:
             query = """
                 SELECT product_id, product_name, product_code 
                 FROM inventory.products 
-                WHERE org_id = :org_id AND product_code = :product_code
+                WHERE product_code = :product_code
             """
-            params = {"org_id": org_id, "product_code": product_code}
+            params = {"product_code": product_code}
             if exclude_id:
                 query += " AND product_id != :exclude_id"
                 params["exclude_id"] = exclude_id
@@ -143,7 +153,7 @@ class ProductService:
         }
     
     @staticmethod
-    def generate_product_code(db: Session, org_id: str) -> str:
+    def generate_product_code(db: Session, org_id: str, product_name: str = None) -> str:
         """Generate unique product code using DocumentNumberService."""
         return DocumentNumberService.generate_number(db, "product", org_id)
     
@@ -160,6 +170,7 @@ class ProductService:
     ) -> int:
         """
         Look up existing product by exact name match or create a new one.
+        TenantAwareSession auto-filters by org_id for SELECT.
         
         For pharma products: We DON'T do partial matching.
         PARACETAMOL 500MG and PARACETAMOL 650MG are different products.
@@ -177,12 +188,12 @@ class ProductService:
             product_id
         """
         # Try to find existing product (exact name match only)
+        # TenantAwareSession auto-adds org_id filter
         existing_product = db.execute(text("""
             SELECT product_id FROM inventory.products
             WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
-            AND org_id = :org_id
             LIMIT 1
-        """), {"product_name": product_name, "org_id": org_id}).fetchone()
+        """), {"product_name": product_name}).fetchone()
         
         if existing_product:
             logger.info(f"Found existing product: {product_name} (ID: {existing_product.product_id})")
@@ -210,6 +221,7 @@ class ProductService:
     ) -> int:
         """
         Create a new product with validation.
+        org_id parameter needed for INSERT (creating new record).
         
         Args:
             db: Database session
@@ -263,7 +275,7 @@ class ProductService:
             # Remove None values
             product_data = {k: v for k, v in product_data.items() if v is not None}
             
-            # Create the product
+            # Create the product - org_id needed for INSERT
             new_product = db.execute(text("""
                 INSERT INTO inventory.products (
                     org_id, product_name, product_code,
@@ -296,6 +308,7 @@ class ProductService:
     def _get_or_create_default_category(db: Session, org_id: str) -> int:
         """
         Get default category or create one if it doesn't exist.
+        TenantAwareSession auto-filters by org_id for SELECT.
         
         Returns:
             category_id
@@ -303,15 +316,14 @@ class ProductService:
         # Try to get existing category
         category_result = db.execute(text("""
             SELECT category_id FROM inventory.product_categories 
-            WHERE org_id = :org_id
             ORDER BY category_id
             LIMIT 1
-        """), {"org_id": org_id}).fetchone()
+        """)).fetchone()
         
         if category_result:
             return category_result.category_id
         
-        # Create a default "General" category
+        # Create a default "General" category - org_id needed for INSERT
         new_category = db.execute(text("""
             INSERT INTO inventory.product_categories (
                 org_id, category_name, category_code, is_active
@@ -324,11 +336,14 @@ class ProductService:
     
     @staticmethod
     def get_product(db: Session, product_id: int, org_id: str) -> Optional[Dict[str, Any]]:
-        """Get product by ID with validation"""
+        """
+        Get product by ID with validation.
+        TenantAwareSession auto-filters by org_id.
+        """
         result = db.execute(text("""
             SELECT * FROM inventory.products
-            WHERE product_id = :product_id AND org_id = :org_id
-        """), {"product_id": product_id, "org_id": org_id}).fetchone()
+            WHERE product_id = :product_id
+        """), {"product_id": product_id}).fetchone()
         
         if not result:
             raise ValueError(f"Product {product_id} not found")
@@ -344,7 +359,8 @@ class ProductService:
         offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Search products by name, brand, or code
+        Search products by name, brand, or code.
+        TenantAwareSession auto-filters by org_id.
         
         Args:
             db: Database session
@@ -362,8 +378,7 @@ class ProductService:
                 brand, manufacturer, hsn_code,
                 base_uom, is_active
             FROM inventory.products
-            WHERE org_id = :org_id
-                AND is_active = true
+            WHERE is_active = true
                 AND (
                     LOWER(product_name) LIKE LOWER(:pattern)
                     OR LOWER(brand) LIKE LOWER(:pattern)
@@ -373,7 +388,6 @@ class ProductService:
             ORDER BY product_name
             LIMIT :limit OFFSET :offset
         """), {
-            "org_id": org_id,
             "pattern": f"%{query}%",
             "limit": limit,
             "offset": offset
@@ -389,7 +403,8 @@ class ProductService:
         updates: Dict[str, Any]
     ) -> None:
         """
-        Update product fields
+        Update product fields.
+        TenantAwareSession auto-filters UPDATE by org_id.
         
         Args:
             db: Database session
@@ -416,12 +431,11 @@ class ProductService:
         
         set_clause = ", ".join([f"{field} = :{field}" for field in update_fields])
         update_fields['product_id'] = product_id
-        update_fields['org_id'] = org_id
         
         db.execute(text(f"""
             UPDATE inventory.products
             SET {set_clause}, updated_at = CURRENT_TIMESTAMP
-            WHERE product_id = :product_id AND org_id = :org_id
+            WHERE product_id = :product_id
         """), update_fields)
         
         logger.info(f"Updated product {product_id} with fields: {list(update_fields.keys())}")
@@ -430,6 +444,7 @@ class ProductService:
     def validate_supplier(db: Session, supplier_id: int, org_id: str) -> Optional[Dict[str, Any]]:
         """
         Validate that supplier exists and belongs to the organization.
+        TenantAwareSession auto-filters by org_id.
         
         Returns:
             Dictionary with supplier details (supplier_id, supplier_name) or None if not found
@@ -437,8 +452,8 @@ class ProductService:
         supplier_result = db.execute(text("""
             SELECT supplier_id, supplier_name 
             FROM parties.suppliers 
-            WHERE supplier_id = :supplier_id AND org_id = :org_id
-        """), {"supplier_id": supplier_id, "org_id": org_id}).first()
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id}).first()
         
         if supplier_result:
             return {
