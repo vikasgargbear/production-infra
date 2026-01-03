@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, FileText, Download } from 'lucide-react';
-import api from '../services/api';
-import InvoiceApiService from '../services/invoiceApiService';
-import { downloadInvoicePDF } from '../utils/invoicePdfGenerator';
+import api from '../../../services/api';
+import InvoiceApiService from '../../../services/invoiceApiService';
+import { downloadInvoicePDF } from '../../../utils/invoicePdfGenerator';
 
 // Type definitions
 interface Order {
@@ -120,7 +120,7 @@ const Orders: React.FC = () => {
         api.get('/customers'),
         api.get('/products')
       ]);
-      
+
       setOrders(ordersResponse.data || []);
       setCustomers(customersResponse.data || []);
       setProducts(productsResponse.data || []);
@@ -141,7 +141,7 @@ const Orders: React.FC = () => {
     const searchLower = searchTerm.toLowerCase();
     const customer = customers.find(c => c.customer_id === order.customer_id);
     const customerName = customer ? customer.customer_name : '';
-    
+
     return (
       order.order_id.toString().toLowerCase().includes(searchLower) ||
       customerName.toLowerCase().includes(searchLower) ||
@@ -162,31 +162,31 @@ const Orders: React.FC = () => {
 
   const handleSubmit = useCallback(async (e: React.FormEvent<OrderFormElement>): Promise<void> => {
     e.preventDefault();
-    
+
     if (submitting) return; // Prevent double submission
 
     setSubmitting(true);
     setError('');
-    
+
     try {
       // Get form data directly from the form element
       const form = e.currentTarget;
       const formData = new FormData(form);
       const orderData: Partial<OrderFormData & { items?: OrderItem[] }> = {};
-      
+
       // Convert FormData to a regular object
       for (let [key, value] of formData.entries()) {
         (orderData as any)[key] = value;
       }
-      
+
       // Add organization ID
       orderData.org_id = ORG_ID;
-      
+
       // Ensure required fields are present
       if (!orderData.customer_id) {
         throw new Error('Customer is required');
       }
-      
+
       if (!orderData.order_date) {
         throw new Error('Order date is required');
       }
@@ -217,7 +217,7 @@ const Orders: React.FC = () => {
       form.reset();
       setShowAddModal(false);
       setEditingOrder(null);
-      
+
       // Refresh the orders list
       await fetchData();
     } catch (err: any) {
@@ -256,41 +256,41 @@ const Orders: React.FC = () => {
   // Handle invoice generation
   const handleGenerateInvoice = useCallback(async (order: Order): Promise<void> => {
     const orderId = order.order_id;
-    
+
     // Check if order is eligible
     if (order.status !== 'confirmed' && order.status !== 'delivered') {
       setError('Order must be confirmed before generating invoice');
       return;
     }
-    
+
     setGeneratingInvoice(prev => ({ ...prev, [orderId]: true }));
     setError(null);
-    
+
     try {
       // Generate invoice and get details
       const invoiceDetails = await InvoiceApiService.generateFromOrder(orderId);
-      
+
       // Store invoice info
       setOrderInvoices(prev => ({
         ...prev,
         [orderId]: invoiceDetails
       }));
-      
+
       // Generate and download PDF
       try {
         downloadInvoicePDF(invoiceDetails);
       } catch (pdfError) {
         // Fallback to JSON download if PDF fails
         const dataStr = JSON.stringify(invoiceDetails, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
         const exportFileDefaultName = `${invoiceDetails.invoice_number}.json`;
-        
+
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', exportFileDefaultName);
         linkElement.click();
       }
-      
+
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate invoice');
     } finally {
@@ -302,13 +302,13 @@ const Orders: React.FC = () => {
   const OrderModal: React.FC = () => {
     // Use a ref for the form to access it directly
     const formRef = useRef<HTMLFormElement>(null);
-    
+
     // When editing an order, populate the form fields after the component mounts
     useEffect(() => {
       if (editingOrder && formRef.current) {
         const form = formRef.current;
         const elements = form.elements as OrderFormElements;
-        
+
         // Set initial values for all fields when editing
         if (editingOrder.customer_id) elements.customer_id.value = editingOrder.customer_id.toString();
         if (editingOrder.order_date) elements.order_date.value = editingOrder.order_date;
@@ -322,7 +322,7 @@ const Orders: React.FC = () => {
         if (editingOrder.notes) elements.notes.value = editingOrder.notes;
       }
     }, [editingOrder]);
-    
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto transform transition-all">
@@ -341,7 +341,7 @@ const Orders: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           <form ref={formRef} onSubmit={handleSubmit} className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -490,7 +490,7 @@ const Orders: React.FC = () => {
                 ></textarea>
               </div>
             </div>
-            
+
             <div className="mt-8 flex justify-end">
               <button
                 type="button"
@@ -520,7 +520,7 @@ const Orders: React.FC = () => {
       </div>
     );
   };
-  
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

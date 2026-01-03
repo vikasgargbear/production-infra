@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Search, Edit, Trash2, Package, Loader2 } from 'lucide-react';
-import api from '../services/api';
-import { productsApi } from '../services/api';
+import api from '../../../services/api';
+import { productsApi } from '../../../services/api';
 
 // Type definitions
 interface Product {
@@ -163,23 +163,23 @@ const Products: React.FC = () => {
 
   const handleSubmit = useCallback(async (e: React.FormEvent<ProductFormElement>): Promise<void> => {
     e.preventDefault();
-    
+
     if (submitting) return; // Prevent double submission
 
     setSubmitting(true);
     setError("");
-    
+
     try {
       // Get form data directly from the form element
       const form = e.currentTarget;
       const formData = new FormData(form);
       const productData: Partial<ProductFormData> = {};
-      
+
       // Convert FormData to a regular object
       for (let [key, value] of formData.entries()) {
         // Skip empty values
         if (value === '') continue;
-        
+
         // Convert numeric fields to numbers
         if (['gst_percent', 'cgst_percent', 'sgst_percent', 'igst_percent', 'mrp', 'sale_price'].includes(key) && value !== '') {
           (productData as any)[key] = parseFloat(value as string);
@@ -187,7 +187,7 @@ const Products: React.FC = () => {
           (productData as any)[key] = value;
         }
       }
-      
+
       // Ensure required fields are present
       if (!productData.product_name) {
         throw new Error('Product name is required');
@@ -210,7 +210,7 @@ const Products: React.FC = () => {
       } catch (error: any) {
         throw error; // Re-throw to be caught by the outer try/catch
       }
-      
+
       // Refresh the products list
       await fetchProducts();
     } catch (err: any) {
@@ -252,13 +252,13 @@ const Products: React.FC = () => {
   const ProductModal: React.FC = () => {
     // Use a ref for the form to access it directly
     const formRef = useRef<HTMLFormElement>(null);
-    
+
     // When editing a product, populate the form fields after the component mounts
     useEffect(() => {
       if (editingProduct && formRef.current) {
         const form = formRef.current;
         const elements = form.elements as ProductFormElements;
-        
+
         // Set initial values for all fields when editing
         // Basic Information
         if (editingProduct.product_name) elements.product_name.value = editingProduct.product_name;
@@ -267,7 +267,7 @@ const Products: React.FC = () => {
         if (editingProduct.product_type) elements.product_type.value = editingProduct.product_type;
         if (editingProduct.hsn_code) elements.hsn_code.value = editingProduct.hsn_code;
         if (editingProduct.generic_name) elements.generic_name.value = editingProduct.generic_name;
-        
+
         // Pricing Information
         if (editingProduct.gst_percent !== undefined) elements.gst_percent.value = editingProduct.gst_percent.toString();
         if (editingProduct.cgst_percent !== undefined) elements.cgst_percent.value = editingProduct.cgst_percent.toString();
@@ -275,7 +275,7 @@ const Products: React.FC = () => {
         if (editingProduct.igst_percent !== undefined) elements.igst_percent.value = editingProduct.igst_percent.toString();
         if (editingProduct.mrp !== undefined) elements.mrp.value = editingProduct.mrp.toString();
         if (editingProduct.sale_price !== undefined) elements.sale_price.value = editingProduct.sale_price.toString();
-        
+
         // Pharmaceutical Information
         if (editingProduct.drug_schedule) elements.drug_schedule.value = editingProduct.drug_schedule;
         if (editingProduct.requires_prescription !== undefined) elements.requires_prescription.checked = editingProduct.requires_prescription;
@@ -283,7 +283,7 @@ const Products: React.FC = () => {
         if (editingProduct.composition) elements.composition.value = editingProduct.composition;
         if (editingProduct.dosage_instructions) elements.dosage_instructions.value = editingProduct.dosage_instructions;
         if (editingProduct.storage_instructions) elements.storage_instructions.value = editingProduct.storage_instructions;
-        
+
         // Product Physical Details
         if (editingProduct.packer) elements.packer.value = editingProduct.packer;
         if (editingProduct.country_of_origin) elements.country_of_origin.value = editingProduct.country_of_origin;
@@ -298,7 +298,7 @@ const Products: React.FC = () => {
         if (editingProduct.is_discontinued !== undefined) elements.is_discontinued.checked = editingProduct.is_discontinued;
       }
     }, [editingProduct]);
-    
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
         <div className="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto transform transition-all">
@@ -317,14 +317,14 @@ const Products: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           <form ref={formRef} onSubmit={handleSubmit} className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Product Information */}
               <div className="col-span-2">
                 <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Basic Information</h3>
               </div>
-              
+
               <div>
                 <label htmlFor="product_name" className="block text-sm font-medium text-gray-700 mb-2">
                   Product Name *
@@ -480,12 +480,12 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               {/* Drug Schedule Information */}
               <div className="col-span-2 mt-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Pharmaceutical Information</h3>
               </div>
-              
+
               <div>
                 <label htmlFor="drug_schedule" className="block text-sm font-medium text-gray-700 mb-2">
                   Drug Schedule
@@ -503,7 +503,7 @@ const Products: React.FC = () => {
                   <option value="OTC">OTC (No Schedule)</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Requires Prescription
@@ -520,7 +520,7 @@ const Products: React.FC = () => {
                   </label>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Controlled Substance
@@ -537,7 +537,7 @@ const Products: React.FC = () => {
                   </label>
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="composition" className="block text-sm font-medium text-gray-700 mb-2">
                   Composition
@@ -550,7 +550,7 @@ const Products: React.FC = () => {
                   placeholder="E.g., Each tablet contains: Paracetamol IP 500mg"
                 ></textarea>
               </div>
-              
+
               <div>
                 <label htmlFor="dosage_instructions" className="block text-sm font-medium text-gray-700 mb-2">
                   Dosage Instructions
@@ -563,7 +563,7 @@ const Products: React.FC = () => {
                   placeholder="E.g., As directed by the physician"
                 ></textarea>
               </div>
-              
+
               <div>
                 <label htmlFor="storage_instructions" className="block text-sm font-medium text-gray-700 mb-2">
                   Storage Instructions
@@ -576,12 +576,12 @@ const Products: React.FC = () => {
                   placeholder="E.g., Store below 30°C in a dry place"
                 />
               </div>
-              
+
               {/* Product Physical Details */}
               <div className="col-span-2 mt-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Product Physical Details</h3>
               </div>
-              
+
               <div>
                 <label htmlFor="packer" className="block text-sm font-medium text-gray-700 mb-2">
                   Packer
@@ -593,7 +593,7 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="country_of_origin" className="block text-sm font-medium text-gray-700 mb-2">
                   Country of Origin
@@ -606,7 +606,7 @@ const Products: React.FC = () => {
                   defaultValue="India"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="model_number" className="block text-sm font-medium text-gray-700 mb-2">
                   Model Number
@@ -618,7 +618,7 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="dimensions" className="block text-sm font-medium text-gray-700 mb-2">
                   Dimensions
@@ -631,7 +631,7 @@ const Products: React.FC = () => {
                   placeholder="E.g., 15 x 5 x 1 cm"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="weight" className="block text-sm font-medium text-gray-700 mb-2">
                   Weight
@@ -655,7 +655,7 @@ const Products: React.FC = () => {
                   </select>
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="pack_quantity" className="block text-sm font-medium text-gray-700 mb-2">
                   Pack Quantity
@@ -667,7 +667,7 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="pack_form" className="block text-sm font-medium text-gray-700 mb-2">
                   Pack Form
@@ -680,7 +680,7 @@ const Products: React.FC = () => {
                   placeholder="E.g., Tablets, Capsules, Syrup"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="color" className="block text-sm font-medium text-gray-700 mb-2">
                   Color
@@ -692,7 +692,7 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="asin" className="block text-sm font-medium text-gray-700 mb-2">
                   ASIN
@@ -704,7 +704,7 @@ const Products: React.FC = () => {
                   className="w-full px-4 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Discontinued
@@ -722,7 +722,7 @@ const Products: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-8 flex justify-end">
               <button
                 type="button"
@@ -752,7 +752,7 @@ const Products: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

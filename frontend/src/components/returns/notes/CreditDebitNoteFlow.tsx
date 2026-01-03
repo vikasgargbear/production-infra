@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import CreditDebitFlow from '../payment/CreditDebitFlow';
+import CreditDebitFlow from '../../payment/CreditDebitFlow';
 
 interface CreditDebitNoteFlowProps {
   open?: boolean;
@@ -20,21 +20,19 @@ const CreditDebitNoteFlow: React.FC<CreditDebitNoteFlowProps> = ({ open = true, 
             <div className="flex space-x-8">
               <button
                 onClick={() => setNoteType('credit')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  noteType === 'credit'
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${noteType === 'credit'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 Credit Note
               </button>
               <button
                 onClick={() => setNoteType('debit')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  noteType === 'debit'
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${noteType === 'debit'
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 Debit Note
               </button>
@@ -44,9 +42,9 @@ const CreditDebitNoteFlow: React.FC<CreditDebitNoteFlowProps> = ({ open = true, 
 
         {/* Note Component */}
         <div className="flex-1">
-          <CreditDebitFlow 
-            noteType={noteType} 
-            onClose={onClose || (() => {})}
+          <CreditDebitFlow
+            noteType={noteType}
+            onClose={onClose || (() => { })}
           />
         </div>
       </div>

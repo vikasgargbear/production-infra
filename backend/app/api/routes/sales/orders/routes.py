@@ -23,7 +23,7 @@ from ....schemas.sales.order import (
 from ....services.sales.order_service import OrderService
 from ....services.master.customer_service import CustomerService
 from ....services.sales.invoice_service import InvoiceService
-from .....services.settings_service import SettingsService  # NEW: Settings enforcement
+from ....services.settings.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 

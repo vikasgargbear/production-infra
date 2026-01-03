@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Bell, 
-  X, 
-  AlertTriangle, 
-  Clock, 
-  Package, 
-  CreditCard, 
-  FileX, 
+import {
+  Bell,
+  X,
+  AlertTriangle,
+  Clock,
+  Package,
+  CreditCard,
+  FileX,
   Calendar,
   CheckCircle,
   Eye,
@@ -15,8 +15,8 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react';
-import { settingsApi } from '../services/api';
-import offlineStorage from '../services/offlineStorage';
+import { settingsApi } from '../../services/api';
+import offlineStorage from '../../services/offlineStorage';
 
 const NotificationCenter = ({ isOpen, onClose }) => {
   const [notifications, setNotifications] = useState([]);
@@ -29,30 +29,30 @@ const NotificationCenter = ({ isOpen, onClose }) => {
   const loadNotifications = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await settingsApi.notifications.getAll();
-      
+
       if (response?.data && Array.isArray(response.data)) {
         const notificationsData = response.data;
         setNotifications(notificationsData);
-        
+
         // Store data offline for future use
-        await offlineStorage.storeOffline('notifications', notificationsData, { 
-          critical: true, 
-          persistent: true 
+        await offlineStorage.storeOffline('notifications', notificationsData, {
+          critical: true,
+          persistent: true
         });
       } else {
         setNotifications([]);
       }
     } catch (error) {
-      
+
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('notifications', { critical: true });
-      
+
       if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for notifications
         setNotifications(offlineData.data);
-        
+
         // Show offline indicator
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -69,7 +69,7 @@ const NotificationCenter = ({ isOpen, onClose }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       await loadNotifications();
     } catch (error) {
@@ -86,11 +86,11 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       setNotifications(prev =>
         prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
       );
-      
+
       // Try to update on server
       await settingsApi.notifications.markAsRead(id);
     } catch (error) {
-      
+
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_mark_read',
@@ -104,11 +104,11 @@ const NotificationCenter = ({ isOpen, onClose }) => {
     try {
       // Remove locally first for immediate UI feedback
       setNotifications(prev => prev.filter(notif => notif.id !== id));
-      
+
       // Try to delete on server
       await settingsApi.notifications.delete(id);
     } catch (error) {
-      
+
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_delete',
@@ -124,11 +124,11 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, read: true }))
       );
-      
+
       // Try to update on server
       await settingsApi.notifications.markAllAsRead();
     } catch (error) {
-      
+
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_mark_all_read',
@@ -176,7 +176,7 @@ const NotificationCenter = ({ isOpen, onClose }) => {
   // Format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Unknown';
-    
+
     const now = new Date();
     const diff = now - new Date(timestamp);
     const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -261,11 +261,10 @@ const NotificationCenter = ({ isOpen, onClose }) => {
               <button
                 key={tab.key}
                 onClick={() => setFilter(tab.key)}
-                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                  filter === tab.key
+                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${filter === tab.key
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 {tab.key === 'unread' ? `${tab.label} (${unreadCount})` : tab.label}
               </button>
@@ -331,15 +330,14 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                   return (
                     <div
                       key={notification.id}
-                      className={`p-4 hover:bg-gray-50 transition-colors ${
-                        !notification.read ? 'bg-blue-50' : ''
-                      }`}
+                      className={`p-4 hover:bg-gray-50 transition-colors ${!notification.read ? 'bg-blue-50' : ''
+                        }`}
                     >
                       <div className="flex items-start space-x-3">
                         <div className={`p-2 rounded-lg ${getSeverityColor(notification.severity)}`}>
                           <Icon className={`w-4 h-4 ${getIconColor(notification.severity)}`} />
                         </div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -352,19 +350,18 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                               <div className="flex items-center space-x-4 text-xs text-gray-500">
                                 <span>{formatTimestamp(notification.timestamp)}</span>
                                 {notification.severity && (
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    notification.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                    notification.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                    notification.severity === 'info' ? 'bg-blue-100 text-blue-700' :
-                                    notification.severity === 'success' ? 'bg-green-100 text-green-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${notification.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                      notification.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                        notification.severity === 'info' ? 'bg-blue-100 text-blue-700' :
+                                          notification.severity === 'success' ? 'bg-green-100 text-green-700' :
+                                            'bg-gray-100 text-gray-700'
+                                    }`}>
                                     {notification.severity}
                                   </span>
                                 )}
                               </div>
                             </div>
-                            
+
                             <div className="flex items-center space-x-1 ml-2">
                               {!notification.read && (
                                 <button
@@ -384,7 +381,7 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                               </button>
                             </div>
                           </div>
-                          
+
                           {/* Additional data display */}
                           {notification.data && Object.keys(notification.data).length > 0 && (
                             <div className="mt-2 p-2 bg-gray-50 rounded text-xs">

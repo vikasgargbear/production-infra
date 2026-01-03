@@ -63,10 +63,10 @@ from .api.routes.finance import expenses as expense_claims
 from .api.routes.compliance import gst
 from .api.routes.compliance import compliance
 
-# Analytics Module
-from .api.routes.analytics import dashboard
-from .api.routes.analytics import collection as collection_center
-from .api.routes.analytics import outstanding as customer_outstanding
+# Reports Module (formerly Analytics)
+from .api.routes.reports import dashboard
+from .api.routes.reports import collection as collection_center
+from .api.routes.reports import outstanding as customer_outstanding
 
 # Organization Module
 from .api.routes.org import company

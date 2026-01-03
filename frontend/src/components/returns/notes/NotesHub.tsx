@@ -1,8 +1,8 @@
 import React from 'react';
-import { 
+import {
   FileEdit, PlusCircle, MinusCircle
 } from 'lucide-react';
-import { ModuleHub } from '../global';
+import { ModuleHub } from '../../global';
 import CreditDebitNoteSimple from './CreditDebitNoteSimple';
 
 interface NotesHubProps {
@@ -45,7 +45,7 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Credit/Debit Notes"
       subtitle="Financial adjustments and corrections"
       icon={FileEdit}

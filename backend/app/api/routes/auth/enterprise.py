@@ -9,7 +9,7 @@ import logging
 
 from ....core.database import get_db  # Regular session for auth (no tenant context yet)
 from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
-from ....services.auth import (
+from ...services.auth import (
     AuthService,
     InvalidCredentialsError,
     AccountDisabledError,

@@ -3,8 +3,43 @@ Optimized Invoice Calculations
 Fast, accurate, reusable calculation logic using Decimal for precision
 """
 from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Dict
-from ...api.schemas.invoice_schemas import InvoiceItemCreate, CalculatedItem, InvoiceTotals
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from ...schemas.sales.billing import InvoiceItemCreate
+
+
+@dataclass
+class CalculatedItem:
+    """Calculated invoice item with all computed values"""
+    product_id: int
+    quantity: Decimal
+    unit_price: Decimal
+    discount_percent: Decimal
+    gst_percent: Decimal
+    base_quantity: Decimal
+    line_total: Decimal
+    discount_amount: Decimal
+    taxable_amount: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+
+
+@dataclass
+class InvoiceTotals:
+    """Invoice totals with all calculated amounts"""
+    subtotal: Decimal
+    discount_amount: Decimal
+    taxable_amount: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    total_tax: Decimal
+    freight_charges: Decimal
+    other_charges: Decimal
+    round_off: Decimal
+    final_amount: Decimal
+
 
 
 class InvoiceCalculator:

@@ -20,11 +20,11 @@ import {
 import {
     Button, Card, DatePicker, CustomerSearch, Select,
     InvoiceSelector, useToast, ModuleHeader, ProceedToReviewComponent
-} from '../global';
-import { theme, classes } from '../../config/theme.config';
-import { notesApi } from '../../services/api';
-import InvoiceApiService from '../../services/invoiceApiService';
-import { Customer } from '../sales/invoice/types/invoiceTypes';
+} from '../../global';
+import { theme, classes } from '../../../config/theme.config';
+import { notesApi } from '../../../services/api';
+import InvoiceApiService from '../../../services/invoiceApiService';
+import { Customer } from '../../sales/invoice/types/invoiceTypes';
 
 // ==================== TYPE DEFINITIONS ====================
 

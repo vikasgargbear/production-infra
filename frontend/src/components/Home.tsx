@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   FileText,
-  ShoppingCart, 
+  ShoppingCart,
   CreditCard,
   ArrowRight,
   RotateCcw,
@@ -16,7 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Card, Button } from './global';
-import NotificationCenter from './NotificationCenter';
+import NotificationCenter from './global/NotificationCenter';
 import { settingsApi } from '../services/api';
 import offlineStorage from '../services/offlineStorage';
 
@@ -39,12 +39,12 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        
+
         // Load any other required data here
         setError(null); // Clear any previous errors
       } catch (err) {
@@ -62,7 +62,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
   // Mock unread count - in real app, this would come from API
   const unreadNotifications = 3;
-  
+
   const coreActions: ActionItem[] = [
     {
       id: 'sales',
@@ -170,8 +170,8 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           setActiveTab('master');
           return;
         }
-        
-        switch(e.key.toLowerCase()) {
+
+        switch (e.key.toLowerCase()) {
           case 's':
             e.preventDefault();
             setActiveTab('sales');
@@ -207,10 +207,10 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           default:
             break;
         }
-        
+
         // Handle Ctrl+Shift combinations
         if (e.shiftKey) {
-          switch(e.key.toLowerCase()) {
+          switch (e.key.toLowerCase()) {
             case 'r':
               e.preventDefault();
               setActiveTab('reports');
@@ -234,7 +234,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
   const renderActionCard = (action: ActionItem, colorScheme: 'blue' | 'green' | 'gray') => {
     const Icon = action.icon;
-    
+
     const colorClasses = {
       blue: {
         gradient: 'bg-gradient-to-br from-blue-100 to-blue-200 group-hover:from-blue-600 group-hover:to-blue-700',
@@ -254,7 +254,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     };
 
     const colors = colorClasses[colorScheme];
-    
+
     return (
       <button
         key={action.id}
@@ -326,8 +326,8 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center justify-center space-x-3 flex-1">
               {companyLogo ? (
-                <img 
-                  src={companyLogo} 
+                <img
+                  src={companyLogo}
                   alt={companyName}
                   className="h-10 w-auto"
                 />
@@ -345,7 +345,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
                 </p>
               </div>
             </div>
-            
+
             {/* Notification Bell */}
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -421,11 +421,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Notification Center */}
-      <NotificationCenter 
-        isOpen={isNotificationOpen} 
-        onClose={() => setIsNotificationOpen(false)} 
+      <NotificationCenter
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
       />
     </div>
   );

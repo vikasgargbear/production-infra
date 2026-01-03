@@ -3,7 +3,7 @@ Settings Service
 Reusable helper to fetch org settings for enforcement in other APIs
 
 Usage:
-    from app.services.settings_service import SettingsService
+    from app.api.services.settings import SettingsService
     
     billing = await SettingsService.get_billing_settings(db, org_id)
     if billing.auto_round_off_invoice:

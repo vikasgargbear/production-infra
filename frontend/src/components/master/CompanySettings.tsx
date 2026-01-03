@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Building2, QrCode } from 'lucide-react';
-import { useToast } from './global/ui/feedback/Toast';
-import { organizationsApi, companyAPI } from '../services/api';
-import { useCompany } from '../contexts/CompanyContext';
+import { useToast } from '../global/ui/feedback/Toast';
+import { organizationsApi, companyAPI } from '../../services/api';
+import { useCompany } from '../../contexts/CompanyContext';
 
 const CompanySettings = ({ open = true, onClose }) => {
   const toast = useToast();
@@ -112,12 +112,12 @@ const CompanySettings = ({ open = true, onClose }) => {
       };
 
       await updateCompanyInfo(companyData);
-      
+
       // Upload QR code if changed
       if (settings.paymentQR && settings.paymentQR !== companyInfo.paymentQR) {
         await companyAPI.uploadQRCode(settings.paymentQR);
       }
-      
+
       toast.saved('Company Settings');
     } catch (error) {
       toast.error('Failed to save settings. Please try again later.');
@@ -152,9 +152,9 @@ const CompanySettings = ({ open = true, onClose }) => {
             </label>
             <div className="flex items-center space-x-4">
               {logoPreview ? (
-                <img 
-                  src={logoPreview} 
-                  alt="Company Logo" 
+                <img
+                  src={logoPreview}
+                  alt="Company Logo"
                   className="h-24 w-auto object-contain border border-gray-300 rounded-lg p-2"
                 />
               ) : (
@@ -305,7 +305,7 @@ const CompanySettings = ({ open = true, onClose }) => {
           {/* Bank Details Section */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Bank Details</h3>
-            
+
             {/* Bank Name */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -355,12 +355,12 @@ const CompanySettings = ({ open = true, onClose }) => {
               <QrCode className="w-5 h-5 mr-2" />
               Payment QR Code
             </h3>
-            
+
             <div className="flex items-center space-x-4">
               {qrPreview ? (
-                <img 
-                  src={qrPreview} 
-                  alt="Payment QR Code" 
+                <img
+                  src={qrPreview}
+                  alt="Payment QR Code"
                   className="h-32 w-32 object-contain border border-gray-300 rounded-lg p-2"
                 />
               ) : (
@@ -393,12 +393,12 @@ const CompanySettings = ({ open = true, onClose }) => {
           {/* Digital Signature Section */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Digital Signature</h3>
-            
+
             <div className="flex items-center space-x-4">
               {signaturePreview ? (
-                <img 
-                  src={signaturePreview} 
-                  alt="Digital Signature" 
+                <img
+                  src={signaturePreview}
+                  alt="Digital Signature"
                   className="h-24 w-auto object-contain border border-gray-300 rounded-lg p-2"
                 />
               ) : (
@@ -418,7 +418,7 @@ const CompanySettings = ({ open = true, onClose }) => {
                       reader.onloadend = () => {
                         // TODO: Handle signature upload
                         // setSignatureUpload(reader.result);
-                        
+
                       };
                       reader.readAsDataURL(file);
                     }

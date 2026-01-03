@@ -1,0 +1,355 @@
+/**
+ * useEntityMaster Hook
+ * 
+ * Generic CRUD hook for master entity management.
+ * Eliminates 90% code duplication across CustomerMaster, SupplierMaster, ProductMaster.
+ * 
+ * @example
+ * ```ts
+ * const {
+ *   entities, filteredEntities, isLoading, error,
+ *   searchTerm, setSearchTerm,
+ *   filterValue, setFilterValue,
+ *   showAddModal, setShowAddModal,
+ *   editingEntity, selectedIds,
+ *   handleEdit, handleDelete, handleSaved, handleBulkDelete
+ * } = useEntityMaster<Customer>({
+ *   entityName: 'customer',
+ *   idField: 'customer_id',
+ *   nameField: 'customer_name',
+ *   api: { getAll: customersApi.getAll, update: customersApi.update },
+ *   searchFields: ['customer_name', 'primary_phone', 'gst_number'],
+ *   filterField: 'customer_type',
+ *   softDelete: true
+ * });
+ * ```
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '../../global/ui/feedback/Toast';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ApiResponse<T = unknown> {
+    data?: T | { data?: T } | { [key: string]: T[] };
+    success?: boolean;
+    message?: string;
+}
+
+export interface UseEntityMasterConfig<T> {
+    /** Entity name for API response parsing (e.g., 'customer' → looks for 'customers') */
+    entityName: string;
+
+    /** Primary key field (e.g., 'customer_id') */
+    idField: keyof T;
+
+    /** Display name field (e.g., 'customer_name') */
+    nameField: keyof T;
+
+    /** Type field for filtering (e.g., 'customer_type') */
+    filterField?: keyof T;
+
+    /** API functions */
+    api: {
+        getAll: () => Promise<ApiResponse<T[]>>;
+        update: (id: string | number, data: Partial<T>) => Promise<ApiResponse<T>>;
+        delete?: (id: string | number) => Promise<ApiResponse<void>>;
+    };
+
+    /** Fields to search in */
+    searchFields: (keyof T)[];
+
+    /** Use soft delete (is_active toggle) instead of hard delete. Default: true */
+    softDelete?: boolean;
+
+    /** Custom data extractor if API response is non-standard */
+    extractData?: (response: ApiResponse<T[]>) => T[];
+}
+
+export interface UseEntityMasterReturn<T> {
+    // Data
+    entities: T[];
+    filteredEntities: T[];
+    isLoading: boolean;
+    error: string | null;
+
+    // Search & Filter
+    searchTerm: string;
+    setSearchTerm: (term: string) => void;
+    filterValue: string;
+    setFilterValue: (value: string) => void;
+
+    // Modal state
+    showAddModal: boolean;
+    setShowAddModal: (show: boolean) => void;
+    editingEntity: T | null;
+    setEditingEntity: (entity: T | null) => void;
+
+    // Selection
+    selectedIds: string[];
+    setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+
+    // Actions
+    loadEntities: () => Promise<void>;
+    handleEdit: (entity: T) => void;
+    handleDelete: (id: string | number) => Promise<void>;
+    handleSaved: () => void;
+    handleBulkDelete: () => Promise<void>;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Extract array data from various API response formats
+ */
+function extractDataArray<T>(response: ApiResponse<T[]>, entityName: string): T[] {
+    const data = response?.data;
+    if (!data) return [];
+
+    // Try common patterns: { customers: [] }, { data: [] }, directly []
+    if (Array.isArray(data)) return data;
+
+    const plural = entityName + 's';
+    const result = (data as Record<string, unknown>)[plural] ||
+        (data as { data?: T[] }).data ||
+        data;
+
+    return Array.isArray(result) ? result : [];
+}
+
+/**
+ * Filter entities by search term across multiple fields
+ */
+function filterBySearch<T>(
+    entities: T[],
+    searchTerm: string,
+    fields: (keyof T)[]
+): T[] {
+    if (!searchTerm) return entities;
+    const term = searchTerm.toLowerCase();
+
+    return entities.filter(entity => {
+        if (!entity) return false;
+        return fields.some(field => {
+            const value = entity[field];
+            return value != null && String(value).toLowerCase().includes(term);
+        });
+    });
+}
+
+/**
+ * Filter entities by type/category field
+ */
+function filterByType<T>(
+    entities: T[],
+    filterField: keyof T | undefined,
+    filterValue: string
+): T[] {
+    if (filterValue === 'all' || !filterField) return entities;
+    return entities.filter(e => e && e[filterField] === filterValue);
+}
+
+// ============================================================================
+// Main Hook
+// ============================================================================
+
+export function useEntityMaster<T extends { is_active?: boolean }>(
+    config: UseEntityMasterConfig<T>
+): UseEntityMasterReturn<T> {
+    const {
+        entityName,
+        idField,
+        api,
+        searchFields,
+        filterField,
+        softDelete = true,
+        extractData
+    } = config;
+
+    const toast = useToast();
+
+    // Data state
+    const [entities, setEntities] = useState<T[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Search & Filter state
+    const [searchTerm, setSearchTerm] = useState<string>('');
+    const [filterValue, setFilterValue] = useState<string>('all');
+
+    // Modal state
+    const [showAddModal, setShowAddModal] = useState<boolean>(false);
+    const [editingEntity, setEditingEntity] = useState<T | null>(null);
+
+    // Selection state
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+    // Capitalize first letter for messages
+    const entityLabel = entityName.charAt(0).toUpperCase() + entityName.slice(1);
+
+    // ========================================
+    // Load Data
+    // ========================================
+
+    const loadEntities = useCallback(async (): Promise<void> => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const response = await api.getAll();
+
+            const data = extractData
+                ? extractData(response)
+                : extractDataArray(response, entityName);
+
+            setEntities(data);
+        } catch (err) {
+            setError(`Failed to load ${entityName}s. Please try again.`);
+            setEntities([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [api, entityName, extractData]);
+
+    // Load on mount
+    useEffect(() => {
+        loadEntities();
+    }, [loadEntities]);
+
+    // ========================================
+    // Filtered Data
+    // ========================================
+
+    const filteredEntities = filterByType(
+        filterBySearch(entities, searchTerm, searchFields),
+        filterField,
+        filterValue
+    );
+
+    // ========================================
+    // Handlers
+    // ========================================
+
+    const handleEdit = useCallback((entity: T): void => {
+        setEditingEntity(entity);
+    }, []);
+
+    const handleDelete = useCallback(async (id: string | number): Promise<void> => {
+        const entity = entities.find(e => e[idField] === id);
+        if (!entity) return;
+
+        if (softDelete) {
+            // Soft delete: toggle is_active
+            const isCurrentlyActive = entity.is_active !== false;
+            const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
+            const confirmMessage = isCurrentlyActive
+                ? `Are you sure you want to deactivate this ${entityName}? It will be marked as inactive but all data will be preserved.`
+                : `Are you sure you want to reactivate this ${entityName}?`;
+
+            if (!window.confirm(confirmMessage)) return;
+
+            try {
+                await api.update(id, {
+                    ...entity,
+                    is_active: !isCurrentlyActive
+                } as Partial<T>);
+                toast.success(`${entityLabel} ${action}d successfully`);
+                await loadEntities();
+            } catch (err) {
+                toast.error(`Failed to ${action} ${entityName}.`);
+            }
+        } else {
+            // Hard delete
+            if (!api.delete) {
+                toast.error('Delete not supported');
+                return;
+            }
+
+            if (!window.confirm(`Are you sure you want to delete this ${entityName}? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                await api.delete(id);
+                toast.success(`${entityLabel} deleted successfully`);
+                await loadEntities();
+            } catch (err) {
+                toast.error(`Failed to delete ${entityName}.`);
+            }
+        }
+    }, [entities, idField, entityName, entityLabel, api, softDelete, toast, loadEntities]);
+
+    const handleSaved = useCallback((): void => {
+        setEditingEntity(null);
+        setShowAddModal(false);
+        loadEntities();
+        toast.created(entityLabel);
+    }, [loadEntities, entityLabel, toast]);
+
+    const handleBulkDelete = useCallback(async (): Promise<void> => {
+        if (selectedIds.length === 0) return;
+
+        const action = softDelete ? 'deactivate' : 'delete';
+        const confirmMessage = softDelete
+            ? `Are you sure you want to deactivate ${selectedIds.length} ${entityName}s? They will be marked as inactive but data will be preserved.`
+            : `Are you sure you want to delete ${selectedIds.length} ${entityName}s? This cannot be undone.`;
+
+        if (!window.confirm(confirmMessage)) return;
+
+        try {
+            if (softDelete) {
+                await Promise.all(selectedIds.map(id =>
+                    api.update(id, { is_active: false } as Partial<T>)
+                ));
+            } else if (api.delete) {
+                await Promise.all(selectedIds.map(id => api.delete!(id)));
+            }
+
+            toast.success(`${selectedIds.length} ${entityName}s ${action}d successfully`);
+            setSelectedIds([]);
+            await loadEntities();
+        } catch (err) {
+            toast.error(`Failed to ${action} some ${entityName}s.`);
+        }
+    }, [selectedIds, entityName, softDelete, api, toast, loadEntities]);
+
+    // ========================================
+    // Return
+    // ========================================
+
+    return {
+        // Data
+        entities,
+        filteredEntities,
+        isLoading,
+        error,
+
+        // Search & Filter
+        searchTerm,
+        setSearchTerm,
+        filterValue,
+        setFilterValue,
+
+        // Modal state
+        showAddModal,
+        setShowAddModal,
+        editingEntity,
+        setEditingEntity,
+
+        // Selection
+        selectedIds,
+        setSelectedIds,
+
+        // Actions
+        loadEntities,
+        handleEdit,
+        handleDelete,
+        handleSaved,
+        handleBulkDelete,
+    };
+}
+
+export default useEntityMaster;

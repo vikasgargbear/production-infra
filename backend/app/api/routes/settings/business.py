@@ -15,7 +15,7 @@ import json
 from ....core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from ....core.org_context import OrgContext, get_org_context
 from ....core.permissions import PermissionChecker
-from ....services.settings_service import invalidate_settings_cache  # CACHE: Clear on update
+from ...services.settings.settings_service import invalidate_settings_cache  # CACHE: Clear on update
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from uuid import UUID
 
-from ....services.email_service import send_user_invite
+from ...services.email.email_service import send_user_invite
 
 from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....core.permissions import (

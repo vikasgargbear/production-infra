@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft, 
+import {
+  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft,
   Search, Calendar, Save, Printer, X, Edit2, Trash2
 } from 'lucide-react';
 import {
@@ -15,10 +15,10 @@ import {
   InvoiceSelector,
   useToast,
   NotesSection
-} from '../global';
-import { theme, classes } from '../../config/theme.config';
-import { notesApi } from '../../services/api';
-import InvoiceApiService from '../../services/invoiceApiService';
+} from '../../global';
+import { theme, classes } from '../../../config/theme.config';
+import { notesApi } from '../../../services/api';
+import InvoiceApiService from '../../../services/invoiceApiService';
 
 interface CreditDebitNoteSimpleProps {
   noteType?: 'credit' | 'debit';
@@ -57,7 +57,7 @@ interface NoteData {
   status?: string;
 }
 
-const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({ 
+const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   noteType = 'credit',
   onClose
 }) => {
@@ -65,7 +65,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
-  
+
   const [noteData, setNoteData] = useState<NoteData>({
     note_date: new Date().toISOString().split('T')[0],
     customer_id: '',
@@ -84,11 +84,11 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const [showItemsSection, setShowItemsSection] = useState(false);
 
   const isCredit = noteType === 'credit';
-  
+
   // Generate note number
   const generateNoteNumber = () => {
     const date = new Date();
-    const dateStr = date.toISOString().slice(2,10).replace(/-/g, '');
+    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
     const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
     return `${isCredit ? 'CN' : 'DN'}-${dateStr}${randomNum}`;
   };
@@ -102,15 +102,15 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
   // Tab configuration
   const tabs = [
-    { 
-      id: 'create', 
+    {
+      id: 'create',
       label: `Create ${isCredit ? 'Credit' : 'Debit'} Note`,
-      icon: Plus 
+      icon: Plus
     },
-    { 
-      id: 'list', 
+    {
+      id: 'list',
       label: `${isCredit ? 'Credit' : 'Debit'} Notes List`,
-      icon: FileText 
+      icon: FileText
     }
   ];
 
@@ -143,7 +143,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   // Handle invoice selection from InvoiceSelector
   const handleInvoiceSelect = async (invoice: any) => {
     if (!invoice) return;
-    
+
     setSelectedInvoice(invoice);
     setNoteData(prev => ({
       ...prev,
@@ -151,14 +151,14 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       invoice_number: invoice.invoice_number,
       invoice_date: invoice.invoice_date
     }));
-    
+
     setShowItemsSection(true);
-    
+
     // Load invoice items
     try {
       setLoading(true);
       let fullInvoice;
-      
+
       // Check if items are already loaded
       if (invoice.items && invoice.items.length > 0) {
         fullInvoice = { data: invoice };
@@ -171,21 +171,21 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
           throw new Error('Failed to load invoice details');
         }
       }
-      
+
       if (fullInvoice?.data?.items) {
         const items = fullInvoice.data.items.map((item: any) => {
           const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0) || item.tax_percent || 0;
           const quantity = parseFloat(item.quantity || 0);
           const rate = parseFloat(item.unit_price || item.rate || 0);
           const discount = parseFloat(item.discount_percent || 0);
-          
+
           // Calculate amount
           const baseAmount = quantity * rate;
           const discountAmount = baseAmount * (discount / 100);
           const taxableAmount = baseAmount - discountAmount;
           const taxAmount = taxableAmount * (gstPercent / 100);
           const totalAmount = taxableAmount + taxAmount;
-          
+
           return {
             id: item.id || item.invoice_item_id,
             product_id: item.product_id,
@@ -201,12 +201,12 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
             max_quantity: quantity
           };
         });
-        
+
         setNoteData(prev => ({
           ...prev,
           items: items
         }));
-        
+
         calculateTotals(items);
       }
     } catch (error) {
@@ -220,19 +220,19 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const calculateTotals = (items: NoteItem[]) => {
     let subtotal = 0;
     let taxTotal = 0;
-    
+
     items.filter(item => item.selected).forEach(item => {
       const baseAmount = item.quantity * item.rate;
       const discountAmount = baseAmount * (item.discount_percent / 100);
       const taxableAmount = baseAmount - discountAmount;
       const taxAmount = taxableAmount * (item.tax_percent / 100);
-      
+
       subtotal += taxableAmount;
       taxTotal += taxAmount;
     });
-    
+
     const total = subtotal + taxTotal;
-    
+
     setNoteData(prev => ({
       ...prev,
       subtotal: Math.round(subtotal * 100) / 100,
@@ -245,18 +245,18 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const updateItemQuantity = (index: number, newQuantity: number) => {
     const updatedItems = [...noteData.items];
     const item = updatedItems[index];
-    
+
     // Ensure quantity doesn't exceed original
     const maxQty = item.max_quantity || item.original_quantity || item.quantity;
     item.quantity = Math.min(Math.max(0, newQuantity), maxQty);
-    
+
     // Recalculate amount for this item
     const baseAmount = item.quantity * item.rate;
     const discountAmount = baseAmount * (item.discount_percent / 100);
     const taxableAmount = baseAmount - discountAmount;
     const taxAmount = taxableAmount * (item.tax_percent / 100);
     item.amount = taxableAmount + taxAmount;
-    
+
     setNoteData(prev => ({ ...prev, items: updatedItems }));
     calculateTotals(updatedItems);
   };
@@ -279,31 +279,31 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   // Handle submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!noteData.customer_id) {
       toast.error('Please select a customer');
       return;
     }
-    
+
     if (!noteData.invoice_id) {
       toast.error('Please select an invoice');
       return;
     }
-    
+
     if (!noteData.reason) {
       toast.error('Please select a reason');
       return;
     }
-    
+
     const selectedItems = noteData.items.filter(item => item.selected);
     if (selectedItems.length === 0) {
       toast.error('Please select at least one item');
       return;
     }
-    
+
     try {
       setSaving(true);
-      
+
       const payload = {
         ...noteData,
         note_type: noteType.toUpperCase(),
@@ -316,12 +316,12 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
           amount: item.amount
         }))
       };
-      
+
       const response = await notesApi.createCreditDebitNote(payload);
-      
+
       if (response.success || response.data) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
-        
+
         // Reset form
         setNoteData({
           note_number: generateNoteNumber(),
@@ -339,7 +339,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         setSelectedCustomer(null);
         setSelectedInvoice(null);
         setShowItemsSection(false);
-        
+
         // Switch to list tab
         setActiveTab('list');
       }
@@ -354,9 +354,9 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const summaryItems = [
     { label: 'Subtotal', value: noteData.subtotal, isBold: false },
     { label: 'Tax Amount', value: noteData.tax_amount, isBold: false },
-    { 
-      label: `Total ${isCredit ? 'Credit' : 'Debit'} Amount`, 
-      value: noteData.total_amount, 
+    {
+      label: `Total ${isCredit ? 'Credit' : 'Debit'} Amount`,
+      value: noteData.total_amount,
       isTotal: true,
       color: isCredit ? theme.colors.secondary.DEFAULT : theme.colors.warning.DEFAULT
     }
@@ -378,7 +378,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                   <ArrowLeft className="w-6 h-6" />
                 </button>
               )}
-              
+
               {isCredit ? (
                 <CreditCard className="w-8 h-8 text-green-600" />
               ) : (
@@ -447,9 +447,9 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         <label className={classes.formLabel}>Note Date *</label>
                         <DatePicker
                           value={noteData.note_date}
-                          onChange={(date) => setNoteData(prev => ({ 
-                            ...prev, 
-                            note_date: typeof date === 'string' ? date : date?.toISOString().split('T')[0] || '' 
+                          onChange={(date) => setNoteData(prev => ({
+                            ...prev,
+                            note_date: typeof date === 'string' ? date : date?.toISOString().split('T')[0] || ''
                           }))}
                           className="mt-1"
                         />
@@ -526,11 +526,10 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                     ) : (
                       <div className="space-y-4">
                         {noteData.items.map((item, index) => (
-                          <div 
+                          <div
                             key={index}
-                            className={`p-4 border rounded-lg ${
-                              item.selected ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
-                            }`}
+                            className={`p-4 border rounded-lg ${item.selected ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                              }`}
                           >
                             <div className="flex items-start justify-between">
                               <div className="flex items-start space-x-3">
@@ -594,8 +593,8 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
               {/* Action Buttons */}
               {showItemsSection && (
                 <div className="flex justify-end space-x-3">
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       setShowItemsSection(false);
                       setSelectedInvoice(null);
@@ -613,7 +612,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                   >
                     Cancel
                   </Button>
-                  <Button 
+                  <Button
                     variant="primary"
                     onClick={handleSubmit}
                     disabled={saving || noteData.items.filter(i => i.selected).length === 0}
@@ -652,22 +651,20 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                           </p>
                         </div>
                       )}
-                      
+
                       {/* Amount Summary */}
                       <SummaryCard
                         title={`${isCredit ? 'Credit' : 'Debit'} Amount Breakdown`}
                         items={summaryItems}
                         variant="detailed"
                       />
-                      
+
                       {/* Additional Info */}
-                      <div className={`p-3 rounded-lg ${
-                        isCredit ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'
-                      }`}>
-                        <p className={`text-sm font-medium ${
-                          isCredit ? 'text-green-800' : 'text-orange-800'
+                      <div className={`p-3 rounded-lg ${isCredit ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'
                         }`}>
-                          {isCredit 
+                        <p className={`text-sm font-medium ${isCredit ? 'text-green-800' : 'text-orange-800'
+                          }`}>
+                          {isCredit
                             ? 'This amount will be credited to customer account'
                             : 'This amount will be added to customer dues'
                           }

@@ -28,7 +28,7 @@ from ....schemas.sales.billing import (
 from decimal import Decimal
 # Consolidated: using main DocumentNumberService
 from .....api.shared.calculations import calculate_line_item, finalize_totals  # Shared helpers
-from .....services.settings_service import SettingsService  # NEW: Settings enforcement
+from ....services.settings.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
