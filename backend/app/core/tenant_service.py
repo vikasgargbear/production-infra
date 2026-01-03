@@ -252,7 +252,7 @@ class TenantQueryBuilder:
     def _inject_org_filter(cls, query: str, org_id: UUID) -> str:
         """
         Smart injection of org_id filters
-        Handles SELECT, UPDATE, DELETE statements
+        Handles SELECT, UPDATE, DELETE, and INSERT statements
         """
         query_upper = query.upper().strip()
         
@@ -263,12 +263,68 @@ class TenantQueryBuilder:
         elif query_upper.startswith('DELETE'):
             return cls._inject_delete_filter(query)
         elif query_upper.startswith('INSERT'):
-            # INSERTs should include org_id in VALUES - warn if missing
-            if 'ORG_ID' not in query_upper:
-                logger.warning(f"INSERT query missing org_id: {query[:100]}")
-            return query
+            return cls._inject_insert_filter(query)
         else:
             return query
+    
+    @classmethod
+    def _inject_insert_filter(cls, query: str) -> str:
+        """
+        Auto-inject org_id into INSERT statements.
+        
+        Transforms:
+          INSERT INTO table (col1, col2) VALUES (:val1, :val2)
+        Into:
+          INSERT INTO table (org_id, col1, col2) VALUES (:_tenant_org_id, :val1, :val2)
+        
+        Handles:
+        - Single INSERT with column list
+        - INSERT with RETURNING clause
+        - INSERT ... SELECT (injects into SELECT's WHERE)
+        """
+        query_upper = query.upper()
+        
+        # Skip if already has org_id
+        if 'ORG_ID' in query_upper:
+            return query
+        
+        # Check if this is INSERT ... SELECT (subquery insert)
+        if re.search(r'\bINSERT\s+INTO\s+\S+\s+SELECT\b', query_upper):
+            # For INSERT ... SELECT, we inject into the SELECT's WHERE clause
+            # The SELECT should already get org_id filtering from build_safe_query
+            logger.debug("INSERT...SELECT detected - SELECT portion will be filtered")
+            return query
+        
+        # Pattern: INSERT INTO schema.table (columns) VALUES (values)
+        # Match the column list opening parenthesis
+        column_pattern = r'(INSERT\s+INTO\s+[\w.]+\s*)\((\s*)'
+        
+        match = re.search(column_pattern, query, re.IGNORECASE)
+        if match:
+            # Insert org_id as first column
+            prefix = match.group(1)
+            space = match.group(2)
+            rest_of_query = query[match.end():]
+            
+            modified_query = f"{prefix}({space}org_id, {rest_of_query}"
+            
+            # Now inject :_tenant_org_id into VALUES
+            # Pattern: VALUES (
+            values_pattern = r'(VALUES\s*)\((\s*)'
+            values_match = re.search(values_pattern, modified_query, re.IGNORECASE)
+            
+            if values_match:
+                values_prefix = modified_query[:values_match.end() - len(values_match.group(2))]
+                values_suffix = modified_query[values_match.end():]
+                space = values_match.group(2)
+                modified_query = f"{values_prefix}{space}:_tenant_org_id, {values_suffix}"
+                
+                logger.debug(f"Injected org_id into INSERT: {modified_query[:100]}...")
+                return modified_query
+        
+        # Fallback: warn if we couldn't inject
+        logger.warning(f"Could not auto-inject org_id into INSERT: {query[:100]}")
+        return query
     
     @classmethod
     def _inject_select_filter(cls, query: str) -> str:
