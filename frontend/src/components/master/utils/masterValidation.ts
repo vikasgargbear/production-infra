@@ -1,98 +1,80 @@
 /**
  * Master Validation Utilities
  * 
- * Shared validation functions for master data.
+ * Re-exports Zod validation schemas and provides convenience wrappers.
+ * Use Zod schemas for comprehensive validation with detailed error messages.
  */
+
+// Re-export all Zod schemas for master entities
+export * from '../schemas';
+
+// ==================== SIMPLE VALIDATION HELPERS ====================
+// These are quick helpers for common checks. For comprehensive validation, use Zod schemas.
 
 import type { BaseCustomer, BaseSupplier, BaseProduct } from '../types/masterSharedTypes';
 
-/**
- * Validate GSTIN format (15-character format)
- */
-export function validateGSTIN(gstin: string): { valid: boolean; message?: string } {
-    if (!gstin) return { valid: true }; // Optional field
+// Regex patterns (shared with Zod schemas)
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const PHONE_REGEX = /^(\+91)?[6-9][0-9]{9}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
+const HSN_REGEX = /^[0-9]{4,8}$/;
 
-    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    if (!gstinRegex.test(gstin)) {
-        return { valid: false, message: 'Invalid GSTIN format' };
-    }
-    return { valid: true };
+/**
+ * Quick GSTIN format check
+ */
+export function isValidGSTIN(gstin: string): boolean {
+    if (!gstin) return true; // Optional field
+    return GSTIN_REGEX.test(gstin);
 }
 
 /**
- * Validate PAN format
+ * Quick PAN format check
  */
-export function validatePAN(pan: string): { valid: boolean; message?: string } {
-    if (!pan) return { valid: true }; // Optional field
-
-    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-    if (!panRegex.test(pan)) {
-        return { valid: false, message: 'Invalid PAN format' };
-    }
-    return { valid: true };
+export function isValidPAN(pan: string): boolean {
+    if (!pan) return true;
+    return PAN_REGEX.test(pan);
 }
 
 /**
- * Validate phone number
+ * Quick phone format check
  */
-export function validatePhone(phone: string): { valid: boolean; message?: string } {
-    if (!phone) return { valid: true };
-
-    // Remove spaces and dashes
+export function isValidPhone(phone: string): boolean {
+    if (!phone) return true;
     const cleaned = phone.replace(/[\s-]/g, '');
-
-    // Indian phone number (10 digits, optionally with +91)
-    const phoneRegex = /^(\+91)?[6-9][0-9]{9}$/;
-    if (!phoneRegex.test(cleaned)) {
-        return { valid: false, message: 'Invalid phone number' };
-    }
-    return { valid: true };
+    return PHONE_REGEX.test(cleaned);
 }
 
 /**
- * Validate email address
+ * Quick email format check
  */
-export function validateEmail(email: string): { valid: boolean; message?: string } {
-    if (!email) return { valid: true };
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return { valid: false, message: 'Invalid email address' };
-    }
-    return { valid: true };
+export function isValidEmail(email: string): boolean {
+    if (!email) return true;
+    return EMAIL_REGEX.test(email);
 }
 
 /**
- * Validate pincode
+ * Quick pincode format check
  */
-export function validatePincode(pincode: string): { valid: boolean; message?: string } {
-    if (!pincode) return { valid: true };
-
-    const pincodeRegex = /^[1-9][0-9]{5}$/;
-    if (!pincodeRegex.test(pincode)) {
-        return { valid: false, message: 'Invalid pincode' };
-    }
-    return { valid: true };
+export function isValidPincode(pincode: string): boolean {
+    if (!pincode) return true;
+    return PINCODE_REGEX.test(pincode);
 }
 
 /**
- * Validate HSN code
+ * Quick HSN code check
  */
-export function validateHSN(hsn: string): { valid: boolean; message?: string } {
-    if (!hsn) return { valid: true };
-
-    // HSN is typically 4, 6, or 8 digits
-    const hsnRegex = /^[0-9]{4,8}$/;
-    if (!hsnRegex.test(hsn)) {
-        return { valid: false, message: 'HSN code must be 4-8 digits' };
-    }
-    return { valid: true };
+export function isValidHSN(hsn: string): boolean {
+    if (!hsn) return true;
+    return HSN_REGEX.test(hsn);
 }
 
 /**
- * Validate customer data
+ * Quick customer validation (basic checks only)
+ * For comprehensive validation, use: validateCustomerCreate() from schemas
  */
-export function validateCustomer(customer: Partial<BaseCustomer>): {
+export function quickValidateCustomer(customer: Partial<BaseCustomer>): {
     valid: boolean;
     errors: string[]
 } {
@@ -101,34 +83,27 @@ export function validateCustomer(customer: Partial<BaseCustomer>): {
     if (!customer.customer_name?.trim()) {
         errors.push('Customer name is required');
     }
-
-    if (customer.gstin) {
-        const gstinResult = validateGSTIN(customer.gstin);
-        if (!gstinResult.valid) errors.push(gstinResult.message!);
+    if (customer.gstin && !isValidGSTIN(customer.gstin)) {
+        errors.push('Invalid GSTIN format');
     }
-
-    if (customer.pan) {
-        const panResult = validatePAN(customer.pan);
-        if (!panResult.valid) errors.push(panResult.message!);
+    if (customer.pan && !isValidPAN(customer.pan)) {
+        errors.push('Invalid PAN format');
     }
-
-    if (customer.phone) {
-        const phoneResult = validatePhone(customer.phone);
-        if (!phoneResult.valid) errors.push(phoneResult.message!);
+    if (customer.phone && !isValidPhone(customer.phone)) {
+        errors.push('Invalid phone number');
     }
-
-    if (customer.email) {
-        const emailResult = validateEmail(customer.email);
-        if (!emailResult.valid) errors.push(emailResult.message!);
+    if (customer.email && !isValidEmail(customer.email)) {
+        errors.push('Invalid email address');
     }
 
     return { valid: errors.length === 0, errors };
 }
 
 /**
- * Validate supplier data
+ * Quick supplier validation (basic checks only)
+ * For comprehensive validation, use Zod schemas
  */
-export function validateSupplier(supplier: Partial<BaseSupplier>): {
+export function quickValidateSupplier(supplier: Partial<BaseSupplier>): {
     valid: boolean;
     errors: string[]
 } {
@@ -137,29 +112,23 @@ export function validateSupplier(supplier: Partial<BaseSupplier>): {
     if (!supplier.supplier_name?.trim()) {
         errors.push('Supplier name is required');
     }
-
-    if (supplier.gstin) {
-        const gstinResult = validateGSTIN(supplier.gstin);
-        if (!gstinResult.valid) errors.push(gstinResult.message!);
+    if (supplier.gstin && !isValidGSTIN(supplier.gstin)) {
+        errors.push('Invalid GSTIN format');
     }
-
-    if (supplier.pan) {
-        const panResult = validatePAN(supplier.pan);
-        if (!panResult.valid) errors.push(panResult.message!);
+    if (supplier.pan && !isValidPAN(supplier.pan)) {
+        errors.push('Invalid PAN format');
     }
-
-    if (supplier.phone) {
-        const phoneResult = validatePhone(supplier.phone);
-        if (!phoneResult.valid) errors.push(phoneResult.message!);
+    if (supplier.phone && !isValidPhone(supplier.phone)) {
+        errors.push('Invalid phone number');
     }
 
     return { valid: errors.length === 0, errors };
 }
 
 /**
- * Validate product data
+ * Quick product validation (basic checks only)
  */
-export function validateProduct(product: Partial<BaseProduct>): {
+export function quickValidateProduct(product: Partial<BaseProduct>): {
     valid: boolean;
     errors: string[]
 } {
@@ -168,19 +137,26 @@ export function validateProduct(product: Partial<BaseProduct>): {
     if (!product.product_name?.trim()) {
         errors.push('Product name is required');
     }
-
     if (product.mrp !== undefined && product.mrp < 0) {
         errors.push('MRP cannot be negative');
     }
-
     if (product.cost_price !== undefined && product.cost_price < 0) {
         errors.push('Cost price cannot be negative');
     }
-
-    if (product.hsn_code) {
-        const hsnResult = validateHSN(product.hsn_code);
-        if (!hsnResult.valid) errors.push(hsnResult.message!);
+    if (product.hsn_code && !isValidHSN(product.hsn_code)) {
+        errors.push('HSN code must be 4-8 digits');
     }
 
     return { valid: errors.length === 0, errors };
 }
+
+// Legacy aliases for backward compatibility
+export const validateGSTIN = isValidGSTIN;
+export const validatePAN = isValidPAN;
+export const validatePhone = isValidPhone;
+export const validateEmail = isValidEmail;
+export const validatePincode = isValidPincode;
+export const validateHSN = isValidHSN;
+export const validateCustomer = quickValidateCustomer;
+export const validateSupplier = quickValidateSupplier;
+export const validateProduct = quickValidateProduct;

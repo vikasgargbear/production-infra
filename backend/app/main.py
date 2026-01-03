@@ -25,12 +25,15 @@ from .api.routes.master import departments
 from .api.routes.master import employees
 from .api.routes.master import bank_accounts
 
-# Sales Module
-from .api.routes.sales import orders
-from .api.routes.sales import sales_orders
-from .api.routes.sales import invoices
-from .api.routes.sales import challan
-from .api.routes.sales import returns as sale_returns
+# Sales Module (modular structure)
+from .api.routes.sales import (
+    orders_router,
+    sales_orders_router,
+    invoices_router,
+    challan_router,
+    returns_router,
+    conversions_router,
+)
 
 # Purchase Module
 from .api.routes.purchase import orders as purchases
@@ -157,11 +160,12 @@ api.include_router(employees.router, prefix="/employees", tags=["Employees"])
 api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
 
 # --- Sales ---
-api.include_router(orders.router, tags=["Orders"])
-api.include_router(sales_orders.router, tags=["Sales Orders"])
-api.include_router(invoices.router, tags=["Invoices"])
-api.include_router(challan.router, prefix="/challan", tags=["Challan"])
-api.include_router(sale_returns.router, prefix="/sale-returns", tags=["Sale Returns"])
+api.include_router(orders_router, tags=["Orders"])
+api.include_router(sales_orders_router, tags=["Sales Orders"])
+api.include_router(invoices_router, tags=["Invoices"])
+api.include_router(challan_router, prefix="/challan", tags=["Challan"])
+api.include_router(returns_router, prefix="/sale-returns", tags=["Sale Returns"])
+api.include_router(conversions_router, prefix="/conversions", tags=["Conversions"])
 
 # --- Purchase ---
 api.include_router(purchases.router, prefix="/purchases", tags=["Purchases"])

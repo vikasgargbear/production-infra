@@ -42,8 +42,8 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
-const Products = lazy(() => import('./components/Products'));
-const Orders = lazy(() => import('./components/Orders'));
+const Products = lazy(() => import('./components/master/products/Products'));
+const Orders = lazy(() => import('./components/sales/order/Orders'));
 const BatchesInventory = lazy(() => import('./components/inventory/BatchesInventory'));
 const PaymentTracking = lazy(() => import('./components/payments/PaymentTracking'));
 const PaymentDashboard = lazy(() => import('./components/payments/PaymentDashboard'));

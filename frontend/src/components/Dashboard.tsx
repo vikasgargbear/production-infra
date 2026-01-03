@@ -12,7 +12,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 // import NewChallan from './NewChallan'; // Old version
 import ModularChallanCreatorV5 from './sales/challan/ModularChallanCreatorV5'; // New improved version
 // import { AddSalePage } from './Home';
-import BusinessSalesEntry from './BusinessSalesEntry';
+import InvoiceFlow from './sales/invoice/InvoiceFlow'; // Modern TypeScript version
 import { dashboardApi, ordersApi, invoiceAPI, invoicesApi, purchasesAPI, productsApi, customersApi } from '../services/api';
 import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
@@ -1361,7 +1361,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Slide-in Panels for each action */}
-      <BusinessSalesEntry open={panel === 'add-sale'} onClose={() => setPanel(null)} />
+      <InvoiceFlow open={panel === 'add-sale'} onClose={() => setPanel(null)} />
       <ModularChallanCreatorV5 open={panel === 'create-challan'} onClose={() => setPanel(null)} />
     </div>
   );
