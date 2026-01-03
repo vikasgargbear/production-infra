@@ -12,9 +12,12 @@
 |------|------|-------|-----------------|--------|
 | `employees.py` | 39 | `full_name as employee_name` | `full_name` | ✅ Fixed |
 | `employees.py` | 47 | `joining_date as date_of_joining` | `joining_date` | ✅ Fixed |
-| `invoice_service.py` | 36 | `state_name as state` | `state_name` | ⚠️ To Fix |
-| `orders.py` | 328 | `tax_percent as tax_percent` | `gst_percent` | ⚠️ To Fix |
-| `order_service.py` | 148 | `gst_percentage as gst_percent` | `gst_percent` | ⚠️ To Fix |
+| `invoice_service.py` | 36 | `state_name as state` | `state_name` | ✅ Fixed |
+| `orders.py` | 68 | `primary_phone as phone` | `primary_phone` | ✅ Fixed |
+| `challan.py` | 472 | `challan_status as status` | `challan_status` | ✅ Fixed |
+| `challan.py` | 474 | `transporter_name as delivery_company` | `transporter_name` | ✅ Fixed |
+| `challan.py` | 531-532 | `gstin as customer_gstin`, etc. | actual names | ✅ Fixed |
+| `invoices/routes.py` | 819 | `GREATEST(...) as credit_amount` | `credit_amount` | ✅ Fixed (uses DB column) |
 
 ### Computed Fields (Review Required)
 
