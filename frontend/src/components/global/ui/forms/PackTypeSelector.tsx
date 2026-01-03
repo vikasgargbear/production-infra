@@ -3,10 +3,15 @@ import { Package, Calculator } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 
+/**
+ * PackData interface - uses backend-standard variable names
+ * @property units_per_pack - Number of units in one pack (e.g., 10 tablets per strip)
+ * @property packages_per_box - Number of packs in one box (e.g., 10 strips per box)
+ */
 interface PackData {
     sale_unit?: string;
-    qty_per_strip?: number | string;
-    strips_per_box?: number | string;
+    units_per_pack?: number | string;  // Backend standard: units in one pack
+    packages_per_box?: number | string;  // Backend standard: packs in one box
     use_boxes?: boolean;
     unit_type?: string;
     pack_size?: number;
@@ -26,8 +31,8 @@ export interface PackTypeSelectorProps {
 type ProductType = 'Tablet' | 'Capsule' | 'Syrup' | 'Injection' | 'Cream' | 'Drops' | 'Powder' | 'Other';
 
 interface ParsedPackType {
-    qtyPerUnit: number;
-    unitsPerBox: number | null;
+    unitsPerPack: number;
+    packagesPerBox: number | null;
     packSize: number | null;
     unitSuffix: string | null;
 }
@@ -48,8 +53,8 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
 }) => {
     const [localPackData, setLocalPackData] = useState<PackData>({
         sale_unit: '',
-        qty_per_strip: 10,
-        strips_per_box: 10,
+        units_per_pack: 10,
+        packages_per_box: 10,
         use_boxes: true,
         unit_type: '',
         ...packData
@@ -94,14 +99,14 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
         const secondPart = parseInt(match[2]);
         let unitSuffix: string | null = match[3]?.toUpperCase() || null;
 
-        let qtyPerUnit = firstPart;
-        let unitsPerBox: number | null = null;
+        let unitsPerPack = firstPart;
+        let packagesPerBox: number | null = null;
         let packSize: number | null = null;
 
         if (unitSuffix) {
             packSize = secondPart;
-            qtyPerUnit = secondPart;
-            unitsPerBox = firstPart;
+            unitsPerPack = secondPart;
+            packagesPerBox = firstPart;
 
             const unitMap: Record<string, string> = {
                 'GRAM': 'GM',
@@ -134,11 +139,11 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
 
             unitSuffix = normalizedUnit;
         } else {
-            qtyPerUnit = firstPart;
-            unitsPerBox = secondPart;
+            unitsPerPack = firstPart;
+            packagesPerBox = secondPart;
         }
 
-        return { qtyPerUnit, unitsPerBox, packSize, unitSuffix };
+        return { unitsPerPack, packagesPerBox, packSize, unitSuffix };
     };
 
     const handlePackTypeInput = (value: string): void => {
@@ -148,9 +153,9 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
         if (parsed) {
             const newData: PackData = {
                 ...localPackData,
-                qty_per_strip: parsed.qtyPerUnit,
-                strips_per_box: parsed.unitsPerBox || localPackData.strips_per_box,
-                use_boxes: !!parsed.unitsPerBox,
+                units_per_pack: parsed.unitsPerPack,
+                packages_per_box: parsed.packagesPerBox || localPackData.packages_per_box,
+                use_boxes: !!parsed.packagesPerBox,
                 pack_size: parsed.packSize || undefined,
                 pack_unit: parsed.unitSuffix || undefined,
                 pack_type_input: value,
@@ -169,16 +174,16 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
     }, [productType]);
 
     useEffect(() => {
-        if (localPackData.qty_per_strip && localPackData.strips_per_box && localPackData.use_boxes) {
-            setPackTypeInput(`${localPackData.qty_per_strip}*${localPackData.strips_per_box}`);
-        } else if (localPackData.qty_per_strip) {
-            setPackTypeInput(`${localPackData.qty_per_strip}`);
+        if (localPackData.units_per_pack && localPackData.packages_per_box && localPackData.use_boxes) {
+            setPackTypeInput(`${localPackData.units_per_pack}*${localPackData.packages_per_box}`);
+        } else if (localPackData.units_per_pack) {
+            setPackTypeInput(`${localPackData.units_per_pack}`);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const calculateTotals = (): TotalsResult => {
-        const { qty_per_strip, strips_per_box, use_boxes, unit_type } = localPackData;
+        const { units_per_pack, packages_per_box, use_boxes, unit_type } = localPackData;
         const baseUnit = unit_type || getBaseUnit(productType);
 
         const getUnitLabel = (unit: string, count: number): string => {
@@ -200,24 +205,24 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
             return pluralMap[unit] || unit + 's';
         };
 
-        const qtyNum = typeof qty_per_strip === 'number' ? qty_per_strip : parseInt(String(qty_per_strip)) || 0;
-        const stripsNum = typeof strips_per_box === 'number' ? strips_per_box : parseInt(String(strips_per_box)) || 0;
+        const unitsNum = typeof units_per_pack === 'number' ? units_per_pack : parseInt(String(units_per_pack)) || 0;
+        const packagesNum = typeof packages_per_box === 'number' ? packages_per_box : parseInt(String(packages_per_box)) || 0;
 
-        if (!use_boxes || !stripsNum) {
+        if (!use_boxes || !packagesNum) {
             return {
-                total_per_box: qtyNum,
-                display_text: `${qtyNum} ${getUnitLabel(baseUnit, qtyNum)}${localPackData.sale_unit ? ` per ${localPackData.sale_unit}` : ''}`
+                total_per_box: unitsNum,
+                display_text: `${unitsNum} ${getUnitLabel(baseUnit, unitsNum)}${localPackData.sale_unit ? ` per ${localPackData.sale_unit}` : ''}`
             };
         }
 
-        const total = qtyNum * stripsNum;
+        const total = unitsNum * packagesNum;
         const saleUnitLabel = localPackData.sale_unit ? localPackData.sale_unit.toLowerCase() : 'unit';
 
         return {
             total_per_box: total,
             display_text: localPackData.sale_unit
-                ? `${qtyNum} ${getUnitLabel(baseUnit, qtyNum)} per ${saleUnitLabel}, ${stripsNum} ${getUnitLabel(saleUnitLabel, stripsNum)} per box (${total} ${getUnitLabel(baseUnit, total)} total)`
-                : `${qtyNum} ${getUnitLabel(baseUnit, qtyNum)} × ${stripsNum} = ${total} ${getUnitLabel(baseUnit, total)} total`
+                ? `${unitsNum} ${getUnitLabel(baseUnit, unitsNum)} per ${saleUnitLabel}, ${packagesNum} ${getUnitLabel(saleUnitLabel, packagesNum)} per box (${total} ${getUnitLabel(baseUnit, total)} total)`
+                : `${unitsNum} ${getUnitLabel(baseUnit, unitsNum)} × ${packagesNum} = ${total} ${getUnitLabel(baseUnit, total)} total`
         };
     };
 
@@ -228,12 +233,12 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
             base_unit: getBaseUnit(productType)
         };
 
-        if (field === 'qty_per_strip' || field === 'strips_per_box' || field === 'use_boxes') {
-            if (newData.use_boxes && newData.strips_per_box) {
-                newData.pack_type_input = `${newData.qty_per_strip}*${newData.strips_per_box}`;
+        if (field === 'units_per_pack' || field === 'packages_per_box' || field === 'use_boxes') {
+            if (newData.use_boxes && newData.packages_per_box) {
+                newData.pack_type_input = `${newData.units_per_pack}*${newData.packages_per_box}`;
                 setPackTypeInput(newData.pack_type_input);
             } else {
-                newData.pack_type_input = `${newData.qty_per_strip}`;
+                newData.pack_type_input = `${newData.units_per_pack}`;
                 setPackTypeInput(newData.pack_type_input);
             }
         }
@@ -294,17 +299,17 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                 </label>
                                 <input
                                     type="number"
-                                    value={localPackData.qty_per_strip}
+                                    value={localPackData.units_per_pack}
                                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                                         const val = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                                        handleChange('qty_per_strip', val);
-                                        if (val && localPackData.strips_per_box) {
-                                            setPackTypeInput(`${val}*${localPackData.strips_per_box}`);
+                                        handleChange('units_per_pack', val);
+                                        if (val && localPackData.packages_per_box) {
+                                            setPackTypeInput(`${val}*${localPackData.packages_per_box}`);
                                         }
                                     }}
                                     onBlur={(e: FocusEvent<HTMLInputElement>) => {
                                         if (e.target.value === '' || parseInt(e.target.value) === 0) {
-                                            handleChange('qty_per_strip', 1);
+                                            handleChange('units_per_pack', 1);
                                         }
                                     }}
                                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -342,19 +347,19 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                 </label>
                                 <input
                                     type="text"
-                                    value={String(localPackData.strips_per_box || '')}
+                                    value={String(localPackData.packages_per_box || '')}
                                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                                         const value = e.target.value;
                                         if (value === '') {
-                                            handleChange('strips_per_box', '');
+                                            handleChange('packages_per_box', '');
                                             handleChange('use_boxes', false);
-                                            setPackTypeInput(String(localPackData.qty_per_strip));
+                                            setPackTypeInput(String(localPackData.units_per_pack));
                                         } else {
                                             const numValue = parseInt(value) || 0;
-                                            handleChange('strips_per_box', numValue);
+                                            handleChange('packages_per_box', numValue);
                                             handleChange('use_boxes', numValue > 0);
-                                            if (localPackData.qty_per_strip && numValue > 0) {
-                                                setPackTypeInput(`${localPackData.qty_per_strip}*${numValue}`);
+                                            if (localPackData.units_per_pack && numValue > 0) {
+                                                setPackTypeInput(`${localPackData.units_per_pack}*${numValue}`);
                                             }
                                         }
                                     }}
@@ -409,11 +414,11 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                     </label>
                     <input
                         type="number"
-                        value={localPackData.qty_per_strip}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('qty_per_strip', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                        value={localPackData.units_per_pack}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('units_per_pack', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                         onBlur={(e: FocusEvent<HTMLInputElement>) => {
                             if (e.target.value === '' || parseInt(e.target.value) === 0) {
-                                handleChange('qty_per_strip', 1);
+                                handleChange('units_per_pack', 1);
                             }
                         }}
                         className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -428,19 +433,19 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                     </label>
                     <input
                         type="number"
-                        value={localPackData.use_boxes ? localPackData.strips_per_box : ''}
+                        value={localPackData.use_boxes ? localPackData.packages_per_box : ''}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => {
                             const value = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
                             if (typeof value === 'number') {
-                                handleChange('strips_per_box', value);
+                                handleChange('packages_per_box', value);
                                 handleChange('use_boxes', value > 0);
                             } else {
-                                handleChange('strips_per_box', value);
+                                handleChange('packages_per_box', value);
                             }
                         }}
                         onBlur={(e: FocusEvent<HTMLInputElement>) => {
                             if (e.target.value === '') {
-                                handleChange('strips_per_box', 0);
+                                handleChange('packages_per_box', 0);
                                 handleChange('use_boxes', false);
                             }
                         }}

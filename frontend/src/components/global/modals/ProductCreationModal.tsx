@@ -58,8 +58,8 @@ interface ProductFormData {
 
 interface PackConfig {
     sale_unit: string;
-    qty_per_strip: number;
-    strips_per_box: number;
+    units_per_pack: number;  // Backend standard: units in one pack
+    packages_per_box: number;  // Backend standard: packs in one box
     use_boxes: boolean;
     pack_type_input: string;
     pack_size: number | null;
@@ -141,8 +141,8 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
 
     const [packConfig, setPackConfig] = useState<PackConfig>({
         sale_unit: '',
-        qty_per_strip: 10,
-        strips_per_box: 10,
+        units_per_pack: 10,
+        packages_per_box: 10,
         use_boxes: true,
         pack_type_input: '10*10',
         pack_size: null,
@@ -338,11 +338,11 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                 hsn_code: newProduct.hsn_code,
                 gst_percent: parseFloat(String(newProduct.gst_percent)),
                 pack_type: packConfig.sale_unit || 'STRIP',
-                pack_size: packConfig.qty_per_strip || 1,
+                pack_size: packConfig.units_per_pack || 1,
                 pack_uom: packConfig.sale_unit || 'STRIP',
                 base_uom: packConfig.base_unit || 'TABLET',
-                units_per_pack: packConfig.qty_per_strip || 1,
-                strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null,
+                units_per_pack: packConfig.units_per_pack || 1,
+                packages_per_box: packConfig.use_boxes ? packConfig.packages_per_box : null,
                 mrp: parseFloat(newProduct.mrp) || 0,
                 sale_price: parseFloat(newProduct.sale_price) || 0,
                 cost_price: parseFloat(newProduct.cost_price) || 0,
@@ -359,8 +359,8 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
 
             const apiData = {
                 ...productData,
-                units_per_pack: packConfig.qty_per_strip ? parseInt(String(packConfig.qty_per_strip)) : null,
-                packages_per_box: packConfig.strips_per_box ? parseInt(String(packConfig.strips_per_box)) : null
+                units_per_pack: packConfig.units_per_pack ? parseInt(String(packConfig.units_per_pack)) : null,
+                packages_per_box: packConfig.packages_per_box ? parseInt(String(packConfig.packages_per_box)) : null
             };
 
             const productResponse = await productAPI.create(apiData) as any;
@@ -384,10 +384,10 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                     gst_percent: parseFloat(String(newProduct.gst_percent)) || 0,
                     hsn_code: newProduct.hsn_code || '3004',
                     pack_type: packConfig.sale_unit || 'STRIP',
-                    pack_size: packConfig.qty_per_strip || 1,
+                    pack_size: packConfig.units_per_pack || 1,
                     sale_unit: packConfig.sale_unit,
-                    qty_per_strip: packConfig.qty_per_strip,
-                    strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null
+                    units_per_pack: packConfig.units_per_pack,
+                    packages_per_box: packConfig.use_boxes ? packConfig.packages_per_box : null
                 };
 
                 toast.created(`Product "${createdProduct.product_name}"`, 4000);
