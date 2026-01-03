@@ -246,7 +246,7 @@ async def create_invoice(
             logger.warning(f"User {created_by} has no branch assigned - using default")
         
         # Step 2: Generate order number using centralized service
-        from ...services.document_number_service import DocumentNumberService
+        from ....services.document_number_service import DocumentNumberService
         order_number = DocumentNumberService.generate_number(db, "sales_order", str(org_id))
         
         # Step 3: Calculate totals from items using InvoiceService (DRY)

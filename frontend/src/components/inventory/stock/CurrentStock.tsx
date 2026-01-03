@@ -3,73 +3,53 @@ import {
   Package, Search, Filter, Download, Eye, Printer, MessageCircle,
   AlertTriangle, CheckCircle, Clock, MoreVertical, Calendar, ChevronDown,
   TrendingUp, TrendingDown, Edit2, X,
-  HelpCircle, Loader2, RefreshCw, AlertCircle, LucideIcon
+  HelpCircle, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import apiClient from '../../services/api/apiClient';
-import { productsApi } from '../../services/api';
-import { stockApi } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
-import { DataTable, ModuleHeader } from '../global';
-import ProductEditModal from '../global/modals/ProductEditModal';
+import apiClient from '../../../services/api/apiClient';
+import { formatCurrency } from '../../../utils/formatters';
+import { DataTable, ModuleHeader } from '../../global';
+import ProductEditModal from '../../global/modals/ProductEditModal';
 import jsPDF from 'jspdf';
 
-// TypeScript interfaces
+// Use shared types and utilities
+import type { BaseStockItem, StockFilters, SortConfig } from '../types';
+import {
+  validateProductData,
+  transformToStockItem,
+  normalizeStockData
+} from '../utils/stockValidation';
+import {
+  calculatePackBreakdown,
+  getStockStatus as getStockStatusUtil,
+  validateStockQuantity
+} from '../utils/stockCalculations';
+import {
+  exportToCSV,
+  printData,
+  shareViaWhatsApp,
+  formatStockItem,
+  formatStockItemHTML,
+  formatStockItemWhatsApp
+} from '../utils/exportHelpers';
+
+// TypeScript interfaces - Using extended version of BaseStockItem
+interface StockItem extends BaseStockItem {
+  product_type?: string;
+  product_class?: string;
+  drug_schedule?: string;
+  prescription_required?: boolean;
+  is_narcotic?: boolean;
+  is_controlled_substance?: boolean;
+  stock_status?: 'out_of_stock' | 'low_stock' | 'normal';
+  storage_conditions?: string;
+  requires_cold_chain?: boolean;
+  batches?: any[];
+  batch_count?: number;
+}
+
 interface CurrentStockProps {
   open?: boolean;
   onClose?: () => void;
-}
-
-interface StockItem {
-  product_id: number;
-  product_name: string;
-  product_code: string;
-  generic_name: string;
-  category: string;
-  manufacturer: string;
-  brand: string;
-  product_type: string;
-  product_class: string;
-  hsn_code: string;
-  drug_schedule: string;
-  prescription_required: boolean;
-  is_narcotic: boolean;
-  is_controlled_substance: boolean;
-  current_stock: number;
-  available_stock: number;
-  reserved_stock: number;
-  reorder_level: number;
-  minimum_stock_level: number;
-  maximum_stock_level: number;
-  mrp: number;
-  purchase_rate: number;
-  selling_rate: number;
-  stock_value: number;
-  unit: string;
-  pack_size: number;
-  pack_type: string;
-  pack_unit_quantity: number;
-  sub_unit_quantity: number;
-  purchase_unit: string;
-  sale_unit: string;
-  gst_percent: number;
-  cess_percentage: number;
-  is_active: boolean;
-  low_stock: boolean;
-  out_of_stock: boolean;
-  stock_status: 'out_of_stock' | 'low_stock' | 'normal';
-  expiry_alert: boolean;
-  storage_conditions: string;
-  requires_cold_chain: boolean;
-  created_at?: string;
-  updated_at?: string;
-  last_updated?: string;
-  batches: any[];
-  batch_count: number;
-}
-
-interface SortConfig {
-  key: string;
-  direction: 'asc' | 'desc';
 }
 
 interface MoreFilters {
@@ -78,114 +58,7 @@ interface MoreFilters {
   packType: string;
 }
 
-interface StockStatus {
-  color: string;
-  text: string;
-  icon: LucideIcon;
-}
-
-// Enterprise-grade data validation and transformation utilities
-const ProductDataValidator = {
-  /**
-   * Validates that a product object has all required fields for stock display
-   */
-  validateProductData(product: any): boolean {
-    if (!product || typeof product !== 'object') {
-      return false;
-    }
-
-    if (!product.product_id || typeof product.product_id !== 'number') {
-      return false;
-    }
-
-    if (!product.product_name || typeof product.product_name !== 'string') {
-      return false;
-    }
-
-    return true;
-  },
-
-  /**
-   * Transforms a raw product object from API to standardized stock item format
-   * Uses actual API field names based on backend response
-   */
-  transformProductToStockItem(product: any): StockItem {
-    const currentStock = Number(product.current_stock || 0);
-    const reorderLevel = Number(product.reorder_level || 0);
-    const minStockLevel = Number(product.min_stock_quantity || 0);
-    const effectiveReorderLevel = reorderLevel || minStockLevel;
-
-    return {
-      // Core identification
-      product_id: product.product_id,
-      product_name: product.product_name,
-      product_code: product.product_code || `PROD-${product.product_id}`,
-      generic_name: product.generic_name || '',
-
-      // Category - now read from batch-level data
-      category: product.category_name || product.category || '',
-      manufacturer: product.manufacturer || '',
-      brand: product.brand || '',
-      product_type: product.product_type || 'standard',
-      product_class: product.product_class || 'medicine',
-
-      // Regulatory & Compliance
-      hsn_code: product.hsn_code || '',
-      drug_schedule: product.drug_schedule || '',
-      prescription_required: Boolean(product.requires_prescription),
-      is_narcotic: Boolean(product.is_narcotic),
-      is_controlled_substance: Boolean(product.is_controlled_substance),
-
-      // Stock & Inventory
-      current_stock: currentStock,
-      available_stock: currentStock, // Assuming available = current for now
-      reserved_stock: 0, // Would need separate API call for reservations
-      reorder_level: effectiveReorderLevel,
-      minimum_stock_level: minStockLevel,
-      maximum_stock_level: Number(product.max_stock_quantity || 0),
-
-      // Pricing
-      mrp: Number(product.mrp || 0),
-      purchase_rate: Number(product.cost_price || 0),
-      selling_rate: Number(product.selling_price || 0),
-      stock_value: currentStock * Number(product.cost_price || 0),
-
-      // Units & Measurements - Now from batch-level data
-      unit: product.base_uom || product.base_uom_id || 'Units',
-      pack_size: Number(product.pack_size || product.pack_config?.pack_size || 1),
-      pack_type: product.pack_type || product.pack_unit || product.pack_config?.pack_type || '',
-      pack_unit_quantity: Number(product.units_per_pack || product.pack_config?.pack_unit_quantity || 1),
-      sub_unit_quantity: Number(product.tablets_per_strip || product.packs_per_box || product.pack_config?.sub_unit_quantity || 1),
-      purchase_unit: product.pack_uom || product.box_unit || product.pack_config?.purchase_unit || '',
-      sale_unit: product.base_uom || product.pack_config?.sale_unit || product.unit || 'Units',
-
-      // Tax Information
-      gst_percent: Number(product.gst_percent || 0),
-      cess_percentage: Number(product.cess_percentage || 0),
-
-      // Status & Alerts
-      is_active: Boolean(product.is_active),
-      low_stock: currentStock <= effectiveReorderLevel && effectiveReorderLevel > 0,
-      out_of_stock: currentStock === 0,
-      stock_status: currentStock === 0 ? 'out_of_stock' :
-        (currentStock <= effectiveReorderLevel && effectiveReorderLevel > 0) ? 'low_stock' : 'normal',
-      expiry_alert: false, // Would be calculated from batches
-
-      // Storage & Handling
-      storage_conditions: product.storage_conditions || '',
-      requires_cold_chain: Boolean(product.requires_cold_chain),
-
-      // Metadata
-      created_at: product.created_at,
-      updated_at: product.updated_at,
-      last_updated: product.updated_at,
-
-      // Related data
-      batches: product.batches || [],
-      batch_count: Number(product.batch_count || 0)
-    };
-  }
-};
+// Use shared validation - ProductDataValidator removed, using shared utilities
 
 const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState<boolean>(true);
