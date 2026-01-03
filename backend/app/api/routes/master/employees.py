@@ -36,7 +36,7 @@ async def list_employees(
             SELECT 
                 e.employee_id,
                 e.employee_code,
-                e.full_name as employee_name,
+                e.full_name,
                 e.first_name,
                 e.last_name,
                 e.designation,
@@ -44,7 +44,7 @@ async def list_employees(
                 d.department_name,
                 e.branch_id,
                 b.branch_name,
-                e.joining_date as date_of_joining,
+                e.joining_date,
                 e.personal_mobile,
                 e.personal_email,
                 e.date_of_birth,

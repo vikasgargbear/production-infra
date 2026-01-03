@@ -15,7 +15,7 @@ import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
 import { LedgerHub, PartyLedgerV3 } from './components/ledger';
-import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
+import CreditDebitNoteFlow from './components/returns/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import ReportsHub from './components/reports/ReportsHub';
