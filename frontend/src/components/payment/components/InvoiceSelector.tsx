@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { FileText, DollarSign, Check, AlertCircle } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
-import { 
+import {
   Card,
   StatusBadge
 } from '../../global';
-import { 
+import {
   SectionHeader
-} from '../../common';
+} from '../../global';
 
 interface Invoice {
   invoice_no: string;
@@ -23,13 +23,13 @@ interface Allocations {
 }
 
 const InvoiceSelectorV2: React.FC = () => {
-  const { 
-    outstandingInvoices, 
+  const {
+    outstandingInvoices,
     selectedInvoices,
     setSelectedInvoices,
-    payment 
+    payment
   } = usePayment();
-  
+
   const [allocations, setAllocations] = useState<Allocations>({});
 
   // Calculate totals - use remaining_due if available (accounts for existing allocations)
@@ -55,9 +55,9 @@ const InvoiceSelectorV2: React.FC = () => {
     } else {
       delete newAllocations[invoiceId];
     }
-    
+
     setAllocations(newAllocations);
-    
+
     // Update selected invoices
     const selected = outstandingInvoices
       .filter((inv: Invoice) => newAllocations[inv.invoice_no] > 0)
@@ -65,7 +65,7 @@ const InvoiceSelectorV2: React.FC = () => {
         ...inv,
         allocated_amount: newAllocations[inv.invoice_no]
       }));
-    
+
     setSelectedInvoices(selected);
   };
 
@@ -73,12 +73,12 @@ const InvoiceSelectorV2: React.FC = () => {
   const autoAllocate = (): void => {
     const newAllocations: Allocations = {};
     let remainingAmount = parseFloat(payment.amount || '0');
-    
+
     // Sort invoices by date (oldest first)
     const sortedInvoices = [...outstandingInvoices].sort(
       (a: Invoice, b: Invoice) => new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
     );
-    
+
     for (const invoice of sortedInvoices) {
       if (remainingAmount <= 0) break;
 
@@ -89,9 +89,9 @@ const InvoiceSelectorV2: React.FC = () => {
         remainingAmount -= allocationAmount;
       }
     }
-    
+
     setAllocations(newAllocations);
-    
+
     // Update selected invoices
     const selected = outstandingInvoices
       .filter((inv: Invoice) => newAllocations[inv.invoice_no] > 0)
@@ -99,7 +99,7 @@ const InvoiceSelectorV2: React.FC = () => {
         ...inv,
         allocated_amount: newAllocations[inv.invoice_no]
       }));
-    
+
     setSelectedInvoices(selected);
   };
 
@@ -127,8 +127,8 @@ const InvoiceSelectorV2: React.FC = () => {
 
   return (
     <Card>
-      <SectionHeader 
-        title="Outstanding Invoices" 
+      <SectionHeader
+        title="Outstanding Invoices"
         subtitle="Allocate payment to invoices (optional)"
         actions={
           <div className="flex items-center space-x-2">
@@ -144,7 +144,7 @@ const InvoiceSelectorV2: React.FC = () => {
           </div>
         }
       />
-      
+
       {/* Auto-allocation buttons */}
       {payment.amount && (
         <div className="mb-4 flex items-center justify-between">
@@ -182,7 +182,7 @@ const InvoiceSelectorV2: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Invoice table */}
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -243,8 +243,8 @@ const InvoiceSelectorV2: React.FC = () => {
                     <StatusBadge
                       status={
                         isFullyAllocated ? 'paid' :
-                        allocated > 0 ? 'partial' :
-                        'unpaid'
+                          allocated > 0 ? 'partial' :
+                            'unpaid'
                       }
                     />
                   </td>

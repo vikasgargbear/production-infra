@@ -45,8 +45,8 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
 const BatchesInventory = lazy(() => import('./components/inventory/BatchesInventory'));
-const PaymentTracking = lazy(() => import('./components/payments/PaymentTracking'));
-const PaymentDashboard = lazy(() => import('./components/payments/PaymentDashboard'));
+const PaymentTracking = lazy(() => import('./components/payment/PaymentTracking'));
+const PaymentDashboard = lazy(() => import('./components/payment/PaymentDashboard'));
 const CreditManagement = lazy(() => import('./components/ledger/CreditManagement'));
 const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead

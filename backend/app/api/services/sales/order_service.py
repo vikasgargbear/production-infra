@@ -1,6 +1,9 @@
 """
 Order service layer for business logic
 Handles order processing, inventory validation, and invoice generation
+
+SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
+Do NOT manually filter by org_id or branch_id - TenantAwareSession handles it
 """
 from typing import List, Dict, Any
 from datetime import date, timedelta
@@ -28,7 +31,13 @@ DEFAULT_MRP_FALLBACK = Decimal("0")
 
 
 class OrderService:
-    """Service class for order-related business logic"""
+    """
+    Service class for order-related business logic
+    
+    SECURITY NOTE: All methods expect TenantAwareSession which auto-filters by:
+    - org_id: Always (hard tenant boundary)
+    - branch_id: Based on user's branch_scope (SINGLE/MULTI/ALL)
+    """
     
     @staticmethod
     def generate_order_number(db: Session, org_id: UUID) -> str:
@@ -36,18 +45,23 @@ class OrderService:
         return DocumentNumberService.generate_number(db, "sales_order", str(org_id))
     
     @staticmethod
-    def validate_inventory(db: Session, items: List[dict], org_id: UUID) -> Dict[str, Any]:
-        """Validate if items are available in inventory"""
+    def validate_inventory(db: Session, items: List[dict]) -> Dict[str, Any]:
+        """
+        Validate if items are available in inventory.
+        
+        TenantAwareSession auto-filters by org_id/branch_id.
+        """
         validation_results = []
         all_valid = True
         
         for item in items:
             # Check product exists and is active
+            # TenantAwareSession auto-adds: AND org_id = :_tenant_org_id
             product = db.execute(text("""
                 SELECT product_id, product_name, is_active
                 FROM inventory.products
-                WHERE product_id = :product_id AND org_id = :org_id
-            """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
+                WHERE product_id = :product_id
+            """), {"product_id": item['product_id']}).fetchone()
             
             if not product:
                 validation_results.append({
@@ -69,14 +83,14 @@ class OrderService:
             
             # Check batch availability if specified
             if item.get('batch_id'):
+                # TenantAwareSession auto-adds org_id filter
                 batch = db.execute(text("""
                     SELECT batch_id, batch_number, quantity_available, expiry_date
                     FROM inventory.batches
-                    WHERE batch_id = :batch_id AND product_id = :product_id AND org_id = :org_id
+                    WHERE batch_id = :batch_id AND product_id = :product_id
                 """), {
                     "batch_id": item['batch_id'],
-                    "product_id": item['product_id'],
-                    "org_id": org_id
+                    "product_id": item['product_id']
                 }).fetchone()
                 
                 if not batch:
@@ -107,13 +121,13 @@ class OrderService:
                     all_valid = False
                     continue
             else:
-                # Check overall stock
+                # Check overall stock (TenantAwareSession auto-adds org_id)
                 stock = db.execute(text("""
                     SELECT COALESCE(SUM(quantity_available), 0) as total_stock
                     FROM inventory.batches
-                    WHERE product_id = :product_id AND org_id = :org_id
+                    WHERE product_id = :product_id
                         AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
-                """), {"product_id": item['product_id'], "org_id": org_id}).scalar()
+                """), {"product_id": item['product_id']}).scalar()
                 
                 if stock < item['quantity']:
                     validation_results.append({
@@ -136,25 +150,29 @@ class OrderService:
         }
     
     @staticmethod
-    def calculate_order_totals(db: Session, items: List[dict], org_id: UUID, customer_discount: Decimal = Decimal("0")) -> Dict[str, Decimal]:
-        """Calculate order totals with tax. org_id is required."""
+    def calculate_order_totals(db: Session, items: List[dict], customer_discount: Decimal = Decimal("0")) -> Dict[str, Decimal]:
+        """
+        Calculate order totals with tax.
+        
+        TenantAwareSession auto-filters by org_id.
+        """
         subtotal = Decimal("0")
         total_discount = Decimal("0")
         total_tax = Decimal("0")
         
         for item in items:
+            # TenantAwareSession auto-adds org_id filter
             product = db.execute(text("""
                 SELECT 
                     p.gst_percentage as gst_percent,
                     b.mrp_per_unit as mrp
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.batch_status = :active_status
-                WHERE p.product_id = :product_id AND p.org_id = :org_id
+                WHERE p.product_id = :product_id
                 ORDER BY b.created_at DESC
                 LIMIT 1
             """), {
                 "product_id": item['product_id'], 
-                "org_id": str(org_id),
                 "active_status": BatchStatus.ACTIVE.value
             }).fetchone()
             
@@ -168,7 +186,6 @@ class OrderService:
                 discount_percent = Decimal(str(item.get('discount_percent', 0)))
                 
                 # Calculate line subtotal - use quantity (what customer pays for)
-                # NOT quantity - free_quantity (that would be wrong)
                 line_subtotal = quantity * unit_price
                 
                 # Apply item discount
@@ -191,21 +208,25 @@ class OrderService:
         
         # Calculate final amounts correctly
         gross_total = subtotal  # Sum of (quantity * unit_price) before any discount
-        taxable_total = gross_total - total_discount  # Amount after discount (on which tax is calculated)
+        taxable_total = gross_total - total_discount  # Amount after discount
         final_total = taxable_total + total_tax  # Final amount including tax
         
         return {
-            "subtotal": gross_total,  # CORRECT: Subtotal is before discount
+            "subtotal": gross_total,
             "discount": total_discount,
-            "taxable_amount": taxable_total,  # Amount after discount
+            "taxable_amount": taxable_total,
             "tax": total_tax,
             "total": final_total,
-            "gross_amount": gross_total  # Same as subtotal
+            "gross_amount": gross_total
         }
     
     @staticmethod
-    def allocate_inventory(db: Session, order_id: int, items: List[dict], org_id: UUID) -> bool:
-        """Allocate inventory for order items using FIFO"""
+    def allocate_inventory(db: Session, order_id: int, items: List[dict]) -> bool:
+        """
+        Allocate inventory for order items using FIFO.
+        
+        TenantAwareSession auto-filters by org_id.
+        """
         try:
             for item in items:
                 remaining_quantity = item['quantity']
@@ -222,21 +243,18 @@ class OrderService:
                         "quantity": item['quantity'],
                         "batch_id": item['batch_id']
                     })
-                    
                     # REMOVED: Orders should NOT deduct inventory
                     # Only invoices should deduct inventory
-                    # This prevents inventory issues when creating challans
-                    pass
                 else:
-                    # Auto-allocate using FIFO
+                    # Auto-allocate using FIFO (TenantAwareSession auto-adds org_id)
                     batches = db.execute(text("""
                         SELECT batch_id, quantity_available
                         FROM inventory.batches
-                        WHERE product_id = :product_id AND org_id = :org_id
+                        WHERE product_id = :product_id
                             AND quantity_available > 0
                             AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
                         ORDER BY expiry_date NULLS LAST, created_at
-                    """), {"product_id": item['product_id'], "org_id": org_id})
+                    """), {"product_id": item['product_id']})
                     
                     for batch in batches:
                         if remaining_quantity <= 0:
@@ -256,10 +274,6 @@ class OrderService:
                             "batch_id": batch.batch_id
                         })
                         
-                        # REMOVED: Orders should NOT deduct inventory
-                        # Only invoices should deduct inventory
-                        pass
-                        
                         remaining_quantity -= allocation
             
             return True
@@ -275,8 +289,13 @@ class OrderService:
     
     @staticmethod
     def process_return(db: Session, order_id: int, return_request: ReturnRequest) -> Dict[str, Any]:
-        """Process order return"""
-        # Get order details
+        """
+        Process order return.
+        
+        TenantAwareSession auto-filters by org_id, ensuring users can only
+        return orders from their own organization.
+        """
+        # Get order details (TenantAwareSession auto-adds org_id filter)
         order = db.execute(text("""
             SELECT * FROM sales.orders WHERE order_id = :order_id
         """), {"order_id": order_id}).fetchone()
@@ -368,12 +387,17 @@ class OrderService:
     
     @staticmethod
     def get_order_dashboard(db: Session, org_id: UUID) -> Dict[str, Any]:
-        """Get order dashboard statistics"""
+        """
+        Get order dashboard statistics.
+        
+        TenantAwareSession auto-filters by org_id.
+        Note: org_id param kept for DocumentNumberService compatibility.
+        """
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
         
-        # Overall stats
+        # Overall stats (TenantAwareSession auto-adds org_id)
         stats = db.execute(text("""
             SELECT 
                 COUNT(*) FILTER (WHERE order_status = :pending) as pending_orders,
@@ -381,9 +405,7 @@ class OrderService:
                 COUNT(*) FILTER (WHERE order_status = :delivered) as delivered_orders,
                 COUNT(*) as total_orders
             FROM sales.orders
-            WHERE org_id = :org_id
         """), {
-            "org_id": org_id,
             "pending": OrderStatus.PENDING.value,
             "processing": OrderStatus.PROCESSING.value,
             "delivered": OrderStatus.DELIVERED.value
@@ -393,22 +415,22 @@ class OrderService:
         today_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
             FROM sales.orders
-            WHERE org_id = :org_id AND order_date = :today
-        """), {"org_id": org_id, "today": today}).fetchone()
+            WHERE order_date = :today
+        """), {"today": today}).fetchone()
         
         # Week stats
         week_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
             FROM sales.orders
-            WHERE org_id = :org_id AND order_date >= :week_start
-        """), {"org_id": org_id, "week_start": week_start}).fetchone()
+            WHERE order_date >= :week_start
+        """), {"week_start": week_start}).fetchone()
         
         # Month stats
         month_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
             FROM sales.orders
-            WHERE org_id = :org_id AND order_date >= :month_start
-        """), {"org_id": org_id, "month_start": month_start}).fetchone()
+            WHERE order_date >= :month_start
+        """), {"month_start": month_start}).fetchone()
         
         # Top products
         top_products = db.execute(text("""
@@ -420,12 +442,11 @@ class OrderService:
             FROM sales.order_items oi
             JOIN inventory.products p ON oi.product_id = p.product_id
             JOIN sales.orders o ON oi.order_id = o.order_id
-            WHERE o.org_id = :org_id
-                AND o.order_date >= :month_start
+            WHERE o.order_date >= :month_start
             GROUP BY p.product_id, p.product_name, p.product_code
             ORDER BY total_revenue DESC
             LIMIT 10
-        """), {"org_id": org_id, "month_start": month_start}).fetchall()
+        """), {"month_start": month_start}).fetchall()
         
         return {
             "total_orders": stats.total_orders,

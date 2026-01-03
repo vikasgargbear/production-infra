@@ -308,7 +308,9 @@ class InvoiceService:
         Get customer details for invoice creation.
         
         Uses TenantAwareSession which auto-filters by org_id.
-        Table: master.addresses (entity_type='customer', entity_id=customer_id)
+        
+        SECURITY: Using separate queries instead of subqueries so TenantAwareSession
+        can properly inject org_id filters into each query.
         
         Args:
             db: Database session (TenantAwareSession)
@@ -320,36 +322,45 @@ class InvoiceService:
         """
         from sqlalchemy import text
         
-        # Get customer with default addresses using correct schema
-        # master.addresses with entity_type='customer' and entity_id=customer_id
-        # TenantAwareSession auto-adds org_id filter
-        result = db.execute(text("""
-            SELECT 
-                c.customer_name,
-                c.customer_id,
-                (SELECT address_id FROM master.addresses 
-                 WHERE entity_type = 'customer' AND entity_id = c.customer_id 
-                 AND is_default = true AND address_type = 'billing' 
-                 LIMIT 1) as billing_address_id,
-                (SELECT address_id FROM master.addresses 
-                 WHERE entity_type = 'customer' AND entity_id = c.customer_id 
-                 AND is_default = true AND address_type = 'shipping' 
-                 LIMIT 1) as shipping_address_id
-            FROM parties.customers c
-            WHERE c.customer_id = :customer_id
+        # Get customer (TenantAwareSession auto-adds org_id filter)
+        customer = db.execute(text("""
+            SELECT customer_name, customer_id
+            FROM parties.customers
+            WHERE customer_id = :customer_id
         """), {"customer_id": customer_id}).fetchone()
         
-        if not result:
+        if not customer:
             return {
                 "customer_name": "Unknown Customer",
                 "billing_address_id": None,
                 "shipping_address_id": None
             }
         
+        # Get billing address (TenantAwareSession auto-adds org_id filter)
+        billing = db.execute(text("""
+            SELECT address_id 
+            FROM master.addresses 
+            WHERE entity_type = 'customer' AND entity_id = :customer_id 
+            AND is_default = true AND address_type = 'billing'
+            LIMIT 1
+        """), {"customer_id": customer_id}).fetchone()
+        
+        # Get shipping address (TenantAwareSession auto-adds org_id filter)
+        shipping = db.execute(text("""
+            SELECT address_id 
+            FROM master.addresses 
+            WHERE entity_type = 'customer' AND entity_id = :customer_id 
+            AND is_default = true AND address_type = 'shipping'
+            LIMIT 1
+        """), {"customer_id": customer_id}).fetchone()
+        
+        billing_id = billing.address_id if billing else None
+        shipping_id = shipping.address_id if shipping else billing_id
+        
         return {
-            "customer_name": result.customer_name or "Customer",
-            "billing_address_id": result.billing_address_id,
-            "shipping_address_id": result.shipping_address_id or result.billing_address_id
+            "customer_name": customer.customer_name or "Customer",
+            "billing_address_id": billing_id,
+            "shipping_address_id": shipping_id
         }
     
     @staticmethod

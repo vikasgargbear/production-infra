@@ -62,8 +62,8 @@ export const validateChequeDetails = (paymentMode: string, chequeDetails?: Chequ
 // API
 export { paymentsApi } from '../../services/api';
 
-// Data Transformer
-export { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
+// Data Transformer - TODO: Create this file
+// export { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
 
 // Main component interfaces
 interface PaymentComponents {
