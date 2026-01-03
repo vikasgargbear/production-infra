@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
 from ...services.document_number_service import DocumentNumberService
-from ...services.inventory_service import InventoryService
+from ...services.inventory.inventory_service import InventoryService
 from ...schemas.inventory.inventory import StockMovementCreate
 from datetime import date, datetime
 from decimal import Decimal

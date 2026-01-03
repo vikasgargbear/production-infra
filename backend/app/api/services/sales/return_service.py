@@ -13,9 +13,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 import logging
 
-from .inventory_service import InventoryService
-from ..schemas.inventory.inventory import StockMovementCreate
-from ...core.constants import ReturnStatus, DispositionType
+from ..inventory.inventory_service import InventoryService
+from ...schemas.inventory.inventory import StockMovementCreate
+from ....core.constants import ReturnStatus, DispositionType
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +284,7 @@ class ReturnService:
         Returns:
             Dict with subtotal, tax_amount, cgst_amount, sgst_amount, igst_amount, total_amount
         """
-        from .gst_service import GSTService
+        from ..gst_service import GSTService
         
         subtotal = Decimal("0")
         tax_amount = Decimal("0")

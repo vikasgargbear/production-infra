@@ -15,7 +15,7 @@ from ....core.tenant_service import TenantAwareSession, get_tenant_aware_db, wit
 from ....core.org_context import OrgContext, get_org_context
 from ....core.permissions import PermissionChecker
 from ....core.constants import InvoiceStatus, PaymentRecordStatus, PartyType
-from ...services.ledger_service import LedgerService
+from ...services.finance.ledger_service import LedgerService
 
 logger = logging.getLogger(__name__)
 

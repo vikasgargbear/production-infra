@@ -18,7 +18,7 @@ from .....core.permissions import PermissionChecker  # RBAC
 from .....core.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
 from ....services.document_number_service import DocumentNumberService
 from ....services.gst_service import GSTService
-from ....services.inventory_service import InventoryService
+from ....services.inventory.inventory_service import InventoryService
 from ....services.sales.invoice_service import InvoiceService
 from ....schemas.inventory.inventory import StockMovementCreate
 from ....schemas.sales.billing import (

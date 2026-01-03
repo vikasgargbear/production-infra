@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from .master.product_service import ProductService
-from .inventory_service import InventoryService
-from .document_number_service import DocumentNumberService
-from ...core.constants import (
+from ..master.product_service import ProductService
+from ..inventory.inventory_service import InventoryService
+from ..document_number_service import DocumentNumberService
+from ....core.constants import (
     POStatus, GRNStatus, InvoicePaymentStatus, SupplierInvoiceStatus
 )
 
@@ -271,7 +271,7 @@ class PurchaseService:
                     continue
                 
                 # Create batch using InventoryService
-                from ..schemas.inventory import BatchCreate
+                from ....schemas.inventory import BatchCreate
                 
                 batch_data = BatchCreate(
                     org_id=org_id,

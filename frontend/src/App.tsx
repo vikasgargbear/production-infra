@@ -51,7 +51,7 @@ const CreditManagement = lazy(() => import('./components/ledger/CreditManagement
 const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
 // const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
-const Profile = lazy(() => import('./components/master/Profile'));
+const CompanyProfile = lazy(() => import('./components/master/CompanyProfile'));
 // InventoryManagement deleted - now uses StockHub
 const AccountingLedgers = lazy(() => import('./components/ledger/AccountingLedgers'));
 // const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
@@ -246,7 +246,7 @@ const AppContent = (): JSX.Element => {
       case 'whatsapp':
         return <WhatsAppBusiness key="whatsapp" />;
       case 'profile':
-        return <Profile key="profile" />;
+        return <CompanyProfile key="profile" />;
       case 'inventory':
         return <StockHub key="inventory" open={true} onClose={() => setActiveTab('home')} />;
       case 'accounting':
