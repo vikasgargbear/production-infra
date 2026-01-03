@@ -18,7 +18,7 @@ from functools import wraps
 from fastapi import Depends
 import contextvars
 
-# Import BranchScope from org_context
+# Import BranchScope from org_context (same folder)
 from .org_context import BranchScope
 
 logger = logging.getLogger(__name__)

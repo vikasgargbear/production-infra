@@ -10,8 +10,8 @@ from jose import JWTError
 import json
 import logging
 
-from .database import get_db
-from .jwt_auth import decode_jwt  # Single source of truth
+from ..database import get_db
+from ..auth.jwt_auth import decode_jwt  # Single source of truth
 
 logger = logging.getLogger(__name__)
 

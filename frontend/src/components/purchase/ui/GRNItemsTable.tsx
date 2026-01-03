@@ -14,7 +14,7 @@ export interface GRNItem {
     // Packing
     pack_type?: string;
     pack_size?: number;
-    strips_per_box?: number;
+    packages_per_box?: number;  // Backend standard: packs in one box
 
     // Batch & Expiry
     batch_number?: string;
@@ -126,8 +126,8 @@ const GRNItemsTable: React.FC<GRNItemsTableProps> = ({
                                     />
                                     <span className="text-gray-400">×</span>
                                     <NumberInput
-                                        value={item.strips_per_box}
-                                        onChange={(value) => onUpdateItem(index, 'strips_per_box', value)}
+                                        value={item.packages_per_box}
+                                        onChange={(value) => onUpdateItem(index, 'packages_per_box', value)}
                                         min={1}
                                         className="w-10 text-center text-xs"
                                     />

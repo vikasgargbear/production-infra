@@ -10,10 +10,10 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ...core.org_context import get_org_context, OrgContext
-from ...core.permissions import PermissionChecker
-from ...core.jwt_auth import get_org_id_string
+from ...core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.auth.org_context import get_org_context, OrgContext
+from ...core.security.permissions import PermissionChecker
+from ...core.auth.jwt_auth import get_org_id_string
 
 logger = logging.getLogger(__name__)
 

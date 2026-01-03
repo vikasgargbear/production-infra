@@ -8,7 +8,7 @@ from typing import Dict, Any
 import logging
 
 from ....core.database import get_db  # Regular session for auth (no tenant context yet)
-from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ...services.auth import (
     AuthService,
     InvalidCredentialsError,
@@ -150,8 +150,8 @@ async def logout(
     The token is extracted from Authorization header and added to blacklist.
     **Offline Mode**: Frontend should also clear local storage/IndexedDB
     """
-    from ....core.jwt_auth import decode_jwt
-    from ....core.token_blacklist import blacklist_token
+    from ....core.auth.jwt_auth import decode_jwt
+    from ....core.auth.token_blacklist import blacklist_token
     
     # Extract token from Authorization header
     auth_header = req.headers.get("Authorization", "")
@@ -205,7 +205,7 @@ async def verify_token(
         - org_id: The organization ID
         - exp: Token expiry timestamp
     """
-    from ....core.jwt_auth import decode_jwt
+    from ....core.auth.jwt_auth import decode_jwt
     from jose import JWTError
     
     # Extract token from Authorization header

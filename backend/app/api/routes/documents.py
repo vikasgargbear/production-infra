@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from ...core.database import get_db
-from ...core.jwt_auth import get_user_context_secure
+from ...core.auth.jwt_auth import get_user_context_secure
 from sqlalchemy.orm import Session
 import logging
 

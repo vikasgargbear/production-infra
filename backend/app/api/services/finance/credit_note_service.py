@@ -19,7 +19,7 @@ import logging
 import uuid
 
 from ..document_number_service import DocumentNumberService
-from ....core.constants import (
+from ....core.utils.constants import (
     PartyType, CreditNoteReason, InvoicePaymentStatus
 )
 

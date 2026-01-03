@@ -155,7 +155,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose:
       free_quantity: 0,
       pack_type: 'STRIP',
       pack_size: 10,
-      strips_per_box: 10,
+      packages_per_box: 10,
       manufacturer: product.manufacturer || '',
       total: product.purchase_price || 0
     };
@@ -406,8 +406,8 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose:
                     />
                     <span className="text-xs text-gray-400">×</span>
                     <NumberInput
-                      value={item.strips_per_box}
-                      onChange={(value) => handleUpdateItem(index, 'strips_per_box', value)}
+                      value={item.packages_per_box}
+                      onChange={(value) => handleUpdateItem(index, 'packages_per_box', value)}
                       min={1}
                       className="w-8 text-center text-xs"
                     />
@@ -717,7 +717,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose:
                   <tr key={index} className="border-b border-gray-200">
                     <td className="py-2">{item.product_name}</td>
                     <td className="text-center py-2 text-sm">
-                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.strips_per_box || 10}
+                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.packages_per_box || 10}
                     </td>
                     <td className="text-center py-2">{quantity}</td>
                     <td className="text-center py-2">{item.free_quantity || 0}</td>

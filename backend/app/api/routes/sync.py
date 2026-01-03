@@ -8,7 +8,7 @@ from typing import Dict, Any
 import logging
 
 from ...core.database import get_db
-from ...core.jwt_auth import get_user_context_secure
+from ...core.auth.jwt_auth import get_user_context_secure
 
 logger = logging.getLogger(__name__)
 

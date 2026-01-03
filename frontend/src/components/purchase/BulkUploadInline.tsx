@@ -18,7 +18,7 @@ interface UploadedProduct {
   expiry_date?: string;
   pack_type?: string;
   units_per_pack?: number;
-  strips_per_box?: number;
+  packages_per_box?: number;  // Backend standard: packs in one box
   quantity?: number;
   free_quantity?: number;
   mrp?: number;
@@ -67,7 +67,7 @@ const BulkUploadInline: React.FC<BulkUploadInlineProps> = ({ onProductsUploaded 
     { field: 'expiry_date', header: 'Expiry*', required: true },
     { field: 'pack_type', header: 'Pack', required: false },
     { field: 'units_per_pack', header: 'Units/Pack', required: false },
-    { field: 'strips_per_box', header: 'Packs/Box', required: false },
+    { field: 'packages_per_box', header: 'Packs/Box', required: false },
     { field: 'quantity', header: 'Qty*', required: true },
     { field: 'free_quantity', header: 'Free', required: false },
     { field: 'mrp', header: 'MRP*', required: true },

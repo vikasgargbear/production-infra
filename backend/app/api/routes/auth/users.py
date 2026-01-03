@@ -12,14 +12,14 @@ from uuid import UUID
 
 from ...services.email.email_service import send_user_invite
 
-from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
-from ....core.permissions import (
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.security.permissions import (
     PermissionChecker,
     check_permission,
     MODULES,
     PERMISSIONS
 )
-from ....core.role_management import RoleManager
+from ....core.security.role_management import RoleManager
 
 logger = logging.getLogger(__name__)
 

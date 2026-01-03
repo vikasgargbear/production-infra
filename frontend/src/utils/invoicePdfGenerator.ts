@@ -13,8 +13,8 @@ export interface InvoiceItem {
     pack_type?: string;
     pack_size?: number;
     pack_unit?: string;
-    qty_per_strip?: number;
-    strips_per_box?: number;
+    units_per_pack?: number;  // Backend standard: units in one pack
+    packages_per_box?: number;  // Backend standard: packs in one box
     sale_unit?: string;
     quantity?: number;
     mrp?: number;
@@ -581,7 +581,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
                                 <span class="pack-info">
                                     ${item.pack_type ||
                 (item.pack_size && item.pack_unit ? `1×${item.pack_size}${item.pack_unit}` : '') ||
-                (item.qty_per_strip && item.strips_per_box ? `${item.qty_per_strip}×${item.strips_per_box}` : '') ||
+                (item.units_per_pack && item.packages_per_box ? `${item.units_per_pack}×${item.packages_per_box}` : '') ||
                 (item.sale_unit ? item.sale_unit : '-')}
                                 </span>
                             </td>

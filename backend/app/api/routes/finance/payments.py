@@ -15,10 +15,10 @@ import logging
 
 # Removed: get_db - using TenantAwareSession instead
 # Removed: get_org_id_from_header - using tenant service instead
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker  # RBAC
-from ....core.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker  # RBAC
+from ....core.utils.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
 from ...services.finance.payment_service import PaymentService
 from ...services.document_number_service import DocumentNumberService
 from ...schemas.sales.billing import (

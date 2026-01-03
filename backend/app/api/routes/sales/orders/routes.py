@@ -10,10 +10,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
 
-from .....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from .....core.org_context import get_org_context, OrgContext
-from .....core.permissions import PermissionChecker
-from .....core.constants import OrderStatus, PaymentStatus
+from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.security.permissions import PermissionChecker
+from .....core.utils.constants import OrderStatus, PaymentStatus
 from ....services.document_number_service import DocumentNumberService
 from ....services.gst_service import GSTService
 from ....schemas.sales.order import (

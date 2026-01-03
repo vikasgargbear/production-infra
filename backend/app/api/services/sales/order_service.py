@@ -14,7 +14,7 @@ from uuid import UUID
 import logging
 
 from ..document_number_service import DocumentNumberService
-from ....core.constants import (
+from ....core.utils.constants import (
     OrderStatus, BatchStatus, PaymentStatus, ReturnStatus,
     BusinessLimits, StockMovementType
 )

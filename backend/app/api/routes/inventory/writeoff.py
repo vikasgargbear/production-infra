@@ -14,9 +14,9 @@ from decimal import Decimal
 import uuid
 from ...services.document_number_service import DocumentNumberService
 
-from ....core.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
-from ....core.org_context import OrgContext, get_org_context
-from ....core.permissions import PermissionChecker
+from ....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
+from ....core.auth.org_context import OrgContext, get_org_context
+from ....core.security.permissions import PermissionChecker
 
 logger = logging.getLogger(__name__)
 

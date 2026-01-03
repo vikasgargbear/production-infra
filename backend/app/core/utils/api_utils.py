@@ -3,7 +3,7 @@ Common API Utilities for Enterprise Pharma ERP
 Provides standardized response formats, error handling, and middleware
 
 Usage:
-    from ...core.api_utils import (
+    from ...core.utils.api_utils import (
         StandardResponse, handle_error, 
         get_request_id, add_cache_headers
     )

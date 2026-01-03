@@ -158,7 +158,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }: { onClose: any, pref
       free_quantity: 0,
       pack_type: 'STRIP',
       pack_size: 10,
-      strips_per_box: 10,
+      packages_per_box: 10,
       quality_status: 'Approved',
       total: product.purchase_price || 0
     };
@@ -566,7 +566,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }: { onClose: any, pref
                   <tr key={index} className="border-b border-gray-200">
                     <td className="py-2">{item.product_name}</td>
                     <td className="text-center py-2 text-sm">
-                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.strips_per_box || 10}
+                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.packages_per_box || 10}
                     </td>
                     <td className="text-center py-2">{item.batch_number || '-'}</td>
                     <td className="text-center py-2">

@@ -13,9 +13,9 @@ import shutil
 from ...services.document_number_service import DocumentNumberService
 from decimal import Decimal
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker
 # get_org_id_string replaced with OrgContext
 
 # Try to import bill_parser if available

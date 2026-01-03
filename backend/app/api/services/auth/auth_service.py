@@ -8,7 +8,7 @@ from datetime import timedelta
 import logging
 import hashlib
 
-from ....core.jwt_auth import verify_password, create_access_token
+from ....core.auth.jwt_auth import verify_password, create_access_token
 from ....repositories.user_repository import UserRepository
 from .exceptions import (
     InvalidCredentialsError, 

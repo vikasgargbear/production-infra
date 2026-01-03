@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import text
 import logging
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker  # RBAC
-from ....core.constants import InvoiceStatus, PaymentRecordStatus, PartyType
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker  # RBAC
+from ....core.utils.constants import InvoiceStatus, PaymentRecordStatus, PartyType
 
 logger = logging.getLogger(__name__)
 

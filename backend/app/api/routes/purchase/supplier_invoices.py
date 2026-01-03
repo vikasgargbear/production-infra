@@ -9,9 +9,9 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker
 # get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)

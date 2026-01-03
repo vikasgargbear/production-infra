@@ -11,11 +11,11 @@ import logging
 import json
 
 # Core utilities - shared across all APIs
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.state_utils import get_state_name_and_code
-from ....core.api_utils import handle_error
-from ....core.permissions import PermissionChecker  # RBAC
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.utils.state_utils import get_state_name_and_code
+from ....core.utils.api_utils import handle_error
+from ....core.security.permissions import PermissionChecker  # RBAC
 
 # Supplier-specific imports
 from ...schemas.master.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse

@@ -10,9 +10,9 @@ from typing import List, Optional, Dict, Any
 import logging
 from decimal import Decimal
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker  # RBAC
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker  # RBAC
 
 router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)

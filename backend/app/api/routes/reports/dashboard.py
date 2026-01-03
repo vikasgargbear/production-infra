@@ -11,10 +11,10 @@ from sqlalchemy import text
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from ....core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.org_context import get_org_context, OrgContext
-from ....core.permissions import PermissionChecker  # RBAC
-from ....core.constants import OrderStatus, InvoiceStatus, PaymentStatus
+from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
+from ....core.security.permissions import PermissionChecker  # RBAC
+from ....core.utils.constants import OrderStatus, InvoiceStatus, PaymentStatus
 from ...services.dashboard_service import DashboardService
 
 logger = logging.getLogger(__name__)

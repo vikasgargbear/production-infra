@@ -12,11 +12,11 @@ import os
 import logging
 from datetime import timedelta
 
-from ....core.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....core.database import get_db
 from sqlalchemy.orm import Session
-from ....core.jwt_auth import create_access_token
-from ....core.supabase_auth import supabase_auth
+from ....core.auth.jwt_auth import create_access_token
+from ....core.auth.supabase_auth import supabase_auth
 from ....repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)

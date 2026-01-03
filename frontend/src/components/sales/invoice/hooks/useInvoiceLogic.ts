@@ -490,9 +490,9 @@ export const useInvoiceLogic = (
                         invoiceItem.sale_price = rate; // Ensure compatibility
                         invoiceItem.available_quantity = Number(bestBatch.quantity_available || 0);
 
-                        // Pack Info
-                        invoiceItem.qty_per_strip = Number(bestBatch.units_per_pack || 1);
-                        invoiceItem.strips_per_box = Number(bestBatch.packages_per_box || 1);
+                        // Pack Info - using backend-standard names
+                        invoiceItem.units_per_pack = Number(bestBatch.units_per_pack || 1);
+                        invoiceItem.packages_per_box = Number(bestBatch.packages_per_box || 1);
 
                         // Recalculate tax if needed
                         // (Usually tax % is from product, but tax amount depends on rate)

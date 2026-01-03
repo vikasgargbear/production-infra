@@ -240,12 +240,12 @@ export interface InvoiceItem {
     total?: number;
     line_total?: number;
 
-    // Pack info (for pharma)
+    // Pack info (for pharma) - using backend-standard names
     pack_type?: string;
     pack_size?: number;
     pack_unit?: string;
-    qty_per_strip?: number;
-    strips_per_box?: number;
+    units_per_pack?: number;  // Number of units in one pack (e.g., 10 tablets/strip)
+    packages_per_box?: number;  // Number of packs in one box (e.g., 10 strips/box)
     sale_unit?: string;
 
     // Allow index access for flexibility

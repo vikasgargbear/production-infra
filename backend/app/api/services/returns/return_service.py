@@ -15,7 +15,7 @@ import logging
 
 from ..inventory.inventory_service import InventoryService
 from ...schemas.inventory.inventory import StockMovementCreate
-from ....core.constants import ReturnStatus, DispositionType
+from ....core.utils.constants import ReturnStatus, DispositionType
 
 logger = logging.getLogger(__name__)
 

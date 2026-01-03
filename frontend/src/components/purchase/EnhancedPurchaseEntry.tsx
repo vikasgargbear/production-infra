@@ -50,7 +50,7 @@ interface PurchaseItem {
   batch_number?: string;
   pack_type?: string;
   pack_size?: number | string;
-  strips_per_box?: number | string;
+  packages_per_box?: number | string;  // Backend standard: packs in one box
   hsn_code?: string;
   category?: string;
   brand_name?: string;
@@ -288,7 +288,7 @@ const EnhancedPurchaseEntry: React.FC<EnhancedPurchaseEntryProps> = ({ onClose, 
       // Pack information
       pack_type: product.pack_type || product.packaging_type || 'STRIP',
       pack_size: product.pack_size || product.units_per_pack || 10,
-      strips_per_box: product.strips_per_box || product.packages_per_box || 10,
+      packages_per_box: product.packages_per_box || 10,
       // Additional info
       category: product.category || '',
       brand_name: product.brand_name || product.brand || '',
@@ -464,7 +464,7 @@ const EnhancedPurchaseEntry: React.FC<EnhancedPurchaseEntryProps> = ({ onClose, 
             // Pack information
             pack_type: item.pack_type || 'STRIP',
             pack_size: parseInt(String(item.pack_size)) || 10,
-            strips_per_box: parseInt(String(item.strips_per_box)) || 10,
+            packages_per_box: parseInt(String(item.packages_per_box)) || 10,
             // Additional fields
             hsn_code: item.hsn_code || '',
             category: item.category || '',
@@ -609,7 +609,7 @@ const EnhancedPurchaseEntry: React.FC<EnhancedPurchaseEntryProps> = ({ onClose, 
       // Pack information
       pack_type: item.pack_type || 'STRIP',
       pack_size: item.pack_size || 10,
-      strips_per_box: item.strips_per_box || 10,
+      packages_per_box: item.packages_per_box || 10,
       // Additional info
       category: item.category || '',
       brand_name: item.brand_name || '',
