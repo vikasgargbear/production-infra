@@ -292,7 +292,8 @@ export const useInvoiceLogic = (
                         const rawData = employeeResponse?.data || employeeResponse || [];
                         const employeesList = Array.isArray(rawData)
                             ? rawData
-                            : ((rawData as { employees?: Employee[] }).employees || []);
+                            : ((rawData as { data?: Employee[]; employees?: Employee[] }).data ||
+                                (rawData as { employees?: Employee[] }).employees || []);
 
                         if (Array.isArray(employeesList) && employeesList.length > 0) {
                             const uniqueEmployees = Array.from(
