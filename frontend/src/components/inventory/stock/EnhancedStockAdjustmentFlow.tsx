@@ -6,8 +6,8 @@ import {
 import {
   EnhancedGlobalDocumentFlow, ProductSearchSimple, BatchSelector, Select, DatePicker,
   NotesSection, useToast
-} from '../global';
-import { stockApi } from '../../services/api';
+} from '../../global';
+import { stockApi } from '../../../services/api';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../constants/stockAdjustment';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRightLeft, Construction, Wrench } from 'lucide-react';
-import { ModuleHeader } from '../global';
+import { ModuleHeader } from '../../global';
 
 const StockTransfer = ({ open = true, onClose }) => {
   if (!open) return null;

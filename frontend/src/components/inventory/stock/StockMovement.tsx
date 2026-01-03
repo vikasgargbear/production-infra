@@ -4,9 +4,9 @@ import {
   ArrowUpFromLine, ArrowRightLeft, Package, ChevronDown, ChevronRight,
   Calendar, AlertCircle, CheckCircle, Clock, RefreshCw, Loader2
 } from 'lucide-react';
-import { stockApi } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
-import { DataTable, ModuleHeader } from '../global';
+import { stockApi } from '../../../services/api';
+import { formatCurrency } from '../../../utils/formatters';
+import { DataTable, ModuleHeader } from '../../global';
 import jsPDF from 'jspdf';
 
 // TypeScript interfaces

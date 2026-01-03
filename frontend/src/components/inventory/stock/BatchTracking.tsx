@@ -4,9 +4,9 @@ import {
   Calendar, Filter, Search, Eye, Edit, Trash2, Plus, Download, Printer, MessageCircle,
   CheckCircle, XCircle, Clock, AlertTriangle, Loader2, ChevronDown, ChevronRight
 } from 'lucide-react';
-import { DataTable, StatusBadge, Button, ModuleHeader } from '../global';
-import { stockApi, batchesApi } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
+import { DataTable, StatusBadge, Button, ModuleHeader } from '../../global';
+import { stockApi, batchesApi } from '../../../services/api';
+import { formatCurrency } from '../../../utils/formatters';
 import offlineDB from '../../services/offline/core/offlineDatabase';
 import jsPDF from 'jspdf';
 

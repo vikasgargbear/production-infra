@@ -585,6 +585,7 @@ async def create_invoice(
             
             # Prepare invoice item data using calculated values
             invoice_items_data.append({
+                "org_id": str(org_id),  # SECURITY: Always include org_id
                 "invoice_id": invoice_id,
                 "product_id": product_id,
                 "product_name": product_name,
@@ -705,7 +706,7 @@ async def create_invoice(
             params = {}
             for i, item_data in enumerate(invoice_items_data):
                 values_list.append(f"""(
-                    :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
+                    :org_id_{i}, :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
                     :batch_number_{i}, :manufacturing_date_{i}, :expiry_date_{i},
                     :quantity_{i}, :uom_{i}, :pack_type_{i}, :pack_size_{i}, :base_quantity_{i},
                     :mrp_{i}, :unit_price_{i}, :discount_percent_{i}, :discount_amount_{i}, :taxable_amount_{i},
@@ -718,7 +719,7 @@ async def create_invoice(
             
             bulk_insert_sql = f"""
                 INSERT INTO sales.invoice_items (
-                    invoice_id, product_id, product_name, hsn_code,
+                    org_id, invoice_id, product_id, product_name, hsn_code,
                     batch_number, manufacturing_date, expiry_date,
                     quantity, uom, pack_type, pack_size, base_quantity,
                     mrp, unit_price, discount_percent, discount_amount, taxable_amount,
