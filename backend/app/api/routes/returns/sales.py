@@ -274,7 +274,7 @@ async def get_returnable_items(
                     COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as tax_percent,
                     ii.total_amount,
                     p.hsn_code,
-                    ii.unit
+                    ii.uom as unit
                 FROM sales.invoice_items ii
                 JOIN inventory.products p ON ii.product_id = p.product_id
                 LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id

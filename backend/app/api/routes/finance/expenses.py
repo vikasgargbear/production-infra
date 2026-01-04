@@ -157,10 +157,10 @@ async def create_expense_claim(
         claim_query = """
             INSERT INTO financial.expense_claims (
                 org_id, claim_number, employee_id, claim_date, purpose,
-                total_amount, claim_status, created_by, created_at
+                total_amount, claim_status, created_at
             ) VALUES (
                 :org_id, :claim_number, :employee_id, :claim_date, :purpose,
-                :total_amount, 'submitted', :created_by, CURRENT_TIMESTAMP
+                :total_amount, 'submitted', CURRENT_TIMESTAMP
             ) RETURNING claim_id
         """
         
@@ -171,7 +171,7 @@ async def create_expense_claim(
             "claim_date": claim.claim_date,
             "purpose": claim.purpose,
             "total_amount": total_amount,
-            "created_by": claim.created_by
+            # "created_by": claim.created_by -- removed as per instruction
         })
         
         claim_id = claim_result.scalar()
@@ -180,7 +180,7 @@ async def create_expense_claim(
         for expense in claim.expenses:
             item_query = """
                 INSERT INTO financial.expense_claim_items (
-                    claim_id, expense_type, description, amount,
+                    claim_id, expense_type, expense_description, claimed_amount,
                     expense_date, receipt_attached, receipt_reference
                 ) VALUES (
                     :claim_id, :expense_type, :description, :amount,
@@ -372,7 +372,7 @@ async def get_expense_claim_details(
                 eci.item_id,
                 eci.expense_type,
                 eci.description,
-                eci.amount,
+                eci.claimed_amount,
                 eci.expense_date,
                 eci.receipt_attached,
                 eci.receipt_reference,
