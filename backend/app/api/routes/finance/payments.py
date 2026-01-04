@@ -90,12 +90,11 @@ async def search_payments(
     try:
         # Base params with status constants
         params = {"cancelled_status": PaymentRecordStatus.CANCELLED.value}
-        query = """
             SELECT p.*, 
                 COALESCE(c.customer_name, s.supplier_name) as party_name
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
-            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
+            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
             WHERE p.payment_status != :cancelled_status
         """
         
@@ -109,10 +108,10 @@ async def search_payments(
             params["q"] = f"%{q}%"
         
         if party_id and party_type == PartyType.CUSTOMER.value:
-            query += " AND p.customer_id = :party_id"
+            query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
             params["party_id"] = party_id
         elif party_id and party_type == PartyType.SUPPLIER.value:
-            query += " AND p.supplier_id = :party_id"
+            query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
             params["party_id"] = party_id
             
         if payment_mode:
@@ -156,14 +155,13 @@ async def get_pending_payments(
 ):
     """Get pending/uncleared payments"""
     try:
-        query = """
             SELECT p.*, 
                 COALESCE(c.customer_name, s.supplier_name) as party_name
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
-            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
+            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
             WHERE p.payment_status = :pending_status
-                OR (p.payment_mode = :cheque_mode AND p.cleared_date IS NULL)
+                OR (p.payment_method_id IS NOT NULL AND p.clearance_date IS NULL)
         """
         params = {
             "pending_status": PaymentRecordStatus.PENDING.value,
@@ -171,10 +169,10 @@ async def get_pending_payments(
         }
         
         if party_type == PartyType.CUSTOMER.value and party_id:
-            query += " AND p.customer_id = :party_id"
+            query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
             params["party_id"] = party_id
         elif party_type == PartyType.SUPPLIER.value and party_id:
-            query += " AND p.supplier_id = :party_id"
+            query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
             params["party_id"] = party_id
             
         query += " ORDER BY p.payment_date DESC"
@@ -244,9 +242,9 @@ async def get_payment_by_id(
                 s.supplier_name,
                 i.invoice_number
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.customer_id = c.customer_id
-            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN sales.invoices i ON p.invoice_id = i.invoice_id
+            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
+            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
+            LEFT JOIN sales.invoices i ON p.reference_number = i.invoice_number
             WHERE p.payment_id = :payment_id
         """), {"payment_id": payment_id})
         

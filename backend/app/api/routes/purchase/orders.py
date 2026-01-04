@@ -227,7 +227,7 @@ async def get_purchases(
                 p.created_at,
                 COUNT(poi.po_item_id) as items_count
             FROM procurement.purchase_orders p
-            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id AND p.org_id = poi.org_id
+            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id
             WHERE p.org_id = :org_id
         """
 
