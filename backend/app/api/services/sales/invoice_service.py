@@ -149,7 +149,7 @@ class InvoiceService:
                 due_date=due_date,
                 customer_id=request.customer_id,
                 customer_name=context['customer_name'],
-                customer_gstin=context.get('gstin'),
+                customer_gstin=context.get('gst_number'),
                 invoice_status="pending",
                 payment_status="pending",
                 totals=totals,

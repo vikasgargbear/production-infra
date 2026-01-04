@@ -61,7 +61,7 @@ class SalesSharedRepository:
         
         return {
             "customer_name": row[0],
-            "gstin": row[1],
+            "gst_number": row[1],
             "billing_address_id": row[2],
             "shipping_address_id": row[3]
         }
