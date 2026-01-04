@@ -94,24 +94,23 @@ async def get_returnable_items(
                         gi.grn_item_id as invoice_item_id,
                         gi.product_id,
                         p.product_name,
-                        gi.batch_id,
+                        NULL as batch_id,
                         gi.batch_number,
                         gi.received_quantity as invoice_quantity,
                         COALESCE(gi.quantity_returned, 0) as already_returned,
                         gi.received_quantity - COALESCE(gi.quantity_returned, 0) as returnable_quantity,
                         gi.unit_price,
-                        gi.discount_percent,
-                        gi.tax_percent,
-                        gi.total_amount,
+                        0 as discount_percent,
+                        0 as tax_percent,
+                        gi.received_quantity * gi.unit_price as total_amount,
                         p.hsn_code,
                         gi.uom as unit,
-                        b.expiry_date,
-                        b.manufacturing_date
+                        gi.expiry_date,
+                        gi.manufacturing_date
                     FROM procurement.supplier_invoices si
                     JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
                     JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
                     JOIN inventory.products p ON gi.product_id = p.product_id
-                    LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
                     WHERE si.supplier_invoice_id = :invoice_id
                     AND gi.received_quantity - COALESCE(gi.quantity_returned, 0) > 0
                     ORDER BY gi.grn_item_id

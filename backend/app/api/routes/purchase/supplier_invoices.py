@@ -195,8 +195,7 @@ async def get_invoice_details(
                     si.*,
                     s.supplier_name,
                     s.gst_number as supplier_gst,
-                    s.phone as supplier_phone,
-                    s.address as supplier_address
+                    s.primary_phone as supplier_phone
                 FROM procurement.supplier_invoices si
                 LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
                 WHERE si.supplier_invoice_id = :invoice_id
@@ -253,21 +252,18 @@ async def get_invoice_items(
                         gi.grn_item_id as invoice_item_id,
                         gi.product_id,
                         p.product_name,
-                        p.hsn_code,
-                        gi.batch_id,
                         gi.batch_number,
                         gi.received_quantity as quantity,
                         gi.unit_price,
-                        gi.discount_percent,
-                        gi.tax_percent,
-                        gi.total_amount,
+                        0 as discount_percent,
+                        0 as tax_percent,
+                        gi.received_quantity * gi.unit_price as total_amount,
                         gi.uom as unit,
-                        b.expiry_date
+                        gi.expiry_date
                     FROM procurement.supplier_invoices si
                     JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
                     JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
                     JOIN inventory.products p ON gi.product_id = p.product_id
-                    LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
                     WHERE si.supplier_invoice_id = :invoice_id
                     ORDER BY gi.grn_item_id
                 """),
