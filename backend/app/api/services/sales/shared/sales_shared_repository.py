@@ -87,7 +87,7 @@ class SalesSharedRepository:
             ),
             user_data AS (
                 SELECT user_id
-                FROM auth.users
+                FROM master.org_users
                 WHERE org_id = :org_id AND is_active = true
                 LIMIT 1
             )
