@@ -9,81 +9,17 @@ from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import text
-from pydantic import BaseModel, Field
 
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker  # RBAC
 from ....core.utils.branch_utils import get_default_branch_id
+from ...schemas.inventory.stock import StockReceiveRequest, StockReceiveResponse
 
 router = APIRouter(
     tags=["stock"]
 )
 
-@router.get("/")
-@with_tenant_context
-async def stock_overview(_: dict = Depends(PermissionChecker("inventory", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)):
-    """Get stock overview and available operations"""
-    try:
-        # Simple stock stats
-        result = db.execute(text("""
-            SELECT 
-                COUNT(DISTINCT product_id) as total_products,
-                SUM(quantity_available) as total_quantity,
-                COUNT(*) as total_batches,
-                COUNT(CASE WHEN batch_status = 'active' THEN 1 END) as active_batches
-            FROM inventory.batches
-        """)).fetchone()
-        
-        return {
-            "status": "Stock management service available",
-            "total_products": result.total_products if result else 0,
-            "total_quantity": int(result.total_quantity) if result and result.total_quantity else 0,
-            "total_batches": result.total_batches if result else 0,
-            "active_batches": result.active_batches if result else 0,
-            "operations": ["Stock Receive", "Batch Management", "Stock Adjustments"]
-        }
-    except Exception as e:
-        return {
-            "status": "Stock management service available",
-            "operations": ["Stock Receive", "Batch Management", "Stock Adjustments"],
-            "error": "Could not load statistics"
-        }
-
-class StockReceiveRequest(BaseModel):
-    """Request model for receiving stock"""
-    product_id: int
-    batch_number: Optional[str] = None
-    quantity: int = Field(gt=0, description="Quantity to receive")
-    cost_price: Optional[Decimal] = None
-    selling_price: Optional[Decimal] = None
-    mrp: Optional[Decimal] = None
-    expiry_date: Optional[datetime] = None
-    supplier_id: Optional[int] = None
-    purchase_invoice_number: Optional[str] = None
-    notes: Optional[str] = None
-    # Pack configuration at batch level
-    pack_type: Optional[str] = Field(None, description="Pack type (strip, box, bottle)")
-    pack_size: Optional[int] = Field(None, description="Pack size (10, 100, etc)")
-    pack_uom: Optional[str] = Field(None, description="Pack unit of measure")
-    base_uom: Optional[str] = Field(None, description="Base unit of measure")
-    units_per_pack: Optional[int] = Field(None, description="Units per pack")
-    category_name: Optional[str] = Field(None, description="Product category")
-
-class StockReceiveResponse(BaseModel):
-    """Response after receiving stock"""
-    batch_id: int
-    batch_number: str
-    product_id: int
-    product_name: str
-    quantity_received: int
-    quantity_available: int
-    expiry_date: datetime
-    message: str
-
-@router.post("/receive", response_model=StockReceiveResponse)
 @with_tenant_context
 async def receive_stock(
     stock_data: StockReceiveRequest,

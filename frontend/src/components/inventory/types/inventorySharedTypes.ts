@@ -29,11 +29,11 @@ export interface BaseStockItem {
     minimum_stock_level?: number;
     maximum_stock_level?: number;
 
-    // Pricing
-    mrp?: number;
-    cost_price?: number;
+    // Pricing (product-level, use _per_unit variants for batch pricing)
+    mrp?: number;                    // Product MRP
+    cost_price?: number;             // = cost_per_unit from schema
     purchase_rate?: number;
-    selling_rate?: number;
+    selling_rate?: number;           // = sale_price_per_unit from schema
     stock_value?: number;
 
     // Units
@@ -78,18 +78,15 @@ export interface BaseBatch {
     quantity_received?: number;
     quantity_sold?: number;
 
-    // Dates
+    // Dates (use backend-standard names only)
     expiry_date?: string;
-    manufacturing_date?: string;
-    mfg_date?: string;
+    manufacturing_date?: string;     // Backend: manufacturing_date (NOT mfg_date)
     received_date?: string;
 
-    // Pricing
-    mrp?: number;
-    mrp_per_unit?: number;
-    cost_price?: number;
-    sale_price?: number;
-    sale_price_per_unit?: number;
+    // Pricing (backend-standard: _per_unit suffix for batch-level pricing)
+    mrp_per_unit?: number;           // Backend: mrp_per_unit
+    cost_per_unit?: number;          // Backend: cost_per_unit
+    sale_price_per_unit?: number;    // Backend: sale_price_per_unit
 
     // Metadata
     supplier?: string;

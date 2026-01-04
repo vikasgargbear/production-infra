@@ -236,10 +236,11 @@ export const formatBatch = (batch: BaseBatch): (string | number)[] => {
         batch.product_name || 'N/A',
         batch.quantity_available || 0,
         batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : 'N/A',
-        batch.mrp || 0,
-        batch.cost_price || 0
+        batch.mrp_per_unit || 0,       // Backend-standard field name
+        batch.cost_per_unit || 0       // Backend-standard field name
     ];
 };
+
 
 /**
  * Format batch for HTML

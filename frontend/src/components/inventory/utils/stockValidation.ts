@@ -140,15 +140,15 @@ export const transformToBatch = <T extends BaseBatch>(batch: any): T => {
         quantity_received: Number(batch.quantity_received || 0),
         quantity_sold: Number(batch.quantity_sold || 0),
 
-        // Dates
+        // Dates - output backend-standard name only
         expiry_date: batch.expiry_date,
-        manufacturing_date: batch.manufacturing_date || batch.mfg_date,
+        manufacturing_date: batch.manufacturing_date || batch.mfg_date, // Accept both inputs, output standard
         received_date: batch.received_date,
 
-        // Pricing
-        mrp: Number(batch.mrp || batch.mrp_per_unit || 0),
-        cost_price: Number(batch.cost_price || 0),
-        sale_price: Number(batch.sale_price || batch.sale_price_per_unit || 0),
+        // Pricing - output backend-standard _per_unit names
+        mrp_per_unit: Number(batch.mrp_per_unit || batch.mrp || 0),
+        cost_per_unit: Number(batch.cost_per_unit || batch.cost_price || 0),
+        sale_price_per_unit: Number(batch.sale_price_per_unit || batch.sale_price || 0),
 
         // Metadata
         supplier: batch.supplier || '',
@@ -156,6 +156,7 @@ export const transformToBatch = <T extends BaseBatch>(batch: any): T => {
         is_active: Boolean(batch.is_active)
     } as T;
 };
+
 
 /**
  * Clean and normalize stock data array
