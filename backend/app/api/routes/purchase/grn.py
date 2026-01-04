@@ -46,189 +46,49 @@ async def create_grn(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Create a new Goods Receipt Note"""
+    """
+    Create a new Goods Receipt Note
+    
+    Uses GRNService for centralized business logic (DRY principle)
+    """
     try:
-        # Use context for org_id, user_id, branch_id
-        org_id = context.org_id
+        # Import service here to avoid circular imports
+        from ...services.purchase import GRNService
+        
+        # Get context values
+        org_id = str(context.org_id)
         user_id = context.user_id
-        branch_id = grn_data.get("branch_id") or context.primary_branch_id  # SECURITY: No fallback to 1
+        branch_id = grn_data.get("branch_id") or context.primary_branch_id
         
-        # Extract main GRN data
-        main_data = {
-            "org_id": org_id,
-            "branch_id": branch_id,
-            "grn_number": grn_data.get("grn_no") or grn_data.get("grn_number"),
-            "grn_date": grn_data.get("grn_date"),
-            "grn_type": grn_data.get("grn_type", "regular"),
-            "purchase_order_id": grn_data.get("po_reference"),
-            "supplier_id": grn_data.get("supplier_id"),
-            "supplier_invoice_number": grn_data.get("supplier_invoice_no"),
-            "supplier_invoice_date": grn_data.get("supplier_invoice_date"),
-            "supplier_challan_number": grn_data.get("challan_number"),
-            "supplier_challan_date": grn_data.get("challan_date"),
-            "received_by": user_id if user_id else None,
-            "received_at": datetime.now(),
-            "transport_mode": grn_data.get("transport_mode", "Road"),
-            "vehicle_number": grn_data.get("vehicle_no"),
-            "lr_number": grn_data.get("lr_number"),
-            "lr_date": grn_data.get("lr_date"),
-            "qc_required": grn_data.get("qc_required", False),
-            "qc_status": "pending" if grn_data.get("qc_required") else "not_required",
-            "supplier_amount": grn_data.get("supplier_amount"),
-            "calculated_amount": grn_data.get("total_amount"),
-            "grn_status": "created",
-            "stock_updated": False,
-            "notes": grn_data.get("notes"),
-            "created_at": datetime.now(),
-            "updated_at": datetime.now()
-        }
-        
-        # Insert main GRN record
-        insert_grn_sql = """
-            INSERT INTO procurement.goods_receipt_notes (
-                org_id, branch_id, grn_number, grn_date, grn_type,
-                purchase_order_id, supplier_id, supplier_invoice_number, 
-                supplier_invoice_date, supplier_challan_number, supplier_challan_date,
-                received_by, received_at, transport_mode, vehicle_number,
-                lr_number, lr_date, qc_required, qc_status,
-                supplier_amount, calculated_amount, grn_status, stock_updated,
-                notes, created_at, updated_at
-            )
-            VALUES (
-                :org_id, :branch_id, :grn_number, :grn_date, :grn_type,
-                :purchase_order_id, :supplier_id, :supplier_invoice_number,
-                :supplier_invoice_date, :supplier_challan_number, :supplier_challan_date,
-                :received_by, :received_at, :transport_mode, :vehicle_number,
-                :lr_number, :lr_date, :qc_required, :qc_status,
-                :supplier_amount, :calculated_amount, :grn_status, :stock_updated,
-                :notes, :created_at, :updated_at
-            )
-            RETURNING grn_id
-        """
-        
-        result = db.execute(text(insert_grn_sql), main_data)
-        grn_id = result.fetchone()[0]
-        
-        # Insert GRN items
-        items = grn_data.get("items", [])
-        for idx, item in enumerate(items):
-            item_data = {
-                "grn_id": grn_id,
-                "product_id": item.get("product_id"),
-                "batch_number": item.get("batch_no") or item.get("batch_number"),
-                "manufacturing_date": item.get("mfg_date"),
-                "expiry_date": item.get("expiry_date"),
-                "ordered_quantity": item.get("ordered_quantity", 0),
-                "received_quantity": item.get("quantity") or item.get("received_quantity"),
-                "accepted_quantity": item.get("accepted_quantity") or item.get("quantity"),
-                "rejected_quantity": item.get("rejected_quantity", 0),
-                "free_quantity": item.get("free_quantity", 0),
-                "uom": item.get("uom", "Strip"),
-                "pack_type": item.get("pack_type", "STRIP"),
-                "pack_size": item.get("pack_size", 10),
-                "unit_price": item.get("purchase_price") or item.get("unit_price"),
-                "mrp": item.get("mrp"),
-                "ptr": item.get("ptr"),
-                "pts": item.get("pts"),
-                "qc_status": "pending" if main_data["qc_required"] else "approved",
-                "item_status": "received",
-                "display_order": idx + 1,
-                "created_at": datetime.now()
-            }
-            
-            insert_item_sql = """
-                INSERT INTO procurement.grn_items (
-                    grn_id, product_id, batch_number, manufacturing_date, expiry_date,
-                    ordered_quantity, received_quantity, accepted_quantity, rejected_quantity,
-                    free_quantity, uom, pack_type, pack_size, unit_price, mrp, ptr, pts,
-                    qc_status, item_status, display_order, created_at
-                )
-                VALUES (
-                    :grn_id, :product_id, :batch_number, :manufacturing_date, :expiry_date,
-                    :ordered_quantity, :received_quantity, :accepted_quantity, :rejected_quantity,
-                    :free_quantity, :uom, :pack_type, :pack_size, :unit_price, :mrp, :ptr, :pts,
-                    :qc_status, :item_status, :display_order, :created_at
-                )
-            """
-            
-            db.execute(text(insert_item_sql), item_data)
-        
-        # Update inventory for accepted items (if not requiring QC)
-        if not main_data["qc_required"]:
-            for item in items:
-                # Insert into batches table
-                # NOTE: Correct column names per inventory.batches schema:
-                #   mrp_per_unit (not mrp), initial_quantity (not quantity_received),
-                #   source_type + source_reference_id (not reference_type + reference_id),
-                #   storage_condition (not storage_temperature)
-                batch_data = {
-                    "org_id": org_id,
-                    "product_id": item.get("product_id"),
-                    "batch_number": item.get("batch_no") or item.get("batch_number"),
-                    "manufacturing_date": item.get("mfg_date"),
-                    "expiry_date": item.get("expiry_date"),
-                    "mrp_per_unit": item.get("mrp"),
-                    "initial_quantity": item.get("quantity"),
-                    "quantity_available": item.get("quantity"),
-                    "cost_per_unit": item.get("purchase_price"),
-                    "supplier_id": grn_data.get("supplier_id"),
-                    "source_type": "GRN",
-                    "source_reference_id": grn_id,
-                    "batch_status": "active",
-                    "storage_condition": item.get("storage_conditions", "room_temperature"),
-                    "pack_size": item.get("pack_size", 1),
-                    "pack_type": item.get("pack_type", "PACK"),
-                    "pack_uom": item.get("pack_uom", "PACK"),
-                    "base_uom": item.get("base_uom", "NOS"),
-                    "units_per_pack": item.get("units_per_pack", 1),
-                    "created_at": datetime.now(),
-                    "updated_at": datetime.now()
-                }
-                
-                # Insert or update batch - using correct column names
-                upsert_batch_sql = """
-                    INSERT INTO inventory.batches (
-                        org_id, product_id, batch_number, manufacturing_date, expiry_date,
-                        mrp_per_unit, initial_quantity, quantity_available, cost_per_unit,
-                        supplier_id, source_type, source_reference_id, batch_status,
-                        storage_condition, pack_size, pack_type, pack_uom, base_uom, units_per_pack,
-                        created_at, updated_at
-                    )
-                    VALUES (
-                        :org_id, :product_id, :batch_number, :manufacturing_date, :expiry_date,
-                        :mrp_per_unit, :initial_quantity, :quantity_available, :cost_per_unit,
-                        :supplier_id, :source_type, :source_reference_id, :batch_status,
-                        :storage_condition, :pack_size, :pack_type, :pack_uom, :base_uom, :units_per_pack,
-                        :created_at, :updated_at
-                    )
-                    ON CONFLICT (org_id, product_id, batch_number) 
-                    DO UPDATE SET 
-                        initial_quantity = inventory.batches.initial_quantity + EXCLUDED.initial_quantity,
-                        quantity_available = inventory.batches.quantity_available + EXCLUDED.quantity_available,
-                        updated_at = EXCLUDED.updated_at
-                """
-                
-                db.execute(text(upsert_batch_sql), batch_data)
-            
-            # Mark stock as updated
-            db.execute(
-                text("UPDATE procurement.goods_receipt_notes SET stock_updated = true, stock_updated_at = :now WHERE grn_id = :grn_id"),
-                {"now": datetime.now(), "grn_id": grn_id}
-            )
+        # Call service layer - all business logic is centralized there
+        result = GRNService.create_grn(
+            db=db,
+            org_id=org_id,
+            branch_id=branch_id,
+            grn_data=grn_data,
+            user_id=user_id
+        )
         
         db.commit()
         
         return {
             "success": True,
-            "grn_id": grn_id,
-            "grn_no": main_data["grn_number"],
+            "grn_id": result["grn_id"],
+            "grn_no": result["grn_number"],
+            "items_created": result.get("items_created", 0),
+            "batches_created": result.get("batches_created", 0),
+            "stock_updated": result.get("stock_updated", False),
             "message": "GRN created successfully"
         }
         
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to create GRN: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create GRN: {str(e)}")
+
 
 @router.get("")
 def get_grns(
@@ -437,103 +297,38 @@ def approve_grn(
     context: OrgContext = Depends(get_org_context),
     
 ):
-    """Approve GRN and update stock if not already done"""
+    """
+    Approve GRN and update stock if not already done
+    
+    Uses GRNService for centralized business logic
+    """
     try:
-        # Check if GRN exists and get details
-        check_sql = """
-            SELECT grn_id, grn_status, stock_updated 
-            FROM procurement.goods_receipt_notes 
-            WHERE grn_id = :grn_id AND org_id = :org_id
-        """
-        grn = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": org_id}).first()
+        # Import service here to avoid circular imports
+        from ...services.purchase import GRNService
         
-        if not grn:
-            raise HTTPException(status_code=404, detail="GRN not found")
+        org_id = str(context.org_id)
+        user_id = context.user_id
         
-        # Update approval status
-        approve_sql = """
-            UPDATE procurement.goods_receipt_notes 
-            SET approval_status = 'approved', approved_by = :user_id, approved_at = :now,
-                grn_status = 'approved', updated_at = :now
-            WHERE grn_id = :grn_id
-        """
-        
-        db.execute(text(approve_sql), {
-            "grn_id": grn_id,
-            "user_id": user_id if user_id else None,
-            "now": datetime.now()
-        })
-        
-        # Update stock if not already done
-        if not grn["stock_updated"]:
-            # Get GRN items
-            items_sql = """
-                SELECT gi.*, g.supplier_id
-                FROM procurement.grn_items gi
-                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
-                WHERE gi.grn_id = :grn_id
-            """
-            
-            items = db.execute(text(items_sql), {"grn_id": grn_id})
-            
-            for item in items:
-                item_dict = dict(item._mapping)
-                
-                # Update batch inventory
-                batch_data = {
-                    "org_id": org_id,
-                    "product_id": item_dict["product_id"],
-                    "batch_number": item_dict["batch_number"],
-                    "manufacturing_date": item_dict["manufacturing_date"],
-                    "expiry_date": item_dict["expiry_date"],
-                    "mrp": item_dict["mrp"],
-                    "quantity_received": item_dict["accepted_quantity"],
-                    "quantity_available": item_dict["accepted_quantity"],
-                    "cost_per_unit": item_dict["unit_price"],
-                    "supplier_id": item_dict["supplier_id"],
-                    "reference_type": "GRN",
-                    "reference_id": grn_id,
-                    "batch_status": "available",
-                    "created_at": datetime.now(),
-                    "updated_at": datetime.now()
-                }
-                
-                # Insert or update batch
-                upsert_batch_sql = """
-                    INSERT INTO inventory.batches (
-                        org_id, product_id, batch_number, manufacturing_date, expiry_date,
-                        mrp, quantity_received, quantity_available, cost_per_unit,
-                        supplier_id, reference_type, reference_id, batch_status,
-                        created_at, updated_at
-                    )
-                    VALUES (
-                        :org_id, :product_id, :batch_number, :manufacturing_date, :expiry_date,
-                        :mrp, :quantity_received, :quantity_available, :cost_per_unit,
-                        :supplier_id, :reference_type, :reference_id, :batch_status,
-                        :created_at, :updated_at
-                    )
-                    ON CONFLICT (org_id, product_id, batch_number) 
-                    DO UPDATE SET 
-                        quantity_received = inventory.batches.quantity_received + EXCLUDED.quantity_received,
-                        quantity_available = inventory.batches.quantity_available + EXCLUDED.quantity_available,
-                        updated_at = EXCLUDED.updated_at
-                """
-                
-                db.execute(text(upsert_batch_sql), batch_data)
-            
-            # Mark stock as updated
-            stock_update_sql = """
-                UPDATE procurement.goods_receipt_notes 
-                SET stock_updated = true, stock_updated_at = :now 
-                WHERE grn_id = :grn_id
-            """
-            
-            db.execute(text(stock_update_sql), {"grn_id": grn_id, "now": datetime.now()})
+        # Call service layer
+        result = GRNService.approve_grn(
+            db=db,
+            grn_id=grn_id,
+            org_id=org_id,
+            user_id=user_id,
+            notes=approval_data.get("notes")
+        )
         
         db.commit()
         
-        return {"success": True, "message": "GRN approved and stock updated successfully"}
+        return {
+            "success": True, 
+            "message": result.get("message", "GRN approved successfully"),
+            "batches_created": result.get("batches_created", 0)
+        }
         
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
