@@ -39,7 +39,8 @@ def _format_composition(composition_value):
         return {"active": composition_value}
     return {}
 
-@router.get("/")
+@router.get("")  # Matches /products (no trailing slash)
+@router.get("/")  # Matches /products/ (with trailing slash)
 @with_tenant_context  # NEW: Automatic tenant filtering
 async def get_products(
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE, description="Number of products to return"),
