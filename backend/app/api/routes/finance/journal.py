@@ -189,11 +189,11 @@ async def create_journal_entry(
         journal_query = """
             INSERT INTO financial.journal_entries (
                 org_id, journal_number, journal_date, reference_number,
-                narration, total_debit, total_credit, entry_status,
+                narration, entry_status,
                 created_by, created_at
             ) VALUES (
                 :org_id, :journal_number, :journal_date, :reference_number,
-                :narration, :total_debit, :total_credit, 'posted',
+                :narration, 'posted',
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING journal_id
         """
@@ -204,8 +204,6 @@ async def create_journal_entry(
             "journal_date": journal_entry.journal_date,
             "reference_number": journal_entry.reference_number,
             "narration": journal_entry.narration,
-            "total_debit": total_debit,
-            "total_credit": total_credit,
             "created_by": journal_entry.created_by
         })
         
@@ -300,8 +298,6 @@ async def get_journal_entries(
                 je.journal_date,
                 je.reference_number,
                 je.narration,
-                je.total_debit,
-                je.total_credit,
                 je.entry_status,
                 je.created_at,
                 u.username as created_by_name,
@@ -332,8 +328,8 @@ async def get_journal_entries(
         
         query += """
             GROUP BY je.journal_id, je.journal_number, je.journal_date, 
-                     je.reference_number, je.narration, je.total_debit, 
-                     je.total_credit, je.entry_status, je.created_at, u.username
+                     je.reference_number, je.narration,
+                     je.entry_status, je.created_at, u.username
             ORDER BY je.journal_date DESC, je.journal_id DESC
             LIMIT :limit OFFSET :offset
         """
@@ -394,8 +390,6 @@ async def get_journal_entry_details(
                 je.journal_date,
                 je.reference_number,
                 je.narration,
-                je.total_debit,
-                je.total_credit,
                 je.entry_status,
                 je.created_at,
                 u.username as created_by_name
