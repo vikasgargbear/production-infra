@@ -24,6 +24,7 @@ import {
 } from '../types/invoiceTypes';
 import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 import { prepareItemForInvoice } from '../utils/invoiceItemUtils';
+import { validateInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceDraft } from './useInvoiceDraft';
 import { useInvoiceSave } from './useInvoiceSave';
 
@@ -564,6 +565,9 @@ export const useInvoiceLogic = (
                     : `Added ${invoiceItem.product_name}`;
 
                 toast.success(toastMsg);
+
+                // VALIDATION: Catch deprecated fields in development
+                validateInvoiceItem(newItem, `new item: ${invoiceItem.product_name}`);
 
                 return {
                     ...prev,
