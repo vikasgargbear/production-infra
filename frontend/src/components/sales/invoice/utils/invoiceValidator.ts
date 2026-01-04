@@ -10,7 +10,8 @@ import type { InvoiceItem } from '../types/invoiceTypes';
 // Deprecated field names that should NEVER be used
 const DEPRECATED_PRICE_FIELDS = ['sale_price', 'rate', 'selling_price'] as const;
 const DEPRECATED_DISCOUNT_FIELDS = ['discount'] as const;
-const DEPRECATED_TOTAL_FIELDS = ['total', 'line_total'] as const;
+// NOTE: line_total IS canonical per sales.invoice_items table - only 'total' is deprecated
+const DEPRECATED_TOTAL_FIELDS = ['total'] as const;
 
 // Detect if running in development (localhost)
 const isDevelopment = typeof window !== 'undefined' &&
@@ -39,10 +40,10 @@ export function validateInvoiceItem(item: any, context: string = 'invoice item')
         }
     });
 
-    // Check for deprecated total fields
+    // Check for deprecated total fields (NOT line_total - that IS canonical)
     DEPRECATED_TOTAL_FIELDS.forEach(field => {
         if (field in item) {
-            errors.push(`❌ Deprecated field '${field}' found. Use 'total_amount' instead.`);
+            errors.push(`❌ Deprecated field '${field}' found. Use 'line_total' instead.`);
         }
     });
 
@@ -100,16 +101,12 @@ export function sanitizeInvoiceItem(item: any): InvoiceItem {
         delete sanitized.discount;
     }
 
-    // Map deprecated total fields to canonical
-    if ('total' in sanitized && !sanitized.total_amount) {
-        sanitized.total_amount = sanitized.total;
-        warnings.push(`Mapped 'total' → 'total_amount'`);
+    // Map deprecated 'total' to canonical 'line_total'
+    // NOTE: line_total IS canonical per sales.invoice_items - do NOT map it away
+    if ('total' in sanitized && !sanitized.line_total) {
+        sanitized.line_total = sanitized.total;
+        warnings.push(`Mapped 'total' → 'line_total'`);
         delete sanitized.total;
-    }
-    if ('line_total' in sanitized && !sanitized.total_amount) {
-        sanitized.total_amount = sanitized.line_total;
-        warnings.push(`Mapped 'line_total' → 'total_amount'`);
-        delete sanitized.line_total;
     }
 
     if (warnings.length > 0) {
@@ -126,6 +123,6 @@ export function hasCanonicalFields(item: any): item is InvoiceItem {
     return (
         'unit_price' in item &&
         'discount_percent' in item &&
-        'total_amount' in item
+        'line_total' in item  // line_total IS canonical per DB
     );
 }

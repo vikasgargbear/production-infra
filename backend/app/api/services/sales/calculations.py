@@ -226,6 +226,147 @@ class InvoiceCalculator:
             "sgst_matches": abs(calculated_sgst - totals.sgst_amount) < Decimal('0.01'),
             "all_verified": True  # Will be set to False if any check fails
         }
+    
+    @staticmethod
+    def calculate_invoice_totals(
+        items: List[Dict],
+        gst_type: str = 'CGST/SGST',
+        freight_charges: float = 0,
+        insurance_charges: float = 0,
+        other_charges: float = 0,
+        discount_type: str = 'percentage',
+        discount_percent: float = 0,
+        discount_amount: float = 0
+    ) -> Dict:
+        """
+        Calculate full invoice totals from dict items (service layer interface)
+        
+        This is the main entry point for invoice_service.py
+        Handles conversion from raw dicts to calculation and back.
+        
+        Args:
+            items: List of item dicts with product_id, quantity, unit_price, etc.
+            gst_type: 'CGST/SGST' or 'IGST'
+            freight_charges: Freight/delivery charges
+            insurance_charges: Insurance charges
+            other_charges: Other charges
+            discount_type: 'percentage' or 'amount'
+            discount_percent: Invoice-level discount percentage
+            discount_amount: Invoice-level discount amount
+            
+        Returns:
+            Dict with all calculated totals matching database column names
+        """
+        # Calculate item-level totals
+        subtotal = Decimal('0')
+        item_discount = Decimal('0')
+        taxable_amount = Decimal('0')
+        cgst_amount = Decimal('0')
+        sgst_amount = Decimal('0')
+        igst_amount = Decimal('0')
+        
+        is_igst = gst_type.upper() == 'IGST'
+        
+        calculated_items = []
+        for item in items:
+            qty = Decimal(str(item.get('quantity', 0)))
+            unit_price = Decimal(str(item.get('unit_price', 0)))
+            disc_pct = Decimal(str(item.get('discount_percent', 0)))
+            gst_pct = Decimal(str(item.get('gst_percent', 0)))
+            free_qty = Decimal(str(item.get('free_quantity', 0)))
+            
+            # Base quantity for billing (excludes free items)
+            base_qty = qty  # Free items tracked separately
+            
+            # Line total = quantity × unit_price
+            line_total = base_qty * unit_price
+            
+            # Item discount = line_total × discount_percent / 100
+            item_disc = line_total * disc_pct / Decimal('100')
+            
+            # Taxable = line_total - discount
+            taxable = line_total - item_disc
+            
+            # GST calculation
+            if is_igst:
+                item_igst = taxable * gst_pct / Decimal('100')
+                item_cgst = Decimal('0')
+                item_sgst = Decimal('0')
+            else:
+                gst_half = gst_pct / Decimal('2')
+                item_cgst = taxable * gst_half / Decimal('100')
+                item_sgst = taxable * gst_half / Decimal('100')
+                item_igst = Decimal('0')
+            
+            # Aggregate
+            subtotal += line_total
+            item_discount += item_disc
+            taxable_amount += taxable
+            cgst_amount += item_cgst
+            sgst_amount += item_sgst
+            igst_amount += item_igst
+            
+            calculated_items.append({
+                'product_id': item.get('product_id'),
+                'quantity': float(qty),
+                'unit_price': float(unit_price),
+                'line_total': float(line_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'discount_amount': float(item_disc.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'taxable_amount': float(taxable.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'cgst_amount': float(item_cgst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'sgst_amount': float(item_sgst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'igst_amount': float(item_igst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            })
+        
+        # Invoice-level (scheme) discount
+        scheme_discount = Decimal('0')
+        if discount_type == 'percentage' and discount_percent > 0:
+            scheme_discount = taxable_amount * Decimal(str(discount_percent)) / Decimal('100')
+        elif discount_type == 'amount' and discount_amount > 0:
+            scheme_discount = Decimal(str(discount_amount))
+        
+        # Adjust taxable after scheme discount
+        taxable_after_scheme = taxable_amount - scheme_discount
+        
+        # Recalculate GST on reduced taxable if scheme discount applied
+        if scheme_discount > 0:
+            # Re-proportion tax based on reduced taxable
+            ratio = taxable_after_scheme / taxable_amount if taxable_amount > 0 else Decimal('0')
+            cgst_amount = cgst_amount * ratio
+            sgst_amount = sgst_amount * ratio
+            igst_amount = igst_amount * ratio
+        
+        # Total tax
+        total_tax = cgst_amount + sgst_amount + igst_amount
+        
+        # Additional charges
+        freight = Decimal(str(freight_charges))
+        insurance = Decimal(str(insurance_charges))
+        other = Decimal(str(other_charges))
+        
+        # Final amount before rounding
+        amount_before_round = taxable_after_scheme + total_tax + freight + insurance + other
+        
+        # Round to nearest integer (Indian practice)
+        final_amount = amount_before_round.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        round_off = final_amount - amount_before_round
+        
+        return {
+            'subtotal_amount': float(subtotal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'discount_amount': float(item_discount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'scheme_discount': float(scheme_discount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'taxable_amount': float(taxable_after_scheme.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'cgst_amount': float(cgst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'sgst_amount': float(sgst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'igst_amount': float(igst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'total_tax_amount': float(total_tax.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'freight_charges': float(freight.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'insurance_charges': float(insurance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'other_charges': float(other.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'round_off_amount': float(round_off.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'final_amount': float(final_amount),
+            'calculated_items': calculated_items
+        }
 
 
 # Convenience functions for common operations
