@@ -164,7 +164,7 @@ class OrderService:
             # TenantAwareSession auto-adds org_id filter
             product = db.execute(text("""
                 SELECT 
-                    p.gst_percentage as gst_percent,
+                    p.gst_percent,
                     b.mrp_per_unit as mrp
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.batch_status = :active_status
