@@ -157,42 +157,53 @@ async def create_grn(
         if not main_data["qc_required"]:
             for item in items:
                 # Insert into batches table
+                # NOTE: Correct column names per inventory.batches schema:
+                #   mrp_per_unit (not mrp), initial_quantity (not quantity_received),
+                #   source_type + source_reference_id (not reference_type + reference_id),
+                #   storage_condition (not storage_temperature)
                 batch_data = {
                     "org_id": org_id,
                     "product_id": item.get("product_id"),
                     "batch_number": item.get("batch_no") or item.get("batch_number"),
                     "manufacturing_date": item.get("mfg_date"),
                     "expiry_date": item.get("expiry_date"),
-                    "mrp": item.get("mrp"),
-                    "quantity_received": item.get("quantity"),
+                    "mrp_per_unit": item.get("mrp"),
+                    "initial_quantity": item.get("quantity"),
                     "quantity_available": item.get("quantity"),
                     "cost_per_unit": item.get("purchase_price"),
                     "supplier_id": grn_data.get("supplier_id"),
-                    "reference_type": "GRN",
-                    "reference_id": grn_id,
-                    "batch_status": "available",
-                    "storage_temperature": item.get("storage_conditions", "room_temperature"),
+                    "source_type": "GRN",
+                    "source_reference_id": grn_id,
+                    "batch_status": "active",
+                    "storage_condition": item.get("storage_conditions", "room_temperature"),
+                    "pack_size": item.get("pack_size", 1),
+                    "pack_type": item.get("pack_type", "PACK"),
+                    "pack_uom": item.get("pack_uom", "PACK"),
+                    "base_uom": item.get("base_uom", "NOS"),
+                    "units_per_pack": item.get("units_per_pack", 1),
                     "created_at": datetime.now(),
                     "updated_at": datetime.now()
                 }
                 
-                # Insert or update batch
+                # Insert or update batch - using correct column names
                 upsert_batch_sql = """
                     INSERT INTO inventory.batches (
                         org_id, product_id, batch_number, manufacturing_date, expiry_date,
-                        mrp, quantity_received, quantity_available, cost_per_unit,
-                        supplier_id, reference_type, reference_id, batch_status,
-                        storage_temperature, created_at, updated_at
+                        mrp_per_unit, initial_quantity, quantity_available, cost_per_unit,
+                        supplier_id, source_type, source_reference_id, batch_status,
+                        storage_condition, pack_size, pack_type, pack_uom, base_uom, units_per_pack,
+                        created_at, updated_at
                     )
                     VALUES (
                         :org_id, :product_id, :batch_number, :manufacturing_date, :expiry_date,
-                        :mrp, :quantity_received, :quantity_available, :cost_per_unit,
-                        :supplier_id, :reference_type, :reference_id, :batch_status,
-                        :storage_temperature, :created_at, :updated_at
+                        :mrp_per_unit, :initial_quantity, :quantity_available, :cost_per_unit,
+                        :supplier_id, :source_type, :source_reference_id, :batch_status,
+                        :storage_condition, :pack_size, :pack_type, :pack_uom, :base_uom, :units_per_pack,
+                        :created_at, :updated_at
                     )
                     ON CONFLICT (org_id, product_id, batch_number) 
                     DO UPDATE SET 
-                        quantity_received = inventory.batches.quantity_received + EXCLUDED.quantity_received,
+                        initial_quantity = inventory.batches.initial_quantity + EXCLUDED.initial_quantity,
                         quantity_available = inventory.batches.quantity_available + EXCLUDED.quantity_available,
                         updated_at = EXCLUDED.updated_at
                 """

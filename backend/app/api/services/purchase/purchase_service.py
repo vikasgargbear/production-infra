@@ -176,32 +176,37 @@ class PurchaseService:
                 invoice_number = PurchaseService.generate_invoice_number(db, org_id)
             
             # Create supplier invoice
+            # NOTE: Schema uses supplier_invoice_number (not invoice_number)
+            #       purchase_order_ids is ARRAY (not po_id)
+            #       subtotal_amount, taxable_amount, invoice_total are correct names
             result = db.execute(text("""
                 INSERT INTO procurement.supplier_invoices (
-                    org_id, branch_id, invoice_number, invoice_date,
-                    supplier_id, po_id, due_date,
-                    subtotal, tax_amount, total_amount,
-                    payment_status, notes, created_by, created_at
+                    org_id, branch_id, supplier_invoice_number, invoice_date,
+                    supplier_id, purchase_order_ids, due_date,
+                    subtotal_amount, taxable_amount, tax_amount, invoice_total,
+                    payment_status, invoice_status, notes, created_by
                 ) VALUES (
-                    :org_id, :branch_id, :invoice_number, :invoice_date,
-                    :supplier_id, :po_id, :due_date,
-                    :subtotal, :tax_amount, :total_amount,
-                    :payment_status, :notes, :created_by, CURRENT_TIMESTAMP
+                    :org_id, :branch_id, :supplier_invoice_number, :invoice_date,
+                    :supplier_id, :purchase_order_ids, :due_date,
+                    :subtotal_amount, :taxable_amount, :tax_amount, :invoice_total,
+                    :payment_status, :invoice_status, :notes, :created_by
                 ) RETURNING supplier_invoice_id
             """), {
                 "org_id": org_id,
                 "branch_id": resolved_branch,
-                "invoice_number": invoice_number,
+                "supplier_invoice_number": invoice_number,
                 "invoice_date": invoice_data.get("invoice_date", date.today()),
                 "supplier_id": invoice_data.get("supplier_id"),
-                "po_id": invoice_data.get("po_id"),
+                "purchase_order_ids": [invoice_data.get("po_id")] if invoice_data.get("po_id") else None,
                 "due_date": invoice_data.get("due_date"),
-                "subtotal": invoice_data.get("subtotal", 0),
+                "subtotal_amount": invoice_data.get("subtotal_amount", invoice_data.get("subtotal", 0)),
+                "taxable_amount": invoice_data.get("taxable_amount", invoice_data.get("subtotal", 0)),
                 "tax_amount": invoice_data.get("tax_amount", 0),
-                "total_amount": invoice_data.get("total_amount", 0),
+                "invoice_total": invoice_data.get("invoice_total", invoice_data.get("total_amount", 0)),
                 "notes": invoice_data.get("notes"),
                 "created_by": created_by,
-                "payment_status": InvoicePaymentStatus.UNPAID.value
+                "payment_status": InvoicePaymentStatus.UNPAID.value,
+                "invoice_status": invoice_data.get("invoice_status", SupplierInvoiceStatus.PENDING.value if hasattr(SupplierInvoiceStatus, 'PENDING') else "pending")
             })
             
             invoice_id = result.scalar()
@@ -256,15 +261,15 @@ class PurchaseService:
                     continue
                 
                 # Get purchase item details
+                # NOTE: Column is purchase_order_id NOT po_id
+                #       No org_id column in purchase_order_items table
                 pi = db.execute(text("""
                     SELECT * FROM procurement.purchase_order_items
                     WHERE po_item_id = :item_id
-                        AND po_id = :purchase_id
-                        AND org_id = :org_id
+                        AND purchase_order_id = :purchase_id
                 """), {
                     "item_id": item.get("po_item_id"),
-                    "purchase_id": purchase_id,
-                    "org_id": org_id
+                    "purchase_id": purchase_id
                 }).first()
                 
                 if not pi:
@@ -281,7 +286,7 @@ class PurchaseService:
                     expiry_date=item.get("expiry_date", pi.expiry_date),
                     quantity_received=received_qty,
                     quantity_available=received_qty,
-                    cost_price=pi.cost_price,
+                    cost_price=pi.unit_price,  # Schema column is unit_price
                     mrp=pi.mrp,
                     purchase_invoice_number=purchase.po_number
                 )
@@ -301,15 +306,15 @@ class PurchaseService:
                 })
             
             # Update purchase status
+            # NOTE: grn_number and grn_date don't exist in purchase_orders table
+            #       GRN data is stored in procurement.goods_receipt_notes
             grn_number = PurchaseService.generate_grn_number(db, org_id)
             db.execute(text("""
                 UPDATE procurement.purchase_orders 
                 SET po_status = :po_status,
-                    grn_number = :grn_number,
-                    grn_date = CURRENT_DATE
+                    receipt_status = 'received'
                 WHERE purchase_order_id = :purchase_id
             """), {
-                "grn_number": grn_number,
                 "purchase_id": purchase_id,
                 "po_status": POStatus.RECEIVED.value
             })
