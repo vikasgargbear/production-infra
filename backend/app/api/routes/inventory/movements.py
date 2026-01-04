@@ -13,8 +13,8 @@ from ...services.document_number_service import DocumentNumberService
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker  # RBAC
-from ....utils.branch_utils import get_default_branch_id
-from ....utils.feature_flags import check_negative_stock_allowed
+from ....core.utils.branch_utils import get_default_branch_id
+from ....core.utils.feature_flags import check_negative_stock_allowed
 
 logger = logging.getLogger(__name__)
 

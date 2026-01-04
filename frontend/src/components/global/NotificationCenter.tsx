@@ -13,17 +13,39 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  LucideIcon
 } from 'lucide-react';
 import { settingsApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
-const NotificationCenter = ({ isOpen, onClose }) => {
-  const [notifications, setNotifications] = useState([]);
-  const [filter, setFilter] = useState('all');
+// TypeScript Interfaces
+interface NotificationCenterProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+type NotificationType = 'stock_low' | 'expiry' | 'payment_due' | 'scheme_expiry' | 'einvoice_failed' | 'system_alert' | 'success' | string;
+type SeverityType = 'critical' | 'warning' | 'info' | 'success' | string;
+
+interface Notification {
+  id: string | number;
+  type: NotificationType;
+  severity?: SeverityType;
+  title?: string;
+  message?: string;
+  timestamp?: string;
+  read: boolean;
+  data?: Record<string, unknown>;
+}
+
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose }) => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'critical'>('all');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
 
   // Load notifications with offline fallback
   const loadNotifications = async () => {
@@ -262,8 +284,8 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                 key={tab.key}
                 onClick={() => setFilter(tab.key)}
                 className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${filter === tab.key
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 {tab.key === 'unread' ? `${tab.label} (${unreadCount})` : tab.label}
@@ -351,10 +373,10 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                                 <span>{formatTimestamp(notification.timestamp)}</span>
                                 {notification.severity && (
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${notification.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                                      notification.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                                        notification.severity === 'info' ? 'bg-blue-100 text-blue-700' :
-                                          notification.severity === 'success' ? 'bg-green-100 text-green-700' :
-                                            'bg-gray-100 text-gray-700'
+                                    notification.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                      notification.severity === 'info' ? 'bg-blue-100 text-blue-700' :
+                                        notification.severity === 'success' ? 'bg-green-100 text-green-700' :
+                                          'bg-gray-100 text-gray-700'
                                     }`}>
                                     {notification.severity}
                                   </span>

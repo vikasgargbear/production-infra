@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  MessageSquare, 
+import React, { useState } from 'react';
+import {
+  MessageSquare,
   Smartphone,
   QrCode,
   CheckCircle,
@@ -17,17 +17,44 @@ import {
   ArrowRight,
   Star,
   Gift,
-  Megaphone
+  Megaphone,
+  LucideIcon
 } from 'lucide-react';
 
-const WhatsAppSimple = () => {
-  const [activeTab, setActiveTab] = useState('quick-start');
-  const [businessPhone, setBusinessPhone] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  
+// TypeScript Interfaces
+interface BusinessStats {
+  ordersToday: number;
+  pendingReplies: number;
+  todayEarnings: number;
+  activeCustomers: number;
+}
+
+interface CatalogProduct {
+  id: number;
+  name: string;
+  price: number;
+  stock: string;
+}
+
+interface MessageTemplate {
+  hindi: string;
+  english: string;
+}
+
+interface TabConfig {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const WhatsAppSimple: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<string>('quick-start');
+  const [businessPhone, setBusinessPhone] = useState<string>('');
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
+
   // Business stats
-  const [stats] = useState({
+  const [stats] = useState<BusinessStats>({
     ordersToday: 12,
     pendingReplies: 5,
     todayEarnings: 8500,
@@ -35,14 +62,15 @@ const WhatsAppSimple = () => {
   });
 
   // Simple product catalog
-  const [catalog] = useState([
+  const [catalog] = useState<CatalogProduct[]>([
     { id: 1, name: 'Paracetamol 500mg', price: 35, stock: 'In Stock' },
     { id: 2, name: 'Cough Syrup 100ml', price: 85, stock: 'In Stock' },
     { id: 3, name: 'Vitamin C Tablets', price: 120, stock: 'Low Stock' }
   ]);
 
   // Quick message templates in Hindi/English
-  const templates = {
+  const templates: Record<string, MessageTemplate> = {
+
     welcome: {
       hindi: "नमस्ते! {{company}} में आपका स्वागत है। आज आपकी क्या मदद कर सकते हैं?\n\n1️⃣ दवाई ऑर्डर करें\n2️⃣ Price List देखें\n3️⃣ Offers देखें\n\nReply करें 1, 2 या 3",
       english: "Welcome to {{company}}! How can we help you today?\n\n1️⃣ Order Medicine\n2️⃣ View Price List\n3️⃣ Today's Offers\n\nReply 1, 2 or 3"
@@ -141,10 +169,10 @@ const WhatsAppSimple = () => {
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Smartphone className="w-10 h-10 text-green-600" />
             </div>
-            
+
             <h2 className="text-2xl font-bold mb-2">WhatsApp से जुड़ें</h2>
             <p className="text-gray-600 mb-6">अपना WhatsApp Business नंबर डालें</p>
-            
+
             <div className="space-y-4">
               <div>
                 <input
@@ -156,14 +184,14 @@ const WhatsAppSimple = () => {
                   maxLength="10"
                 />
               </div>
-              
+
               <button
                 onClick={handleConnect}
                 className="w-full bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700"
               >
                 Connect WhatsApp Business
               </button>
-              
+
               <p className="text-xs text-gray-500">
                 Free for 1000 messages/month • No credit card required
               </p>
@@ -208,11 +236,10 @@ const WhatsAppSimple = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-colors ${
-                      activeTab === tab.id
+                    className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === tab.id
                         ? 'bg-green-600 text-white'
                         : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     <tab.icon className="w-4 h-4 mr-2" />
                     <span className="hidden sm:inline">{tab.label}</span>
@@ -313,9 +340,8 @@ const WhatsAppSimple = () => {
                       <h4 className="font-medium">{product.name}</h4>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-lg font-bold text-green-600">₹{product.price}</span>
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          product.stock === 'In Stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                        }`}>
+                        <span className={`text-xs px-2 py-1 rounded ${product.stock === 'In Stock' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
                           {product.stock}
                         </span>
                       </div>
@@ -334,7 +360,7 @@ const WhatsAppSimple = () => {
             {activeTab === 'broadcast' && (
               <div className="bg-white rounded-lg p-6">
                 <h3 className="font-semibold text-lg mb-6">Send Bulk Messages</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <h4 className="font-medium mb-3">Quick Broadcasts</h4>
@@ -408,7 +434,7 @@ const WhatsAppSimple = () => {
             {activeTab === 'auto-reply' && (
               <div className="bg-white rounded-lg p-6">
                 <h3 className="font-semibold text-lg mb-6">Auto Reply Setup</h3>
-                
+
                 <div className="space-y-4">
                   <div className="border rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
@@ -477,7 +503,7 @@ const WhatsAppSimple = () => {
                 ✕
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <h4 className="font-medium mb-2">For Medicine Shops:</h4>
@@ -488,7 +514,7 @@ const WhatsAppSimple = () => {
                   <li>• Collect payments via UPI links</li>
                 </ul>
               </div>
-              
+
               <div>
                 <h4 className="font-medium mb-2">Real Examples:</h4>
                 <ul className="text-sm text-gray-600 space-y-1">
@@ -497,7 +523,7 @@ const WhatsAppSimple = () => {
                   <li>• "Apollo Chemist gets 50+ orders via WhatsApp"</li>
                 </ul>
               </div>
-              
+
               <div className="bg-green-50 rounded-lg p-3">
                 <p className="text-sm text-green-800">
                   <strong>Free Trial:</strong> Send 1000 messages free every month. No credit card needed!

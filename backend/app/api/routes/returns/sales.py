@@ -24,7 +24,7 @@ from ...services.inventory.inventory_service import InventoryService
 from ...services.returns.return_service import ReturnService
 from ...schemas.inventory.inventory import StockMovementCreate
 from ...schemas.sales.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
-from ....utils.branch_utils import get_default_branch_id
+from ....core.utils.branch_utils import get_default_branch_id
 from datetime import date
 
 # Note: Schema classes moved to schemas/returns.py

@@ -22,7 +22,7 @@ from ...services.gst_service import GSTService
 from ...services.inventory.inventory_service import InventoryService
 from ...services.returns.return_service import ReturnService
 from ...schemas.inventory.inventory import StockMovementCreate
-from ....utils.branch_utils import get_default_branch_id
+from ....core.utils.branch_utils import get_default_branch_id
 from datetime import date
 
 logger = logging.getLogger(__name__)
