@@ -58,7 +58,7 @@ class InvoiceRepository:
                         c.customer_id,
                         c.customer_name,
                         c.gstin,
-                        c.phone,
+                        c.primary_phone,
                         c.email,
                         ba.address_id as billing_address_id,
                         sa.address_id as shipping_address_id
@@ -88,7 +88,7 @@ class InvoiceRepository:
                     cd.customer_id,
                     cd.customer_name,
                     cd.gstin,
-                    cd.phone,
+                    cd.primary_phone,
                     cd.email,
                     cd.billing_address_id,
                     cd.shipping_address_id
@@ -318,7 +318,7 @@ class InvoiceRepository:
                     i.*,
                     c.customer_name,
                     c.gstin as customer_gstin,
-                    c.phone as customer_phone,
+                    c.primary_phone as customer_phone,
                     c.email as customer_email
                 FROM sales.invoices i
                 JOIN parties.customers c ON c.customer_id = i.customer_id

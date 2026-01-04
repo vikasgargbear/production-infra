@@ -39,7 +39,7 @@ async def get_aging_data(
                 SELECT 
                     c.customer_id,
                     c.customer_name,
-                    c.phone,
+                    c.primary_phone,
                     c.email,
                     c.address_line1 || ', ' || c.city || ', ' || c.state as address,
                     c.credit_limit,
@@ -69,7 +69,7 @@ async def get_aging_data(
                 WHERE c.org_id = :org_id 
                     AND c.is_active = true
                     AND COALESCE(SUM(bd.outstanding_amount), 0) > 0
-                GROUP BY c.customer_id, c.customer_name, c.phone, c.email, 
+                GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email, 
                          c.address_line1, c.city, c.state, c.credit_limit, c.credit_days
                 HAVING COALESCE(SUM(bd.outstanding_amount), 0) > 0
             ),
@@ -178,7 +178,7 @@ async def get_aging_data(
             parties.append({
                 "id": row.customer_id,
                 "name": row.customer_name,
-                "phone": row.phone or "",
+                "phone": row.primary_phone or "",
                 "email": row.email or "",
                 "location": row.address or "",
                 "outstandingAmount": float(row.outstanding_amount or 0),
@@ -243,7 +243,7 @@ async def send_whatsapp_reminder(
         reminder_log = {
             "customer_id": customer_id,
             "customer_name": customer.customer_name,
-            "phone": customer.phone,
+            "phone": customer.primary_phone,
             "template_type": template_type,
             "variables": variables,
             "sent_at": datetime.now(),

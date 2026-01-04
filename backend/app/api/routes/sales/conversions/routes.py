@@ -77,7 +77,7 @@ async def convert_sales_order_to_invoice(
         # Validate order
         order = db.execute(text("""
             SELECT o.order_id, o.order_number, o.order_status, o.customer_id,
-                   o.subtotal_amount, o.discount_amount, o.tax_amount, o.total_amount,
+                   o.subtotal_amount, o.discount_amount, o.tax_amount, o.final_amount,
                    c.customer_name, c.primary_phone, c.primary_email, c.gst_number
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -234,7 +234,7 @@ async def convert_sales_order_to_challan(
         # Validate order
         order = db.execute(text("""
             SELECT o.order_id, o.order_number, o.order_status, o.customer_id,
-                   o.total_amount, c.customer_name
+                   o.final_amount, c.customer_name
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :order_id AND o.org_id = :org_id
