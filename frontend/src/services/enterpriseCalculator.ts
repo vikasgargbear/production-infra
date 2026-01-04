@@ -105,6 +105,8 @@ class EnterpriseCalculator {
     const igstAmount = gstType === 'IGST' ? gstAmount : 0;
 
     // Return enriched item with all calculations
+    // NOTE: We store BOTH raw values (for aggregation) and rounded values (for display)
+    // This prevents cumulative rounding errors during aggregation
     return {
       ...item,
       // Quantities - include calculables for convenience
@@ -113,7 +115,19 @@ class EnterpriseCalculator {
       free_quantity: freeQuantity,
       total_quantity: baseQuantity + freeQuantity,  // Total including free
 
-      // Amounts - canonical names
+      // Raw values for aggregation (FULL PRECISION - no rounding)
+      _raw: {
+        subtotal,
+        discount_amount: discountAmount,
+        taxable_amount: taxableAmount,
+        gst_amount: gstAmount,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
+        total_amount: totalAmount
+      },
+
+      // Rounded values for display (2 decimal places)
       unit_price: this.round(unit_price),
       subtotal: this.round(subtotal),
       discount_percent: discountPercent,
@@ -135,7 +149,7 @@ class EnterpriseCalculator {
    * @returns {CalculatedTotals} Aggregated totals
    */
   static calculateTotals(items: any[] = [], options: CalculationOptions = {}): CalculatedTotals {
-    // Initialize totals
+    // Initialize totals with FULL PRECISION (no rounding during aggregation)
     let grossAmount = 0;
     let totalDiscount = 0;
     let taxableAmount = 0;
@@ -144,18 +158,19 @@ class EnterpriseCalculator {
     let sgstTotal = 0;
     let igstTotal = 0;
 
-    // Calculate each item and aggregate
+    // Calculate each item and aggregate using RAW values (full precision)
     const calculatedItems = items.map(item => {
       const calculated = this.calculateItem(item, options);
 
-      // Aggregate totals
-      grossAmount += calculated.subtotal;
-      totalDiscount += calculated.discount_amount;
-      taxableAmount += calculated.taxable_amount;
-      totalGst += calculated.gst_amount;
-      cgstTotal += calculated.cgst_amount;
-      sgstTotal += calculated.sgst_amount;
-      igstTotal += calculated.igst_amount;
+      // Aggregate totals using RAW values to avoid cumulative rounding errors
+      const raw = calculated._raw || calculated;  // Fallback for backwards compatibility
+      grossAmount += raw.subtotal;
+      totalDiscount += raw.discount_amount;
+      taxableAmount += raw.taxable_amount;
+      totalGst += raw.gst_amount;
+      cgstTotal += raw.cgst_amount;
+      sgstTotal += raw.sgst_amount;
+      igstTotal += raw.igst_amount;
 
       return calculated;
     });
