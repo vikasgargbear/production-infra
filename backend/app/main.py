@@ -46,9 +46,7 @@ from .api.routes.purchase import upload as purchase_upload
 from .api.routes.inventory import stock as inventory
 from .api.routes.inventory import adjustments as stock_adjustments
 from .api.routes.inventory import movements as stock_movements
-from .api.routes.inventory import receive as stock_receive
 from .api.routes.inventory import writeoff as stock_writeoff
-from .api.routes.inventory import dashboard as stock_dashboard
 
 # Finance Module
 from .api.routes.finance import payments
@@ -117,9 +115,9 @@ app.add_middleware(
     max_age=3600,
 )
 
-# Enable redirect_slashes so /batches/ redirects to /batches
-# This prevents 405 errors from trailing slash mismatches
-app.router.redirect_slashes = True
+# Disable redirect_slashes to prevent 307 redirects that break CORS
+# 307 redirects during preflight OPTIONS requests fail CORS validation
+app.router.redirect_slashes = False
 
 # REMOVED: Custom OPTIONS handler - let CORS middleware handle it
 # The custom handler was returning JSON without CORS headers, causing CORS failures
@@ -179,9 +177,7 @@ api.include_router(purchase_upload.router, prefix="/purchase-upload", tags=["Pur
 api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api.include_router(stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
 api.include_router(stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
-api.include_router(stock_receive.router, prefix="/stock", tags=["Stock Receive"])
 api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
-api.include_router(stock_dashboard.router, prefix="/stock-dashboard", tags=["Stock Dashboard"])
 
 # --- Finance ---
 api.include_router(payments.router, prefix="/payments", tags=["Payments"])
