@@ -90,6 +90,7 @@ async def search_payments(
     try:
         # Base params with status constants
         params = {"cancelled_status": PaymentRecordStatus.CANCELLED.value}
+        query = """
             SELECT p.*, 
                 COALESCE(c.customer_name, s.supplier_name) as party_name
             FROM financial.payments p
@@ -155,6 +156,7 @@ async def get_pending_payments(
 ):
     """Get pending/uncleared payments"""
     try:
+        query = """
             SELECT p.*, 
                 COALESCE(c.customer_name, s.supplier_name) as party_name
             FROM financial.payments p
