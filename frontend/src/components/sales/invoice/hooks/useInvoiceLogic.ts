@@ -487,7 +487,7 @@ export const useInvoiceLogic = (
 
                         invoiceItem.mrp = mrp;
                         invoiceItem.unit_price = rate;
-                        invoiceItem.sale_price = rate; // Ensure compatibility
+                        // CANONICAL: unit_price is single source of truth
                         invoiceItem.available_quantity = Number(bestBatch.quantity_available || 0);
 
                         // Pack Info - using backend-standard names
@@ -520,7 +520,7 @@ export const useInvoiceLogic = (
                     manufacturing_date: invoiceItem.manufacturing_date,
                     quantity_available: invoiceItem.available_quantity || 0,
                     mrp_per_unit: invoiceItem.mrp,
-                    sale_price_per_unit: invoiceItem.unit_price,
+                    sale_price_per_unit: invoiceItem.unit_price, // Maps to unit_price
                 }]);
                 console.log('📦 [ADD ITEM] Batch cached in IndexedDB for offline use');
             } catch (e) {
@@ -554,7 +554,8 @@ export const useInvoiceLogic = (
                 const newItem: InvoiceItem = {
                     ...invoiceItem,
                     quantity: 1,
-                    discount_percent: 0,
+                    // PRESERVE user's discount - don't reset!
+                    discount_percent: invoiceItem.discount_percent || 0,
                     free_quantity: 0
                 };
 

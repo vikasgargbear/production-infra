@@ -207,19 +207,15 @@ export interface InvoiceItem {
     ordered_quantity?: number;
     dispatched_quantity?: number;
 
-    // Pricing
-    unit_price?: number;
-    selling_price?: number;
-    sale_price?: number;
-    rate?: number;
+    // Pricing - CANONICAL ONLY
+    unit_price?: number;  // CANONICAL: selling price per unit
     mrp?: number;
     purchase_price?: number;
     cost_price?: number;
 
-    // Discounts
-    discount_percent?: number;
-    discount_amount?: number;
-    discount?: number;
+    // Discounts - CANONICAL ONLY
+    discount_percent?: number;  // CANONICAL: % discount on item
+    discount_amount?: number;   // CANONICAL: calculated discount amount
 
     // Taxes
     gst_percent?: number;
@@ -495,10 +491,8 @@ export interface ProductInput {
     expiry_date?: string;
     manufacturing_date?: string;
     // Pricing - batch level uses _per_unit suffix
-    sale_price_per_unit?: number;
-    unit_price?: number;
-    sale_price?: number;
-    selling_price?: number;  // Alias from product search
+    sale_price_per_unit?: number; // Backend field - maps to unit_price
+    unit_price?: number;  // CANONICAL: selling price
     mrp_per_unit?: number;
     mrp?: number;
     // Tax

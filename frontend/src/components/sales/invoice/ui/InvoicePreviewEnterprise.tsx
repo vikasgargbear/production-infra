@@ -387,8 +387,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 // Calculate per-item amounts (display only - no business logic)
                 // CRITICAL: ALWAYS use item.quantity (not base_quantity)
                 const quantity = parseFloat(String(item.quantity || 0)); // Source of truth
-                const rate = parseFloat(String(item.sale_price || item.rate || item.unit_price || 0));
-                const discount = parseFloat(String(item.discount_percent || item.discount || 0));
+                const rate = parseFloat(String(item.unit_price || 0)); // CANONICAL: unit_price only
+                const discount = parseFloat(String(item.discount_percent || 0)); // CANONICAL: discount_percent only
                 const gstPercent = parseFloat(String(item.gst_percent || item.tax_percent || 0));
 
                 const subtotal = quantity * rate;
