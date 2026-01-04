@@ -551,11 +551,11 @@ async def create_purchase_from_parsed(
             
             supplier_id = db.execute(
                 text("""
-                    INSERT INTO suppliers (
+                    INSERT INTO parties.suppliers (
                         org_id, supplier_code, supplier_name, 
-                        gst_number, address, phone, email, drug_license_number
+                        gst_number, address, primary_phone, primary_email, drug_license_number
                     ) VALUES (
-                        :org_id, -- Default org
+                        :org_id,
                         :code, :name, :gstin, :address, :phone, :email, :drug_license
                     ) RETURNING supplier_id
                 """),
@@ -576,25 +576,25 @@ async def create_purchase_from_parsed(
         
         purchase_id = db.execute(
             text("""
-                INSERT INTO purchases (
-                    org_id, purchase_number, purchase_date,
-                    supplier_id, supplier_invoice_number, supplier_invoice_date,
+                INSERT INTO procurement.purchase_orders (
+                    org_id, branch_id, po_number, po_date,
+                    supplier_id, supplier_reference,
                     subtotal_amount, discount_amount, tax_amount, 
-                    other_charges, final_amount, purchase_status
+                    other_charges, total_amount, po_status
                 ) VALUES (
-                    :org_id, -- Default org
+                    :org_id, :branch_id,
                     :purchase_number, :purchase_date,
-                    :supplier_id, :invoice_number, :invoice_date,
+                    :supplier_id, :invoice_number,
                     :subtotal, :discount, :tax, :other_charges, :total, 'draft'
-                ) RETURNING purchase_id
+                ) RETURNING purchase_order_id
             """),
             {
                 "org_id": str(context.org_id),
+                "branch_id": context.branch_id or context.primary_branch_id,
                 "purchase_number": purchase_number,
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": supplier_id,
                 "invoice_number": purchase_data.get("invoice_number"),
-                "invoice_date": purchase_data.get("invoice_date"),
                 "subtotal": Decimal(str(purchase_data.get("subtotal", 0))),
                 "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
                 "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
@@ -638,39 +638,41 @@ async def create_purchase_from_parsed(
                 ).scalar()
             
             if product_id:
-                # Create purchase item
+                # Create purchase order item - using correct table and column names
                 db.execute(
                     text("""
-                        INSERT INTO purchase_items (
-                            purchase_id, product_id, product_name,
-                            ordered_quantity, cost_price, mrp,
+                        INSERT INTO procurement.purchase_order_items (
+                            purchase_order_id, product_id, product_name,
+                            ordered_quantity, unit_price, mrp,
                             discount_percent, discount_amount,
-                            tax_percent, tax_amount, total_price,
-                            batch_number, expiry_date,
+                            tax_percent, tax_amount, line_total,
+                            batch_number, expiry_date, uom, pack_type,
                             item_status
                         ) VALUES (
-                            :purchase_id, :product_id, :product_name,
-                            :quantity, :cost_price, :mrp,
+                            :purchase_order_id, :product_id, :product_name,
+                            :quantity, :unit_price, :mrp,
                             :discount_percent, :discount_amount,
-                            :tax_percent, :tax_amount, :total,
-                            :batch_number, :expiry_date,
+                            :tax_percent, :tax_amount, :line_total,
+                            :batch_number, :expiry_date, :uom, :pack_type,
                             'pending'
                         )
                     """),
                     {
-                        "purchase_id": purchase_id,
+                        "purchase_order_id": purchase_id,
                         "product_id": product_id,
                         "product_name": item.get("description"),
                         "quantity": item.get("quantity", 0),
-                        "cost_price": Decimal(str(item.get("rate", 0))),
+                        "unit_price": Decimal(str(item.get("rate", 0))),
                         "mrp": Decimal(str(item.get("mrp", 0))),
                         "discount_percent": Decimal(str(item.get("discount_percent", 0))),
                         "discount_amount": Decimal(str(item.get("discount_amount", 0))),
                         "tax_percent": Decimal(str(item.get("tax_percent", 12))),
                         "tax_amount": Decimal(str(item.get("tax_amount", 0))),
-                        "total": Decimal(str(item.get("amount", 0))),
+                        "line_total": Decimal(str(item.get("amount", 0))),
                         "batch_number": item.get("batch_number"),
-                        "expiry_date": item.get("expiry_date")
+                        "expiry_date": item.get("expiry_date"),
+                        "uom": item.get("unit", "NOS"),
+                        "pack_type": item.get("pack_type", "STRIP")
                     }
                 )
                 items_created += 1
@@ -734,12 +736,12 @@ async def validate_invoice_data(
             "warnings": []
         }
         
-        # Check for duplicate invoice
+        # Check for duplicate invoice - use supplier_invoices table
         if invoice_data.get("invoice_number") and invoice_data.get("supplier_id"):
             duplicate = db.execute(
                 text("""
-                    SELECT purchase_id, purchase_number 
-                    FROM purchases 
+                    SELECT supplier_invoice_id, supplier_invoice_number 
+                    FROM procurement.supplier_invoices 
                     WHERE supplier_invoice_number = :invoice_num 
                     AND supplier_id = :supplier_id
                 """),
@@ -751,7 +753,7 @@ async def validate_invoice_data(
             
             if duplicate:
                 validations["errors"].append(
-                    f"Duplicate invoice found: {duplicate.purchase_number}"
+                    f"Duplicate invoice found: {duplicate.supplier_invoice_number}"
                 )
                 validations["is_valid"] = False
         

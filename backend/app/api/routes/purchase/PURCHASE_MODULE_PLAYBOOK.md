@@ -38,11 +38,12 @@
 
 | File | Lines | Status | Issues |
 |------|-------|--------|--------|
-| `purchase_service.py` | 329 | ❌ Broken | 6 critical issues |
-| `orders.py` | 1467 | ✅ Mostly OK | 0 issues found |
-| `grn.py` | 531 | ⚠️ Partial | 4 column issues |
-| `supplier_invoices.py` | 310~ | ⏳ To Audit | Not audited yet |
-| `upload.py` | 994~ | ⏳ To Audit | Not audited yet |
+| `purchase_service.py` | 329 | ✅ Fixed | 6 issues fixed |
+| `orders.py` | 1467 | ✅ Verified | No issues found |
+| `grn.py` | 531 | ✅ Fixed | 5 column issues fixed |
+| `supplier_invoices.py` | 280 | ✅ Verified | No issues found |
+| `upload.py` | 800 | ✅ Fixed | 5 issues fixed |
+| `pharma_invoice_parser.py` | ~300 | ✅ Parser Only | No SQL queries |
 
 ---
 
