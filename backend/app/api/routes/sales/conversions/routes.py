@@ -172,7 +172,7 @@ async def convert_sales_order_to_invoice(
                 CASE WHEN :is_interstate THEN 0 ELSE oi.tax_amount / 2 END,
                 CASE WHEN :is_interstate THEN 0 ELSE oi.tax_amount / 2 END,
                 CASE WHEN :is_interstate THEN oi.tax_amount ELSE 0 END,
-                oi.taxable_amount, oi.total_amount
+                oi.taxable_amount, oi.line_total as total_amount
             FROM sales.order_items oi
             LEFT JOIN inventory.products p ON oi.product_id = p.product_id
             WHERE oi.order_id = :order_id

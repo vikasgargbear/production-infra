@@ -330,7 +330,7 @@ def get_grn_details(
                 g.*,
                 s.supplier_name,
                 s.contact_person,
-                s.phone,
+                s.primary_phone,
                 s.email,
                 s.address_line1,
                 s.gst_number,

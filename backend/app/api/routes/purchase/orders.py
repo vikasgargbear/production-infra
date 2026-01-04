@@ -1447,7 +1447,7 @@ async def get_pending_receipts(
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
             FROM procurement.purchase_orders p
             JOIN parties.suppliers s ON p.supplier_id = s.supplier_id AND p.org_id = s.org_id
-            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id AND p.org_id = pi.org_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id
             WHERE p.org_id = :org_id
             AND p.po_status IN ('draft', 'approved', 'partial')
         """
