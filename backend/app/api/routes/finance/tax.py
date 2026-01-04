@@ -99,7 +99,6 @@ async def get_tax_entry(entry_id: int, _: dict = Depends(PermissionChecker("fina
                     i.customer_id as party_id,
                     c.customer_name as party_name,
                     c.gst_number as party_gstin,
-                    c.state as party_state,
                     i.invoice_number,
                     i.subtotal_amount as taxable_amount,
                     i.cgst_amount,
