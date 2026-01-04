@@ -4,10 +4,10 @@ Application dependencies
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .core.database import get_db
-from .core.jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
+from ..database import get_db
+from ..jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
 
-from .core.config import DEFAULT_ORG_ID
+from ..config import DEFAULT_ORG_ID
 
 async def get_current_org(token: Optional[str] = Depends(oauth2_scheme)) -> dict:
     """Get current organization context from token"""
