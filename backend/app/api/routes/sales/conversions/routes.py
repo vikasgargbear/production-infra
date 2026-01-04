@@ -78,8 +78,7 @@ async def convert_sales_order_to_invoice(
         order = db.execute(text("""
             SELECT o.order_id, o.order_number, o.order_status, o.customer_id,
                    o.subtotal_amount, o.discount_amount, o.tax_amount, o.total_amount,
-                   c.customer_name, c.primary_phone, c.primary_email, c.gst_number,
-                   c.billing_address, c.state, c.state_code
+                   c.customer_name, c.primary_phone, c.primary_email, c.gst_number
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :order_id AND o.org_id = :org_id
@@ -122,7 +121,6 @@ async def convert_sales_order_to_invoice(
             INSERT INTO sales.invoices (
                 org_id, invoice_number, invoice_date, due_date,
                 customer_id, customer_name, customer_phone, customer_email, customer_gstin,
-                billing_address, billing_state,
                 order_id, subtotal_amount, discount_amount, taxable_amount,
                 tax_amount, final_amount, paid_amount,
                 payment_status, invoice_status, gst_type,
@@ -130,7 +128,6 @@ async def convert_sales_order_to_invoice(
             ) VALUES (
                 :org_id, :invoice_number, :invoice_date, :due_date,
                 :customer_id, :customer_name, :customer_phone, :customer_email, :customer_gstin,
-                :billing_address, :billing_state,
                 :order_id, :subtotal_amount, :discount_amount, :taxable_amount,
                 :tax_amount, :final_amount, 0,
                 'unpaid', 'generated', :gst_type,
@@ -146,9 +143,7 @@ async def convert_sales_order_to_invoice(
             "customer_name": order.customer_name,
             "customer_phone": order.primary_phone,
             "customer_email": order.primary_email,
-            "customer_gstin": order.gstin,
-            "billing_address": order.billing_address,
-            "billing_state": order.state,
+            "customer_gstin": order.gst_number,
             "order_id": order_id,
             "subtotal_amount": order.subtotal_amount,
             "discount_amount": float(order.discount_amount or 0) + float(request.discount_amount or 0),
@@ -239,7 +234,7 @@ async def convert_sales_order_to_challan(
         # Validate order
         order = db.execute(text("""
             SELECT o.order_id, o.order_number, o.order_status, o.customer_id,
-                   o.total_amount, c.customer_name, c.billing_address
+                   o.total_amount, c.customer_name
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :order_id AND o.org_id = :org_id
@@ -283,7 +278,7 @@ async def convert_sales_order_to_challan(
             "challan_date": challan_date,
             "order_id": order_id,
             "customer_id": order.customer_id,
-            "delivery_address": order.billing_address,
+            "delivery_address": None,  # Address in separate table
             "total_amount": order.total_amount,
             "created_by": user_id,
             "branch_id": branch_id,
@@ -358,7 +353,7 @@ async def convert_challan_to_invoice(
         challan = db.execute(text("""
             SELECT c.challan_id, c.challan_number, c.order_id, c.customer_id,
                    c.status, c.invoice_id, c.total_amount,
-                   cust.customer_name, cust.gstin, cust.state, cust.billing_address
+                   cust.customer_name, cust.gst_number
             FROM challans c
             JOIN parties.customers cust ON c.customer_id = cust.customer_id
             WHERE c.challan_id = :challan_id AND c.org_id = :org_id
@@ -462,7 +457,7 @@ async def _create_invoice_from_challans(
     
     # Get customer details
     customer = db.execute(text("""
-        SELECT customer_name, gstin, state, state_code, billing_address, primary_phone
+        SELECT customer_name, gst_number, primary_phone
         FROM parties.customers WHERE customer_id = :id AND org_id = :org_id
     """), {"id": customer_id, "org_id": org_id}).fetchone()
     
@@ -500,13 +495,11 @@ async def _create_invoice_from_challans(
         INSERT INTO sales.invoices (
             org_id, invoice_number, invoice_date, due_date,
             customer_id, customer_name, customer_phone, customer_gstin,
-            billing_address, billing_state,
             subtotal_amount, discount_amount, tax_amount, final_amount,
             payment_status, invoice_status, created_by, notes
         ) VALUES (
             :org_id, :invoice_number, :invoice_date, :due_date,
             :customer_id, :customer_name, :customer_phone, :customer_gstin,
-            :billing_address, :billing_state,
             :subtotal, :discount, :tax, :final,
             'unpaid', 'generated', :user_id, :notes
         )
@@ -519,9 +512,7 @@ async def _create_invoice_from_challans(
         "customer_id": customer_id,
         "customer_name": customer.customer_name,
         "customer_phone": customer.primary_phone,
-        "customer_gstin": customer.gstin,
-        "billing_address": customer.billing_address,
-        "billing_state": customer.state,
+        "customer_gstin": customer.gst_number,
         "subtotal": subtotal,
         "discount": discount_amount or 0,
         "tax": tax_total,
