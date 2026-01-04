@@ -562,7 +562,7 @@ def get_tenant_aware_db():
         result = db.execute("SELECT * FROM customers")
         return result.fetchall()
     """
-    from ..core.database import get_db
+    from ..database import get_db
     
     # Get the generator from get_db and extract the session
     db_generator = get_db()
