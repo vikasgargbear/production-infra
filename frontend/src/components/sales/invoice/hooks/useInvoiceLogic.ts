@@ -24,7 +24,7 @@ import {
 } from '../types/invoiceTypes';
 import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 import { prepareItemForInvoice } from '../utils/invoiceItemUtils';
-import { validateInvoiceItem } from '../utils/invoiceValidator';
+import { validateInvoiceItem, sanitizeInvoiceItem } from '../utils/invoiceValidator';
 import { useInvoiceDraft } from './useInvoiceDraft';
 import { useInvoiceSave } from './useInvoiceSave';
 
@@ -552,22 +552,25 @@ export const useInvoiceLogic = (
                 toast.info(`Quantity updated for ${invoiceItem.product_name} (Batch: ${invoiceItem.batch_number})`);
                 return { ...prev, items: updatedItems };
             } else {
+                // SANITIZE: Remove deprecated fields before adding
+                const sanitizedItem = sanitizeInvoiceItem(invoiceItem);
+
                 const newItem: InvoiceItem = {
-                    ...invoiceItem,
+                    ...sanitizedItem,
                     quantity: 1,
                     // PRESERVE user's discount - don't reset!
-                    discount_percent: invoiceItem.discount_percent || 0,
+                    discount_percent: sanitizedItem.discount_percent || 0,
                     free_quantity: 0
                 };
 
-                const toastMsg = invoiceItem.batch_number
-                    ? `Added ${invoiceItem.product_name} (Batch: ${invoiceItem.batch_number})`
-                    : `Added ${invoiceItem.product_name}`;
+                const toastMsg = sanitizedItem.batch_number
+                    ? `Added ${sanitizedItem.product_name} (Batch: ${sanitizedItem.batch_number})`
+                    : `Added ${sanitizedItem.product_name}`;
 
                 toast.success(toastMsg);
 
                 // VALIDATION: Catch deprecated fields in development
-                validateInvoiceItem(newItem, `new item: ${invoiceItem.product_name}`);
+                validateInvoiceItem(newItem, `new item: ${sanitizedItem.product_name}`);
 
                 return {
                     ...prev,
