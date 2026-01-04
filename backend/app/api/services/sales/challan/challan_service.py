@@ -8,7 +8,7 @@ import logging
 
 from .challan_repository import ChallanRepository
 from .challan_validator import ChallanValidator
-from ..calculations import InvoiceCalculator
+from ..invoice.invoice_service import InvoiceService as InvoiceCalc
 from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class ChallanService:
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in challan_data.items]
             
-            totals = InvoiceCalculator.calculate_invoice_totals(
+            totals = InvoiceCalc.calculate_invoice_totals(
                 items=items,
                 gst_type=getattr(challan_data, 'gst_type', 'CGST/SGST'),
                 freight_charges=0,

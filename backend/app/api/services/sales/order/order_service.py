@@ -9,7 +9,7 @@ import logging
 
 from .order_repository import OrderRepository
 from .order_validator import OrderValidator
-from ..calculations import InvoiceCalculator
+from ..invoice.invoice_service import InvoiceService as InvoiceCalc
 from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class OrderService:
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in order_data.items]
             
-            totals = InvoiceCalculator.calculate_invoice_totals(
+            totals = InvoiceCalc.calculate_invoice_totals(
                 items=items,
                 gst_type=getattr(order_data, 'gst_type', 'CGST/SGST'),
                 freight_charges=float(getattr(order_data, 'freight_charges', 0) or 0),
