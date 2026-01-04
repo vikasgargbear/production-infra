@@ -108,7 +108,7 @@ def get_recent_orders(
                 o.order_date,
                 o.final_amount,
                 o.order_status,
-                o.delivery_status
+                o.fulfillment_status as delivery_status
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
             ORDER BY o.order_date DESC

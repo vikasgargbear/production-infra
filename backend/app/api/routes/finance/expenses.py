@@ -375,7 +375,7 @@ async def get_expense_claim_details(
                 eci.approved_amount
             FROM financial.expense_claim_items eci
             WHERE eci.claim_id = :claim_id
-            ORDER BY eci.expense_date, eci.item_id
+            ORDER BY eci.expense_date, eci.claim_item_id
         """
         
         items_result = db.execute(text(items_query), {"claim_id": claim_id})

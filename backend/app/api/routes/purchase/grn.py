@@ -354,7 +354,7 @@ def get_grn_details(
                 p.product_name,
                 p.manufacturer,
                 p.hsn_code,
-                p.gst_percentage
+                p.gst_percent
             FROM procurement.grn_items gi
             LEFT JOIN inventory.products p ON gi.product_id = p.product_id
             WHERE gi.grn_id = :grn_id
