@@ -1250,10 +1250,10 @@ async def get_purchase_items(
                     p.product_name as product_full_name,
                     p.hsn_code,
                     p.category_id,
-                    p.brand_name
+                    p.brand
                 FROM procurement.purchase_order_items pi
-                LEFT JOIN inventory.products p ON pi.product_id = p.product_id AND pi.org_id = p.org_id
-                WHERE pi.po_id = :purchase_id AND pi.org_id = :org_id
+                LEFT JOIN inventory.products p ON pi.product_id = p.product_id
+                WHERE pi.purchase_order_id = :purchase_id
                 ORDER BY pi.po_item_id
             """),
             {"purchase_id": purchase_id, "org_id": context.org_id}
@@ -1284,8 +1284,7 @@ def update_purchase_item(
                 SELECT po_item_id
                 FROM procurement.purchase_order_items
                 WHERE po_item_id = :item_id
-                AND po_id = :purchase_id
-                AND org_id = :org_id
+                AND purchase_order_id = :purchase_id
             """),
             {"item_id": item_id, "purchase_id": purchase_id, "org_id": org_id}
         ).first()

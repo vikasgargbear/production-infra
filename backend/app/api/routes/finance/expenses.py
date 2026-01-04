@@ -180,22 +180,19 @@ async def create_expense_claim(
         for expense in claim.expenses:
             item_query = """
                 INSERT INTO financial.expense_claim_items (
-                    claim_id, expense_type, expense_description, claimed_amount,
-                    expense_date, receipt_attached, receipt_reference
+                    claim_id, expense_description, claimed_amount,
+                    expense_date
                 ) VALUES (
-                    :claim_id, :expense_type, :description, :amount,
-                    :expense_date, :receipt_attached, :receipt_reference
+                    :claim_id, :description, :amount,
+                    :expense_date
                 )
             """
             
             db.execute(text(item_query), {
                 "claim_id": claim_id,
-                "expense_type": expense.expense_type,
                 "description": expense.description,
                 "amount": expense.amount,
-                "expense_date": expense.expense_date,
-                "receipt_attached": expense.receipt_attached,
-                "receipt_reference": expense.receipt_reference
+                "expense_date": expense.expense_date
             })
         
         # TenantAwareSession auto-commits
@@ -245,7 +242,7 @@ async def get_expense_claims(
                 ec.claim_status,
                 ec.created_at,
                 u.username as created_by_name,
-                COUNT(eci.item_id) as items_count
+                COUNT(eci.claim_item_id) as items_count
             FROM financial.expense_claims ec
             LEFT JOIN master.employees e ON ec.employee_id = e.employee_id
             LEFT JOIN master.org_users u ON ec.created_by = u.user_id
@@ -347,9 +344,9 @@ async def get_expense_claim_details(
                 ec.total_amount,
                 ec.approved_amount,
                 ec.claim_status,
-                ec.approval_notes,
-                ec.approved_by,
-                ec.approved_at,
+                ec.notes as approval_notes,
+                ec.current_approver_id as approved_by,
+                ec.submitted_date as approved_at,
                 ec.created_at,
                 u.username as created_by_name
             FROM financial.expense_claims ec
@@ -369,13 +366,12 @@ async def get_expense_claim_details(
         # Get claim items
         items_query = """
             SELECT 
-                eci.item_id,
-                eci.expense_type,
-                eci.description,
+                eci.claim_item_id as item_id,
+                eci.expense_description,
                 eci.claimed_amount,
                 eci.expense_date,
-                eci.receipt_attached,
-                eci.receipt_reference,
+                eci.attachment_path,
+                eci.notes,
                 eci.approved_amount
             FROM financial.expense_claim_items eci
             WHERE eci.claim_id = :claim_id

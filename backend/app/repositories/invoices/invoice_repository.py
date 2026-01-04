@@ -57,7 +57,7 @@ class InvoiceRepository:
                     SELECT 
                         c.customer_id,
                         c.customer_name,
-                        c.gstin,
+                        c.gst_number as gstin,
                         c.primary_phone,
                         c.email,
                         ba.address_id as billing_address_id,
@@ -317,7 +317,7 @@ class InvoiceRepository:
                 SELECT 
                     i.*,
                     c.customer_name,
-                    c.gstin as customer_gstin,
+                    c.gst_number as customer_gstin,
                     c.primary_phone as customer_phone,
                     c.email as customer_email
                 FROM sales.invoices i

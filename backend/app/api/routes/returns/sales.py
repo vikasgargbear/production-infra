@@ -272,7 +272,7 @@ async def get_returnable_items(
                     ii.unit_price,
                     ii.discount_percent,
                     COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as tax_percent,
-                    ii.total_amount,
+                    ii.line_total as total_amount,
                     p.hsn_code,
                     ii.uom as unit
                 FROM sales.invoice_items ii
