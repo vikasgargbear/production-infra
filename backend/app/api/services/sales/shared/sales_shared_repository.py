@@ -31,7 +31,7 @@ class SalesSharedRepository:
                 SELECT 
                     customer_id,
                     customer_name,
-                    gstin
+                    gst_number
                 FROM parties.customers
                 WHERE customer_id = :customer_id AND org_id = :org_id
             ),
@@ -48,7 +48,7 @@ class SalesSharedRepository:
             )
             SELECT 
                 c.customer_name,
-                c.gstin,
+                c.gst_number,
                 a.billing_address_id,
                 COALESCE(a.shipping_address_id, a.billing_address_id) as shipping_address_id
             FROM customer_data c
