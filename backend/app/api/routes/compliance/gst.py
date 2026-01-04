@@ -37,7 +37,7 @@ def get_organization_gstin(db: Session, org_id: str) -> Optional[str]:
             WHERE org_id = :org_id
         """)
         result = db.execute(company_query, {'org_id': org_id}).fetchone()
-        return result.gstin if result else None
+        return result.gst_number if result else None
     except:
         return None
 
@@ -482,10 +482,10 @@ async def verify_gst_data(
 
             # Verify customer GSTIN if B2B
             if invoice.customer_id:
-                customer_query = text("SELECT gstin FROM parties.customers WHERE customer_id = :customer_id")
+                customer_query = text("SELECT gst_number FROM parties.customers WHERE customer_id = :customer_id")
                 customer_result = db.execute(customer_query, {'customer_id': invoice.customer_id}).fetchone()
 
-                if float(invoice.final_amount or 0) > 50000 and (not customer_result or not customer_result.gstin):
+                if float(invoice.final_amount or 0) > 50000 and (not customer_result or not customer_result.gst_number):
                     issues.append("Missing GSTIN for high-value B2B transaction")
 
             if issues:
@@ -631,11 +631,11 @@ async def get_compliance_status(
             if invoice.final_amount and float(invoice.final_amount) > 50000:  # B2B threshold
                 if invoice.customer_id:
                     customer_gstin_query = text("""
-                        SELECT gstin FROM parties.customers
+                        SELECT gst_number FROM parties.customers
                         WHERE customer_id = :customer_id
                     """)
                     customer_result = db.execute(customer_gstin_query, {'customer_id': invoice.customer_id}).fetchone()
-                    if not customer_result or not customer_result.gstin:
+                    if not customer_result or not customer_result.gst_number:
                         b2b_without_gstin += 1
 
         if b2b_without_gstin > 0:
@@ -839,7 +839,7 @@ async def get_credit_debit_notes_report(
                     sr.credit_note_date as note_date,
                     sr.customer_id,
                     c.customer_name,
-                    c.gstin as customer_gstin,
+                    c.gst_number as customer_gstin,
                     'sales_return' as reference_type,
                     sr.return_number as reference_number,
                     sr.return_amount as amount,

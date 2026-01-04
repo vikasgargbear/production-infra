@@ -78,7 +78,7 @@ async def convert_sales_order_to_invoice(
         order = db.execute(text("""
             SELECT o.order_id, o.order_number, o.order_status, o.customer_id,
                    o.subtotal_amount, o.discount_amount, o.tax_amount, o.total_amount,
-                   c.customer_name, c.primary_phone, c.primary_email, c.gstin,
+                   c.customer_name, c.primary_phone, c.primary_email, c.gst_number,
                    c.billing_address, c.state, c.state_code
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id

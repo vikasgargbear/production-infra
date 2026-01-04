@@ -528,7 +528,7 @@ async def get_challan_details(
         # Get challan header
         challan_result = db.execute(
             text("""
-                SELECT c.*, cust.customer_name, cust.gstin,
+                SELECT c.*, cust.customer_name, cust.gst_number,
                        cust.address_line1, cust.primary_phone
                 FROM sales.delivery_challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
