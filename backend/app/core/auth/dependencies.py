@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
+from .jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
 
 from ..config import DEFAULT_ORG_ID
 
