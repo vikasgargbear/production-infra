@@ -116,10 +116,10 @@ async def create_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
-            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": result["order_id"], "org_id": org_id})
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": result["order_id"]})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -206,8 +206,8 @@ async def list_sales_orders(
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
                 FROM sales.order_items oi
-                JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
-                WHERE oi.order_id = ANY(:order_ids) AND oi.org_id = :org_id
+                JOIN inventory.products p ON oi.product_id = p.product_id
+                WHERE oi.order_id = ANY(:order_ids)
                 ORDER BY oi.order_id, oi.order_item_id
             """), {"order_ids": order_ids, "org_id": str(context.org_id)})
             
@@ -269,10 +269,10 @@ async def get_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
-            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": order_id, "org_id": str(context.org_id)})
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -357,10 +357,10 @@ async def update_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
-            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
-        """), {"order_id": order_id, "org_id": str(context.org_id)})
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
