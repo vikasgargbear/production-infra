@@ -83,6 +83,9 @@ These fields match the `sales.invoices` table columns:
 | `round_off` | `round_off_amount` |
 | `net_amount` | `final_amount` |
 | `rate` | `unit_price` |
+| `sale_price` | `unit_price` |
+| `selling_price` | `unit_price` |
+| `discount` | `discount_percent` |
 | `tax_amount` | `gst_amount` |
 
 ---
