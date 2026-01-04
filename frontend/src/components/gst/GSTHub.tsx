@@ -4,11 +4,10 @@ import {
   Settings, Receipt
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import GSTDashboard from './GSTDashboard';
+import { GSTDashboard } from './dashboard';
 import GSTFiling from './GSTFiling';
-import GSTReports from './GSTReports';
+import { GSTReports } from './reports';
 import GSTReconciliation from './GSTReconciliation';
-// GST Settings removed - now handled in Master → Tax Master
 
 interface GSTHubProps {
   open?: boolean;
@@ -65,7 +64,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="GST Hub"
       subtitle="Tax management & compliance"
       icon={Receipt}

@@ -329,10 +329,9 @@ def get_grn_details(
             SELECT 
                 g.*,
                 s.supplier_name,
-                s.contact_person,
+                s.contact_person_name,
                 s.primary_phone,
-                s.email,
-                s.address_line1,
+                s.primary_email,
                 s.gst_number,
                 u.username as received_by_name
             FROM procurement.goods_receipt_notes g

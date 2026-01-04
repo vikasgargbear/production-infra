@@ -103,9 +103,7 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         ));
     }
 
-    console.log('[PrepareItem] Prepared pricing:', { unitPrice, mrp, availableQty, batchId });
-
-    // Create base item
+    // Create base item with ONLY canonical fields
     const baseItem: BaseLineItem = {
         id: Date.now(),
         product_id: product.product_id || product.id || 0,
@@ -113,15 +111,11 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         batch_id: batchId ?? undefined,
         batch_number: batchNumber,
         expiry_date: expiryDate,
-        unit_price: unitPrice,
-        rate: unitPrice,
-        sale_price: unitPrice,
+        unit_price: unitPrice,  // ✅ CANONICAL
         mrp: mrp,
         quantity: parseInt(String(product.quantity || 1)),
         free_quantity: parseInt(String(product.free_quantity || 0)),
-        unit: '',
-        total: 0,
-        line_total: 0
+        unit: ''
     };
 
     // Merge with module-specific defaults

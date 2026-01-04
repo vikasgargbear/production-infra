@@ -2,7 +2,7 @@ import React from 'react';
 import { RotateCcw, ShoppingCart, Package, List } from 'lucide-react';
 import { ModuleHub } from '../global';
 import SalesReturnFlow from './SalesReturnFlow';
-import PurchaseReturnFlow from './PurchaseReturnFlowV2'; // Use the new UI-matching version
+import PurchaseReturnFlow from './PurchaseReturnFlow';
 import ReturnsListHistory from './ReturnsListHistory';
 
 interface ReturnsHubProps {
@@ -54,7 +54,7 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Returns Management"
       subtitle="Process sales and purchase returns"
       icon={RotateCcw}

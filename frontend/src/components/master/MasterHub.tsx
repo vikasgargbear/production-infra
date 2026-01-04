@@ -1,27 +1,28 @@
 import React, { useState } from 'react';
-import { 
-  Building, Package, Users, 
+import {
+  Building, Package, Users,
   Calculator, UserCheck, Bell, Cog,
   Plug, Database, Receipt, Settings,
   Ruler, Warehouse, Package2, Truck, UsersRound
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import CompanyProfile from './CompanyProfile';
-import ProductMaster from './ProductMaster';
-import CustomerMaster from './CustomerMaster';
-import SupplierMaster from './SupplierMaster';
-import FeatureSettings from './FeatureSettings';
-import UserManagement from './UserManagement';
-import TaxMaster from './TaxMaster';
-import SystemSettings from './SystemSettings';
-import NotificationsAlerts from './NotificationsAlerts';
-import ThirdPartyIntegrations from './ThirdPartyIntegrations';
-import UnitMaster from './UnitMaster';
-import WarehouseMaster from './WarehouseMaster';
-import BatchMaster from './BatchMaster';
-import DataValidationEngine from './DataValidationEngine';
-import BulkOperations from './BulkOperations';
-import EmployeeManagement from '../settings/EmployeeManagementEnhanced';
+// Master data components
+import CompanyProfile from './settings/CompanyProfile';
+import ProductMaster from './masters/ProductMaster';
+import CustomerMaster from './masters/CustomerMaster';
+import SupplierMaster from './masters/SupplierMaster';
+import FeatureSettings from './settings/FeatureSettings';
+import UserManagement from './settings/UserManagement';
+import TaxMaster from './masters/TaxMaster';
+import SystemSettings from './settings/SystemSettings';
+import NotificationsAlerts from './settings/NotificationsAlerts';
+import ThirdPartyIntegrations from './settings/ThirdPartyIntegrations';
+import UnitMaster from './masters/UnitMaster';
+import WarehouseMaster from './masters/WarehouseMaster';
+import BatchMaster from './masters/BatchMaster';
+import DataValidationEngine from './utils/DataValidationEngine';
+import BulkOperations from './utils/BulkOperations';
+import EmployeeManagement from '../settings/employees/EmployeeManagement';
 
 interface MasterHubProps {
   open?: boolean;
@@ -189,20 +190,20 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
     <>
       <ModuleHub
         open={open}
-        onClose={onClose || (() => {})}
+        onClose={onClose || (() => { })}
         title="Master Settings"
         subtitle="Configure your platform"
         icon={Settings}
         modules={masterModules}
         defaultModule={defaultModule}
       />
-      
+
       {/* Enterprise Components */}
-      <DataValidationEngine 
+      <DataValidationEngine
         open={showValidationEngine}
         onClose={() => setShowValidationEngine(false)}
       />
-      
+
       <BulkOperations
         open={showBulkOperations}
         onClose={() => setShowBulkOperations(false)}

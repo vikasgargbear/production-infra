@@ -234,7 +234,7 @@ export const calculateTotalBatchValue = (
     const batchesToCount = onlyAvailable ? getAvailableBatches(batches) : batches;
     return batchesToCount.reduce((sum, batch) => {
         const qty = batch.quantity_available || 0;
-        const cost = batch.cost_per_unit || 0;  // Backend-standard field name
+        const cost = batch.cost_price || 0;
         return sum + (qty * cost);
     }, 0);
 

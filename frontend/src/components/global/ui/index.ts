@@ -7,6 +7,7 @@ export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as SearchBar } from './SearchBar';
 export { default as NotesSection } from './forms/NotesSection';
+export { default as LoadingSpinner } from './LoadingSpinner';
 
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';

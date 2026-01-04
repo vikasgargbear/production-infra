@@ -40,8 +40,7 @@ async def get_aging_data(
                     c.customer_id,
                     c.customer_name,
                     c.primary_phone,
-                    c.email,
-                    c.address_line1 || ', ' || c.city || ', ' || c.state as address,
+                    c.primary_email,
                     c.credit_limit,
                     c.credit_days,
                     COALESCE(SUM(bd.outstanding_amount), 0) as outstanding_amount,
@@ -70,7 +69,7 @@ async def get_aging_data(
                     AND c.is_active = true
                     AND COALESCE(SUM(bd.outstanding_amount), 0) > 0
                 GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email, 
-                         c.address_line1, c.city, c.state, c.credit_limit, c.credit_days
+                         c.credit_limit, c.credit_days
                 HAVING COALESCE(SUM(bd.outstanding_amount), 0) > 0
             ),
             payment_history AS (
@@ -179,8 +178,8 @@ async def get_aging_data(
                 "id": row.customer_id,
                 "name": row.customer_name,
                 "phone": row.primary_phone or "",
-                "email": row.email or "",
-                "location": row.address or "",
+                "email": row.primary_email or "",
+                "location": "",  # Address data from separate table
                 "outstandingAmount": float(row.outstanding_amount or 0),
                 "daysOverdue": int(row.max_overdue_days or 0),
                 "creditLimit": float(row.credit_limit or 0),

@@ -1,0 +1,197 @@
+/**
+ * GSTR2B Report - Input Tax Credit (Purchase Invoices)
+ */
+
+import React, { useState, useEffect } from 'react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { DataTable } from '../../global';
+import type { DateRange, GSTR1Data } from '../types';
+import { formatCurrency } from '../utils';
+import { gstApi, apiClient } from '../../../services/api';
+import offlineStorage from '../../../services/offlineStorage';
+
+interface GSTR2BReportProps {
+    dateRange: DateRange;
+    refreshTrigger: number;
+    onRefresh?: () => void;
+}
+
+const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }) => {
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize] = useState(25);
+    const [totalInvoices, setTotalInvoices] = useState(0);
+
+    useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+
+            try {
+                const response = await gstApi.reports.gstr2a({
+                    from_date: dateRange.from,
+                    to_date: dateRange.to
+                });
+
+                if (response) {
+                    const totalCount = response.summary?.totalInvoices || response.invoices?.length || 0;
+                    setTotalInvoices(totalCount);
+
+                    const invoices = response.invoices || [];
+                    const firstPage = invoices.slice(0, pageSize);
+
+                    setData({
+                        b2b: firstPage.map((inv: any) => ({
+                            gstin: inv.supplier_gstin || inv.gstin || '',
+                            name: inv.supplier_name || 'Unknown Supplier',
+                            invoices: 1,
+                            taxableValue: inv.taxable_amount || 0,
+                            cgst: inv.cgst_amount || 0,
+                            sgst: inv.sgst_amount || 0,
+                            igst: inv.igst_amount || 0
+                        })),
+                        summary: response.summary || {
+                            totalInvoices: totalCount,
+                            totalTaxableValue: 0,
+                            totalCGST: 0,
+                            totalSGST: 0,
+                            totalIGST: 0,
+                            totalTax: 0
+                        }
+                    });
+
+                    await offlineStorage.storeOffline(`gstr2b_${dateRange.from}_${dateRange.to}`, response, { critical: true });
+                }
+            } catch (err) {
+                console.error('GSTR2B load error:', err);
+                setError('Failed to load GSTR-2B data');
+
+                const offline = await offlineStorage.getOffline(`gstr2b_${dateRange.from}_${dateRange.to}`, { critical: true });
+                if (offline && !offlineStorage.isDataStale(offline, 120)) {
+                    setData(offline.data);
+                    setError('Using offline data');
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, [dateRange.from, dateRange.to, refreshTrigger]);
+
+    const loadPage = async (page: number) => {
+        try {
+            const skip = (page - 1) * pageSize;
+            const response = await apiClient.get('/supplier-invoices/', {
+                params: { from_date: dateRange.from, to_date: dateRange.to, limit: pageSize, skip }
+            });
+
+            const invoices = response.data || [];
+            setData((prev: any) => ({
+                ...prev,
+                b2b: invoices.map((inv: any) => ({
+                    gstin: inv.supplier_gstin || '',
+                    name: inv.supplier_name || 'Unknown',
+                    invoices: 1,
+                    taxableValue: inv.taxable_amount || 0,
+                    cgst: inv.cgst_amount || 0,
+                    sgst: inv.sgst_amount || 0,
+                    igst: inv.igst_amount || 0
+                }))
+            }));
+            setCurrentPage(page);
+        } catch (err) {
+            console.error('Pagination error:', err);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                <span className="ml-2">Loading GSTR-2B data...</span>
+            </div>
+        );
+    }
+
+    if (error && !data) {
+        return (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <AlertCircle className="h-5 w-5 text-red-600 inline mr-2" />
+                <span className="text-red-800">{error}</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-lg border">
+                    <div className="text-sm text-gray-600">Total Invoices</div>
+                    <div className="text-2xl font-bold">{totalInvoices}</div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border">
+                    <div className="text-sm text-gray-600">Taxable Value</div>
+                    <div className="text-2xl font-bold">{formatCurrency(data?.summary?.totalTaxableValue || 0)}</div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border">
+                    <div className="text-sm text-gray-600">Input Credit Available</div>
+                    <div className="text-2xl font-bold text-green-600">{formatCurrency(data?.summary?.totalTax || 0)}</div>
+                </div>
+                <div className="bg-white p-4 rounded-lg border">
+                    <div className="text-sm text-gray-600">IGST Credit</div>
+                    <div className="text-2xl font-bold">{formatCurrency(data?.summary?.totalIGST || 0)}</div>
+                </div>
+            </div>
+
+            {/* Supplier Invoices Table */}
+            <div className="bg-white rounded-lg border">
+                <div className="p-4 border-b">
+                    <h3 className="text-lg font-semibold">Supplier Invoices</h3>
+                    <p className="text-sm text-gray-600">Input Tax Credit from purchases</p>
+                </div>
+                <DataTable
+                    data={data?.b2b || []}
+                    columns={[
+                        { key: 'gstin', label: 'Supplier GSTIN' },
+                        { key: 'name', label: 'Supplier Name' },
+                        { key: 'taxableValue', label: 'Taxable Value', render: (v) => formatCurrency(v) },
+                        { key: 'cgst', label: 'CGST', render: (v) => formatCurrency(v) },
+                        { key: 'sgst', label: 'SGST', render: (v) => formatCurrency(v) },
+                        { key: 'igst', label: 'IGST', render: (v) => formatCurrency(v) }
+                    ]}
+                />
+
+                {/* Pagination */}
+                {totalInvoices > pageSize && (
+                    <div className="p-4 border-t flex items-center justify-between">
+                        <span className="text-sm text-gray-600">
+                            Page {currentPage} of {Math.ceil(totalInvoices / pageSize)}
+                        </span>
+                        <div className="space-x-2">
+                            <button
+                                onClick={() => loadPage(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1 border rounded disabled:opacity-50"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => loadPage(currentPage + 1)}
+                                disabled={currentPage >= Math.ceil(totalInvoices / pageSize)}
+                                className="px-3 py-1 border rounded disabled:opacity-50"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default GSTR2BReport;

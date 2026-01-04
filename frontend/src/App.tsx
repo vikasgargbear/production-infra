@@ -4,18 +4,18 @@ import queryClient from './queryClient';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './components/auth/LoginPage';
 // import Sidebar from './components/Sidebar';
-import ErrorBoundary from './components/ErrorBoundary';
-import LoadingSpinner from './components/LoadingSpinner';
+import { ErrorBoundary } from './components/global/utilities';
+import { LoadingSpinner } from './components/global/ui';
 import Home from './components/Home';
 import SalesHub from './components/sales/SalesHub';
 import PurchaseHub from './components/purchase/PurchaseHub';
 import FinancialHub from './components/payment/FinancialHub';
-import CompanySettings from './components/master/CompanySettings';
+import CompanySettings from './components/master/settings/CompanySettings';
 import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
 import { LedgerHub, PartyLedgerV3 } from './components/ledger';
-import CreditDebitNoteFlow from './components/returns/notes/CreditDebitNoteFlow';
+import { NotesHub } from './components/returns/notes';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import ReportsHub from './components/reports/ReportsHub';
@@ -44,14 +44,14 @@ import 'react-toastify/dist/ReactToastify.css';
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
-const BatchesInventory = lazy(() => import('./components/inventory/BatchesInventory'));
+// BatchesInventory removed - use StockHub instead
 const PaymentTracking = lazy(() => import('./components/payment/PaymentTracking'));
 const PaymentDashboard = lazy(() => import('./components/payment/PaymentDashboard'));
 const CreditManagement = lazy(() => import('./components/ledger/CreditManagement'));
 const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
 // const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
-const CompanyProfile = lazy(() => import('./components/master/CompanyProfile'));
+const CompanyProfile = lazy(() => import('./components/master/settings/CompanyProfile'));
 // InventoryManagement deleted - now uses StockHub
 const AccountingLedgers = lazy(() => import('./components/ledger/AccountingLedgers'));
 // const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
@@ -236,7 +236,7 @@ const AppContent = (): JSX.Element => {
       case 'orders':
         return <Orders key="orders" />;
       case 'batches':
-        return <BatchesInventory key="batches" />;
+        return <StockHub key="batches" open={true} onClose={() => setActiveTab('home')} />;
       case 'payments':
         return <PaymentTracking key="payments" />;
       case 'payment-dashboard':
@@ -267,7 +267,7 @@ const AppContent = (): JSX.Element => {
       case 'party-ledger':
         return <LedgerHub key="party-ledger" onClose={() => setActiveTab('home')} />;
       case 'credit-debit-note':
-        return <CreditDebitNoteFlow key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
+        return <NotesHub key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
       case 'gst':
         return <GSTHub key="gst" open={true} onClose={() => setActiveTab('home')} />;
       case 'master':

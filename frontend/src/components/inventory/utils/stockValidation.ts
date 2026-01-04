@@ -145,10 +145,10 @@ export const transformToBatch = <T extends BaseBatch>(batch: any): T => {
         manufacturing_date: batch.manufacturing_date || batch.mfg_date, // Accept both inputs, output standard
         received_date: batch.received_date,
 
-        // Pricing - output backend-standard _per_unit names
-        mrp_per_unit: Number(batch.mrp_per_unit || batch.mrp || 0),
-        cost_per_unit: Number(batch.cost_per_unit || batch.cost_price || 0),
-        sale_price_per_unit: Number(batch.sale_price_per_unit || batch.sale_price || 0),
+        // Pricing
+        mrp: Number(batch.mrp || 0),
+        cost_price: Number(batch.cost_price || 0),
+        sale_price: Number(batch.sale_price || 0),
 
         // Metadata
         supplier: batch.supplier || '',

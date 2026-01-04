@@ -1,4 +1,5 @@
 /**
- * Purchase Types Barrel Export
+ * Purchase Types - Barrel Export
  */
+
 export * from './purchaseSharedTypes';

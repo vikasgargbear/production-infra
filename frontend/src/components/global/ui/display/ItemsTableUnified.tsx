@@ -76,7 +76,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const enableKeyboardNav = enableKeyboardNavProp !== undefined ? enableKeyboardNavProp : mode === 'entry';
 
     const fieldRefs = useRef<Record<string, EditableCellRef | null>>({});
-    const EDITABLE_FIELDS = ['quantity', 'rate', 'discount', 'free', 'tax'];
+    const EDITABLE_FIELDS = ['quantity', 'rate', 'discount_percent', 'free', 'tax'];
 
     useImperativeHandle(ref, () => ({
         focusField: (rowIndex: number, fieldName: string) => {
@@ -149,7 +149,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const calculateItemTotal = (item: ItemsTableItem): number => {
         const baseQuantity = parseFloat(String(item.quantity)) || 0;
         const rate = parseFloat(String(item.unit_price || item.rate)) || 0;
-        const discount = parseFloat(String(item.discount || item.discount_percent || 0)) || 0;
+        const discount = parseFloat(String(item.discount_percent || item.discount || 0)) || 0;
         const gstPercent = parseFloat(String(item.gst_percent || item.tax_rate || 0)) || 0;
 
         const subtotal = baseQuantity * rate;
@@ -273,16 +273,16 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                     <EditableCell
-                                        ref={(el) => setFieldRef(index, 'discount', el)}
-                                        value={item.discount || 0}
+                                        ref={(el) => setFieldRef(index, 'discount_percent', el)}
+                                        value={item.discount_percent || item.discount || 0}
                                         type="number"
                                         min={0}
                                         max={100}
                                         decimalPlaces={2}
                                         suffix="%"
-                                        onChange={(val) => onUpdateItem?.(index, 'discount', val)}
-                                        onSave={(val) => onUpdateItem?.(index, 'discount', val)}
-                                        onNavigate={(dir) => handleNavigate(index, 'discount', dir as NavigationDirection)}
+                                        onChange={(val) => onUpdateItem?.(index, 'discount_percent', val)}
+                                        onSave={(val) => onUpdateItem?.(index, 'discount_percent', val)}
+                                        onNavigate={(dir) => handleNavigate(index, 'discount_percent', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-20"

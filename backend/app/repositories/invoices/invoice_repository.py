@@ -59,7 +59,7 @@ class InvoiceRepository:
                         c.customer_name,
                         c.gst_number as gstin,
                         c.primary_phone,
-                        c.email,
+                        c.primary_email,
                         ba.address_id as billing_address_id,
                         sa.address_id as shipping_address_id
                     FROM parties.customers c
@@ -319,7 +319,7 @@ class InvoiceRepository:
                     c.customer_name,
                     c.gst_number as customer_gstin,
                     c.primary_phone as customer_phone,
-                    c.email as customer_email
+                    c.primary_email as customer_email
                 FROM sales.invoices i
                 JOIN parties.customers c ON c.customer_id = i.customer_id
                 WHERE i.invoice_id = :invoice_id 

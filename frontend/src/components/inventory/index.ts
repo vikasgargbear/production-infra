@@ -31,3 +31,6 @@ export {
     STOCK_STATUS,
     EXPIRY_THRESHOLDS
 } from './types/inventorySharedTypes';
+
+// Default export for backward compatibility
+export { default } from './StockHub';

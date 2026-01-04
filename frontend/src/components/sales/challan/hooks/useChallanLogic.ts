@@ -156,10 +156,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 ...item,
                 id: item.id || `imported-${Date.now()}-${index}`,
                 quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0,
-                rate: parseFloat(String(item.rate || item.unit_price || item.sale_price)) || 0,
-                sale_price: parseFloat(String(item.sale_price || item.rate || item.unit_price)) || 0,
-                line_total: 0
+                unit_price: parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0
             }));
 
             setChallan(prev => ({

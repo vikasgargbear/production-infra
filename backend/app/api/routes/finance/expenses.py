@@ -245,7 +245,6 @@ async def get_expense_claims(
                 COUNT(eci.claim_item_id) as items_count
             FROM financial.expense_claims ec
             LEFT JOIN master.employees e ON ec.employee_id = e.employee_id
-            LEFT JOIN master.org_users u ON ec.created_by = u.user_id
             LEFT JOIN financial.expense_claim_items eci ON ec.claim_id = eci.claim_id
             WHERE ec.org_id = :org_id
         """
@@ -351,7 +350,6 @@ async def get_expense_claim_details(
                 u.username as created_by_name
             FROM financial.expense_claims ec
             LEFT JOIN master.employees e ON ec.employee_id = e.employee_id
-            LEFT JOIN master.org_users u ON ec.created_by = u.user_id
             WHERE ec.claim_id = :claim_id AND ec.org_id = :org_id
         """
         

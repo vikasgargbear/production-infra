@@ -1,12 +1,12 @@
 /**
- * Notes Module Index
- * Re-exports notes-related components
+ * Notes Module - Barrel Export
+ * Clean exports for credit/debit note functionality
  */
 
+// Hub
 export { default as NotesHub } from './NotesHub';
-export { default as CreditDebitNoteEntry } from './CreditDebitNoteEntry';
-export { default as CreditDebitNoteSimple } from './CreditDebitNoteSimple';
-export { default as CreditDebitNoteFlow } from './CreditDebitNoteFlow';
-
-// Default export for module.ts import
 export { default } from './NotesHub';
+
+// Components
+export { default as CreditDebitNote } from './CreditDebitNote';
+export { default as NotesHistory } from './NotesHistory';

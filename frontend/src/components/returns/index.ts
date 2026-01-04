@@ -2,20 +2,24 @@
  * Returns Module - Central Export
  * 
  * Unified returns module for sales and purchase returns.
+ * Follows same patterns as sales module.
  */
 
 // ==================== MAIN COMPONENTS ====================
 export { default as ReturnsHub } from './ReturnsHub';
 export { default as SalesReturnFlow } from './SalesReturnFlow';
-export { default as PurchaseReturnFlow } from './PurchaseReturnFlowV2';
+export { default as PurchaseReturnFlow } from './PurchaseReturnFlow';
+export { default as ReturnsListHistory } from './ReturnsListHistory';
+
+// ==================== NOTES ====================
+export { NotesHub, CreditDebitNote, NotesHistory } from './notes';
 
 // ==================== UI COMPONENTS ====================
 export { default as CreditNotePreview } from './ui/CreditNotePreview';
 export { default as DebitNotePreview } from './ui/DebitNotePreview';
 export { default as PurchaseReturnSelector } from './ui/PurchaseReturnSelector';
-
-// ==================== SELECTORS ====================
-export { default as PurchaseInvoiceSelector } from './components/PurchaseInvoiceSelector';
+export { default as ManualReturnEntry } from './ui/ManualReturnEntry';
+export { default as ReturnSteps } from './ui/ReturnSteps';
 
 // ==================== SHARED TYPES ====================
 export * from './types';

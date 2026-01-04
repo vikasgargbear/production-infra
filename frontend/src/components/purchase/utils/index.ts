@@ -1,4 +1,6 @@
 /**
- * Purchase Utils Barrel Export
+ * Purchase Utils - Barrel Export
  */
+
+export * from './productItemTransform';
 export * from './purchaseCalculations';

@@ -4,6 +4,7 @@ import {
   BarChart3, ArrowRightLeft, Archive, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
+import type { ModuleItem } from '../global/navigation/ModuleHub.d';
 import StockMovement from './stock/StockMovement';
 import StockTransfer from './stock/StockTransfer';
 import CurrentStock from './stock/CurrentStock';
@@ -15,18 +16,9 @@ interface StockHubProps {
   onClose?: () => void;
 }
 
-interface StockModule {
-  id: string;
-  label: string;
-  fullLabel: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  component: React.ComponentType<any>;
-}
 
 const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
-  const stockModules: StockModule[] = [
+  const stockModules: ModuleItem[] = [
     {
       id: 'current-stock',
       label: 'Current Stock',
@@ -81,10 +73,11 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       title="Stock Hub"
       subtitle="Manage inventory & warehouse"
       icon={Archive}
-      modules={stockModules}
-      defaultModule="current-stock"
+      modules={stockModules as any}  // ModuleHub.tsx lacks proper TS types
+      defaultModule={"current-stock" as any}  // Type assertion needed
     />
   );
+
 };
 
 export default StockHub;

@@ -9,21 +9,21 @@ interface Supplier {
   [key: string]: any;
 }
 
-interface SupplierSelectorProps { }
+interface SupplierSelectorProps {}
 
 const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
   const { purchase, setSupplier, clearError, errors } = usePurchase();
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
-
+  
   const handleSelectSupplier = (supplier: Supplier): void => {
     setSupplier(supplier);
     clearError('supplier');
   };
-
+  
   const handleCreateSupplier = (): void => {
     setShowCreateModal(true);
   };
-
+  
   const handleSupplierCreated = (newSupplier: Supplier): void => {
     handleSelectSupplier(newSupplier);
     setShowCreateModal(false);
@@ -41,7 +41,7 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
           New Supplier
         </button>
       </div>
-
+      
       {purchase.supplier_id ? (
         <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
           <div className="flex justify-between items-start">
@@ -68,12 +68,12 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
           placeholder="Search suppliers by name, phone, or GSTIN..."
         />
       )}
-
+      
       {/* Supplier Creation Modal */}
       <SupplierCreationModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSupplierCreated={(newSupplier: any) => handleSupplierCreated(newSupplier)}
+        onSupplierCreated={handleSupplierCreated}
         initialData={{}}
         title="Create New Supplier"
       />

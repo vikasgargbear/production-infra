@@ -1,4 +1,5 @@
 // Layout Components Export
+export { default as Sidebar } from './Sidebar';
 export { default as DocumentLayout } from './DocumentLayout';
 export { default as GlobalLayout, ContentCard, PageHeader, FormSection, StatsGrid } from './GlobalLayout';
 export { default as EnhancedGlobalDocumentFlow } from './EnhancedGlobalDocumentFlow';

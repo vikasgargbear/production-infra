@@ -1,186 +1,186 @@
 /**
  * Purchase Module - Shared Type Definitions
  * 
- * Common types for purchase orders, GRN, and supplier invoices.
+ * Following sales module pattern with base types + extensions
  */
 
-// ==================== PURCHASE TYPES ====================
+// ==================== BASE TYPES ====================
 
-/** Purchase document type */
-export type PurchaseDocumentType =
-    | 'purchase_order'
-    | 'grn'
-    | 'supplier_invoice'
-    | 'purchase_return';
-
-/** Purchase status */
-export type PurchaseStatus =
-    | 'draft'
-    | 'pending'
-    | 'approved'
-    | 'ordered'
-    | 'partial_received'
-    | 'received'
-    | 'completed'
-    | 'cancelled';
-
-/** GRN status */
-export type GRNStatus =
-    | 'draft'
-    | 'pending_verification'
-    | 'verified'
-    | 'completed'
-    | 'rejected';
-
-/** Payment status */
-export type PaymentStatus =
-    | 'pending'
-    | 'partial'
-    | 'paid'
-    | 'overdue';
-
-// ==================== BASE PURCHASE ITEM ====================
-
-/** Base purchase item fields */
+/** Base purchase line item - shared across all purchase flows */
 export interface BasePurchaseItem {
-    product_id: number;
+    id?: number | string;
+    product_id: number | string;
     product_name: string;
-    product_code?: string;
-    generic_name?: string;
-
-    // Batch info
-    batch_id?: number;
-    batch_number?: string;
-    expiry_date?: string;
-    manufacturing_date?: string;
+    hsn_code?: string;
 
     // Quantities
-    ordered_quantity?: number;
-    received_quantity?: number;
-    pending_quantity?: number;
     quantity: number;
     free_quantity?: number;
 
-    // Pack configuration
-    pack_size?: number;
-    pack_type?: string;
-    units_per_pack?: number;
-
     // Pricing
-    mrp: number;
-    purchase_rate: number;
-    rate?: number;
+    rate: number;
     discount_percent?: number;
     discount_amount?: number;
 
     // Tax
-    gst_percent?: number;
+    tax_percent?: number;
     cgst_rate?: number;
     sgst_rate?: number;
     igst_rate?: number;
-    hsn_code?: string;
 
     // Calculated
     taxable_amount?: number;
     tax_amount?: number;
     total_amount?: number;
+}
 
-    // Metadata
+/** Purchase Order Item - for ordering goods */
+export interface PurchaseOrderItem extends BasePurchaseItem {
+    expected_delivery_date?: string;
     notes?: string;
-    is_verified?: boolean;
 }
 
-// ==================== SUPPLIER ====================
+/** Purchase Entry Item - for recording received invoices */
+export interface PurchaseEntryItem extends BasePurchaseItem {
+    batch_number?: string;
+    expiry_date?: string;
+    manufacturing_date?: string | null;
+    mrp_per_unit?: number;
+    sale_price_per_unit?: number;
+    cost_per_unit?: number;
+    purchase_price?: number; // Alias for cost_per_unit (legacy)
+    mrp?: number; // Alias for mrp_per_unit (legacy)
+    selling_price?: number; // Alias for sale_price_per_unit (legacy)
+}
 
-/** Base supplier */
-export interface BaseSupplier {
-    supplier_id: number;
+/** GRN Item - for goods receipt note */
+export interface GRNItem extends BasePurchaseItem {
+    batch_number?: string;
+    expiry_date?: string;
+    manufacturing_date?: string | null;
+    received_quantity?: number;
+    rejected_quantity?: number;
+    po_item_id?: number | string;
+}
+
+// ==================== BASE DOCUMENT ====================
+
+/** Supplier information */
+export interface Supplier {
+    supplier_id?: number | string;
     supplier_name: string;
-    supplier_code?: string;
-    contact_person?: string;
-    phone?: string;
-    email?: string;
-    gstin?: string;
-    pan?: string;
-    address?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    credit_days?: number;
-    credit_limit?: number;
-    balance?: number;
-    is_active?: boolean;
+    supplier_details?: {
+        phone?: string;
+        email?: string;
+        address?: string;
+        gst_number?: string;
+        drug_license_number?: string;
+    };
 }
-
-// ==================== PURCHASE DOCUMENT ====================
 
 /** Base purchase document */
-export interface BasePurchaseDocument {
-    document_id?: number;
-    document_number?: string;
-    document_type: PurchaseDocumentType;
+export interface BasePurchaseDocument extends Supplier {
+    document_number: string;
     document_date: string;
-    status: PurchaseStatus;
-
-    // Supplier
-    supplier_id: number;
-    supplier_name?: string;
-    supplier?: BaseSupplier;
-
-    // Reference
-    reference_number?: string;
-    po_number?: string;
-    invoice_number?: string;
-
-    // Items
     items: BasePurchaseItem[];
 
-    // Totals
-    subtotal: number;
+    // Amounts
+    gross_amount: number;
     discount_amount?: number;
     tax_amount: number;
-    total_amount: number;
-
-    // Payment
-    payment_status?: PaymentStatus;
-    paid_amount?: number;
-    balance_amount?: number;
-    due_date?: string;
-
-    // Notes
-    notes?: string;
-    terms?: string;
+    other_charges?: number;
+    round_off?: number;
+    net_amount: number;
+    final_amount?: number;
 
     // Metadata
+    notes?: string;
     created_by?: string;
     created_at?: string;
-    updated_at?: string;
+}
+
+/** Purchase Order document */
+export interface PurchaseOrder extends Omit<BasePurchaseDocument, 'items'> {
+    purchase_order_number: string;
+    expected_delivery_date?: string;
+    items: PurchaseOrderItem[];
+    payment_terms?: string;
+    delivery_terms?: string;
+}
+
+/** Purchase Entry document */
+export interface PurchaseEntry extends Omit<BasePurchaseDocument, 'items'> {
+    purchase_number: string;
+    supplier_invoice_number: string;
+    invoice_date: string;
+    items: PurchaseEntryItem[];
+
+    // Transport
+    transport_company?: string;
+    vehicle_number?: string;
+    lr_number?: string;
+
+    // Payment
+    payment_methods?: Array<{
+        method: string;
+        amount: number;
+        reference?: string;
+    }>;
+}
+
+/** GRN document */
+export interface GRN extends Omit<BasePurchaseDocument, 'items'> {
+    grn_number: string;
+    grn_date: string;
+    purchase_order_id?: number | string;
+    purchase_order_number?: string;
+    items: GRNItem[];
+
+    // Receipt details
+    received_by?: string;
+    verified_by?: string;
+    quality_check_status?: 'pending' | 'passed' | 'failed';
+}
+
+// ==================== CALCULATION RESULTS ====================
+
+export interface PurchaseCalculation {
+    gross_amount: number;
+    discount_amount: number;
+    taxable_amount: number;
+    tax_amount: number;
+    other_charges: number;
+    net_amount: number;
+    final_amount: number;
+    total_items: number;
+    total_quantity: number;
+    gst_breakdown: {
+        [rate: string]: {
+            taxable: number;
+            cgst: number;
+            sgst: number;
+            igst: number;
+            total: number;
+        };
+    };
 }
 
 // ==================== CONSTANTS ====================
 
-export const PURCHASE_STATUS = {
-    DRAFT: 'draft' as PurchaseStatus,
-    PENDING: 'pending' as PurchaseStatus,
-    APPROVED: 'approved' as PurchaseStatus,
-    ORDERED: 'ordered' as PurchaseStatus,
-    PARTIAL_RECEIVED: 'partial_received' as PurchaseStatus,
-    RECEIVED: 'received' as PurchaseStatus,
-    COMPLETED: 'completed' as PurchaseStatus,
-    CANCELLED: 'cancelled' as PurchaseStatus
+export const PURCHASE_TYPES = {
+    ORDER: 'purchase_order',
+    ENTRY: 'purchase_entry',
+    GRN: 'grn',
 } as const;
 
-export const GRN_STATUS = {
-    DRAFT: 'draft' as GRNStatus,
-    PENDING_VERIFICATION: 'pending_verification' as GRNStatus,
-    VERIFIED: 'verified' as GRNStatus,
-    COMPLETED: 'completed' as GRNStatus,
-    REJECTED: 'rejected' as GRNStatus
+export type PurchaseType = typeof PURCHASE_TYPES[keyof typeof PURCHASE_TYPES];
+
+export const PAYMENT_METHODS = {
+    CASH: 'cash',
+    CARD: 'card',
+    UPI: 'upi',
+    BANK_TRANSFER: 'bank_transfer',
+    CREDIT: 'credit',
 } as const;
 
-export const PAYMENT_STATUS = {
-    PENDING: 'pending' as PaymentStatus,
-    PARTIAL: 'partial' as PaymentStatus,
-    PAID: 'paid' as PaymentStatus,
-    OVERDUE: 'overdue' as PaymentStatus
-} as const;
+export type PaymentMethod = typeof PAYMENT_METHODS[keyof typeof PAYMENT_METHODS];

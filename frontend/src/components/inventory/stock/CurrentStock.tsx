@@ -173,9 +173,9 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
       // Set hasMore based on whether we got fewer items than requested
       setHasMore(products.length === 100);  // We request 100 items per page
 
-      // Enterprise-grade data validation and transformation
-      const validProducts = products.filter(ProductDataValidator.validateProductData);
-      const transformedData = validProducts.map(ProductDataValidator.transformProductToStockItem);
+      // Enterprise-grade data validation and transformation using shared utilities
+      const validProducts = products.filter(validateProductData);
+      const transformedData = validProducts.map(transformToStockItem<StockItem>);
 
       if (reset || page === 0) {
         setAllProducts(transformedData);

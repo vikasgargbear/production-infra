@@ -3,7 +3,7 @@ import {
   FileEdit, PlusCircle, MinusCircle
 } from 'lucide-react';
 import { ModuleHub } from '../../global';
-import CreditDebitNoteSimple from './CreditDebitNoteSimple';
+import CreditDebitNote from './CreditDebitNote';
 
 interface NotesHubProps {
   open?: boolean;
@@ -29,7 +29,7 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
       description: 'Issue credit to customers',
       icon: PlusCircle,
       color: 'green',
-      component: () => <CreditDebitNoteSimple noteType="credit" onClose={onClose} />
+      component: () => <CreditDebitNote noteType="credit" onClose={onClose} />
     },
     {
       id: 'debit-note',
@@ -38,7 +38,7 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
       description: 'Issue debit to suppliers',
       icon: MinusCircle,
       color: 'orange',
-      component: () => <CreditDebitNoteSimple noteType="debit" onClose={onClose} />
+      component: () => <CreditDebitNote noteType="debit" onClose={onClose} />
     }
   ];
 

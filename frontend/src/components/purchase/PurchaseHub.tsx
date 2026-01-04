@@ -1,12 +1,11 @@
 import React from 'react';
-import { 
+import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import EnhancedPurchaseEntry from './EnhancedPurchaseEntry';
-// import StreamlinedPurchaseEntry from './StreamlinedPurchaseEntry';
-import EnhancedPurchaseOrderFlow from './EnhancedPurchaseOrderFlow';
-import EnhancedGRNFlow from './EnhancedGRNFlow';
+import { PurchaseEntryFlow } from './purchase-entry';
+import { PurchaseOrderFlow } from './purchase-order';
+import { GRNFlow } from './grn';
 import PurchaseListHistory from './PurchaseListHistory';
 import { PurchaseProvider } from '../../contexts/PurchaseContext';
 
@@ -34,7 +33,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Record purchases',
       icon: ShoppingBag,
       color: 'indigo',
-      component: EnhancedPurchaseEntry
+      component: PurchaseEntryFlow
     },
     {
       id: 'purchase-order',
@@ -43,7 +42,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Create POs',
       icon: FileText,
       color: 'indigo',
-      component: EnhancedPurchaseOrderFlow
+      component: PurchaseOrderFlow
     },
     {
       id: 'grn',
@@ -52,7 +51,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Receive goods',
       icon: Package,
       color: 'green',
-      component: EnhancedGRNFlow
+      component: GRNFlow
     },
     {
       id: 'purchase-history',
@@ -75,7 +74,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
   return (
     <PurchaseHubContent
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Purchase Hub"
       subtitle="Manage procurement & inventory"
       icon={ShoppingCart}

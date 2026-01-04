@@ -215,11 +215,7 @@ export function useSalesTransaction<
                 quantity,
                 unit: product.unit || product.base_uom || product.uom_code || '',
                 mrp: product.mrp || 0,
-                unit_price: unitPrice,
-                rate: unitPrice,
-                sale_price: unitPrice,
-                total,
-                line_total: total,
+                unit_price: unitPrice,  // ✅ CANONICAL
                 gst_percent: includeGst ? (product.gst_percent || 0) : undefined
             } as TItem;
 
@@ -244,12 +240,8 @@ export function useSalesTransaction<
                 // Recalculate line total if quantity or price changes
                 if (field === 'quantity' || field === 'unit_price' || field === 'rate') {
                     const quantity = parseFloat(field === 'quantity' ? String(value) : String(item.quantity)) || 0;
-                    const unitPrice = parseFloat((field === 'unit_price' || field === 'rate') ? String(value) : String(item.unit_price || item.rate)) || 0;
-                    const total = quantity * unitPrice;
-                    updatedItem.total = total;
-                    updatedItem.line_total = total;
+                    const unitPrice = parseFloat(field === 'unit_price' ? String(value) : String(item.unit_price)) || 0;
                     updatedItem.unit_price = unitPrice;
-                    updatedItem.rate = unitPrice;
                 }
                 return updatedItem;
             }
