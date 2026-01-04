@@ -12,7 +12,7 @@ import { SupplierSearch, PurchaseProductSearch, ItemsTable, NotesSection, Produc
 // ItemsTableKeyboard doesn't exist - using ItemsTable instead
 // import ItemsTableKeyboard from '../global/ui/display/ItemsTableKeyboard';
 import PurchaseOrderPreview from './ui/PurchaseOrderPreview';
-import SupplierCreationModal from '../global/modals/SupplierCreationModal';
+import SupplierCreationModal from '../global/creation/SupplierCreationModal';
 import ShareModal from '../global/modals/ShareModal';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import useEscapeKey from '../../hooks/useEscapeKey';

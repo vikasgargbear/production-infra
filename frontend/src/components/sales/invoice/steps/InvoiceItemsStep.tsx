@@ -6,7 +6,7 @@ import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearchSimple, 
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 
 // Modals
-import CustomerCreation from '../../../global/ui/forms/CustomerCreation';
+import CustomerCreation from '../../../global/creation/CustomerCreation';
 import { ProductCreationModal, GSTCalculator, DocumentImportModal } from '../../../global';
 import BillDiscountModal from '../../modals/BillDiscountModal';
 import TaxDetailModal from '../../modals/TaxDetailModal';

@@ -19,7 +19,7 @@ import {
 
 // Import global components
 import { CustomerSearch, OutstandingInvoicesTable } from '../global';
-import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
 import { paymentsApi } from '../../services/api';
 
 interface EnterprisePaymentEntryProps {

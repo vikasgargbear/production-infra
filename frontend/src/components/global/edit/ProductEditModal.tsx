@@ -1,5 +1,5 @@
 import React, { FC } from 'react';
-import ProductCreationModal from './ProductCreationModal';
+import ProductCreationModal from '../creation/ProductCreationModal';
 
 // ==================== TYPE DEFINITIONS ====================
 

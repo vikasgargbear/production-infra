@@ -15,8 +15,8 @@ import {
     ProductCreationModal,
     StandardDatePicker
 } from '../../../global';
-import ItemsTableKeyboard from '../../../global/ui/display/ItemsTableKeyboard';
-import CustomerCreationB2B from '../../../global/ui/forms/CustomerCreationB2B';
+import ItemsTableKeyboard from '../../../global/ui/display/ItemsTableUnified';
+import CustomerCreationB2B from '../../../global/creation/CustomerCreationB2B';
 import KeyboardShortcuts from '../../../global/ui/KeyboardShortcuts';
 import ImportFromInvoiceModal from '../ui/ImportFromInvoiceModal';
 import { Challan, ChallanItem, CustomerDetails, Employee, ImportData } from '../types/challanTypes';

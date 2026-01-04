@@ -8,7 +8,7 @@ import {
 import apiClient from '../../../services/api/apiClient';
 import { formatCurrency } from '../../../utils/formatters';
 import { DataTable, ModuleHeader } from '../../global';
-import ProductEditModal from '../../global/modals/ProductEditModal';
+import ProductEditModal from '../../global/edit/ProductEditModal';
 import jsPDF from 'jspdf';
 
 // Use shared types and utilities

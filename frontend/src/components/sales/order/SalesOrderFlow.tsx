@@ -11,7 +11,7 @@ import {
     DocumentFooter,
     GenericSuccessModal
 } from '../../global';
-import CustomerCreation from '../../global/ui/forms/CustomerCreation';
+import CustomerCreation from '../../global/creation/CustomerCreation';
 import { ProductCreationModal } from '../../global';
 import { DocumentImportModal } from '../../global/modals';
 import { useSalesOrderLogic } from './hooks/useSalesOrderLogic';

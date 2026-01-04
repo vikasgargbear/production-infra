@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, CreditCard, Star, Building2 } from 'lucide-react';
-import { bankAccountsAPI } from '../../../../services/api';
+import { bankAccountsAPI } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 

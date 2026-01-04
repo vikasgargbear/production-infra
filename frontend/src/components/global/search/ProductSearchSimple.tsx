@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, KeyboardEvent, MouseEvent } from 'react';
 import { Search, Package } from 'lucide-react';
 import { productAPI } from '../../../services/api';
-import BatchSelector from '../modals/BatchSelector';
+import BatchSelector from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
+
 import localSearchService from '../../../services/offline/search/localSearchService';
 import { mapProductToCanonical } from '../../../utils/productMapper';
 import { Product } from '../../../types/models/product';

@@ -3,7 +3,7 @@ import {
   Receipt, Save, Calendar, Filter, Calculator, AlertCircle, CheckCircle, Users, FileText, FileInput
 } from 'lucide-react';
 import { CustomerSearch, Select, Card, DatePicker, Button } from '../../global';
-import CustomerCreationB2B from '../../global/ui/forms/CustomerCreationB2B';
+import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
 import { notesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 

@@ -6,7 +6,6 @@ export { default as StandardMonthYearPicker } from './forms/StandardMonthYearPic
 export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as SearchBar } from './SearchBar';
-export { default as CustomerCreation } from './forms/CustomerCreation';
 export { default as NotesSection } from './forms/NotesSection';
 
 // Enhanced Input Components
@@ -17,8 +16,7 @@ export { default as MonthYearPicker } from './forms/MonthYearPicker';
 export { DataTable } from './display/DataTable';
 export { StatusBadge } from './display/StatusBadge';
 export { default as SummaryCard, InvoiceSummary, PaymentSummary, OrderSummary } from './display/SummaryCard';
-export { default as ItemsTable } from './display/ItemsTable';
-export { default as ItemsTableKeyboard } from './display/ItemsTableKeyboard';
+export { default as ItemsTable, ItemsTableKeyboard } from './display/ItemsTableUnified';
 export { default as Card, CardSection } from './Card';
 export { default as Badge, BadgeGroup, SimpleStatusBadge } from './Badge';
 export { default as DocumentFooter } from './display/DocumentFooter';
@@ -30,7 +28,6 @@ export { Pagination } from './Pagination';
 export { default as ModuleHeader } from './ModuleHeader';
 export { default as ViewHistoryButton } from './ViewHistoryButton';
 export { default as HistoryTable } from './HistoryTable';
-export { default as AddressSelector } from './AddressSelector';
 export { default as AddressForm } from './AddressForm';
 
 // Feedback Components
