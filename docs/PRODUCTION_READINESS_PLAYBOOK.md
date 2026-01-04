@@ -5,6 +5,27 @@ This playbook documents all improvements applied to `backend/app/core` and `back
 
 ---
 
+## 🎯 Progress Tracker
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| ✅ `core/` | **COMPLETE** | Reorganized into auth/, security/, utils/. All files have type hints, clean exports |
+| ✅ `services/purchase/parsers/` | **COMPLETE** | Consolidated 8 files → 3 files. Added Pydantic schemas, removed duplicates |
+| ✅ `services/inventory/` | **COMPLETE** | Extracted schemas to schemas/inventory/stock.py. Security audit passed |
+| 🔄 `services/master/` | **IN PROGRESS** | Starting audit |
+| ⏳ `services/purchase/` | **PENDING** | |
+| ⏳ `services/sales/` | **PENDING** | |
+| ⏳ `services/finance/` | **PENDING** | |
+| ⏳ `routes/inventory/` | **PENDING** | Duplicate endpoints identified, needs consolidation |
+| ⏳ `routes/master/` | **PENDING** | |
+| ⏳ `routes/purchase/` | **PENDING** | |
+| ⏳ `routes/sales/` | **PENDING** | |
+| ⏳ `routes/finance/` | **PENDING** | |
+
+**Last Updated**: 2026-01-03
+
+---
+
 ## Quick Reference Checklist
 
 ```
@@ -380,6 +401,30 @@ grep -r "from \.\.\.core\.{old_module}" backend/app --include="*.py"
 find backend/app -name "*.py" -exec sed -i '' \
     's/from \.\.\.core\.tenant_service/from ...core.auth.tenant_service/g' {} \;
 ```
+
+### ⚠️ No Import Aliases Rule
+
+**CRITICAL**: Do NOT use import aliases to maintain backward compatibility. This creates technical debt and confusion.
+
+❌ **BAD** - Using aliases as fallbacks:
+```python
+# Don't do this!
+from ...core.security.permissions import PermissionChecker
+from ...core.permissions import PermissionChecker  # Old path as fallback
+```
+
+✅ **GOOD** - Single import path:
+```python
+from ...core.security.permissions import PermissionChecker
+```
+
+**Why?**
+- Multiple import paths for the same thing creates confusion
+- Makes it unclear which is the "correct" import
+- Prevents finding all usages via grep
+- Makes refactoring harder
+
+**Instead**: Update ALL imports when moving files using `sed` or find/replace.
 
 ### Import Order
 ```python
