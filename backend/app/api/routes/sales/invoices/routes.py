@@ -19,7 +19,7 @@ from .....core.utils.constants import InvoiceStatus, InvoicePaymentStatus, Payme
 from ....services.document_number_service import DocumentNumberService
 from ....services.gst_service import GSTService
 from ....services.inventory.inventory_service import InventoryService
-from ....services.sales.invoice_service import InvoiceService
+from ....services.sales.invoice import InvoiceService
 from ....schemas.inventory.inventory import StockMovementCreate
 from ....schemas.sales.billing import (
     InvoiceCreateRequest, InvoiceItemCreate, 
@@ -211,584 +211,60 @@ async def create_invoice(
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """
-    Create invoice with Pydantic validation
+    Create invoice - delegates to InvoiceService
     
-    Uses InvoiceCreateRequest schema for input validation.
-    Backend calculates tax amounts, totals, and generates invoice number.
+    This is a THIN HTTP ADAPTER - all business logic is in the service layer.
+    Route only handles: request validation, context extraction, response formatting.
     """
     try:
-        # Get org_id from context
+        # Extract context from JWT
         org_id = str(context.org_id)
+        user_id = context.user_id
+        branch_id = context.primary_branch_id
         
-        # Extract validated fields from Pydantic model
-        customer_id = invoice_data.customer_id
-        if not customer_id:
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "Customer ID is required"}
-            )
+        logger.info(f"📝 Creating invoice for customer {invoice_data.customer_id} in org {org_id}")
         
-        logger.info(f"Creating invoice for customer {customer_id} in org {org_id}")
-        
-        # SECURITY FIX: Get branch_id and created_by from authenticated context
-        # Previously: Random first user/branch from DB - now uses JWT-verified values
-        branch_id = context.primary_branch_id  # User's assigned branch from JWT
-        created_by = context.user_id  # Authenticated user from JWT
-        
-        # Fallback if user doesn't have branch assigned (legacy data)
-        if not branch_id:
-            branch_result = db.execute(text("""
-                SELECT branch_id FROM master.org_branches 
-                WHERE org_id = :org_id LIMIT 1
-            """), {"org_id": org_id})
-            branch = branch_result.fetchone()
-            branch_id = branch[0] if branch else None
-            logger.warning(f"User {created_by} has no branch assigned - using default")
-        
-        # Step 2: Generate order number using centralized service
-        from ....services.document_number_service import DocumentNumberService
-        order_number = DocumentNumberService.generate_number(db, "sales_order", str(org_id))
-        
-        # Step 3: Calculate totals from items using InvoiceService (DRY)
-        # Convert Pydantic items to dicts for service compatibility
-        items = [item.model_dump() for item in invoice_data.items]
-        
-        
-        # Use GST type from frontend directly (auto-detection disabled - org_branches schema issue)
-        # Frontend already sends gst_type: "CGST/SGST" or "IGST" based on customer location
-        gst_type = invoice_data.gst_type or "CGST/SGST"
-        
-        freight_charges = float(invoice_data.freight_charges or 0)  # Canonical name from schema
-        insurance_charges = 0.0
-        other_charges = 0.0
-        
-        # Invoice-level discount parameters (will be calculated by service)
-        discount_type = invoice_data.discount_type or "percentage"
-        discount_percent = float(invoice_data.discount_percent or 0)
-        discount_amount_fixed = float(invoice_data.discount_amount or 0)
-        
-        # GST type from frontend directly (auto-detection disabled)
-        gst_type = invoice_data.gst_type or "CGST/SGST"
-        
-        # Call service ONCE for ALL calculations (single source of truth)
-        # Service handles item-level discounts, invoice-level discount, GST, rounding
-        totals = InvoiceService.calculate_invoice_totals(
-            items=items,
-            gst_type=gst_type,
-            freight_charges=freight_charges,
-            insurance_charges=insurance_charges,
-            other_charges=other_charges,
-            discount_type=discount_type,
-            discount_percent=discount_percent,
-            discount_amount=discount_amount_fixed
+        # Delegate to service (all business logic here)
+        result = InvoiceService.create_invoice_with_items(
+            db=db,
+            org_id=org_id,
+            user_id=user_id,
+            branch_id=branch_id,
+            invoice_data=invoice_data
         )
         
-        # Extract calculated values (using database-aligned field names)
-        subtotal = totals["subtotal_amount"]            # DB: subtotal_amount
-        total_discount = totals["discount_amount"]      # DB: discount_amount (item-level)
-        invoice_discount = totals["scheme_discount"]    # DB: scheme_discount (invoice-level)
-        taxable_amount = totals["taxable_amount"]       # DB: taxable_amount
-        total_cgst = totals["cgst_amount"]              # DB: cgst_amount
-        total_sgst = totals["sgst_amount"]              # DB: sgst_amount
-        total_igst = totals["igst_amount"]              # DB: igst_amount
-        total_tax = totals["total_tax_amount"]          # DB: total_tax_amount
-        round_off_amount = totals["round_off_amount"]   # DB: round_off_amount
-        final_amount = totals["final_amount"]           # DB: final_amount
+        logger.info(f"✅ Invoice {result['invoice_number']} created successfully")
         
-        # Extracted line calculations for inserting later (AVOIDS REDUNDANT RE-CALCULATION)
-        line_item_details = totals.get("line_calculations", [])
-        
-        # SIMPLIFIED: Pydantic model handles date validation - use directly
-        invoice_date = invoice_data.invoice_date
-        logger.info(f"Using invoice_date: {invoice_date}")
-        
-        # For offline sync, use current timestamp
-        created_at = None  # Will use CURRENT_TIMESTAMP in SQL
-        
-        # Step 4: Create order (using ONLY columns that exist)
-        order_create = db.execute(text("""
-            INSERT INTO sales.orders (
-                org_id, branch_id, order_number, order_date, order_type,
-                customer_id, subtotal_amount, discount_amount, taxable_amount,
-                cgst_amount, sgst_amount, tax_amount, final_amount,
-                created_by, created_at
-            ) VALUES (
-                :org_id, :branch_id, :order_number, :order_date, 'sales',
-                :customer_id, :subtotal, :discount, :taxable,
-                :cgst, :sgst, :tax, :final,
-                :created_by, COALESCE(:created_at, CURRENT_TIMESTAMP)
-            ) RETURNING order_id
-        """), {
-            "org_id": context.org_id,
-            "branch_id": branch_id,
-            "order_number": order_number,
-            "order_date": invoice_date,  # ✅ Use actual invoice date, not today!
-            "customer_id": customer_id,
-            "subtotal": subtotal,
-            "discount": total_discount,  # Sum of item-level discounts
-            "taxable": taxable_amount,
-            "cgst": total_cgst,
-            "sgst": total_sgst,
-            "tax": total_tax,
-            "final": final_amount,
-            "created_by": created_by,
-            "created_at": created_at  # ✅ Use original timestamp if provided
-        })
-        order_id = order_create.scalar()
-        
-        # Step 5: Generate invoice number using unified service
-        invoice_number = DocumentNumberService.generate_number(db, "invoice", org_id)
-        
-        # Step 6: Get customer details using InvoiceService
-        customer_details = InvoiceService.get_customer_details(db, customer_id, org_id)
-        customer_name = customer_details["customer_name"]
-        billing_address_id = customer_details["billing_address_id"]
-        shipping_address_id = customer_details["shipping_address_id"]
-        
-        # Due date: Use frontend value if provided, otherwise calculate from payment terms
-        payment_terms = invoice_data.payment_mode or "cash"
-        invoice_date_obj = invoice_date if isinstance(invoice_date, date) else date.today()
-        
-        if invoice_data.due_date:
-            # Frontend provided due_date - respect it
-            due_date = invoice_data.due_date
-        elif payment_terms == "credit":
-            due_date = invoice_date_obj + timedelta(days=30)  # Default 30 days for credit
-        elif payment_terms == "cash":
-            due_date = invoice_date_obj  # Same day for cash
-        else:
-            due_date = invoice_date_obj + timedelta(days=7)  # Default 7 days
-        
-        # Step 7: Create invoice with ALL important fields
-        invoice_create = db.execute(text("""
-            INSERT INTO sales.invoices (
-                org_id, branch_id, invoice_number, invoice_date, invoice_type,
-                order_id, customer_id, customer_name,
-                billing_address_id, shipping_address_id,
-                subtotal_amount, discount_amount, scheme_discount, taxable_amount,
-                igst_amount, cgst_amount, sgst_amount, total_tax_amount, 
-                freight_charges, insurance_charges, other_charges, 
-                round_off_amount, final_amount,
-                payment_terms, due_date, notes, 
-                bank_account_id,
-                invoice_status, payment_status,
-                created_by, created_at
-            ) VALUES (
-                :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
-                :order_id, :customer_id, :customer_name,
-                :billing_address_id, :shipping_address_id,
-                :subtotal, :item_discount, :scheme_discount, :taxable,
-                :igst, :cgst, :sgst, :tax,
-                :freight, :insurance, :other, 
-                :round_off, :final,
-                :payment_terms, :due_date, :notes,
-                :bank_account_id,
-                'posted', 'pending',
-                :created_by, CURRENT_TIMESTAMP
-            ) RETURNING invoice_id
-        """), {
-            "org_id": context.org_id,
-            "branch_id": branch_id,
-            "invoice_number": invoice_number,
-            "invoice_date": date.today(),
-            "order_id": order_id,
-            "customer_id": customer_id,
-            "customer_name": customer_name,
-            "subtotal": subtotal,
-            "item_discount": total_discount,  # Sum of item-level discounts
-            "scheme_discount": invoice_discount,  # Invoice-level discount
-            "taxable": taxable_amount,
-            "igst": 0,  # IGST calculated by service based on gst_type
-            "cgst": total_cgst,
-            "sgst": total_sgst,
-            "tax": total_tax,
-            "freight": freight_charges,
-            "insurance": insurance_charges,
-            "other": other_charges,
-            "round_off": round_off_amount,
-            "final": final_amount,
-            "billing_address_id": billing_address_id,
-            "shipping_address_id": shipping_address_id,
-            "payment_terms": payment_terms,
-            "due_date": due_date,
-            "notes": invoice_data.notes,
-            "bank_account_id": None,  # Not in current schema
-            "created_by": created_by
-        })
-        invoice_id = invoice_create.scalar()
-        
-        # Step 7.5: Payment methods should already exist (populated via MASTER_DATABASE_FIXES.sql)
-        # No need to check or create them on every invoice
-        
-        # Step 7.6: Calculate total paid amount first (for invoice status)
-        payments = invoice_data.payments or []
-        total_paid = 0
-        
-        if payments:
-            for payment in payments:
-                payment_amount = float(payment.get("amount", 0))
-                if payment_amount > 0:
-                    total_paid += payment_amount
-        
-        # If no payments array, check legacy payment_mode field  
-        elif invoice_data.payment_mode:
-            payment_mode = (invoice_data.payment_mode or "").lower()
-            if payment_mode == "cash":
-                total_paid = final_amount  # Cash means fully paid
-                # Payment will be created after successful invoice creation
-            # Credit means no payment yet
-            
-        logger.info(f"Total paid amount: ₹{total_paid} of ₹{final_amount}")
-        
-        # Determine payment status based on actual money received vs invoice total
-        if total_paid >= final_amount:
-            payment_status = InvoicePaymentStatus.PAID.value
-        elif total_paid > 0:
-            payment_status = InvoicePaymentStatus.PARTIAL.value
-        else:
-            payment_status = InvoicePaymentStatus.UNPAID.value
-        
-        # Update invoice payment status
-        try:
-            db.execute(text("""
-                UPDATE sales.invoices
-                SET payment_status = :payment_status,
-                    paid_amount = :paid_amount,
-                    credit_amount = GREATEST(0, final_amount - :paid_amount),
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE invoice_id = :invoice_id AND org_id = :org_id
-            """), {
-                "payment_status": payment_status,
-                "paid_amount": total_paid,
-                "invoice_id": invoice_id,
-                "org_id": str(org_id)
-            })
-        except Exception as e:
-            logger.warning(f"Could not update payment status: {e}")
-        
-        # Note: Triggers handle data correctly now - no need to disable them
-        
-        # PERFORMANCE: Batch lookup all products and batches BEFORE item loop (eliminates N+1)
-        product_ids = [int(item.get("product_id")) for item in items]
-        batch_ids = [int(item.get("batch_id")) for item in items if item.get("batch_id") and str(item.get("batch_id")).isdigit()]
-        
-        # Batch fetch product names
-        products_lookup = {}
-        if product_ids:
-            prod_result = db.execute(text("""
-                SELECT product_id, product_name
-                FROM inventory.products
-                WHERE product_id = ANY(:product_ids) AND org_id = :org_id
-            """), {"product_ids": product_ids, "org_id": str(org_id)})
-            products_lookup = {row[0]: row[1] for row in prod_result.fetchall()}
-        
-        # Batch fetch batch details
-        batches_lookup = {}
-        if batch_ids:
-            batch_result = db.execute(text("""
-                SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date, cost_per_unit
-                FROM inventory.batches
-                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
-            """), {"batch_ids": batch_ids, "org_id": str(org_id)})
-            batches_lookup = {row[0]: {"batch_number": row[1], "mrp": row[2], "mfg_date": row[3], "exp_date": row[4], "cost_per_unit": row[5]} for row in batch_result.fetchall()}
-        
-        # For items without batch_id, get FIFO batches in one query
-        products_needing_batches = [int(item.get("product_id")) for item in items if not item.get("batch_id") or not str(item.get("batch_id")).isdigit()]
-        fifo_batches = {}
-        if products_needing_batches:
-            fifo_result = db.execute(text("""
-                SELECT DISTINCT ON (product_id) product_id, batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date, cost_per_unit
-                FROM inventory.batches
-                WHERE product_id = ANY(:product_ids) AND org_id = :org_id AND quantity_available > 0
-                ORDER BY product_id, expiry_date NULLS LAST, batch_id
-            """), {"product_ids": products_needing_batches, "org_id": str(org_id)})
-            fifo_batches = {row[0]: {"batch_id": row[1], "batch_number": row[2], "mrp": row[3], "mfg_date": row[4], "exp_date": row[5], "cost_per_unit": row[6]} for row in fifo_result.fetchall()}
-        
-        # =========================================================================
-        # OPTIMIZED: BULK OPERATIONS - Prepare all data first, then bulk INSERT
-        # Before: 3N queries (N items × 3 operations each)
-        # After: 3 queries total (1 bulk INSERT + 1 bulk UPDATE + 1 bulk INSERT)
-        # =========================================================================
-        
-        # Data preparation lists
-        invoice_items_data = []
-        batch_deductions = []  # (batch_id, quantity_to_deduct, product_id)
-        movement_records = []
-        
-        from decimal import Decimal
-        gst_type = invoice_data.gst_type or "CGST/SGST"
-        
-        for i, item in enumerate(items):
-            product_id = int(item.get("product_id"))
-            quantity = float(item.get("quantity", 1))
-            unit_price = float(item.get("unit_price", 0))
-            
-            # Get product details - use pre-fetched lookup
-            product_name = item.get("product_name") or products_lookup.get(product_id, f"Product {product_id}")
-            uom = item.get("uom") or "PCS"
-            pack_type = item.get("pack_type") or "UNIT"
-            
-            # Calculate quantities
-            discount_percent = float(item.get("discount_percent", 0))
-            base_quantity = float(item.get("base_quantity", quantity))
-            free_quantity = float(item.get("free_quantity", 0))
-            total_quantity = base_quantity + free_quantity
-            
-            # Get batch_id - use pre-fetched lookups
-            batch_id = item.get("batch_id")
-            if batch_id and (isinstance(batch_id, str) and ('default' in str(batch_id).lower() or batch_id == '')):
-                batch_id = None
-            elif batch_id and str(batch_id).isdigit():
-                batch_id = int(batch_id)
-            
-            batch_number = None
-            mrp = item.get("mrp", 0)
-            manufacturing_date = None
-            expiry_date = item.get("expiry_date")
-            cost_per_unit = 0  # Will be set from batch lookup if available
-            
-            if not batch_id:
-                fifo = fifo_batches.get(product_id)
-                if fifo:
-                    batch_id = fifo["batch_id"]
-                    batch_number = fifo["batch_number"]
-                    mrp = float(fifo["mrp"]) if fifo["mrp"] else mrp
-                    manufacturing_date = fifo["mfg_date"]
-                    expiry_date = fifo["exp_date"] or expiry_date
-                    cost_per_unit = float(fifo["cost_per_unit"]) if fifo.get("cost_per_unit") else 0
-            else:
-                batch_details = batches_lookup.get(batch_id)
-                if batch_details:
-                    batch_number = batch_details["batch_number"]
-                    mrp = float(batch_details["mrp"]) if batch_details["mrp"] else mrp
-                    manufacturing_date = batch_details["mfg_date"]
-                    expiry_date = batch_details["exp_date"] or expiry_date
-                    cost_per_unit = float(batch_details["cost_per_unit"]) if batch_details.get("cost_per_unit") else 0
-                else:
-                    cost_per_unit = 0
-            
-            # Retrieve Pre-Calculated Data (DRY Principle)
-            # Instead of calling calculate_line_item again, we use the values from the service call above.
-            # This guarantees that the sum of line items EXACTLY matches invoice totals.
-            if i < len(line_item_details):
-                calc = line_item_details[i]
-            else:
-                # Fallback only if index mismatch (should never happen)
-                logger.warning(f"Index mismatch for item {i}, recalculating line item")
-                calc = calculate_line_item(
-                    base_quantity, 
-                    unit_price, 
-                    discount_percent, 
-                    float(item.get("gst_percent", 0)), 
-                    gst_type
-                )
-            
-            # Prepare invoice item data using calculated values
-            invoice_items_data.append({
-                "org_id": str(org_id),  # SECURITY: Always include org_id
-                "invoice_id": invoice_id,
-                "product_id": product_id,
-                "product_name": product_name,
-                "hsn_code": item.get("hsn_code"),
-                "batch_number": batch_number or item.get("batch_number"),
-                "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
-                "expiry_date": expiry_date,
-                "quantity": total_quantity,
-                "uom": uom,
-                "pack_type": pack_type,
-                "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
-                "base_quantity": base_quantity,
-                "mrp": float(mrp) if mrp else 0,
-                "unit_price": unit_price,
-                "discount_percent": discount_percent,
-                "discount_amount": calc["discount_amount"],
-                "taxable_amount": calc["taxable_amount"],
-                "igst_rate": float(item.get("gst_percent", 0)) if calc["igst_amount"] > 0 else 0,
-                "igst_amount": calc["igst_amount"],
-                "cgst_rate": float(item.get("gst_percent", 0)) / 2 if calc["cgst_amount"] > 0 else 0,
-                "cgst_amount": calc["cgst_amount"],
-                "sgst_rate": float(item.get("gst_percent", 0)) / 2 if calc["sgst_amount"] > 0 else 0,
-                "sgst_amount": calc["sgst_amount"],
-                "total_tax_amount": calc["total_tax"],
-                "line_total": calc["line_total"],
-                "free_quantity": free_quantity
-            })
-            
-            # Prepare batch deduction (only if batch exists)
-            if batch_id:
-                batch_deductions.append({
-                    "batch_id": batch_id,
-                    "quantity": total_quantity,
-                    "product_id": product_id,
-                    "base_quantity": base_quantity
-                })
-            
-            # Use cost_per_unit from batch (fetched from DB), or 0 if not available
-            unit_cost = cost_per_unit
-            movement_records.append({
-                "org_id": context.org_id,
-                "product_id": product_id,
-                "batch_id": batch_id,  # Can be None for non-batched products
-                "quantity": total_quantity,
-                "pack_type": pack_type,
-                "base_quantity": base_quantity,
-                "unit_cost": unit_cost,
-                "total_cost": unit_cost * total_quantity
-            })
-            
-            if not batch_id:
-                logger.warning(f"⚠️ No batch_id for product {product_id} - movement recorded but no batch deduction")
-        
-        items_created = len(invoice_items_data)
-        
-        # =========================================================================
-        # CRITICAL: BULK STOCK CHECK before deduction
-        # =========================================================================
-        if batch_deductions:
-            deduction_batch_ids = [bd["batch_id"] for bd in batch_deductions]
-            
-            # Fetch current available quantities for all relevant batches
-            stock_check_result = db.execute(text("""
-                SELECT batch_id, product_id, quantity_available
-                FROM inventory.batches
-                WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
-            """), {"batch_ids": deduction_batch_ids, "org_id": str(org_id)})
-            
-            current_stock_map = {row[0]: {"product_id": row[1], "available": row[2]} for row in stock_check_result.fetchall()}
-            
-            for deduction in batch_deductions:
-                batch_id = deduction["batch_id"]
-                required_quantity = deduction["quantity"]
-                product_id = deduction["product_id"]
-                
-                stock_info = current_stock_map.get(batch_id)
-                
-                if not stock_info:
-                    error_msg = f"Batch {batch_id} not found for product {product_id} during stock check."
-                    logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
-                    db.rollback()
-                    raise HTTPException(
-                        status_code=404,
-                        detail={
-                            "error": "BATCH_NOT_FOUND",
-                            "message": error_msg,
-                            "product_id": product_id,
-                            "batch_id": batch_id,
-                            "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
-                        }
-                    )
-                
-                available_quantity = stock_info["available"]
-                
-                if available_quantity < required_quantity:
-                    error_msg = f"Insufficient stock for product {product_id} (batch {batch_id}): Required {required_quantity}, Available {available_quantity}"
-                    logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
-                    db.rollback()
-                    raise HTTPException(
-                        status_code=409,  # Conflict status
-                        detail={
-                            "error": "INSUFFICIENT_STOCK",
-                            "message": error_msg,
-                            "product_id": product_id,
-                            "batch_id": batch_id,
-                            "required_quantity": required_quantity,
-                            "available_quantity": available_quantity,
-                            "invoice_number": getattr(invoice_data, 'invoice_number', None) or "DRAFT"
-                        }
-                    )
-            logger.info(f"✅ All stock checks passed for {len(batch_deductions)} items.")
-        
-        # =========================================================================
-        # BULK INSERT: Invoice Items (single query for all items)
-        # =========================================================================
-        if invoice_items_data:
-            values_list = []
-            params = {}
-            for i, item_data in enumerate(invoice_items_data):
-                values_list.append(f"""(
-                    :org_id_{i}, :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
-                    :batch_number_{i}, :manufacturing_date_{i}, :expiry_date_{i},
-                    :quantity_{i}, :uom_{i}, :pack_type_{i}, :pack_size_{i}, :base_quantity_{i},
-                    :mrp_{i}, :unit_price_{i}, :discount_percent_{i}, :discount_amount_{i}, :taxable_amount_{i},
-                    :igst_rate_{i}, :igst_amount_{i}, :cgst_rate_{i}, :cgst_amount_{i},
-                    :sgst_rate_{i}, :sgst_amount_{i}, :total_tax_amount_{i}, :line_total_{i},
-                    :free_quantity_{i}
-                )""")
-                for key, value in item_data.items():
-                    params[f"{key}_{i}"] = value
-            
-            bulk_insert_sql = f"""
-                INSERT INTO sales.invoice_items (
-                    org_id, invoice_id, product_id, product_name, hsn_code,
-                    batch_number, manufacturing_date, expiry_date,
-                    quantity, uom, pack_type, pack_size, base_quantity,
-                    mrp, unit_price, discount_percent, discount_amount, taxable_amount,
-                    igst_rate, igst_amount, cgst_rate, cgst_amount,
-                    sgst_rate, sgst_amount, total_tax_amount, line_total,
-                    free_quantity
-                ) VALUES {", ".join(values_list)}
-            """
-            db.execute(text(bulk_insert_sql), params)
-            logger.info(f"✅ Bulk inserted {len(invoice_items_data)} invoice items")
-        
-        # =========================================================================
-        # ASYNC: Process batch updates, movements, and totals in BACKGROUND
-        # This runs AFTER the response is sent to user for faster perceived performance
-        # =========================================================================
-        
-        # Prepare invoice totals for background task
-        invoice_totals_data = {
-            "items_count": items_created,
-            "total_qty": sum(float(item.get("base_quantity", item.get("quantity", 0))) + float(item.get("free_quantity", 0)) for item in items),
-            "subtotal": subtotal,
-            "item_discount": total_discount,
-            "invoice_discount": invoice_discount,
-            "taxable_amount": taxable_amount,
-            "igst": total_igst,
-            "cgst": total_cgst,
-            "sgst": total_sgst,
-            "total_tax": total_tax,
-            "final_amount": final_amount,
-            # For outstanding record creation
-            "customer_id": customer_id,
-            "invoice_number": invoice_number,
-            "invoice_date": invoice_date
-        }
-        
-        # Add background task for inventory processing
-        background_tasks.add_task(
-            process_inventory_background,
-            org_id=str(org_id),
-            invoice_id=invoice_id,
-            batch_deductions=batch_deductions,
-            movement_records=movement_records,
-            invoice_totals=invoice_totals_data,
-            created_by=created_by
+        # Return success response
+        return JSONResponse(
+            status_code=201,
+            content={
+                "success": True,
+                "message": "Invoice created successfully",
+                "invoice_id": result["invoice_id"],
+                "invoice_number": result["invoice_number"],
+                "order_id": result["order_id"],
+                "order_number": result["order_number"],
+                "final_amount": result["final_amount"],
+                "items_count": result["items_created"]
+            }
         )
-        logger.info(f"📦 Queued background task for invoice {invoice_id} inventory processing")
         
-        # Commit transaction (invoice header + items only)
-        db.commit()
-        
-        logger.info(f"✅ Invoice {invoice_id} ({invoice_number}) created - returning immediately")
-        
-        # =========================================================================
-        # INSTANT RETURN - All post-processing happens in background
-        # =========================================================================
-        return {
-            "success": True,
-            "invoice_id": invoice_id,
-            "invoice_number": invoice_number,
-            "order_id": order_id,
-            "order_number": order_number,
-            "items_created": items_created,
-            "total_amount": final_amount,
-            "processing_async": True  # Flag indicating background processing pending
-        }
-        
+    except ValueError as e:
+        # Business rule validation errors
+        logger.warning(f"⚠️ Validation error: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": "VALIDATION_ERROR",
+                "message": str(e)
+            }
+        )
     except Exception as e:
-        db.rollback()
-        raise handle_error(e, "create invoice")
+        # Unexpected errors
+        logger.error(f"❌ Error creating invoice: {e}", exc_info=True)
+        return handle_error(e, "create invoice")
 
 @router.get("/")
 @with_tenant_context
