@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, MessageCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { customersApi } from '../../../../services/api';
-import offlineStorage from '../../../../services/offlineStorage';
+import { customersApi } from '../../../services/api';
+import offlineStorage from '../../../services/offlineStorage';
 
 /**
  * B2C Customer Creation Component

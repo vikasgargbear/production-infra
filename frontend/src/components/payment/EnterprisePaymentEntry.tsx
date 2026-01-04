@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Save, 
-  FileText, 
-  User, 
-  CreditCard, 
-  Calendar, 
-  Hash, 
+import {
+  X,
+  Save,
+  FileText,
+  User,
+  CreditCard,
+  Calendar,
+  Hash,
   MessageCircle,
   AlertCircle,
   CheckCircle,
@@ -18,9 +18,10 @@ import {
 } from 'lucide-react';
 
 // Import global components
-import { CustomerSearch, OutstandingInvoicesTable } from '../global';
+import { CustomerSearch } from '../global';
 import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
 import { paymentsApi } from '../../services/api';
+
 
 interface EnterprisePaymentEntryProps {
   open: boolean;
@@ -122,7 +123,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
     collectorName: '',
     route: ''
   });
-  
+
   const [outstandingInvoices, setOutstandingInvoices] = useState<Invoice[]>([]);
   const [selectedInvoices, setSelectedInvoices] = useState<SelectedInvoice[]>([]);
   const [loading, setLoading] = useState(false);
@@ -135,7 +136,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const checkLocalPayments = () => {
     const localPayments: LocalPayment[] = JSON.parse(localStorage.getItem('localPayments') || '[]');
     if (localPayments.length > 0) {
-      alert(`Found ${localPayments.length} payments stored locally:\n\n${localPayments.map(p => 
+      alert(`Found ${localPayments.length} payments stored locally:\n\n${localPayments.map(p =>
         `₹${p.amount} - ${p.payment_date} - ${p.remarks || 'Advance Payment'}`
       ).join('\n')}\n\nThese will be synced once backend is fixed.`);
     } else {
@@ -148,7 +149,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
     try {
       setLoading(true);
       const response = await paymentsApi.getOutstandingInvoices(customerId, 'customer');
-      
+
       if (response.data?.invoices) {
         // Transform backend data to component format
         const transformedInvoices: Invoice[] = response.data.invoices.map((invoice: any) => ({
@@ -161,16 +162,16 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
           daysOverdue: invoice.days_overdue || 0,
           type: invoice.type || 'Sales Invoice'
         }));
-        
+
         setOutstandingInvoices(transformedInvoices);
       } else {
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
-      
+
       // Set empty array but don't show error to user since payments can still be recorded as advance
       setOutstandingInvoices([]);
-      
+
       // Only log the error for debugging
       if (error.response?.status === 500) {
       }
@@ -224,18 +225,18 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
   const autoAllocatePayment = () => {
     if (!formData.totalAmount) return;
-    
+
     let remainingAmount = parseFloat(formData.totalAmount);
     const newSelectedInvoices: SelectedInvoice[] = [];
-    
+
     // Sort by due date (FIFO)
-    const sortedInvoices = [...outstandingInvoices].sort((a, b) => 
+    const sortedInvoices = [...outstandingInvoices].sort((a, b) =>
       new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
     );
-    
+
     for (const invoice of sortedInvoices) {
       if (remainingAmount <= 0) break;
-      
+
       const payingAmount = Math.min(remainingAmount, invoice.pendingAmount);
       newSelectedInvoices.push({
         ...invoice,
@@ -243,7 +244,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       });
       remainingAmount -= payingAmount;
     }
-    
+
     setSelectedInvoices(newSelectedInvoices);
   };
 
@@ -283,43 +284,43 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.party) newErrors.party = 'Please select a party';
-    
+
     // Validate payment methods
     const hasValidPaymentMethods = formData.paymentMethods.some(mode => mode.mode && mode.amount);
     if (!hasValidPaymentMethods) {
       newErrors.paymentMethods = 'Please add at least one payment method with amount';
     }
-    
+
     const totalAmount = formData.paymentMethods.reduce((sum, mode) => sum + (parseFloat(mode.amount) || 0), 0);
     if (totalAmount <= 0) {
       newErrors.totalAmount = 'Total payment amount must be greater than 0';
     }
-    
+
     if (formData.paymentType === 'order_payment' && selectedInvoices.length === 0) {
       newErrors.invoices = 'Please select at least one invoice for order payment';
     }
-    
+
     // For regular payment, auto-allocation should work, but we need outstanding invoices
     if (formData.paymentType === 'regular_payment' && outstandingInvoices.length === 0) {
       newErrors.invoices = 'No outstanding invoices found for regular payment. Use advance payment instead.';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
     if (!validateForm()) return;
-    
+
     setLoading(true);
-    
+
     // Calculate total from payment methods
-    const totalAmount = formData.paymentMethods.reduce((sum, mode) => 
+    const totalAmount = formData.paymentMethods.reduce((sum, mode) =>
       sum + (parseFloat(mode.amount) || 0), 0
     );
-    
+
     // Prepare payment data for backend
     const paymentData: PaymentData = {
       customer_id: formData.party!.customer_id,
@@ -338,31 +339,31 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       route: formData.route || null,
       invoice_allocations: (formData.paymentType === 'order_payment' || formData.paymentType === 'regular_payment')
         ? selectedInvoices.map(inv => ({
-            invoice_id: inv.id,
-            amount: inv.payingAmount
-          }))
+          invoice_id: inv.id,
+          amount: inv.payingAmount
+        }))
         : [],
       outstanding_invoices: outstandingInvoices // Pass all outstanding invoices for FIFO allocation
     };
-    
+
     try {
-      
+
       const response = await paymentsApi.create(paymentData);
-      
+
       // Show success message with backend status
       if (response.data?.message === 'Payment recorded locally (backend unavailable)') {
         alert('⚠️ Payment saved locally (Backend issues detected)\n\nYour payment data is safely stored in the browser and will be synced once the backend is fixed.');
       } else {
         alert('✅ Payment saved successfully to backend!');
       }
-      
+
       // Reset form and close
       onClose();
     } catch (error: any) {
-      
+
       // Show error message with more details
       let errorMessage = 'Failed to save payment';
-      
+
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.detail) {
@@ -370,7 +371,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       alert(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -394,7 +395,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Collector Name
@@ -410,7 +411,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               />
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Route/Area
@@ -462,7 +463,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
           <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
           Payment Information
         </h3>
-        
+
         {/* Payment Type */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -509,7 +510,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               <span>Add Payment Method</span>
             </button>
           </div>
-          
+
           <div className="space-y-3">
             {formData.paymentMethods.map((payment, index) => {
               return (
@@ -536,7 +537,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                         <option value="credit_adjustment">Credit Adjustment</option>
                       </select>
                     </div>
-                    
+
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Amount *
@@ -550,7 +551,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                             const newMethods = [...formData.paymentMethods];
                             newMethods[index].amount = e.target.value;
                             setFormData(prev => ({ ...prev, paymentMethods: newMethods }));
-                            
+
                             // Update total amount
                             const total = newMethods.reduce((sum, mode) => sum + (parseFloat(mode.amount) || 0), 0);
                             setFormData(prev => ({ ...prev, totalAmount: total.toString() }));
@@ -567,7 +568,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                           onClick={() => {
                             const newMethods = formData.paymentMethods.filter((_, i) => i !== index);
                             setFormData(prev => ({ ...prev, paymentMethods: newMethods }));
-                            
+
                             // Update total amount
                             const total = newMethods.reduce((sum, mode) => sum + (parseFloat(mode.amount) || 0), 0);
                             setFormData(prev => ({ ...prev, totalAmount: total.toString() }));
@@ -609,7 +610,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               </div>
             )}
           </div>
-          
+
           {loading ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -664,7 +665,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               <p className="text-sm mt-1">This payment will be recorded as an advance payment.</p>
             </div>
           )}
-          
+
           {errors.invoices && (
             <p className="mt-2 text-sm text-red-600">{errors.invoices}</p>
           )}
@@ -748,7 +749,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
               ₹{formData.paymentMethods.reduce((sum, mode) => sum + (parseFloat(mode.amount) || 0), 0).toLocaleString()}
             </p>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <button
               onClick={onClose}
@@ -756,7 +757,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
             >
               Cancel
             </button>
-            
+
             <button
               onClick={handleSave}
               disabled={loading || !formData.party || !formData.paymentType || formData.paymentMethods.every(m => !m.mode || !m.amount)}

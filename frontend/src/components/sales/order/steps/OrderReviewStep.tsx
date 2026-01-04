@@ -10,7 +10,7 @@ import {
     AddressForm,
     PrintUtility
 } from '../../../global';
-import BankAccountSelector from '../../../global/ui/forms/BankAccountSelector';
+import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { numberToWords } from '../../../../utils/formatters';
 import type { Order, OrderItem, BankAccount } from '../../../../types/models';
 

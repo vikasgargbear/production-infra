@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productAPI, productsApi } from '../../../services/api';
-import PackTypeSelector from '../ui/forms/PackTypeSelector';
+import PackTypeSelector from '../selector/PackTypeSelector';
 import MonthYearPicker from '../ui/forms/MonthYearPicker';
 import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
-import { FullScreenModal } from '../ui/FullScreenModal';
+import { FullScreenModal } from '../modals/FullScreenModal';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 

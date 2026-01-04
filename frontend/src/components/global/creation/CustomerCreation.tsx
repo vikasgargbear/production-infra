@@ -8,7 +8,7 @@
  * <CustomerCreation onClose={handleClose} onCustomerCreated={handleCreated} />
  */
 import React from 'react';
-import CustomerCreationModal from '../../modals/CustomerCreationModal';
+import CustomerCreationModal from './CustomerCreationModal';
 
 interface CustomerCreationProps {
     onClose: () => void;

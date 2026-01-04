@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Building2, User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, Shield, MessageCircle, FileText, CreditCard, ToggleLeft, ToggleRight, Check } from 'lucide-react';
-import { customersApi } from '../../../../services/api';
-import { metadataApi } from '../../../../services/api';
-import offlineStorage from '../../../../services/offlineStorage';
-import { useEnterAsTab } from '../../../../hooks/useEnterAsTab';
-import useEscapeKey from '../../../../hooks/useEscapeKey';
+import { customersApi } from '../../../services/api';
+import { metadataApi } from '../../../services/api';
+import offlineStorage from '../../../services/offlineStorage';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
+import useEscapeKey from '../../../hooks/useEscapeKey';
 
 /**
  * Enhanced Customer Creation Component

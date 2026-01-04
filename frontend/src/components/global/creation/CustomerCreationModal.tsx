@@ -2,7 +2,7 @@ import React, { useState, ChangeEvent } from 'react';
 import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customerAPI } from '../../../services/api';
 import { APP_CONFIG } from '../../../config/app.config';
-import { FullScreenModal } from '../ui/FullScreenModal';
+import { FullScreenModal } from '../modals/FullScreenModal';
 
 // Imports from centralized types
 import type {

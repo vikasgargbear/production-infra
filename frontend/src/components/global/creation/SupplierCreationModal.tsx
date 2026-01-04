@@ -4,7 +4,7 @@ import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
 import { APP_CONFIG } from '../../../config/app.config';
-import { FullScreenModal } from '../ui/FullScreenModal';
+import { FullScreenModal } from '../modals/FullScreenModal';
 
 // ==================== INLINE TRANSFORMERS ====================
 

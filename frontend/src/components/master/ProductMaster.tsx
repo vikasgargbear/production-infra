@@ -12,7 +12,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { productsApi } from '../../services/api';
-import { ProductEditModal } from '../global/modals';
+import { ProductEditModal } from '../global/edit';
 import { DataTable, Column } from '../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../global';
 import Button from '../global/ui/Button';
