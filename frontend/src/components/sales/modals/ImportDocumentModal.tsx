@@ -95,28 +95,28 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
     setLoading(true);
     try {
       let results: Document[] = [];
-      
+
       switch (documentType) {
         case 'sales-order':
           // Get sales orders that haven't been invoiced
-          const ordersResponse = await salesOrdersAPI.getAll({ 
+          const ordersResponse = await salesOrdersAPI.getAll({
             limit: 20,
             order_status: 'approved',
             invoice_created: false
           });
           results = ordersResponse.data || [];
           break;
-          
+
         case 'challan':
           // Get challans - try multiple endpoints to find working one
           try {
             // Try main challans endpoint first
-            const challansResponse = await challansApi.getAll({ 
+            const challansResponse = await challansApi.getAll({
               limit: 20,
               converted_to_invoice: false
             });
             results = challansResponse.data || [];
-            
+
             // If no results, try delivery API as fallback
             if (!results.length) {
               const deliveryResponse = await fetch('/api/delivery-challans/')
@@ -128,11 +128,11 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             results = []; // No mock data - let user know API is not working
           }
           break;
-          
+
         default:
           results = [];
       }
-      
+
       setDocuments(results);
     } catch (error) {
       setDocuments([]);
@@ -150,21 +150,21 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
     setLoading(true);
     try {
       let results: Document[] = [];
-      
+
       if (documentType === 'sales-order') {
-        const response = await salesOrdersAPI.search({ 
+        const response = await salesOrdersAPI.search({
           query: searchQuery,
-          invoice_created: false 
+          invoice_created: false
         });
         results = response.data || [];
       } else if (documentType === 'challan') {
-        const response = await challansApi.getAll({ 
+        const response = await challansApi.getAll({
           search: searchQuery,
           converted_to_invoice: false
         });
         results = response.data || [];
       }
-      
+
       setDocuments(results);
     } catch (error) {
     } finally {
@@ -174,13 +174,13 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
 
   const handleImport = async () => {
     if (!selectedDoc) return;
-    
+
     setLoading(true);
-    
+
     try {
       if (documentType === 'challan') {
         // For challans, get the challan data and populate the form (don't create invoice yet)
-        
+
         let challan: Document;
         try {
           const challanResponse = await challansApi.getById(selectedDoc.challan_id!);
@@ -189,7 +189,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
           // Use the selectedDoc data directly if fetch fails
           challan = selectedDoc;
         }
-        
+
         if (challan) {
           // Transform challan data for invoice form population
           const importData: ImportData = {
@@ -212,12 +212,10 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               expiry_date: item.expiry_date,
               quantity: item.dispatched_quantity || item.quantity,
               mrp: item.mrp,
-              rate: item.unit_price,
-              sale_price: item.unit_price,
+              unit_price: item.unit_price || item.rate || item.sale_price || 0,  // ✅ CANONICAL
               discount_percent: 0,
               free_quantity: 0,
               gst_percent: item.gst_percent || 0,
-              tax_rate: item.gst_percent || 0,
               available_quantity: item.quantity
             })),
             // Link references
@@ -230,7 +228,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               lr_number: challan.lr_number
             }
           };
-          
+
           onImport(importData);
         }
       } else {
@@ -254,10 +252,10 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             lr_number: selectedDoc.lr_number
           }
         };
-        
+
         onImport(importData);
       }
-      
+
       onClose();
     } catch (error: any) {
       alert(`Failed to import: ${error.response?.data?.detail || error.message}`);
@@ -286,22 +284,20 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
           <div className="flex gap-4">
             <button
               onClick={() => setDocumentType('sales-order')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                documentType === 'sales-order' 
-                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300' 
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'sales-order'
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
                   : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
-              }`}
+                }`}
             >
               <ShoppingCart className="w-4 h-4" />
               Sales Orders
             </button>
             <button
               onClick={() => setDocumentType('challan')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                documentType === 'challan' 
-                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300' 
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'challan'
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
                   : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
-              }`}
+                }`}
             >
               <Truck className="w-4 h-4" />
               Delivery Challans
@@ -344,19 +340,18 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             <div className="space-y-2">
               {documents.map((doc, index) => {
                 const docId = documentType === 'sales-order' ? doc.order_id : doc.challan_id;
-                const docNumber = documentType === 'sales-order' 
+                const docNumber = documentType === 'sales-order'
                   ? (doc.order_number || `ORD-${doc.order_id}`)
                   : (doc.challan_number || `DC-${doc.challan_id}`);
-                
+
                 return (
                   <div
                     key={docId || `doc-${index}`}
                     onClick={() => setSelectedDoc(doc)}
-                    className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                      selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">

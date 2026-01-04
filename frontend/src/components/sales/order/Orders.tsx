@@ -201,7 +201,7 @@ const Orders: React.FC = () => {
           discount_amount: 0,
           tax_percent: 12,
           tax_amount: 12.00,
-          line_total: 112.00
+          total_amount: 112.00  // ✅ CANONICAL (not line_total)
         }];
       }
 

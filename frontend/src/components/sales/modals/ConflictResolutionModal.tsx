@@ -23,7 +23,7 @@ interface InvoiceItem {
     batch_id?: number;
     quantity?: number;
     unit_price?: number;
-    line_total?: number;
+    total_amount?: number;  // ✅ CANONICAL (not line_total)
     [key: string]: unknown;
 }
 
@@ -78,7 +78,7 @@ const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = ({
                         ...item,
                         quantity: newQuantity,
                         // Recalculate totals
-                        line_total: newQuantity * (item.unit_price || 0)
+                        total_amount: newQuantity * (item.unit_price || 0)
                     };
                 }
                 return item;
