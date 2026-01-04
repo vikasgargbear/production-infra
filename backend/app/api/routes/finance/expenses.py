@@ -124,7 +124,7 @@ async def create_expense_claim(
             employee_result = db.execute(
                 text("""
                     SELECT employee_id FROM master.employees 
-                    WHERE employee_name ILIKE :name 
+                    WHERE full_name ILIKE :name 
                     ORDER BY employee_id 
                     LIMIT 1
                 """),
@@ -138,7 +138,7 @@ async def create_expense_claim(
                 employee_insert = db.execute(
                     text("""
                         INSERT INTO master.employees (
-                            employee_code, employee_name, status
+                            employee_code, full_name, employment_status
                         ) VALUES (
                             :code, :name, 'active'
                         ) RETURNING employee_id
@@ -237,7 +237,7 @@ async def get_expense_claims(
                 ec.claim_id,
                 ec.claim_number,
                 ec.employee_id,
-                e.employee_name,
+                e.full_name as employee_name,
                 ec.claim_date,
                 ec.purpose,
                 ec.total_amount,
@@ -276,7 +276,7 @@ async def get_expense_claims(
             params["to_date"] = to_date
         
         query += """
-            GROUP BY ec.claim_id, ec.claim_number, ec.employee_id, e.employee_name,
+            GROUP BY ec.claim_id, ec.claim_number, ec.employee_id, e.full_name,
                      ec.claim_date, ec.purpose, ec.total_amount, ec.approved_amount,
                      ec.claim_status, ec.created_at, u.username
             ORDER BY ec.claim_date DESC, ec.claim_id DESC
@@ -341,7 +341,7 @@ async def get_expense_claim_details(
                 ec.claim_id,
                 ec.claim_number,
                 ec.employee_id,
-                e.employee_name,
+                e.full_name as employee_name,
                 ec.claim_date,
                 ec.purpose,
                 ec.total_amount,

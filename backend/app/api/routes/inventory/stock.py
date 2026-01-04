@@ -315,8 +315,8 @@ async def list_stock_movements(
                     b.batch_number
                 FROM sales.invoice_items ii
                 JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
-                JOIN inventory.products p ON ii.product_id = p.product_id AND ii.org_id = p.org_id
-                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND ii.org_id = b.org_id
+                JOIN inventory.products p ON ii.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
                 WHERE 1=1
                 
                 UNION ALL
@@ -336,8 +336,8 @@ async def list_stock_movements(
                     p.product_code,
                     gi.batch_number
                 FROM procurement.grn_items gi
-                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id AND gi.org_id = g.org_id
-                JOIN inventory.products p ON gi.product_id = p.product_id AND gi.org_id = p.org_id
+                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
+                JOIN inventory.products p ON gi.product_id = p.product_id
                 WHERE 1=1
             )
             SELECT * FROM movements WHERE 1=1

@@ -271,7 +271,7 @@ async def get_returnable_items(
                     ii.quantity - COALESCE(SUM(sri.return_quantity), 0) as returnable_quantity,
                     ii.unit_price,
                     ii.discount_percent,
-                    ii.gst_percent as tax_percent,
+                    COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as tax_percent,
                     ii.total_amount,
                     p.hsn_code,
                     ii.unit
@@ -562,7 +562,7 @@ async def create_sale_return(
                 invoice_item_details = db.execute(
                     text("""
                         SELECT 
-                            ii.gst_percent,
+                            COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as gst_percent,
                             ii.discount_percent,
                             ii.unit_price,
                             ii.free_quantity as invoice_free_qty
