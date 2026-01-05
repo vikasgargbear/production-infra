@@ -35,8 +35,7 @@ async def get_full_sync_data(
     
     try:
         # Get products with current stock
-        # NOTE: mrp and sale_price are on batches table, not products
-        # We get latest batch pricing like products.py does
+        # Now using products.total_quantity_available (maintained by trigger)
         products_result = db.execute(text("""
             SELECT 
                 p.product_id,
@@ -46,24 +45,22 @@ async def get_full_sync_data(
                 p.category_id,
                 p.gst_percent,
                 p.is_active,
-                COALESCE(SUM(ib.quantity_available), 0) as current_stock,
+                COALESCE(p.total_quantity_available, 0) as total_quantity_available,
                 -- Get pricing from most recent batch
                 (SELECT b.mrp_per_unit 
                  FROM inventory.batches b 
                  WHERE b.product_id = p.product_id 
                    AND b.mrp_per_unit IS NOT NULL
                  ORDER BY b.batch_id DESC 
-                 LIMIT 1) as mrp,
+                 LIMIT 1) as mrp_per_unit,
                 (SELECT b.sale_price_per_unit 
                  FROM inventory.batches b 
                  WHERE b.product_id = p.product_id 
                    AND b.sale_price_per_unit IS NOT NULL
                  ORDER BY b.batch_id DESC 
-                 LIMIT 1) as sale_price
+                 LIMIT 1) as sale_price_per_unit
             FROM inventory.products p
-            LEFT JOIN inventory.batches ib ON p.product_id = ib.product_id
             WHERE p.org_id = :org_id AND p.is_active = true
-            GROUP BY p.product_id
             ORDER BY p.product_name
             LIMIT 5000
         """), {"org_id": org_id})
