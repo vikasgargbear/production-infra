@@ -489,3 +489,169 @@ class ProductService:
             ORDER BY type_name
         """))
         return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def search_for_purchase(
+        db: Session,
+        org_id: str,
+        product_name: str
+    ) -> Dict[str, Any]:
+        """
+        Search for existing products before creating purchase entry.
+        Returns matching products with their latest batch info.
+        """
+        if not product_name or not product_name.strip():
+            return {"products": [], "search_term": "", "exact_match_found": False}
+        
+        product_name = product_name.strip()
+        result = db.execute(text("""
+            SELECT DISTINCT
+                p.product_id,
+                p.product_name,
+                p.product_code,
+                p.hsn_code,
+                p.manufacturer,
+                b.batch_number as last_batch,
+                b.mrp_per_unit as last_mrp,
+                b.cost_per_unit as last_cost,
+                b.expiry_date as last_expiry,
+                CASE 
+                    WHEN LOWER(TRIM(p.product_name)) = LOWER(TRIM(:exact_name)) THEN 100
+                    WHEN LOWER(p.product_name) LIKE LOWER(:pattern) THEN 80
+                    ELSE 60
+                END as match_score
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON b.product_id = p.product_id
+                AND b.org_id = p.org_id
+                AND b.batch_id = (
+                    SELECT batch_id FROM inventory.batches
+                    WHERE product_id = p.product_id
+                    AND org_id = p.org_id
+                    ORDER BY created_at DESC LIMIT 1
+                )
+            WHERE p.org_id = :org_id
+                AND (
+                    LOWER(TRIM(p.product_name)) = LOWER(TRIM(:exact_name))
+                    OR LOWER(p.product_name) LIKE LOWER(:pattern)
+                )
+            ORDER BY match_score DESC, p.product_name
+            LIMIT 10
+        """), {
+            "org_id": org_id,
+            "exact_name": product_name,
+            "pattern": f"%{product_name}%"
+        })
+        
+        products = []
+        for row in result:
+            products.append({
+                "product_id": row.product_id,
+                "product_name": row.product_name,
+                "product_code": row.product_code,
+                "hsn_code": row.hsn_code,
+                "manufacturer": row.manufacturer,
+                "last_batch": row.last_batch,
+                "last_mrp": float(row.last_mrp) if row.last_mrp else None,
+                "last_cost": float(row.last_cost) if row.last_cost else None,
+                "last_expiry": str(row.last_expiry) if row.last_expiry else None,
+                "match_score": row.match_score,
+                "is_exact_match": row.match_score == 100
+            })
+        
+        return {
+            "search_term": product_name,
+            "products": products,
+            "exact_match_found": any(p["is_exact_match"] for p in products)
+        }
+    
+    @staticmethod
+    def validate_purchase_items(
+        db: Session,
+        org_id: str,
+        items: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Validate purchase items before creating entry.
+        Uses batch lookup for efficiency instead of N+1 queries.
+        """
+        if not items:
+            return {"items": [], "all_valid": True, "new_products_count": 0, "existing_products_count": 0}
+        
+        # BATCH: Get all product names and look them up together
+        product_names = [item.get("product_name", "").strip().lower() for item in items]
+        existing_products = {}
+        
+        if product_names:
+            result = db.execute(text("""
+                SELECT product_id, product_name, hsn_code, LOWER(TRIM(product_name)) as name_key
+                FROM inventory.products
+                WHERE LOWER(TRIM(product_name)) = ANY(:names)
+                AND org_id = :org_id
+            """), {"names": product_names, "org_id": org_id})
+            
+            for row in result:
+                existing_products[row.name_key] = {
+                    "product_id": row.product_id,
+                    "product_name": row.product_name,
+                    "hsn_code": row.hsn_code
+                }
+        
+        # Now validate each item using the pre-fetched lookup
+        validated_items = []
+        for item in items:
+            product_name = item.get("product_name", "").strip()
+            name_key = product_name.lower()
+            
+            validated_item = {
+                "product_name": product_name,
+                "quantity": item.get("quantity"),
+                "cost_price": item.get("cost_price"),
+                "mrp": item.get("mrp"),
+                "selling_price": item.get("selling_price"),
+                "batch_number": item.get("batch_number"),
+                "expiry_date": item.get("expiry_date"),
+                "hsn_code": item.get("hsn_code"),
+                "tax_percent": item.get("tax_percent", 0)
+            }
+            
+            existing = existing_products.get(name_key)
+            if existing:
+                validated_item["product_exists"] = True
+                validated_item["product_id"] = existing["product_id"]
+                validated_item["existing_product_name"] = existing["product_name"]
+                validated_item["existing_hsn_code"] = existing["hsn_code"]
+            else:
+                validated_item["product_exists"] = False
+                validated_item["product_id"] = None
+                validated_item["will_create_new"] = True
+            
+            # Validate required fields
+            errors = []
+            if not validated_item["quantity"] or validated_item["quantity"] <= 0:
+                errors.append("Quantity is required and must be > 0")
+            if not validated_item["cost_price"] or validated_item["cost_price"] <= 0:
+                errors.append("Cost price is required and must be > 0")
+            if not validated_item["batch_number"]:
+                errors.append("Batch number is required")
+            if not validated_item["expiry_date"]:
+                errors.append("Expiry date is required for pharma products")
+            
+            # Validate pricing logic
+            if validated_item.get("mrp") and validated_item.get("cost_price"):
+                if validated_item["mrp"] < validated_item["cost_price"]:
+                    errors.append("MRP cannot be less than cost price")
+            
+            if validated_item.get("selling_price") and validated_item.get("mrp"):
+                if validated_item["selling_price"] > validated_item["mrp"]:
+                    errors.append("Selling price cannot be greater than MRP")
+            
+            validated_item["validation_errors"] = errors
+            validated_item["is_valid"] = len(errors) == 0
+            validated_items.append(validated_item)
+        
+        return {
+            "items": validated_items,
+            "all_valid": all(item["is_valid"] for item in validated_items),
+            "new_products_count": sum(1 for item in validated_items if not item.get("product_exists")),
+            "existing_products_count": sum(1 for item in validated_items if item.get("product_exists"))
+        }

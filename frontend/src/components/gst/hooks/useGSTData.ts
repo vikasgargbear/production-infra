@@ -34,7 +34,8 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
                 dateTo: dateRange.to,
                 limit: 5000
             });
-            const data = Array.isArray(response) ? response : response?.invoices || response?.data?.invoices || [];
+            const responseData = response?.data || response;
+            const data = Array.isArray(responseData) ? responseData : responseData?.invoices || [];
             setInvoices(data);
             return data;
         } catch (err) {
@@ -46,12 +47,13 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
 
     const loadPurchases = useCallback(async () => {
         try {
-            const response = await purchasesApi.search({
+            const response = await purchasesApi.getOrders({
                 dateFrom: dateRange.from,
                 dateTo: dateRange.to,
                 limit: 5000
             });
-            const data = Array.isArray(response) ? response : response?.data?.purchases || response?.data || [];
+            const responseData = response?.data || response;
+            const data = Array.isArray(responseData) ? responseData : responseData?.purchases || responseData?.orders || [];
             setPurchases(data);
             return data;
         } catch (err) {
@@ -68,7 +70,8 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
                 to_date: dateRange.to,
                 note_type: 'all'
             });
-            const data = response.notes || [];
+            const responseData = response?.data || response;
+            const data = responseData?.notes || [];
             setCreditDebitNotes(data);
             return data;
         } catch (err) {
@@ -101,3 +104,4 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
 }
 
 export default useGSTData;
+
