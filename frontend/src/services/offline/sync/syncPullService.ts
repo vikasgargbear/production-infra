@@ -275,7 +275,8 @@ class SyncPullService {
             manufacturer: product.manufacturer_name || product.manufacturer || '',
             generic_name: product.generic_name || '',
             gst_percent: product.gst_percent || 0,
-            total_stock: product.total_stock ?? product.current_stock ?? 0,
+            // CANONICAL: use total_quantity_available from backend (fallback to legacy names)
+            total_stock: product.total_quantity_available ?? product.total_stock ?? product.current_stock ?? 0,
             mrp_per_unit: product.mrp_per_unit || product.mrp || 0,
             sale_price_per_unit: product.sale_price_per_unit || product.sale_price || 0,
             batches,
