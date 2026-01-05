@@ -351,26 +351,17 @@ async def get_note_detail(
     Get detailed information about a specific note
     """
     try:
-        # Get note details
-        note_query = """
-            SELECT n.*, p.party_name, p.party_type, p.gst_number as party_gst,
-                   p.address as party_address, p.phone as party_phone,
-                   s.invoice_number as linked_invoice_number
-            FROM financial_notes n
-            LEFT JOIN parties p ON n.party_id = p.party_id
-            LEFT JOIN sales s ON n.linked_invoice_id = s.sale_id
-            WHERE n.note_id = :note_id
-        """
+        # Use CreditNoteService instead of inline SQL
+        result = CreditNoteService.get_note_detail(
+            db=db,
+            org_id=str(context.org_id),
+            note_id=note_id
+        )
         
-        note = db.execute(
-            text(note_query), 
-            {"note_id": note_id}
-        ).first()
-        
-        if not note:
+        if not result:
             raise HTTPException(status_code=404, detail="Note not found")
             
-        return dict(note._mapping)
+        return result
         
     except HTTPException:
         raise
