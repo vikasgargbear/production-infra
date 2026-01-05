@@ -42,10 +42,10 @@ export interface BaseCustomer {
     primary_phone?: string;
     mobile?: string;
     email?: string;
-    contact_person?: string;
+    contact_person_name?: string;
 
     // GST
-    gstin?: string;
+    gst_number?: string;
     gst_number?: string;
 
     // Address (flat structure)
@@ -70,7 +70,7 @@ export interface BaseLineItem {
     // Batch
     batch_id?: string | number;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     expiry_date?: string;
 
     // Quantity
@@ -169,7 +169,7 @@ export interface BaseCompanyInfo {
     name?: string;
     company_name?: string;
     address?: string;
-    gstin?: string;
+    gst_number?: string;
     phone?: string;
     email?: string;
     logo?: string;

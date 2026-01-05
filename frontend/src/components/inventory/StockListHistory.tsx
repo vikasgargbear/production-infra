@@ -17,7 +17,7 @@ interface StockMovement {
   reference_no?: string;
   movement_date: string;
   reason?: string;
-  batch_no?: string;
+  batch_number?: string;
   location_from?: string;
   location_to?: string;
   created_by?: string;
@@ -60,7 +60,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         movement.movement_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.reference_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        movement.batch_no?.toLowerCase().includes(searchQuery.toLowerCase())
+        movement.batch_number?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -100,7 +100,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           reference_no: movement.reference_no || movement.reference_document || movement.invoice_no,
           movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
           reason: movement.reason || movement.notes,
-          batch_no: movement.batch_no || movement.batch_number,
+          batch_number: movement.batch_number || movement.batch_number,
           location_from: movement.location_from || movement.from_location,
           location_to: movement.location_to || movement.to_location,
           created_by: movement.created_by || movement.user_name,
@@ -149,7 +149,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
                 reference_no: purchase.purchase_number || purchase.po_number || purchase.supplier_invoice_number,
                 movement_date: purchase.invoice_date || purchase.po_date || purchase.created_at || new Date().toISOString(),
                 reason: `Purchase from ${purchase.supplier_name || 'Supplier'}`,
-                batch_no: item.batch_number || item.batch_no || 'N/A',
+                batch_number: item.batch_number || item.batch_number || 'N/A',
                 location_from: purchase.supplier_name || 'Supplier',
                 location_to: 'Main Warehouse',
                 created_by: 'System',
@@ -178,7 +178,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
                 reference_no: invoice.invoice_number || invoice.invoice_no,
                 movement_date: invoice.invoice_date || invoice.created_at || new Date().toISOString(),
                 reason: `Sale to ${invoice.customer_name || 'Customer'}`,
-                batch_no: item.batch_number || item.batch_no || 'N/A',
+                batch_number: item.batch_number || item.batch_number || 'N/A',
                 location_from: 'Main Warehouse',
                 location_to: invoice.customer_name || 'Customer',
                 created_by: 'System',
@@ -262,8 +262,8 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
       render: (value, movement) => (
         <div>
           <div className="text-app-900">{value}</div>
-          {movement.batch_no && (
-            <div className="text-sm text-app-500">Batch: {movement.batch_no}</div>
+          {movement.batch_number && (
+            <div className="text-sm text-app-500">Batch: {movement.batch_number}</div>
           )}
         </div>
       ),

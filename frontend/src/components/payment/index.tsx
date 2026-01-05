@@ -4,14 +4,14 @@
  */
 
 // Main Components
-import ModularPaymentEntry from './ModularPaymentEntry';
+import ModularPaymentEntry from './entry/ModularPaymentEntry';
 export { ModularPaymentEntry };
 // TODO: Implement these components
 // export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
 // export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
 
-import PaymentSummary from './components/PaymentSummary';
-import InvoiceSelector from './components/InvoiceSelector';
+import PaymentSummary from './shared/PaymentSummary';
+import InvoiceSelector from './shared/InvoiceSelector';
 export { PaymentSummary, InvoiceSelector };
 // export { default as PaymentModeSelector } from './components/PaymentModeSelector'; // TODO: Implement
 // export { default as InvoiceAllocation } from './components/InvoiceAllocation'; // TODO: Implement

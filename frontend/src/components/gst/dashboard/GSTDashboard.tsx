@@ -82,7 +82,7 @@ interface GSTReturnsData {
 }
 
 interface GSTSettingsData {
-  gstin?: string;
+  gst_number?: string;
   is_valid?: boolean;
   [key: string]: any;
 }
@@ -214,13 +214,13 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
       if (gstSettingsResponse.status === 'fulfilled') {
         settingsData = gstSettingsResponse.value || {};
         console.log(`[GST Dashboard] Settings loaded:`, {
-          gstin: settingsData.gstin,
+          gst_number: settingsData.gst_number,
           isValid: settingsData.is_valid
         });
       } else {
         console.warn(`[GST Dashboard] Settings API failed:`, gstSettingsResponse.reason);
         settingsData = {
-          gstin: '',
+          gst_number: '',
           is_valid: false,
           state: ''
         };
@@ -267,7 +267,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         complianceScore: gstData.complianceScore,
         gstr1Status: returnsData.gstr1?.status,
         gstr3bStatus: returnsData.gstr3b?.status,
-        gstinConfigured: settingsData.gstin ? 'Yes' : 'No',
+        gst_numberConfigured: settingsData.gst_number ? 'Yes' : 'No',
         loadDuration: `${loadDuration}ms`,
         timestamp: new Date().toISOString()
       });
@@ -282,7 +282,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
           loadedAt: new Date().toISOString(),
           period: selectedPeriod,
           complianceScore: gstData.complianceScore,
-          gstinConfigured: Boolean(settingsData.gstin),
+          gst_numberConfigured: Boolean(settingsData.gst_number),
           gstr1DueDate: returnsData.gstr1?.dueDate,
           gstr3bDueDate: returnsData.gstr3b?.dueDate,
           loadDuration,

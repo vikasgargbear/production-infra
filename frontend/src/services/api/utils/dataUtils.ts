@@ -3,11 +3,11 @@
 // Fields that should be converted to numbers
 const NUMERIC_FIELDS: string[] = [
   'gst_percent', 'cgst_percent', 'sgst_percent', 'igst_percent',
-  'mrp', 'sale_price', 'purchase_price', 'cost_price',
+  'mrp', 'sale_price', 'unit_price', 'cost_per_unit',
   'total_amount', 'discount', 'discount_amount', 'final_amount',
   'credit_limit', 'quantity', 'tax_percent', 'tax_amount',
   'subtotal_amount', 'line_total', 'amount', 'rate',
-  'min_stock', 'max_stock', 'current_stock',
+  'min_stock', 'max_stock', 'total_quantity_available',
   'opening_balance', 'closing_balance', 'payment_amount',
   'outstanding_amount', 'paid_amount', 'balance_amount'
 ];
@@ -23,7 +23,7 @@ const INTEGER_FIELDS: string[] = [
 
 // Fields that should remain as strings even if numeric
 const STRING_FIELDS: string[] = [
-  'phone', 'mobile', 'alternate_phone', 'pincode', 'gstin', 'gst_number', 'pan', 'pan_number',
+  'phone', 'mobile', 'alternate_phone', 'pincode', 'gst_number', 'gst_number', 'pan', 'pan_number',
   'drug_license_no', 'drug_license_number', 'fssai_license_no',
   'invoice_number', 'order_number', 'challan_number', 'batch_number',
   'supplier_code', 'customer_code', 'product_code',

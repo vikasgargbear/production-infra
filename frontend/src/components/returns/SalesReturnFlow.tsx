@@ -219,7 +219,7 @@ const SalesReturnFlow = ({ onClose }) => {
                 // Preserve batch data
                 batch_id: item.batch_id,
                 batch_number: item.batch_number,
-                batch_no: item.batch_number || item.batch_no,
+                batch_number: item.batch_number || item.batch_number,
                 manufacturing_date: item.manufacturing_date,
                 expiry_date: item.expiry_date,
                 // Preserve invoice item ID for linking
@@ -260,7 +260,7 @@ const SalesReturnFlow = ({ onClose }) => {
             // Preserve batch data
             batch_id: item.batch_id,
             batch_number: item.batch_number,
-            batch_no: item.batch_number || item.batch_no,
+            batch_number: item.batch_number || item.batch_number,
             manufacturing_date: item.manufacturing_date,
             expiry_date: item.expiry_date,
             // Preserve invoice item ID for linking
@@ -304,8 +304,8 @@ const SalesReturnFlow = ({ onClose }) => {
       phone: customer.phone || customer.mobile || customer.contact_phone || '',
       mobile: customer.mobile || customer.phone || '',
       email: customer.email || customer.contact_email || '',
-      contact_person: customer.contact_person || customer.contact_name || '',
-      gst_number: customer.gst_number || customer.gstin || customer.gst || '',
+      contact_person_name: customer.contact_person_name || customer.contact_person_name || '',
+      gst_number: customer.gst_number || customer.gst_number || customer.gst || '',
       drug_license_number: customer.drug_license_number || customer.drug_license || '',
       credit_limit: customer.credit_limit || 0,
       credit_days: customer.credit_days || 0
@@ -403,8 +403,8 @@ const SalesReturnFlow = ({ onClose }) => {
       product_name: product.product_name || product.name,
       // Batch data - properly handle from product search
       batch_id: product.batch_id || product.selectedBatch?.batch_id || null,
-      batch_no: product.batch_no || product.batch_number || product.selectedBatch?.batch_number || '',
-      batch_number: product.batch_number || product.batch_no || product.selectedBatch?.batch_number || '',
+      batch_number: product.batch_number || product.batch_number || product.selectedBatch?.batch_number || '',
+      batch_number: product.batch_number || product.batch_number || product.selectedBatch?.batch_number || '',
       manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || null,
       expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || null,
       rate: sellingPrice, // Use actual selling price from backend
@@ -421,7 +421,7 @@ const SalesReturnFlow = ({ onClose }) => {
       manufacturer: product.manufacturer || '',
       // Additional fields for manual entry
       is_manual: true,
-      available_stock: product.current_stock || product.stock || 0,
+      available_stock: product.total_quantity_available || product.stock || 0,
       discount_percent: 0, // Default no discount for manual items
       // Enterprise fields for manual returns
       requires_approval: true,
@@ -551,7 +551,7 @@ const SalesReturnFlow = ({ onClose }) => {
     // Enterprise validation: Batch tracking for manual returns
     if (showManualEntry) {
       const itemsWithoutBatch = returnData.items.filter(item =>
-        item.selected && item.return_quantity > 0 && !item.batch_id && !item.batch_no
+        item.selected && item.return_quantity > 0 && !item.batch_id && !item.batch_number
       );
 
       if (itemsWithoutBatch.length > 0) {
@@ -795,7 +795,7 @@ const SalesReturnFlow = ({ onClose }) => {
                             Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Amount: ₹{selectedInvoice.final_amount || selectedInvoice.total_amount || selectedInvoice.grand_total}
+                            Amount: ₹{selectedInvoice.final_amount || selectedInvoice.total_amount || selectedInvoice.total_amount}
                           </p>
                         </div>
                         <button

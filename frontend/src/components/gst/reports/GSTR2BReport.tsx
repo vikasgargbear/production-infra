@@ -44,7 +44,7 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
 
                     setData({
                         b2b: firstPage.map((inv: any) => ({
-                            gstin: inv.supplier_gstin || inv.gstin || '',
+                            gst_number: inv.supplier_gst_number || inv.gst_number || '',
                             name: inv.supplier_name || 'Unknown Supplier',
                             invoices: 1,
                             taxableValue: inv.taxable_amount || 0,
@@ -92,7 +92,7 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
             setData((prev: any) => ({
                 ...prev,
                 b2b: invoices.map((inv: any) => ({
-                    gstin: inv.supplier_gstin || '',
+                    gst_number: inv.supplier_gst_number || '',
                     name: inv.supplier_name || 'Unknown',
                     invoices: 1,
                     taxableValue: inv.taxable_amount || 0,
@@ -156,7 +156,7 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
                 <DataTable
                     data={data?.b2b || []}
                     columns={[
-                        { key: 'gstin', label: 'Supplier GSTIN' },
+                        { key: 'gst_number', label: 'Supplier GSTIN' },
                         { key: 'name', label: 'Supplier Name' },
                         { key: 'taxableValue', label: 'Taxable Value', render: (v) => formatCurrency(v) },
                         { key: 'cgst', label: 'CGST', render: (v) => formatCurrency(v) },

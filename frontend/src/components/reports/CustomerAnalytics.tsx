@@ -584,8 +584,8 @@ const CustomerAnalytics: React.FC = () => {
                       {customer.frequency}x/month
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className={customer.outstanding > customer.creditLimit * 0.8 ? 'text-red-600 font-medium' : ''}>
-                        {formatCurrency(customer.outstanding)}
+                      <span className={customer.current_outstanding > customer.creditLimit * 0.8 ? 'text-red-600 font-medium' : ''}>
+                        {formatCurrency(customer.current_outstanding)}
                       </span>
                       <p className="text-xs text-gray-500">of {formatCurrency(customer.creditLimit)}</p>
                     </td>

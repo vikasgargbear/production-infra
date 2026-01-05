@@ -33,7 +33,7 @@ export interface GRNItem {
     product_id: number;
     batch_number: string;
     quantity_received: number;
-    mfg_date?: string;
+    manufacturing_date?: string;
     expiry_date: string;
     mrp: number;
     rate: number;

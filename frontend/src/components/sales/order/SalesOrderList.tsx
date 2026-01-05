@@ -194,7 +194,7 @@ const SalesOrderList: React.FC = () => {
                 order.order_number || `ORD-${order.order_id}`,
                 formatDate(order.order_date),
                 order.customer_name || 'N/A',
-                formatCurrency(order.final_amount || order.total_amount),
+                formatCurrency(order.final_amount),
                 order.order_status || 'pending'
             ]);
 
@@ -219,7 +219,7 @@ const SalesOrderList: React.FC = () => {
             yPos += 10;
 
             itemsToExport.forEach(order => {
-                const rowText = `${order.order_number || `ORD-${order.order_id}`} | ${formatDate(order.order_date)} | ${order.customer_name || 'N/A'} | ${formatCurrency(order.final_amount || order.total_amount)} | ${order.order_status || 'pending'}`;
+                const rowText = `${order.order_number || `ORD-${order.order_id}`} | ${formatDate(order.order_date)} | ${order.customer_name || 'N/A'} | ${formatCurrency(order.final_amount)} | ${order.order_status || 'pending'}`;
                 doc.text(rowText, 20, yPos);
                 yPos += 8;
 
@@ -241,7 +241,7 @@ const SalesOrderList: React.FC = () => {
       <h2>Sales Orders Report</h2>
       <table><thead><tr><th>Order #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead>
       <tbody>
-      ${itemsToPrint.map(order => `<tr><td>${order.order_number || `ORD-${order.order_id}`}</td><td>${formatDate(order.order_date)}</td><td>${order.customer_name || 'N/A'}</td><td>${formatCurrency(order.final_amount || order.total_amount)}</td><td>${order.order_status || 'pending'}</td></tr>`).join('')}
+      ${itemsToPrint.map(order => `<tr><td>${order.order_number || `ORD-${order.order_id}`}</td><td>${formatDate(order.order_date)}</td><td>${order.customer_name || 'N/A'}</td><td>${formatCurrency(order.final_amount)}</td><td>${order.order_status || 'pending'}</td></tr>`).join('')}
       </tbody></table>
       </body></html>`;
         const w = window.open('', '_blank');
@@ -258,7 +258,7 @@ const SalesOrderList: React.FC = () => {
 
         const message = encodeURIComponent(
             `Sales Orders Report:\n\n${itemsToSend.map(order =>
-                `${order.order_number || `ORD-${order.order_id}`} - ${formatDate(order.order_date)} - ${order.customer_name} - ${formatCurrency(order.final_amount || order.total_amount)} (${order.order_status})`
+                `${order.order_number || `ORD-${order.order_id}`} - ${formatDate(order.order_date)} - ${order.customer_name} - ${formatCurrency(order.final_amount)} (${order.order_status})`
             ).join('\n')}`
         );
 
@@ -414,7 +414,7 @@ const SalesOrderList: React.FC = () => {
                                     <div className="text-sm text-gray-900">{order.customer_name}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {formatCurrency(order.final_amount || order.total_amount)}
+                                    {formatCurrency(order.final_amount)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex gap-2">

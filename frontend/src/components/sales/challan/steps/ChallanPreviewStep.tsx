@@ -64,7 +64,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
         address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
         phone: localStorage.getItem('companyPhone') || '7738228969',
         email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
-        gstin: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
+        gst_number: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
         drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
         logo: localStorage.getItem('companyLogo') || undefined
     };

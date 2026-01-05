@@ -19,7 +19,7 @@ export interface BaseCustomer {
     customer_type?: 'retail' | 'wholesale' | 'dealer' | 'hospital' | 'institution';
 
     // Contact
-    contact_person?: string;
+    contact_person_name?: string;
     phone?: string;
     alternate_phone?: string;
     email?: string;
@@ -32,7 +32,7 @@ export interface BaseCustomer {
     country?: string;
 
     // Tax info
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     drug_license_number?: string;
 
@@ -61,7 +61,7 @@ export interface BaseSupplier {
     supplier_type?: 'manufacturer' | 'distributor' | 'wholesaler' | 'importer';
 
     // Contact
-    contact_person?: string;
+    contact_person_name?: string;
     phone?: string;
     alternate_phone?: string;
     email?: string;
@@ -74,7 +74,7 @@ export interface BaseSupplier {
     country?: string;
 
     // Tax info
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     drug_license_number?: string;
 
@@ -110,7 +110,7 @@ export interface BaseProduct {
 
     // Pricing
     mrp?: number;
-    cost_price?: number;
+    cost_per_unit?: number;
     selling_price?: number;
 
     // Pack config

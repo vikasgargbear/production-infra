@@ -27,8 +27,8 @@ interface Customer {
     phone?: string;
     primary_phone?: string;
     email?: string;
-    gstin?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
 }
 
 interface Employee {
@@ -44,7 +44,7 @@ interface CompanyInfo {
     address?: string;
     phone?: string;
     email?: string;
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     state?: string;
     city?: string;
@@ -57,7 +57,7 @@ interface Product {
     hsn_code?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     quantity?: number;
     unit?: string;
     uom?: string;
@@ -467,7 +467,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
                 batch_id: product.batch_id,
-                batch_number: product.batch_number || product.batch_no,
+                batch_number: product.batch_number || product.batch_number,
                 quantity,
                 unit: product.unit || product.uom || 'NOS',
                 pack_size: product.pack_size || product.pack_type,

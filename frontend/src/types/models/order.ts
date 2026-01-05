@@ -15,7 +15,7 @@ export interface OrderItem {
     product_code?: string;
     hsn_code?: string;
     batch_id?: number | string;
-    batch_no?: string;
+    batch_number?: string;
     batch_number?: string;
     expiry_date?: string;
 

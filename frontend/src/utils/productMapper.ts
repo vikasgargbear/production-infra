@@ -19,7 +19,7 @@ export interface RawBatchInput {
     batch_id?: number | string;
     id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     // Pricing aliases
     sale_price_per_unit?: number | string;
     sale_price?: number | string;
@@ -58,12 +58,12 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
         // Canonical Pricing
         mrp_per_unit: mrp,
         sale_price_per_unit: salePrice,
-        cost_per_unit: parseFloat(raw.cost_per_unit || raw.cost_price || 0),
+        cost_per_unit: parseFloat(raw.cost_per_unit || raw.cost_per_unit || 0),
 
         // Legacy Required Fields (mapped from same source)
         mrp: mrp,
         sale_price: salePrice,
-        purchase_price: parseFloat(raw.purchase_price || 0),
+        unit_price: parseFloat(raw.unit_price || 0),
 
         units_per_pack: raw.units_per_pack,
         packages_per_box: raw.packages_per_box,
@@ -101,12 +101,12 @@ export function mapProductToCanonical(raw: RawProductInput): Product {
         // Pricing
         mrp: mrp,
         sale_price: salePrice,
-        cost_price: parseFloat(raw.cost_price || 0),
+        cost_per_unit: parseFloat(raw.cost_per_unit || 0),
 
         // Canonical Pricing
         mrp_per_unit: mrp,
         sale_price_per_unit: salePrice,
-        cost_per_unit: parseFloat(raw.cost_price || 0),
+        cost_per_unit: parseFloat(raw.cost_per_unit || 0),
 
         // Stock
         total_stock: totalStock,
@@ -177,7 +177,7 @@ export function mergeProductAndBatch(product: Product, batch: ProductBatch) {
         // Batch overrides
         batch_id: batch.batch_id,
         batch_number: batch.batch_number,
-        batch_no: batch.batch_number,
+        batch_number: batch.batch_number,
         expiry_date: batch.expiry_date,
         manufacturing_date: batch.manufacturing_date,
 

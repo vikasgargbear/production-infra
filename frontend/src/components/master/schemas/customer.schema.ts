@@ -96,7 +96,7 @@ export const customerCreateSchema = z.object({
   address_info: addressInfoSchema,
   
   // GST and compliance
-  gstin: z.string()
+  gst_number: z.string()
     .regex(GST_REGEX, 'Invalid GST number format')
     .optional()
     .nullable(),
@@ -160,8 +160,8 @@ export const customerCreateSchema = z.object({
     .nullable(),
 }).refine((data) => {
   // If GST number is provided, extract and validate state code
-  if (data.gstin) {
-    const stateCode = data.gstin.substring(0, 2);
+  if (data.gst_number) {
+    const stateCode = data.gst_number.substring(0, 2);
     // You can add state code validation here
   }
   return true;
@@ -174,7 +174,7 @@ export const customerUpdateSchema = z.object({
   customer_type: customerTypeSchema.optional(),
   contact_info: contactInfoSchema.partial().optional(),
   address_info: addressInfoSchema.partial().optional(),
-  gstin: z.string().regex(GST_REGEX, 'Invalid GST number format').optional().nullable(),
+  gst_number: z.string().regex(GST_REGEX, 'Invalid GST number format').optional().nullable(),
   pan_number: z.string().regex(PAN_REGEX, 'Invalid PAN number format').optional().nullable(),
   drug_license_number: z.string().optional().nullable(),
   credit_limit: z.number().min(0).optional(),
@@ -219,17 +219,17 @@ export const validateCustomerUpdate = (data: unknown) => {
   return customerUpdateSchema.safeParse(data);
 };
 
-export const validateGSTNumber = (gstin: string): boolean => {
-  return GST_REGEX.test(gstin);
+export const validateGSTNumber = (gst_number: string): boolean => {
+  return GST_REGEX.test(gst_number);
 };
 
 export const validatePANNumber = (pan: string): boolean => {
   return PAN_REGEX.test(pan);
 };
 
-export const extractStateCodeFromGST = (gstin: string): string | null => {
-  if (validateGSTNumber(gstin)) {
-    return gstin.substring(0, 2);
+export const extractStateCodeFromGST = (gst_number: string): string | null => {
+  if (validateGSTNumber(gst_number)) {
+    return gst_number.substring(0, 2);
   }
   return null;
 };

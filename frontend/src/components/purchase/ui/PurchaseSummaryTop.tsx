@@ -13,7 +13,7 @@ interface Purchase {
   invoice_date?: string;
   items?: PurchaseItem[];
   payment_mode?: string;
-  final_amount?: number;
+  total_amount?: number;
   payment_status?: 'paid' | 'partial' | 'pending';
   [key: string]: any;
 }
@@ -113,7 +113,7 @@ const PurchaseSummaryTop: React.FC<PurchaseSummaryTopProps> = ({ purchase }) => 
           </div>
           <div>
             <p className="text-xs text-gray-500 uppercase tracking-wider">Amount</p>
-            <p className="font-semibold text-gray-900">₹{(purchase.final_amount || 0).toFixed(2)}</p>
+            <p className="font-semibold text-gray-900">₹{(purchase.total_amount || 0).toFixed(2)}</p>
           </div>
         </div>
       </div>

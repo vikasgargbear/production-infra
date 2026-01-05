@@ -32,7 +32,7 @@ export function useGSTExport(): UseGSTExportResult {
             // GSTR1/GSTR2B format
             csvContent = 'GSTIN,Party Name,Invoices,Taxable Value,CGST,SGST,IGST\n';
             data.b2b.forEach((row: any) => {
-                csvContent += `${row.gstin},"${row.name}",${row.invoices},${row.taxableValue},${row.cgst},${row.sgst},${row.igst}\n`;
+                csvContent += `${row.gst_number},"${row.name}",${row.invoices},${row.taxableValue},${row.cgst},${row.sgst},${row.igst}\n`;
             });
         } else if (Array.isArray(data)) {
             // Generic array
@@ -115,7 +115,7 @@ export function useGSTExport(): UseGSTExportResult {
             data.b2b.forEach((row: any) => {
                 content += `
           <tr>
-            <td>${row.gstin}</td>
+            <td>${row.gst_number}</td>
             <td>${row.name}</td>
             <td>${row.invoices}</td>
             <td>${formatCurrency(row.taxableValue)}</td>

@@ -12,7 +12,7 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   name: formData.supplier_name,
   code: formData.supplier_code || null,
   supplier_type: formData.supplier_type || 'distributor',
-  contact_person: formData.contact_person || null,
+  contact_person_name: formData.contact_person_name || null,
   contact_person_phone: formData.contact_person_phone || null,
   phone: formData.phone || null,
   whatsapp_number: formData.whatsapp_number || formData.phone || null,
@@ -23,7 +23,7 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   city: formData.city || null,
   state: formData.state || null,
   pincode: formData.pincode || null,
-  gst_number: formData.gstin || null,
+  gst_number: formData.gst_number || null,
   pan_number: formData.pan_number || null,
   drug_license_number: formData.drug_license_no || null,
   drug_license_validity: formData.drug_license_validity || null,
@@ -77,7 +77,7 @@ const SupplierCreationForm = ({
     // Basic Information
     supplier_name: '',
     supplier_code: '',
-    contact_person: '',
+    contact_person_name: '',
     contact_person_phone: '',
     contact_person_email: '',
     phone: '',
@@ -95,7 +95,7 @@ const SupplierCreationForm = ({
     country: 'India',
 
     // Tax & Compliance
-    gstin: '',
+    gst_number: '',
     pan_number: '',
     drug_license_no: '',
     drug_license_validity: '',
@@ -170,8 +170,8 @@ const SupplierCreationForm = ({
       newErrors.email = 'Invalid email format';
     }
 
-    if (formData.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstin)) {
-      newErrors.gstin = 'Invalid GSTIN format';
+    if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
+      newErrors.gst_number = 'Invalid GSTIN format';
     }
 
     setErrors(newErrors);
@@ -350,7 +350,7 @@ const SupplierCreationForm = ({
                 <input
                   type="text"
                   value={formData.contact_person}
-                  onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                  onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="Contact person name"
                 />
@@ -484,14 +484,14 @@ const SupplierCreationForm = ({
             </label>
             <input
               type="text"
-              value={formData.gstin}
-              onChange={(e) => handleInputChange('gstin', e.target.value.toUpperCase())}
-              className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${errors.gstin ? 'border-red-300' : 'border-gray-300'
+              value={formData.gst_number}
+              onChange={(e) => handleInputChange('gst_number', e.target.value.toUpperCase())}
+              className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 ${errors.gst_number ? 'border-red-300' : 'border-gray-300'
                 }`}
               placeholder="00AAAAA0000A0Z0"
             />
-            {errors.gstin && (
-              <p className="mt-1 text-xs text-red-600">{errors.gstin}</p>
+            {errors.gst_number && (
+              <p className="mt-1 text-xs text-red-600">{errors.gst_number}</p>
             )}
           </div>
           <div>

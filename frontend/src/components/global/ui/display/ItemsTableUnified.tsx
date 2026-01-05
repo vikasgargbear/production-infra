@@ -10,7 +10,7 @@ export interface ItemsTableItem {
     name?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     quantity?: number;
     unit_price?: number;
     rate?: number;
@@ -216,7 +216,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
                                 <td className="px-3 py-2">
                                     <div className="text-sm font-medium text-gray-900">{item.product_name || item.name}</div>
-                                    <div className="text-xs text-gray-500">{item.batch_number || item.batch_no || 'No Batch'}</div>
+                                    <div className="text-xs text-gray-500">{item.batch_number || item.batch_number || 'No Batch'}</div>
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                     <div className="text-sm text-gray-700">{item.packages_per_box || 1}*{item.units_per_pack || 1}</div>

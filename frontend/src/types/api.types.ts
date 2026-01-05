@@ -51,7 +51,7 @@ export interface Customer {
   phone: string;
   alternate_phone?: string;
   email?: string;
-  gstin?: string;
+  gst_number?: string;
   drug_license?: string;
   fssai_license?: string;
   address: Address;
@@ -107,7 +107,7 @@ export interface Product {
 
 export interface ProductPricing {
   mrp: number;
-  purchase_rate: number;
+  unit_price: number;
   selling_rate: number;
   ptr?: number;
   pts?: number;
@@ -117,7 +117,7 @@ export interface ProductPricing {
 }
 
 export interface ProductStock {
-  current_stock: number;
+  total_quantity_available: number;
   reserved_stock: number;
   available_stock: number;
   reorder_level: number;
@@ -134,7 +134,7 @@ export interface ProductBatch {
   quantity: number;
   reserved?: number;
   available?: number;
-  purchase_rate: number;
+  unit_price: number;
   mrp: number;
   location?: string;
   days_to_expiry?: number;
@@ -149,7 +149,7 @@ export interface Invoice {
   customer: {
     customer_id: number;
     name: string;
-    gstin?: string;
+    gst_number?: string;
     address: Address;
   };
   items: InvoiceItem[];
@@ -193,7 +193,7 @@ export interface InvoiceTotals {
   igst: number;
   total_gst: number;
   round_off: number;
-  grand_total: number;
+  total_amount: number;
 }
 
 export interface PaymentTerms {
@@ -261,7 +261,7 @@ export interface PurchaseOrder {
   supplier: {
     supplier_id: number;
     name: string;
-    gstin?: string;
+    gst_number?: string;
   };
   items: PurchaseOrderItem[];
   totals: PurchaseTotals;
@@ -285,7 +285,7 @@ export interface PurchaseTotals {
   discount_amount: number;
   taxable_amount: number;
   gst_amount: number;
-  grand_total: number;
+  total_amount: number;
 }
 
 export interface GRN {
@@ -307,7 +307,7 @@ export interface GRNItem {
   manufacturing_date?: string;
   quantity: number;
   free_quantity?: number;
-  purchase_rate: number;
+  unit_price: number;
   mrp: number;
   selling_rate: number;
 }
@@ -392,7 +392,7 @@ export interface GSTSummary {
 }
 
 export interface GSTDetails {
-  gstin: string;
+  gst_number: string;
   invoice_count: number;
   taxable_value: number;
   cgst: number;
@@ -452,7 +452,7 @@ export interface Organization {
   id: number;
   name: string;
   legal_name: string;
-  gstin: string;
+  gst_number: string;
   drug_license?: string;
   fssai_license?: string;
   address: Address;

@@ -21,7 +21,7 @@ interface PurchaseItem {
     invoice_no: string;
     invoice_date: string;
     supplier_name: string;
-    supplier_gstin: string;
+    supplier_gst_number: string;
     taxable_amount: number;
     cgst: number;
     sgst: number;
@@ -53,8 +53,8 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                     invoice_no: p.invoice_no || p.purchase_no || `PUR-${idx + 1}`,
                     invoice_date: p.invoice_date || p.purchase_date || '-',
                     supplier_name: p.supplier_name || 'Unknown Supplier',
-                    supplier_gstin: p.supplier_gstin || p.gstin || '-',
-                    taxable_amount: p.subtotal_amount || p.taxable_amount || 0,
+                    supplier_gst_number: p.supplier_gst_number || p.gst_number || '-',
+                    taxable_amount: p.taxable_amount || 0,
                     cgst: p.cgst_amount || 0,
                     sgst: p.sgst_amount || 0,
                     igst: p.igst_amount || 0,
@@ -152,7 +152,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                         { key: 'invoice_no', label: 'Invoice No' },
                         { key: 'invoice_date', label: 'Date' },
                         { key: 'supplier_name', label: 'Supplier' },
-                        { key: 'supplier_gstin', label: 'GSTIN' },
+                        { key: 'supplier_gst_number', label: 'GSTIN' },
                         { key: 'taxable_amount', label: 'Taxable', render: (v) => formatCurrency(v) },
                         { key: 'cgst', label: 'CGST', render: (v) => formatCurrency(v) },
                         { key: 'sgst', label: 'SGST', render: (v) => formatCurrency(v) },

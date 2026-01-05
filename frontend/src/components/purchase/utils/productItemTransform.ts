@@ -25,7 +25,7 @@ export function prepareItemForPurchaseOrder(product: any): PurchaseOrderItem {
         hsn_code: product.hsn_code || product.hsn,
         quantity: 1,
         free_quantity: 0,
-        rate: product.purchase_price || product.cost_price || product.cost_per_unit || 0,
+        rate: product.unit_price || product.unit_price || product.cost_per_unit || 0,
         discount_percent: 0,
         discount_amount: 0,
         tax_percent: product.gst_percent || product.tax_percent || 18,
@@ -46,7 +46,7 @@ export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
         hsn_code: product.hsn_code || product.hsn,
         quantity: 1,
         free_quantity: 0,
-        rate: product.purchase_price || product.cost_price || product.cost_per_unit || 0,
+        rate: product.unit_price || product.unit_price || product.cost_per_unit || 0,
         discount_percent: 0,
         discount_amount: 0,
         tax_percent: product.gst_percent || product.tax_percent || 18,
@@ -59,7 +59,7 @@ export function prepareItemForPurchaseEntry(product: any): PurchaseEntryItem {
         manufacturing_date: null,
         mrp_per_unit: product.mrp_per_unit || product.mrp || 0,
         sale_price_per_unit: product.sale_price_per_unit || product.selling_price || 0,
-        cost_per_unit: product.purchase_price || product.cost_price || product.cost_per_unit || 0,
+        cost_per_unit: product.unit_price || product.unit_price || product.cost_per_unit || 0,
     };
 }
 
@@ -76,7 +76,7 @@ export function prepareItemForGRN(product: any, poItem?: any): GRNItem {
         received_quantity: poItem?.quantity || 1,
         rejected_quantity: 0,
         free_quantity: poItem?.free_quantity || 0,
-        rate: poItem?.rate || product.purchase_price || product.cost_per_unit || 0,
+        rate: poItem?.unit_price || product.unit_price || product.cost_per_unit || 0,
         discount_percent: poItem?.discount_percent || 0,
         tax_percent: poItem?.tax_percent || product.gst_percent || 18,
         cgst_rate: ((poItem?.tax_percent || product.gst_percent || 18) / 2),
@@ -104,7 +104,7 @@ export function cleanItemForBackend(item: BasePurchaseItem): any {
 
     // Ensure numeric fields
     cleaned.quantity = parseFloat(cleaned.quantity as any) || 0;
-    cleaned.rate = parseFloat(cleaned.rate as any) || 0;
+    cleaned.unit_price = parseFloat(cleaned.unit_price as any) || 0;
     cleaned.discount_percent = parseFloat(cleaned.discount_percent as any) || 0;
     cleaned.tax_percent = parseFloat(cleaned.tax_percent as any) || 0;
 

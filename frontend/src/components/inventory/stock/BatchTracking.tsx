@@ -136,7 +136,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
     );
 
     const totalValue = batchesData.reduce((sum, batch) => {
-      return sum + ((batch.quantity_available || 0) * (batch.cost_price || 0));
+      return sum + ((batch.quantity_available || 0) * (batch.cost_per_unit || 0));
     }, 0);
 
     setStats({
@@ -308,7 +308,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
         item.quantity_available || 0,
         new Date(item.expiry_date).toLocaleDateString(),
         getBatchStatusText(item),
-        formatCurrency((item.quantity_available || 0) * (item.cost_price || 0))
+        formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))
       ]);
 
       (doc as any).autoTable({
@@ -332,7 +332,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       yPos += 10;
 
       itemsToExport.forEach(item => {
-        const rowText = `${item.batch_number} | ${item.product_name} | ${item.quantity_available} | ${new Date(item.expiry_date).toLocaleDateString()} | ${getBatchStatusText(item)} | ${formatCurrency((item.quantity_available || 0) * (item.cost_price || 0))}`;
+        const rowText = `${item.batch_number} | ${item.product_name} | ${item.quantity_available} | ${new Date(item.expiry_date).toLocaleDateString()} | ${getBatchStatusText(item)} | ${formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))}`;
         doc.text(rowText, 20, yPos);
         yPos += 8;
 
@@ -357,7 +357,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       <h2>Batch Tracking Report</h2>
       <table><thead><tr><th>Batch #</th><th>Product</th><th>Available</th><th>Expiry Date</th><th>Status</th><th>Value</th></tr></thead>
       <tbody>
-      ${itemsToPrint.map(item => `<tr><td>${item.batch_number}</td><td>${item.product_name}</td><td>${item.quantity_available}</td><td>${new Date(item.expiry_date).toLocaleDateString()}</td><td>${getBatchStatusText(item)}</td><td>${formatCurrency((item.quantity_available || 0) * (item.cost_price || 0))}</td></tr>`).join('')}
+      ${itemsToPrint.map(item => `<tr><td>${item.batch_number}</td><td>${item.product_name}</td><td>${item.quantity_available}</td><td>${new Date(item.expiry_date).toLocaleDateString()}</td><td>${getBatchStatusText(item)}</td><td>${formatCurrency((item.quantity_available || 0) * (item.cost_per_unit || 0))}</td></tr>`).join('')}
       </tbody></table>
       </body></html>`;
     const w = window.open('', '_blank');
@@ -459,7 +459,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       key: 'total_value',
       align: 'right' as const,
       sortable: true,
-      render: (value, batch) => formatCurrency((batch.quantity_available || 0) * (batch.cost_price || 0)),
+      render: (value, batch) => formatCurrency((batch.quantity_available || 0) * (batch.cost_per_unit || 0)),
     },
     {
       header: 'Days to Expiry',
@@ -729,7 +729,7 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
                 <div>
                   <span className="text-gray-500">Total Value:</span>
                   <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredBatches.reduce((sum, item) => sum + ((item.quantity_available || 0) * (item.cost_price || 0)), 0))}
+                    {formatCurrency(filteredBatches.reduce((sum, item) => sum + ((item.quantity_available || 0) * (item.cost_per_unit || 0)), 0))}
                   </span>
                 </div>
                 <div>

@@ -16,7 +16,7 @@ export type GSTReportPeriod = 'current' | 'previous' | 'quarter' | 'year' | 'cus
 // ==================== B2B & B2C DATA ====================
 
 export interface B2BInvoice {
-    gstin: string;
+    gst_number: string;
     name: string;
     invoices: number;
     taxableValue: number;
@@ -88,7 +88,7 @@ export interface HSNSummaryItem {
 
 export interface PartyWiseItem {
     party_name: string;
-    gstin: string;
+    gst_number: string;
     total_taxable_value: number;
     total_cgst: number;
     total_sgst: number;
@@ -105,7 +105,7 @@ export interface CreditDebitNote {
     note_date: string;
     original_invoice_number?: string;
     customer_name?: string;
-    customer_gstin?: string;
+    customer_gst_number?: string;
     reason?: string;
     amount: number;
     cgst_amount: number;
@@ -212,7 +212,7 @@ export interface GSTReturnsData {
 }
 
 export interface GSTSettingsData {
-    gstin?: string;
+    gst_number?: string;
     is_valid?: boolean;
 }
 
@@ -233,7 +233,7 @@ export interface ReconciliationItem {
     invoice_number: string;
     invoice_date: string;
     party_name: string;
-    gstin: string;
+    gst_number: string;
     taxable_amount: number;
     tax_amount: number;
     status: 'matched' | 'unmatched' | 'partial';

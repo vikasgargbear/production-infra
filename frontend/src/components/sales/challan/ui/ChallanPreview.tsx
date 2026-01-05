@@ -20,7 +20,7 @@ interface CustomerDetails {
     city?: string;
     state?: string;
     pincode?: string;
-    gstin?: string;
+    gst_number?: string;
     phone?: string;
 }
 
@@ -35,7 +35,7 @@ interface Challan {
     delivery_city?: string;
     delivery_state?: string;
     delivery_pincode?: string;
-    delivery_gstin?: string;
+    delivery_gst_number?: string;
     delivery_contact_person?: string;
     delivery_contact_phone?: string;
     transport_company?: string;
@@ -50,7 +50,7 @@ interface Challan {
 interface CompanyInfo {
     name?: string;
     address?: string;
-    gstin?: string;
+    gst_number?: string;
     logo?: string;
     drugLicense?: string;
 }
@@ -144,7 +144,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                         <div>
                             <h2 className="text-lg font-bold text-gray-900 uppercase">{companyInfo?.name || 'AASO PHARMACEUTICALS'}</h2>
                             <p className="text-sm text-gray-600">{companyInfo?.address || 'Gangapur City, Rajasthan'}</p>
-                            <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gstin || '08AAXCA4042N1Z2'}</p>
+                            <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || '08AAXCA4042N1Z2'}</p>
                             {companyInfo?.drugLicense && <p className="text-sm text-gray-600">{companyInfo.drugLicense}</p>}
                         </div>
                     </div>
@@ -178,8 +178,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                                             challan.customer_details.pincode || ''
                                         ].filter(Boolean).join(', ')}
                                     </p>
-                                    {challan.customer_details.gstin && (
-                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gstin}</p>
+                                    {challan.customer_details.gst_number && (
+                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gst_number}</p>
                                     )}
                                     {challan.customer_details.phone && (
                                         <p className="text-gray-700 text-xs">Phone: {challan.customer_details.phone}</p>
@@ -200,8 +200,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                                     <p className="font-semibold text-gray-900 text-sm">{challan.delivery_contact_person || challan.customer_name || 'N/A'}</p>
                                     <p className="text-gray-700 text-xs">{challan.delivery_address}</p>
                                     <p className="text-gray-700 text-xs">{[challan.delivery_city, challan.delivery_state, challan.delivery_pincode].filter(Boolean).join(', ')}</p>
-                                    {challan.delivery_gstin && (
-                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.delivery_gstin}</p>
+                                    {challan.delivery_gst_number && (
+                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.delivery_gst_number}</p>
                                     )}
                                     {challan.delivery_contact_phone && (
                                         <p className="text-gray-700 text-xs">Phone: {challan.delivery_contact_phone}</p>
@@ -214,8 +214,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                                     {(challan.customer_details?.city || challan.customer_details?.state || challan.customer_details?.pincode) && (
                                         <p className="text-gray-700 text-xs">{[challan.customer_details?.city, challan.customer_details?.state, challan.customer_details?.pincode].filter(Boolean).join(', ')}</p>
                                     )}
-                                    {challan.customer_details?.gstin && (
-                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gstin}</p>
+                                    {challan.customer_details?.gst_number && (
+                                        <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gst_number}</p>
                                     )}
                                     {challan.customer_details?.phone && (
                                         <p className="text-gray-700 text-xs">Phone: {challan.customer_details.phone}</p>

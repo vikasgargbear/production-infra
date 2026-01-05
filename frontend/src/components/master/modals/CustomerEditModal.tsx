@@ -49,7 +49,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     pincode: customer?.pincode || '',
     
     // Compliance & GST
-    gst_number: customer?.gst_number || customer?.gstin || '',
+    gst_number: customer?.gst_number || customer?.gst_number || '',
     pan_number: customer?.pan_number || '',
     drug_license_number: customer?.drug_license_number || '',
     drug_license_validity: customer?.drug_license_validity || '',
@@ -178,7 +178,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         security_deposit: parseFloat(String(formData.security_deposit)) || 0,
         // Map GST field properly
-        gstin: formData.gst_number,
+        gst_number: formData.gst_number,
         gst_number: formData.gst_number
       };
       

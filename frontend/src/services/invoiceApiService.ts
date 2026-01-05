@@ -90,7 +90,7 @@ interface CompanySettings {
         email: string;
     };
     secure: {
-        gstin: string;
+        gst_number: string;
         state_code: string;
     };
 }
@@ -203,7 +203,7 @@ api.interceptors.response.use(
             } else if (error.config?.url?.includes('company/settings/secure')) {
                 return Promise.resolve({
                     data: {
-                        gstin: '27AABCU9603R1ZM',
+                        gst_number: '27AABCU9603R1ZM',
                         state_code: '27'
                     }
                 });

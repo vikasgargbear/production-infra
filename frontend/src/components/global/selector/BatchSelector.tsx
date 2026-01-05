@@ -60,7 +60,7 @@ interface Batch {
 interface ProductWithBatch extends Product {
     batch_id: number | string;
     batch_number: string;
-    batch_no: string;
+    batch_number: string;
     available_quantity: number;
     quantity: number;
     unit_price: number;

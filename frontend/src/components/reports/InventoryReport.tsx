@@ -94,9 +94,9 @@ const InventoryReport: React.FC = () => {
       const items = (inventoryList.data || []).map((item: any) => {
         // Determine stock status
         let status: InventoryItem['status'] = 'Optimal';
-        if (item.current_stock <= item.min_stock_level) {
-          status = item.current_stock <= (item.min_stock_level * 0.5) ? 'Critical' : 'Low';
-        } else if (item.current_stock >= item.max_stock_level) {
+        if (item.total_quantity_available <= item.min_stock_level) {
+          status = item.total_quantity_available <= (item.min_stock_level * 0.5) ? 'Critical' : 'Low';
+        } else if (item.total_quantity_available >= item.max_stock_level) {
           status = 'Overstocked';
         } else if (item.expiry_date) {
           const daysToExpiry = Math.ceil((new Date(item.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
@@ -110,10 +110,10 @@ const InventoryReport: React.FC = () => {
           name: item.name || item.product_name,
           category: item.category || 'General',
           batch: item.batch_number || '',
-          currentStock: item.current_stock || item.quantity || 0,
+          currentStock: item.total_quantity_available || item.quantity || 0,
           minStock: item.min_stock_level || 0,
           maxStock: item.max_stock_level || 0,
-          value: item.stock_value || (item.current_stock * (item.purchase_price || 0)),
+          value: item.stock_value || (item.total_quantity_available * (item.unit_price || 0)),
           expiryDate: item.expiry_date || '',
           lastRestocked: item.last_restocked || item.last_purchase_date || '',
           turnoverRate: item.turnover_rate || 0,

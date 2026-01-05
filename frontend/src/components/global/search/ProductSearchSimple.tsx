@@ -15,7 +15,7 @@ import { Product } from '../../../types/models/product';
 interface ProductWithBatch extends Product {
     batch_id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     expiry_date?: string;
     quantity?: number;
     unit_price?: number;

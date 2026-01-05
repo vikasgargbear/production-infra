@@ -1,28 +1,38 @@
 # Inventory Module
 
-Enterprise inventory management module for stock tracking, adjustments, and batch management.
+**Status:** ✅ Modernized (Jan 2026)
 
-## Structure
+Hook-based architecture with extracted logic. No context providers.
+
+---
+
+## 🏗️ Architecture
 
 ```
 inventory/
-├── StockHub.tsx           # Main hub with navigation
-├── StockListHistory.tsx   # Stock movement history
-├── index.ts               # Barrel exports
-│
-├── stock/                 # Stock sub-module (6 components)
-│   ├── CurrentStock.tsx   # Current stock view
-│   ├── BatchTracking.tsx  # Batch management
-│   └── StockAdjustment.tsx# Adjustments
-│
-├── hooks/                 # Shared hooks
-│
-├── types/                 # Type definitions
-│   └── inventorySharedTypes.ts
-│
-└── utils/                 # Utilities (5 files)
-    ├── inventoryCalculations.ts
-    └── inventoryTransforms.ts
+├── hooks/                              # Logic hooks
+│   ├── useCurrentStock.ts             # Stock data + filtering (450 lines)
+│   ├── useStockAdjustment.ts          # Adjustment logic (350 lines)
+│   └── index.ts                       # Barrel export
+├── stock/
+│   ├── CurrentStock.tsx               # Stock display (1,188 lines, hook ready)
+│   ├── EnhancedStockAdjustmentFlow.tsx # Adjustment flow (939 lines, hook ready)
+│   ├── BatchTracking.tsx              # Batch management (857 lines)
+│   └── StockMovement.tsx              # Movement history (753 lines)
+├── types/                             # Shared types
+├── utils/                             # Utilities
+└── index.ts                           # Module export
+```
+
+## ✅ Hooks Created
+
+- **useCurrentStock** - Data loading, filtering, sorting, pagination, export
+- **useStockAdjustment** - Adjustment workflow, validation, submission
+
+## 🚀 Usage
+
+```typescript
+import { useCurrentStock, useStockAdjustment } from './hooks';
 ```
 
 ## Components

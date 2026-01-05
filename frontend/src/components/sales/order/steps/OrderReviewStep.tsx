@@ -19,8 +19,8 @@ interface Customer {
     customer_name?: string;
     phone?: string;
     primary_phone?: string;
-    gstin?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
 }
 
 interface CompanyInfo {
@@ -28,7 +28,7 @@ interface CompanyInfo {
     address?: string;
     phone?: string;
     email?: string;
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     city?: string;
 }
@@ -77,13 +77,13 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                     customer: {
                         name: order.customer_name,
                         phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
-                        gstin: selectedCustomer?.gstin,
-                        dl_number: selectedCustomer?.dl_number
+                        gst_number: selectedCustomer?.gst_number,
+                        drug_license_number: selectedCustomer?.drug_license_number
                     },
                     items: order.items.map(item => ({
                         product_name: item.product_name,
                         hsn_code: item.hsn_code,
-                        batch_no: item.batch_no || item.batch_number,
+                        batch_number: item.batch_number || item.batch_number,
                         quantity: item.quantity,
                         free_quantity: item.free_quantity || 0,
                         unit_price: item.unit_price,
@@ -121,8 +121,8 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 </div>
                                 <div>
                                     <h1 className="text-2xl font-bold text-gray-900 mb-1">{companyInfo.name || 'Your Company'}</h1>
-                                    {companyInfo.gstin && (
-                                        <p className="text-sm font-semibold text-gray-700 mb-1">GSTIN: {companyInfo.gstin}</p>
+                                    {companyInfo.gst_number && (
+                                        <p className="text-sm font-semibold text-gray-700 mb-1">GSTIN: {companyInfo.gst_number}</p>
                                     )}
                                     <p className="text-xs text-gray-600">{companyInfo.address || ''}</p>
                                 </div>
@@ -144,11 +144,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
                                     <p className="font-medium text-sm text-gray-900">{order.customer_name}</p>
-                                    {selectedCustomer?.gstin && (
-                                        <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gstin}</p>
+                                    {selectedCustomer?.gst_number && (
+                                        <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gst_number}</p>
                                     )}
-                                    {selectedCustomer?.dl_number && (
-                                        <p className="text-xs text-gray-500">D.L. No: {selectedCustomer.dl_number}</p>
+                                    {selectedCustomer?.drug_license_number && (
+                                        <p className="text-xs text-gray-500">D.L. No: {selectedCustomer.drug_license_number}</p>
                                     )}
                                     {selectedCustomer?.phone && (
                                         <p className="text-xs text-gray-500">Phone: {selectedCustomer.phone}</p>
@@ -265,7 +265,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         <tr key={index} className="border-b hover:bg-blue-50">
                                             <td className="py-2 px-3">
                                                 <p className="text-sm font-medium">{item.product_name}</p>
-                                                <p className="text-xs text-gray-500">Batch: {item.batch_no || item.batch_number || 'N/A'}</p>
+                                                <p className="text-xs text-gray-500">Batch: {item.batch_number || item.batch_number || 'N/A'}</p>
                                             </td>
                                             <td className="text-center py-2 px-3 text-sm font-medium">{item.quantity}</td>
                                             <td className="text-right py-2 px-3 text-sm">₹{(item.unit_price || 0).toFixed(2)}</td>

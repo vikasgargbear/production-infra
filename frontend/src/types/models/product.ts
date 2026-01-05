@@ -20,7 +20,7 @@ export interface Product {
   // Pricing
   mrp: number;
   sale_price: number;
-  cost_price: number;
+  cost_per_unit: number;
   // Canonical Pricing
   mrp_per_unit?: number;
   sale_price_per_unit?: number;
@@ -69,7 +69,7 @@ export interface Product {
   batch_count?: number;
   has_stock?: boolean;
   quantity_available?: number;
-  current_stock?: number; // Added for MVP compatibility
+  total_quantity_available?: number; // Added for MVP compatibility
 
   // Status
   is_active?: boolean;
@@ -98,7 +98,7 @@ export interface ProductBatch {
 
   // Legacy Pricing (deprecated)
   mrp?: number;
-  purchase_price?: number;
+  unit_price?: number;
   sale_price?: number;
 
   location?: string;
@@ -127,7 +127,7 @@ export interface ProductCreateInput {
   // Pricing
   mrp: number;
   sale_price: number;
-  cost_price: number;
+  cost_per_unit: number;
   gst_percent: number;
 
   // Units

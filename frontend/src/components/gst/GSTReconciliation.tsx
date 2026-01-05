@@ -93,7 +93,7 @@ const GSTReconciliation: React.FC = () => {
 
       // Transform real purchase data into reconciliation items
       const purchaseItems: ReconciliationItem[] = purchases.map((purchase, index) => {
-        const ourAmount = (purchase as any).final_amount || (purchase as any).total_amount || 0;
+        const ourAmount = (purchase as any).total_amount || 0;
         const ourGST = ((purchase as any).cgst_amount || 0) + ((purchase as any).sgst_amount || 0) + ((purchase as any).igst_amount || 0);
 
         // For now, assume portal amounts match our amounts (in real implementation, this would come from GST portal API)
@@ -108,7 +108,7 @@ const GSTReconciliation: React.FC = () => {
 
         return {
           id: index + 1,
-          supplierGSTIN: (purchase as any).supplier_gstin || (purchase as any).gstin || 'N/A',
+          supplierGSTIN: (purchase as any).supplier_gst_number || (purchase as any).gst_number || 'N/A',
           supplierName: (purchase as any).supplier_name || `Supplier ${index + 1}`,
           invoiceNo: (purchase as any).invoice_no || (purchase as any).purchase_no || `PUR-${index + 1}`,
           invoiceDate: (purchase as any).invoice_date || (purchase as any).purchase_date || (purchase as any).created_at?.split('T')[0] || fromDate,
@@ -122,7 +122,7 @@ const GSTReconciliation: React.FC = () => {
 
       // Transform real invoice data into reconciliation items
       const salesItems: ReconciliationItem[] = invoices.map((invoice, index) => {
-        const ourAmount = (invoice as any).final_amount || (invoice as any).total_amount || (invoice as any).grand_total || 0;
+        const ourAmount = (invoice as any).final_amount || 0;
         const ourGST = ((invoice as any).cgst_amount || 0) + ((invoice as any).sgst_amount || 0) + ((invoice as any).igst_amount || 0);
 
         // For now, assume portal amounts match our amounts (in real implementation, this would come from GST portal API)
@@ -137,7 +137,7 @@ const GSTReconciliation: React.FC = () => {
 
         return {
           id: index + 1,
-          supplierGSTIN: (invoice as any).customer_gstin || (invoice as any).gstin || 'N/A',
+          supplierGSTIN: (invoice as any).customer_gst_number || (invoice as any).gst_number || 'N/A',
           supplierName: (invoice as any).customer_name || `Customer ${index + 1}`,
           invoiceNo: (invoice as any).invoice_number || (invoice as any).invoice_no || `INV-${index + 1}`,
           invoiceDate: (invoice as any).invoice_date || (invoice as any).created_at?.split('T')[0] || fromDate,

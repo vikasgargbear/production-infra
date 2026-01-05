@@ -475,7 +475,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <td className="text-right py-2">{formatCurrency(party.total_business)}</td>
                     <td className="text-right py-2">{party.ontime_payment_rate}%</td>
                     <td className="text-right py-2">{party.avg_payment_days} days</td>
-                    <td className="text-right py-2">{formatCurrency(party.outstanding)}</td>
+                    <td className="text-right py-2">{formatCurrency(party.current_outstanding)}</td>
                     <td className="py-2">
                       <div className="flex gap-1">
                         {[...Array(5)].map((_, i) => (

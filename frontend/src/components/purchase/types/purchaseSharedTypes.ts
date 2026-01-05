@@ -48,7 +48,7 @@ export interface PurchaseEntryItem extends BasePurchaseItem {
     mrp_per_unit?: number;
     sale_price_per_unit?: number;
     cost_per_unit?: number;
-    purchase_price?: number; // Alias for cost_per_unit (legacy)
+    unit_price?: number; // Alias for cost_per_unit (legacy)
     mrp?: number; // Alias for mrp_per_unit (legacy)
     selling_price?: number; // Alias for sale_price_per_unit (legacy)
 }
@@ -91,7 +91,7 @@ export interface BasePurchaseDocument extends Supplier {
     other_charges?: number;
     round_off?: number;
     net_amount: number;
-    final_amount?: number;
+    total_amount?: number;
 
     // Metadata
     notes?: string;
@@ -101,7 +101,7 @@ export interface BasePurchaseDocument extends Supplier {
 
 /** Purchase Order document */
 export interface PurchaseOrder extends Omit<BasePurchaseDocument, 'items'> {
-    purchase_order_number: string;
+    po_number: string;
     expected_delivery_date?: string;
     items: PurchaseOrderItem[];
     payment_terms?: string;
@@ -133,7 +133,7 @@ export interface GRN extends Omit<BasePurchaseDocument, 'items'> {
     grn_number: string;
     grn_date: string;
     purchase_order_id?: number | string;
-    purchase_order_number?: string;
+    po_number?: string;
     items: GRNItem[];
 
     // Receipt details
@@ -151,7 +151,7 @@ export interface PurchaseCalculation {
     tax_amount: number;
     other_charges: number;
     net_amount: number;
-    final_amount: number;
+    total_amount: number;
     total_items: number;
     total_quantity: number;
     gst_breakdown: {

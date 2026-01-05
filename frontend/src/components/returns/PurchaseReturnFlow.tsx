@@ -173,9 +173,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             invoice_item_id: item.invoice_item_id,
             return_quantity: parseFloat(item.returnable_quantity || 0), // Pre-fill with max returnable
             selected: true, // Pre-select all
-            rate: item.unit_price || item.rate || item.purchase_price || 0,
-            unit_price: item.unit_price || item.rate || item.purchase_price || 0,
-            purchase_price: item.unit_price || item.rate || item.purchase_price || 0,
+            rate: item.unit_price || item.rate || item.unit_price || 0,
+            unit_price: item.unit_price || item.rate || item.unit_price || 0,
+            unit_price: item.unit_price || item.rate || item.unit_price || 0,
             tax_percent: item.tax_percent || 18,
             discount_percent: item.discount_percent || 0,
             max_returnable_qty: parseFloat(item.returnable_quantity || 0),
@@ -220,7 +220,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       supplier_name: supplier.supplier_name || supplier.name,
       address: supplier.address || supplier.billing_address || '',
       phone: supplier.phone || supplier.mobile || '',
-      gst_number: supplier.gst_number || supplier.gstin || ''
+      gst_number: supplier.gst_number || supplier.gst_number || ''
     };
 
     setSelectedSupplier(fullSupplier);
@@ -276,7 +276,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       return_quantity: 0,
       rate: 0,
       unit_price: 0,
-      purchase_price: 0,
+      unit_price: 0,
       tax_percent: 18,
       discount_percent: 0,
       selected: true,
@@ -313,7 +313,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
+        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.unit_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
 
         const itemTotal = returnQty * rate;
@@ -348,7 +348,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
+        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.unit_price) || 0;
         const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
 
         const itemTotal = returnQty * rate;
@@ -426,9 +426,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               batch_number: item.batch_number,
               return_quantity: item.return_quantity,  // Transformer expects this
               quantity: item.return_quantity,  // Backend expects this
-              rate: item.rate || item.unit_price || item.purchase_price || 0,
-              unit_price: item.unit_price || item.rate || item.purchase_price || 0,
-              cost_price: item.rate || item.unit_price || item.purchase_price || 0,  // Transformer expects this
+              rate: item.rate || item.unit_price || item.unit_price || 0,
+              unit_price: item.unit_price || item.rate || item.unit_price || 0,
+              cost_per_unit: item.rate || item.unit_price || item.unit_price || 0,  // Transformer expects this
               discount_percent: item.discount_percent || 0,
               tax_percent: item.tax_percent || item.gst_percent || 0,
               return_reason: item.return_reason || returnData.return_reason,

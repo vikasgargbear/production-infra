@@ -122,8 +122,8 @@ export const calculatePackBreakdown = (
 export const calculateTotalStockValue = (items: BaseStockItem[]): number => {
     return items.reduce((sum, item) => {
         const value = calculateStockValue(
-            item.current_stock || 0,
-            item.cost_price || item.purchase_rate || 0
+            item.total_quantity_available || 0,
+            item.cost_per_unit || item.cost_per_unit || 0
         );
         return sum + value;
     }, 0);

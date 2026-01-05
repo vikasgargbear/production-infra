@@ -24,16 +24,16 @@ export function transformInvoicesToGSTR1(
 
         // Check for GSTIN in multiple possible locations
         const hasGSTIN =
-            invoice.customer_gstin ||
-            invoice.gstin ||
-            customer?.gstin ||
+            invoice.customer_gst_number ||
+            invoice.gst_number ||
+            customer?.gst_number ||
             customer?.gst_number ||
             customer?.gst_no;
 
         if (hasGSTIN) {
             b2bInvoices.push({
                 ...invoice,
-                customer_gstin: hasGSTIN
+                customer_gst_number: hasGSTIN
             });
         } else {
             b2cInvoices.push(invoice);
@@ -86,7 +86,7 @@ export function transformGSTR2BResponse(data: any): GSTR1Data {
 
     // Map supplier invoices to B2B format
     const b2b: B2BInvoice[] = invoices.map((inv: any) => ({
-        gstin: inv.supplier_gstin || inv.gstin || '',
+        gst_number: inv.supplier_gst_number || inv.gst_number || '',
         name: inv.supplier_name || inv.name || 'Unknown Supplier',
         invoices: 1,
         taxableValue: inv.taxable_amount || 0,
@@ -141,7 +141,7 @@ export function transformHSNResponse(data: any): GSTR1Data {
 
     // For HSN report, we use B2B array to display HSN items
     const b2b: any[] = hsnItems.map((item: HSNSummaryItem) => ({
-        gstin: item.hsn_code,
+        gst_number: item.hsn_code,
         name: item.description,
         invoices: 1,
         taxableValue: item.taxable_value,
@@ -174,7 +174,7 @@ export function transformPartyWiseResponse(data: any): GSTR1Data {
     const parties = data.parties || data.party_wise || [];
 
     const b2b: B2BInvoice[] = parties.map((party: PartyWiseItem) => ({
-        gstin: party.gstin,
+        gst_number: party.gst_number,
         name: party.party_name,
         invoices: 1,
         taxableValue: party.total_taxable_value,
@@ -231,8 +231,8 @@ export function normalizeInvoiceData(invoice: any): any {
         invoice_date: invoice.invoice_date || invoice.date,
         customer_id: invoice.customer_id,
         customer_name: invoice.customer_name || invoice.party_name,
-        customer_gstin: invoice.customer_gstin || invoice.gstin,
-        subtotal_amount: invoice.subtotal_amount || invoice.taxable_amount || 0,
+        customer_gst_number: invoice.customer_gst_number || invoice.gst_number,
+        subtotal_amount: invoice.taxable_amount || 0,
         cgst_amount: invoice.cgst_amount || 0,
         sgst_amount: invoice.sgst_amount || 0,
         igst_amount: invoice.igst_amount || 0,

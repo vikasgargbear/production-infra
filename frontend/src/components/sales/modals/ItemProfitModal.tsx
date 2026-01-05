@@ -67,7 +67,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                 items.map(async (item) => {
                     if (!item.batch_id) {
                         console.log(`Item ${item.product_name} has no batch_id`);
-                        return { ...item, cost_price: 0, cost_source: 'none' };
+                        return { ...item, cost_per_unit: 0, cost_source: 'none' };
                     }
 
                     try {
@@ -87,12 +87,12 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
 
                         return {
                             ...item,
-                            cost_price: finalCost,
+                            cost_per_unit: finalCost,
                             cost_source: costPerUnit > 0 ? 'batch' : (weightedAvgCost > 0 ? 'weighted_avg' : 'none')
                         };
                     } catch (error) {
                         console.error(`Failed to fetch cost for batch ${item.batch_id}:`, (error as Error).message);
-                        return { ...item, cost_price: 0, cost_source: 'error' };
+                        return { ...item, cost_per_unit: 0, cost_source: 'error' };
                     }
                 })
             );
@@ -100,7 +100,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
             setItemsWithCost(itemsWithCostData);
         } catch (error) {
             console.error('Failed to fetch cost data:', error);
-            setItemsWithCost(items.map(item => ({ ...item, cost_price: 0, cost_source: 'error' })));
+            setItemsWithCost(items.map(item => ({ ...item, cost_per_unit: 0, cost_source: 'error' })));
         } finally {
             setLoading(false);
         }
@@ -118,7 +118,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                 item.unit_price ||
                 item.sale_price_per_unit
             )) || 0;
-            const costRate = parseFloat(String(item.cost_price)) || 0;
+            const costRate = parseFloat(String(item.cost_per_unit)) || 0;
             const discountAmount = parseFloat(String(item.discount_amount)) || 0;
 
             const totalCost = costRate * quantity;

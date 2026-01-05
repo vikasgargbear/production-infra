@@ -1,8 +1,8 @@
 # Purchase Module
 
-**Status:** ✅ Optimized (Jan 2026)
+**Status:** ✅ Modernized (Jan 2026)
 
-Production-ready purchase module with shared infrastructure following sales module patterns.
+Production-ready purchase module with hook-based architecture. No context providers - each flow manages its own state.
 
 ---
 
@@ -10,25 +10,30 @@ Production-ready purchase module with shared infrastructure following sales modu
 
 ```
 purchase/
-├── hooks/              # Shared hooks
-│   ├── usePurchaseItems.ts      # Item management
-│   └── useDraftAutoSave.ts      # Draft persistence
-├── utils/              # Shared utilities
-│   ├── productItemTransform.ts  # Product → Item transforms
-│   ├── purchaseCalculations.ts  # Calculation logic
+├── hooks/                              # Shared hooks
+│   ├── usePurchaseItems.ts            # Item CRUD operations
+│   ├── useDraftAutoSave.ts            # Draft persistence
+│   ├── usePurchaseTransaction.ts      # Transaction state management
 │   └── index.ts
-├── types/              # Shared types
-│   ├── purchaseSharedTypes.ts   # Base types + extensions
-│   └── index.ts
-├── purchase-order/     # Purchase Order sub-module
-│   └── PurchaseOrderFlow.tsx
-├── grn/                # Goods Receipt Note sub-module
+├── purchase-entry/                     # Purchase Entry (~840 lines)
+│   ├── PurchaseEntryFlow.tsx          # UI component
+│   └── hooks/
+│       ├── usePurchaseEntryLogic.ts   # State & handlers (~560 lines)
+│       └── index.ts
+├── purchase-order/                     # Purchase Order (~700 lines)
+│   ├── PurchaseOrderFlow.tsx          # UI component
+│   └── hooks/
+│       ├── usePurchaseOrderLogic.ts   # State & handlers (~365 lines)
+│       └── index.ts
+├── grn/                                # Goods Receipt Note
 │   └── GRNFlow.tsx
-├── purchase-entry/     # Purchase Entry sub-module
-│   └── PurchaseEntryFlow.tsx
-├── modals/             # Shared modals
-├── ui/                 # Shared UI components
-└── PurchaseHub.tsx     # Main entry point
+├── ui/                                 # Shared UI (props-based)
+│   ├── SupplierSelector.tsx
+│   ├── PurchaseHeader.tsx
+│   └── PurchaseSummary.tsx
+├── types/                              # purchaseSharedTypes.ts
+├── utils/                              # purchaseCalculations.ts
+└── PurchaseHub.tsx                     # Entry point (NO context wrapper)
 ```
 
 ---

@@ -8,7 +8,7 @@ interface PurchaseOrderItem {
   pack_size?: string;
   quantity: string | number;
   free_quantity?: string | number;
-  purchase_price: string | number;
+  unit_price: string | number;
   mrp?: string | number;
   discount_percent?: string | number;
   tax_percent?: string | number;
@@ -76,7 +76,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
     
     purchaseOrder.items.forEach(item => {
       const quantity = parseFloat(String(item.quantity)) || 0;
-      const rate = parseFloat(String(item.purchase_price)) || 0;
+      const rate = parseFloat(String(item.unit_price)) || 0;
       const discountPercent = parseFloat(String(item.discount_percent)) || 0;
       const taxPercent = parseFloat(String(item.tax_percent)) || 0;
       
@@ -152,7 +152,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               </h2>
               <div className="text-sm text-gray-600 space-y-1">
                 <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
-                <p>GSTIN: {localStorage.getItem('company_gstin') || ''}</p>
+                <p>GSTIN: {localStorage.getItem('company_gst_number') || ''}</p>
                 <p>DL No: {localStorage.getItem('buyer_drug_license') || ''}</p>
                 <p>Phone: {localStorage.getItem('company_phone') || '+91 99999 99999'}</p>
               </div>
@@ -254,7 +254,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               <tbody>
                 {purchaseOrder.items.map((item, index) => {
                   const quantity = parseFloat(String(item.quantity)) || 0;
-                  const rate = parseFloat(String(item.purchase_price)) || 0;
+                  const rate = parseFloat(String(item.unit_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
                   const itemTotal = quantity * rate;
                   const discountAmount = (itemTotal * discountPercent) / 100;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Building2, Phone, Mail, MapPin, Globe, FileText, 
-  Save, Edit2, Upload, X, Check, AlertCircle, Loader2 
+import {
+  Building2, Phone, Mail, MapPin, Globe, FileText,
+  Save, Edit2, Upload, X, Check, AlertCircle, Loader2
 } from 'lucide-react';
 import { companyAPI } from '../../../services/api';
 
@@ -12,7 +12,7 @@ const CompanySettings = () => {
     phone: '',
     email: '',
     gst: '',
-    pan: '',
+    pan_number: '',
     website: '',
     logo: null,
     city: '',
@@ -20,7 +20,7 @@ const CompanySettings = () => {
     pincode: '',
     country: 'India'
   });
-  
+
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,9 +38,9 @@ const CompanySettings = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await companyAPI.getCompanyInfo();
-      
+
       if (response) {
         setCompanyInfo(response);
         if (response.logo) {
@@ -63,7 +63,7 @@ const CompanySettings = () => {
         errorMessage = error.message;
       }
       setError(errorMessage);
-      
+
       // Use default values if fetch fails
       const defaultInfo = {
         name: 'Your Company Name',
@@ -71,7 +71,7 @@ const CompanySettings = () => {
         phone: '+91 00000 00000',
         email: 'info@company.com',
         gst: '',
-        pan: '',
+        pan_number: '',
         website: '',
         logo: null,
         city: '',
@@ -101,7 +101,7 @@ const CompanySettings = () => {
         setError('Logo file size must be less than 2MB');
         return;
       }
-      
+
       setLogoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -122,20 +122,20 @@ const CompanySettings = () => {
         ...companyInfo,
         logo: logoPreview // Include base64 logo if changed
       };
-      
+
       // Save company info using the correct API
       const response = await companyAPI.updateCompanyInfo(dataToSave);
-      
+
       setCompanyInfo(response);
       setSuccess(true);
       setIsEditing(false);
-      
+
       // Store in localStorage for quick access
       localStorage.setItem('companyInfo', JSON.stringify(response));
-      
+
       // Hide success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
-      
+
     } catch (error) {
       let errorMessage = 'Failed to save company profile';
       if (error.response?.data?.detail) {
@@ -240,9 +240,9 @@ const CompanySettings = () => {
                 <div className="flex-shrink-0">
                   <div className="w-32 h-32 border-2 border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                     {logoPreview ? (
-                      <img 
-                        src={logoPreview} 
-                        alt="Company Logo" 
+                      <img
+                        src={logoPreview}
+                        alt="Company Logo"
                         className="w-full h-full object-contain"
                       />
                     ) : (
@@ -387,8 +387,8 @@ const CompanySettings = () => {
                       <FileText className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
-                        name="pan"
-                        value={companyInfo.pan}
+                        name="pan_number"
+                        value={companyInfo.pan_number}
                         onChange={handleInputChange}
                         disabled={!isEditing}
                         placeholder="ABCDE1234F"
@@ -402,7 +402,7 @@ const CompanySettings = () => {
               {/* Address Information */}
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Address Information</h3>
-                
+
                 {/* Address */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">

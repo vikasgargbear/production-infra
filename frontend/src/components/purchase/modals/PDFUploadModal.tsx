@@ -172,7 +172,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
               const testData = {
                 supplier_name: 'TEST SUPPLIER',
                 invoice_number: 'TEST-001',
-                items: [{product_name: 'Test Product', quantity: 1, cost_price: 100}]
+                items: [{product_name: 'Test Product', quantity: 1, unit_price: 100}]
               };
               setExtractedData(testData);
               setEditedData(testData);
@@ -277,8 +277,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                   <label className="text-sm text-gray-600">GSTIN</label>
                   <input
                     type="text"
-                    value={editedData.supplier_gstin || ''}
-                    onChange={(e) => setEditedData({...editedData, supplier_gstin: e.target.value})}
+                    value={editedData.supplier_gst_number || ''}
+                    onChange={(e) => setEditedData({...editedData, supplier_gst_number: e.target.value})}
                     className="w-full mt-1 p-2 border rounded"
                     disabled={editedData.supplier_exists}
                   />
@@ -348,7 +348,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                       quantity: 1,
                       free_quantity: 0,
                       mrp: 0,
-                      purchase_price: 0,
+                      unit_price: 0,
                       selling_price: 0,
                       discount_percent: 0,
                       tax_percent: 12
@@ -371,7 +371,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     hsn_code: '',
                     batch_number: '',
                     expiry_date: '',
-                    purchase_price: 0,
+                    unit_price: 0,
                     selling_price: 0,
                     quantity: 0,
                     free_quantity: 0,
@@ -379,7 +379,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     pack_type: 'STRIP',
                     total_units: 0,
                     mrp: 0,
-                    cost_price: 0,
+                    unit_price: 0,
                     rate: 0,
                     tax_percent: 12,
                     amount: 0,
@@ -503,8 +503,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-gray-500 text-xs">Cost</label>
                         <input
                           type="number"
-                          value={safeItem.purchase_price || safeItem.cost_price || safeItem.rate || 0}
-                          onChange={(e) => handleItemEdit(index, 'purchase_price', e.target.value)}
+                          value={safeItem.unit_price || safeItem.unit_price || safeItem.unit_price || 0}
+                          onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
                           className="w-full p-1 border rounded text-xs"
                           step="0.01"
                         />
@@ -564,7 +564,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                 </div>
                 <div className="flex justify-between font-semibold text-lg">
                   <span>Total:</span>
-                  <span>₹{editedData.grand_total || 0}</span>
+                  <span>₹{editedData.total_amount || 0}</span>
                 </div>
               </div>
             </div>

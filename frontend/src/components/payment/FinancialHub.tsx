@@ -4,10 +4,11 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import ModularPaymentEntry from './ModularPaymentEntry';
-import FinancialJournalFlow from './FinancialJournalFlow';
-import ExpenseClaimsFlow from './ExpenseClaimsFlow';
-import BankReconciliationFlow from './BankReconciliationFlow';
+import ModularPaymentEntry from './entry/ModularPaymentEntry';
+import FinancialJournalFlow from './flows/FinancialJournalFlow';
+import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
+import BankReconciliationFlow from './flows/BankReconciliationFlow';
+
 
 interface FinancialHubProps {
   open?: boolean;
@@ -67,7 +68,7 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Financial Hub"
       subtitle="Payments, journals, and expense management"
       icon={Calculator}

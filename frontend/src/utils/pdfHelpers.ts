@@ -88,7 +88,7 @@ const generateInvoiceStylePDF = async (
     name: data.customer_name || data.supplier_name || '',
     phone: data.customer_phone || data.supplier_phone || '',
     address: data.billing_address || data.supplier_address || '',
-    gst: data.customer_gstin || data.supplier_gstin || '',
+    gst: data.customer_gst_number || data.supplier_gst_number || '',
     email: data.customer_email || data.supplier_email || ''
   };
   pdfGenerator.addPartyDetails(
@@ -107,7 +107,7 @@ const generateInvoiceStylePDF = async (
     expiry: item.expiry_date || item.expiry,
     quantity: item.quantity,
     unit: item.unit,
-    unitPrice: item.unit_price || item.rate || item.price,
+    unitPrice: item.unit_price || item.unit_price || item.price,
     discount: item.discount,
     taxPercent: item.tax_percent || item.gst_percent || 0,
     cgstPercent: item.cgst_percent,
@@ -129,7 +129,7 @@ const generateInvoiceStylePDF = async (
     igst: parseFloat(data.igst_amount || 0),
     tax: parseFloat(data.total_gst || 0),
     roundOff: parseFloat(data.round_off_amount || data.round_off || 0),
-    total: parseFloat(data.final_amount || data.total_amount || data.net_amount || 0)
+    total: parseFloat(data.final_amount || 0)
   };
   pdfGenerator.currentY += 10;
   pdfGenerator.addSummary(summary);

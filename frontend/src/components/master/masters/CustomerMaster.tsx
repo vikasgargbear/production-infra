@@ -145,7 +145,7 @@ const getColumns = (
       header: 'GST/License',
       render: (_, customer) => {
         if (!customer) return <div>N/A</div>;
-        const gstNumber = customer.gst_number || (customer as Record<string, unknown>).gstin;
+        const gstNumber = customer.gst_number || (customer as Record<string, unknown>).gst_number;
         return (
           <div className="text-sm">
             {gstNumber ? (

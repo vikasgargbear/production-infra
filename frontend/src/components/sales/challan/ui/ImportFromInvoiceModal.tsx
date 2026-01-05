@@ -34,7 +34,7 @@ interface Document {
     shipping_state?: string;
     shipping_pincode?: string;
     customer_phone?: string;
-    customer_gstin?: string;
+    customer_gst_number?: string;
     items?: DocumentItem[];
     invoice_items?: DocumentItem[];
     invoice_date?: string;
@@ -140,7 +140,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                 state: selectedDoc.billing_state,
                 pincode: selectedDoc.billing_pincode,
                 phone: selectedDoc.customer_phone,
-                gstin: selectedDoc.customer_gstin
+                gst_number: selectedDoc.customer_gst_number
             },
             billing_address: selectedDoc.billing_address,
             delivery_address: selectedDoc.shipping_address || selectedDoc.billing_address,

@@ -88,7 +88,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                 // Transform backend data to match frontend structure
                 const transformedBatches = (response as any).data.map((batch: any) => ({
                     id: batch.id,
-                    batchNo: batch.batch_number || batch.batch_no || `BT-${batch.id}`,
+                    batchNo: batch.batch_number || batch.batch_number || `BT-${batch.id}`,
                     productId: batch.product_id || batch.productId,
                     productName: batch.product_name || batch.productName || 'Unknown Product',
                     productCode: batch.product_code || batch.productCode || 'N/A',
@@ -97,7 +97,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     quantity: batch.quantity || batch.total_quantity || 0,
                     availableQty: batch.available_quantity || batch.availableQty || batch.quantity || 0,
                     mrp: batch.mrp || batch.max_retail_price || 0,
-                    purchasePrice: batch.purchase_price || batch.purchasePrice || 0,
+                    purchasePrice: batch.unit_price || batch.purchasePrice || 0,
                     salePrice: batch.sale_price || batch.salePrice || 0,
                     status: getBatchStatus(batch.expiry_date || batch.expiryDate, batch.available_quantity || batch.availableQty),
                     location: batch.location || batch.warehouse || 'Unknown',

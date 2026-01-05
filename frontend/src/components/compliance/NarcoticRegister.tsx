@@ -403,7 +403,7 @@ const NarcoticRegister: React.FC = () => {
             productBatches.forEach((batch: any) => {
               narcoticEntries.push({
                 id: `batch_${batch.id || batch.batch_id}`,
-                entry_date: batch.created_at || batch.mfg_date,
+                entry_date: batch.created_at || batch.manufacturing_date,
                 entry_type: 'purchase',
                 product_id: product.id || product.product_id,
                 product_name: product.name || product.product_name,

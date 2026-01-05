@@ -15,10 +15,10 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     expiry_date?: string;
     manufacturing_date?: string;
-    mfg_date?: string;
+    manufacturing_date?: string;
     sale_price_per_unit?: number;
     unit_price?: number;
     sale_price?: number;
@@ -27,7 +27,7 @@ export interface ProductInput {
     quantity_available?: number;
     available_quantity?: number;
     total_stock?: number;
-    current_stock?: number;
+    total_quantity_available?: number;
     gst_percent?: number;
     tax_rate?: number;
     hsn_code?: string;
@@ -62,7 +62,7 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
     let mrp = 0;
     let availableQty = 0;
     let batchId = product.batch_id;
-    let batchNumber = product.batch_number || product.batch_no || '';
+    let batchNumber = product.batch_number || product.batch_number || '';
     let expiryDate = product.expiry_date || '';
     let manufacturingDate = product.manufacturing_date || '';
 
@@ -78,7 +78,7 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         availableQty = parseInt(String(
             product.quantity_available || product.available_quantity || 0
         ));
-        manufacturingDate = product.manufacturing_date || product.mfg_date || '';
+        manufacturingDate = product.manufacturing_date || product.manufacturing_date || '';
     } else if (bestBatch) {
         // New API: use best_batch ONLY if no batch was explicitly selected
         console.log('[PrepareItem] Using best_batch from API (auto-selected):', bestBatch);
@@ -99,7 +99,7 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
             product.mrp_per_unit || product.mrp || 0
         ));
         availableQty = parseInt(String(
-            product.total_stock || product.quantity_available || product.current_stock || 0
+            product.total_stock || product.quantity_available || product.total_quantity_available || 0
         ));
     }
 

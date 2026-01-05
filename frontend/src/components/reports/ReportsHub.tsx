@@ -26,8 +26,8 @@ import TaxAnalytics from './TaxAnalytics';
 import ProfitLossStatement from './ProfitLossStatement';
 
 // GST Reports
-import GSTR1Report from './GSTR1Report';
-import GSTR3BReport from './GSTR3BReport';
+import GSTR1Report from '../gst/reports/GSTR1Report';
+import GSTR3BReport from '../gst/reports/GSTR3BReport';
 
 interface ReportsHubProps {
   open: boolean;

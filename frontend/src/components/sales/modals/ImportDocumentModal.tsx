@@ -8,7 +8,7 @@ interface DocumentItem {
   product_name: string;
   product_code?: string;
   batch_id?: string;
-  batch_no?: string;
+  batch_number?: string;
   batch_number?: string;
   hsn_code?: string;
   expiry_date?: string;
@@ -206,7 +206,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               product_name: item.product_name,
               product_code: item.product_code,
               batch_id: item.batch_id,
-              batch_no: item.batch_number,
+              batch_number: item.batch_number,
               batch_number: item.batch_number,
               hsn_code: item.hsn_code,
               expiry_date: item.expiry_date,

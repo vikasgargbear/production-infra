@@ -13,14 +13,14 @@ import ProductVerificationModal from './modals/ProductVerificationModal';
 interface ExtractedItem {
   product_name: string;
   quantity?: number | string;
-  cost_price?: number | string;
+  unit_price?: number | string;
   mrp?: number | string;
   selling_price?: number | string;
   tax_percent?: number | string;
   discount_percent?: number | string;
   expiry_date?: string;
   batch_number?: string;
-  batch_no?: string;
+  batch_number?: string;
   hsn_code?: string;
   free_quantity?: number | string;
   product_id?: string | number | null;
@@ -34,9 +34,9 @@ interface ExtractedData {
   invoice_number?: string;
   invoice_date?: string;
   items?: ExtractedItem[];
-  final_amount?: number | string;
   total_amount?: number | string;
-  supplier_gstin?: string;
+  total_amount?: number | string;
+  supplier_gst_number?: string;
   supplier_address?: string;
   [key: string]: any;
 }
@@ -52,7 +52,7 @@ interface VerifiedSupplier {
   supplier_id?: string;
   supplier_name?: string;
   gst_number?: string;
-  gstin?: string;
+  gst_number?: string;
   primary_phone?: string;
   phone?: string;
   primary_email?: string;
@@ -193,7 +193,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       batch_number: '',
       expiry_date: '',
       quantity: 1,
-      cost_price: 0,
+      unit_price: 0,
       mrp: 0,
       selling_price: 0,
       tax_percent: 12,
@@ -256,8 +256,8 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       ...extractedData,
       supplier_id: verifiedSupplier.supplier_id,
       supplier_name: verifiedSupplier.supplier_name,
-      supplier_gst: verifiedSupplier.gst_number || verifiedSupplier.gstin,
-      supplier_gstin: verifiedSupplier.gstin || verifiedSupplier.gst_number,
+      supplier_gst: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
+      supplier_gst_number: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
       supplier_phone: verifiedSupplier.primary_phone || verifiedSupplier.phone,
       supplier_email: verifiedSupplier.primary_email || verifiedSupplier.email,
       supplier_address: verifiedSupplier.address_line1 || verifiedSupplier.address,
@@ -265,10 +265,10 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       items: productsToSave.map(product => ({
         product_id: product.product_id || null,
         product_name: product.product_name,
-        batch_number: product.batch_number || product.batch_no,
+        batch_number: product.batch_number || product.batch_number,
         expiry_date: product.expiry_date,
         quantity: product.quantity,
-        cost_price: product.cost_price,
+        unit_price: product.unit_price,
         mrp: product.mrp,
         selling_price: product.selling_price || (parseFloat(String(product.mrp || 0)) * 0.9),
         tax_percent: product.tax_percent || 12,
@@ -342,7 +342,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
             <SupplierVerificationModal
               extractedSupplier={{
                 name: extractedData.supplier_name,
-                gstin: extractedData.supplier_gstin,
+                gst_number: extractedData.supplier_gst_number,
                 address: extractedData.supplier_address,
                 invoice_number: extractedData.invoice_number,
                 invoice_date: extractedData.invoice_date
@@ -381,7 +381,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                   </div>
                   <div>
                     <span className="text-gray-600">Total Amount:</span>
-                    <span className="ml-2 font-semibold">₹{extractedData.final_amount || extractedData.total_amount || 0}</span>
+                    <span className="ml-2 font-semibold">₹{extractedData.total_amount || extractedData.total_amount || 0}</span>
                   </div>
                 </div>
               </div>
@@ -398,7 +398,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p><span className="text-gray-600">Name:</span> <span className="font-medium">{verifiedSupplier?.supplier_name || verifiedSupplier?.name}</span></p>
-                    {(verifiedSupplier?.gst_number || verifiedSupplier?.gstin) && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number || verifiedSupplier.gstin}</p>}
+                    {(verifiedSupplier?.gst_number || verifiedSupplier?.gst_number) && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number || verifiedSupplier.gst_number}</p>}
                     {(verifiedSupplier?.primary_phone || verifiedSupplier?.phone) && <p><span className="text-gray-600">Phone:</span> {verifiedSupplier.primary_phone || verifiedSupplier.phone}</p>}
                   </div>
                   <div>
@@ -447,7 +447,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                       {verifiedProducts.filter(p => !p.skipped).map((product, index) => {
                         // Calculate line totals
                         const qty = parseFloat(String(product.quantity || 0));
-                        const cost = parseFloat(String(product.cost_price || 0));
+                        const cost = parseFloat(String(product.unit_price || 0));
                         const discountPercent = parseFloat(String(product.discount_percent || 0));
                         const taxPercent = parseFloat(String(product.tax_percent || 0));
 
@@ -502,7 +502,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                         <td className="px-2 py-1 text-right">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
                             const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.cost_price || 0));
+                            const cost = parseFloat(String(p.unit_price || 0));
                             const discount = parseFloat(String(p.discount_percent || 0));
                             const base = qty * cost;
                             return sum + (base - (base * discount / 100));
@@ -515,7 +515,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                         <td className="px-2 py-1 text-right">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
                             const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.cost_price || 0));
+                            const cost = parseFloat(String(p.unit_price || 0));
                             const discount = parseFloat(String(p.discount_percent || 0));
                             const tax = parseFloat(String(p.tax_percent || 0));
                             const base = qty * cost;
@@ -530,7 +530,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                         <td className="px-2 py-2 text-right text-indigo-600">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
                             const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.cost_price || 0));
+                            const cost = parseFloat(String(p.unit_price || 0));
                             const discount = parseFloat(String(p.discount_percent || 0));
                             const tax = parseFloat(String(p.tax_percent || 0));
                             const base = qty * cost;

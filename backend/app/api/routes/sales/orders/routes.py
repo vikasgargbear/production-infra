@@ -154,80 +154,24 @@ async def list_sales_orders(
     List sales orders with filters and pagination
     """
     try:
-        # Build query - only get sales orders
-        query = """
-            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
-            FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
-            WHERE o.org_id = :org_id AND o.order_type = 'regular'
-        """
-        count_query = """
-            SELECT COUNT(*) FROM sales.orders o
-            WHERE o.org_id = :org_id AND o.order_type = 'regular'
-        """
+        # Use OrderService instead of inline SQL
+        result = OrderService.list_orders(
+            db=db,
+            org_id=str(context.org_id),
+            skip=skip,
+            limit=limit,
+            customer_id=customer_id,
+            status=status,
+            from_date=from_date,
+            to_date=to_date,
+            order_type="regular"
+        )
         
-        params = {"org_id": str(context.org_id)}
-        
-        # Add filters
-        if customer_id:
-            query += " AND o.customer_id = :customer_id"
-            count_query += " AND customer_id = :customer_id"
-            params["customer_id"] = customer_id
-        
-        if status:
-            query += " AND o.order_status = :status"
-            count_query += " AND order_status = :status"
-            params["status"] = status
-        
-        if from_date:
-            query += " AND o.order_date >= :from_date"
-            count_query += " AND order_date >= :from_date"
-            params["from_date"] = from_date
-        
-        if to_date:
-            query += " AND o.order_date <= :to_date"
-            count_query += " AND order_date <= :to_date"
-            params["to_date"] = to_date
-        
-        # Get total count
-        total = db.execute(text(count_query), params).scalar()
-        
-        # Get orders
-        query += " ORDER BY o.order_date DESC, o.order_id DESC LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        order_rows = list(result)
-        
-        # Get items for all orders in batch
-        items_by_order = {}
-        if order_rows:
-            order_ids = [row.order_id for row in order_rows]
-            items_result = db.execute(text("""
-                SELECT oi.*, p.product_name, p.product_code
-                FROM sales.order_items oi
-                JOIN inventory.products p ON oi.product_id = p.product_id
-                WHERE oi.order_id = ANY(:order_ids)
-                ORDER BY oi.order_id, oi.order_item_id
-            """), {"order_ids": order_ids, "org_id": str(context.org_id)})
-            
-            for item in items_result:
-                order_id = item.order_id
-                if order_id not in items_by_order:
-                    items_by_order[order_id] = []
-                items_by_order[order_id].append(dict(item._mapping))
-        
-        # Build responses
-        orders = []
-        for row in order_rows:
-            order_dict = dict(row._mapping)
-            order_dict["items"] = items_by_order.get(row.order_id, [])
-            order_dict["total_amount"] = order_dict.get("final_amount", 0)
-            order_dict["balance_amount"] = order_dict["total_amount"] - order_dict.get("0 as paid_amount", 0)
-            orders.append(OrderResponse(**order_dict))
+        # Convert to response models
+        orders = [OrderResponse(**order) for order in result["orders"]]
         
         return OrderListResponse(
-            total=total,
+            total=result["total"],
             page=skip // limit + 1,
             per_page=limit,
             orders=orders

@@ -19,9 +19,9 @@ interface Party {
     code?: string;
     party_code?: string;
     type?: 'customer' | 'supplier' | 'both';
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
-    contact_person?: string;
+    contact_person_name?: string;
     contact?: string;
     phone?: string;
     alt_phone?: string;
@@ -48,9 +48,9 @@ interface FormData {
     name: string;
     code: string;
     type: 'customer' | 'supplier' | 'both';
-    gstin: string;
-    pan: string;
-    contact_person: string;
+    gst_number: string;
+    pan_number: string;
+    contact_person_name: string;
     phone: string;
     alt_phone: string;
     email: string;
@@ -94,9 +94,9 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
         name: '',
         code: '',
         type: partyType,
-        gstin: '',
-        pan: '',
-        contact_person: '',
+        gst_number: '',
+        pan_number: '',
+        contact_person_name: '',
         phone: '',
         alt_phone: '',
         email: '',
@@ -167,9 +167,9 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
                 name: party.name || party.party_name || party.customer_name || party.supplier_name || '',
                 code: party.code || party.party_code || '',
                 type: (party.type as 'customer' | 'supplier' | 'both') || partyType,
-                gstin: party.gstin || '',
-                pan: party.pan || '',
-                contact_person: party.contact_person || party.contact || '',
+                gst_number: party.gst_number || '',
+                pan_number: party.pan_number || '',
+                contact_person_name: party.contact_person || party.contact || '',
                 phone: party.phone || '',
                 alt_phone: party.alt_phone || party.altPhone || '',
                 email: party.email || '',
@@ -208,11 +208,11 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
             setError('Party name is required');
             return false;
         }
-        if (formData.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstin)) {
+        if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
             setError('Invalid GSTIN format');
             return false;
         }
-        if (formData.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan)) {
+        if (formData.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan_number)) {
             setError('Invalid PAN format');
             return false;
         }
@@ -333,8 +333,8 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
                                 <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
                                 <input
                                     type="text"
-                                    value={formData.gstin}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('gstin', e.target.value.toUpperCase())}
+                                    value={formData.gst_number}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('gst_number', e.target.value.toUpperCase())}
                                     disabled={mode === 'view'}
                                     placeholder="29AABCT1332L1ZN"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -345,8 +345,8 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
                                 <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
                                 <input
                                     type="text"
-                                    value={formData.pan}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('pan', e.target.value.toUpperCase())}
+                                    value={formData.pan_number}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('pan_number', e.target.value.toUpperCase())}
                                     disabled={mode === 'view'}
                                     placeholder="AABCT1332L"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
@@ -544,8 +544,8 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
                                             onClick={() => handleTagToggle(tag)}
                                             disabled={mode === 'view'}
                                             className={`px-3 py-1 rounded-full text-sm ${formData.tags.includes(tag)
-                                                    ? 'bg-blue-100 text-blue-800'
-                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                                 } disabled:cursor-not-allowed`}
                                         >
                                             {tag}

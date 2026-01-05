@@ -73,11 +73,11 @@ export interface OfflineProduct {
     mrp: number;
     sale_price: number;
     selling_price: number;
-    purchase_price?: number;
+    unit_price?: number;
     gst_percent: number;
     min_stock_level?: number;
     shelf_label?: string;
-    current_stock?: number;
+    total_quantity_available?: number;
     hsn_code?: string;
     // Search fields
     _search_name: string;
@@ -104,7 +104,7 @@ export interface OfflineCustomer {
     state?: string;
     pincode?: string;
     gst_number?: string;
-    gstin?: string;
+    gst_number?: string;
     customer_type?: string;
     credit_limit?: number;
     current_balance?: number;

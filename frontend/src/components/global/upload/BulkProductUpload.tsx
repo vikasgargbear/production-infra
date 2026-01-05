@@ -24,13 +24,13 @@ interface Product {
     manufacturer?: string;
     hsn_code?: string;
     batch_number: string;
-    batch_no?: string;
+    batch_number?: string;
     expiry_date: string;
     quantity: number;
     free_quantity?: number;
     mrp: number;
-    cost_price: number;
-    purchase_price?: number;
+    cost_per_unit: number;
+    unit_price?: number;
     sale_price?: number;
     selling_price?: number;
     pack_type?: string;
@@ -100,7 +100,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
         { field: 'quantity', header: 'Quantity*', required: true, example: '100' },
         { field: 'free_quantity', header: 'Free Qty', required: false, example: '10' },
         { field: 'mrp', header: 'MRP*', required: true, example: '120.00' },
-        { field: 'cost_price', header: 'Cost Price*', required: true, example: '80.00' },
+        { field: 'cost_per_unit', header: 'Cost Price*', required: true, example: '80.00' },
         { field: 'sale_price', header: 'Sale Price', required: false, example: '100.00' },
         { field: 'pack_type', header: 'Pack Type', required: false, example: 'STRIP' },
         { field: 'pack_size', header: 'Units per Pack', required: false, example: '10' },
@@ -233,7 +233,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                                     (product as any)[col.field] = parseInt(value) || 0;
                                     break;
                                 case 'mrp':
-                                case 'cost_price':
+                                case 'cost_per_unit':
                                 case 'sale_price':
                                 case 'gst_percent':
                                 case 'discount_percent':
@@ -271,7 +271,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                     if (!product.pack_size) product.pack_size = 10;
                     if (!product.storage_condition) product.storage_condition = 'Cool & Dry';
 
-                    product.amount = (product.quantity || 0) * (product.cost_price || 0);
+                    product.amount = (product.quantity || 0) * (product.cost_per_unit || 0);
 
                     if (rowErrors.length > 0) {
                         validationErrors.push({ row: index + 2, errors: rowErrors });
@@ -311,10 +311,10 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
             [field]: value
         };
 
-        if (field === 'quantity' || field === 'cost_price') {
+        if (field === 'quantity' || field === 'cost_per_unit') {
             updatedProducts[index].amount =
                 (updatedProducts[index].quantity || 0) *
-                (updatedProducts[index].cost_price || 0);
+                (updatedProducts[index].cost_per_unit || 0);
         }
 
         setProducts(updatedProducts);
@@ -339,8 +339,8 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                 const formattedProducts = products.map(product => ({
                     ...product,
                     product_id: product.product_id || null,
-                    batch_no: product.batch_number,
-                    purchase_price: product.cost_price,
+                    batch_number: product.batch_number,
+                    unit_price: product.cost_per_unit,
                     selling_price: product.sale_price || product.mrp,
                     tax_percent: product.gst_percent
                 }));
@@ -585,8 +585,8 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                                         <td className="px-3 py-2">
                                             <input
                                                 type="number"
-                                                value={product.cost_price}
-                                                onChange={(e) => handleEdit(index, 'cost_price', parseFloat(e.target.value) || 0)}
+                                                value={product.cost_per_unit}
+                                                onChange={(e) => handleEdit(index, 'cost_per_unit', parseFloat(e.target.value) || 0)}
                                                 className="w-20 px-2 py-1 text-sm border rounded"
                                                 step="0.01"
                                             />

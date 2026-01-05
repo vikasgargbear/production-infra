@@ -24,17 +24,17 @@ const HSN_REGEX = /^[0-9]{4,8}$/;
 /**
  * Quick GSTIN format check
  */
-export function isValidGSTIN(gstin: string): boolean {
-    if (!gstin) return true; // Optional field
-    return GSTIN_REGEX.test(gstin);
+export function isValidGSTIN(gst_number: string): boolean {
+    if (!gst_number) return true; // Optional field
+    return GSTIN_REGEX.test(gst_number);
 }
 
 /**
  * Quick PAN format check
  */
-export function isValidPAN(pan: string): boolean {
-    if (!pan) return true;
-    return PAN_REGEX.test(pan);
+export function isValidPAN(pan_number: string): boolean {
+    if (!pan_number) return true;
+    return PAN_REGEX.test(pan_number);
 }
 
 /**
@@ -83,10 +83,10 @@ export function quickValidateCustomer(customer: Partial<BaseCustomer>): {
     if (!customer.customer_name?.trim()) {
         errors.push('Customer name is required');
     }
-    if (customer.gstin && !isValidGSTIN(customer.gstin)) {
+    if (customer.gst_number && !isValidGSTIN(customer.gst_number)) {
         errors.push('Invalid GSTIN format');
     }
-    if (customer.pan && !isValidPAN(customer.pan)) {
+    if (customer.pan_number && !isValidPAN(customer.pan_number)) {
         errors.push('Invalid PAN format');
     }
     if (customer.phone && !isValidPhone(customer.phone)) {
@@ -112,10 +112,10 @@ export function quickValidateSupplier(supplier: Partial<BaseSupplier>): {
     if (!supplier.supplier_name?.trim()) {
         errors.push('Supplier name is required');
     }
-    if (supplier.gstin && !isValidGSTIN(supplier.gstin)) {
+    if (supplier.gst_number && !isValidGSTIN(supplier.gst_number)) {
         errors.push('Invalid GSTIN format');
     }
-    if (supplier.pan && !isValidPAN(supplier.pan)) {
+    if (supplier.pan_number && !isValidPAN(supplier.pan_number)) {
         errors.push('Invalid PAN format');
     }
     if (supplier.phone && !isValidPhone(supplier.phone)) {
@@ -140,7 +140,7 @@ export function quickValidateProduct(product: Partial<BaseProduct>): {
     if (product.mrp !== undefined && product.mrp < 0) {
         errors.push('MRP cannot be negative');
     }
-    if (product.cost_price !== undefined && product.cost_price < 0) {
+    if (product.cost_per_unit !== undefined && product.cost_per_unit < 0) {
         errors.push('Cost price cannot be negative');
     }
     if (product.hsn_code && !isValidHSN(product.hsn_code)) {

@@ -195,12 +195,11 @@ export const formatStockItem = (item: BaseStockItem): (string | number)[] => {
         item.product_name || 'N/A',
         item.product_code || 'N/A',
         item.category || 'N/A',
-        item.current_stock || 0,
-        item.available_stock || 0,
-        item.reserved_stock || 0,
+        item.total_quantity_available || 0,
+        item.total_quantity_reserved || 0,
         item.reorder_level || 0,
         item.unit || 'Units',
-        item.mrp || 0,
+        item.mrp_per_unit || 0,
         item.stock_value || 0,
         item.low_stock ? 'Low Stock' : item.out_of_stock ? 'Out of Stock' : 'In Stock'
     ];
@@ -213,7 +212,7 @@ export const formatStockItemHTML = (item: BaseStockItem): string => {
     return `<tr>
     <td>${item.product_name || 'N/A'}</td>
     <td>${item.product_code || 'N/A'}</td>
-    <td>${item.current_stock || 0}</td>
+    <td>${item.total_quantity_available || 0}</td>
     <td>${item.unit || 'Units'}</td>
     <td>${item.reorder_level || 0}</td>
     <td>${item.low_stock ? 'Low Stock' : item.out_of_stock ? 'Out of Stock' : 'In Stock'}</td>
@@ -224,7 +223,7 @@ export const formatStockItemHTML = (item: BaseStockItem): string => {
  * Format stock item for WhatsApp message
  */
 export const formatStockItemWhatsApp = (item: BaseStockItem): string => {
-    return `${item.product_name} - ${item.current_stock} ${item.unit || 'Units'} (${item.low_stock ? 'Low Stock' : item.out_of_stock ? 'Out of Stock' : 'In Stock'})`;
+    return `${item.product_name} - ${item.total_quantity_available} ${item.unit || 'Units'} (${item.low_stock ? 'Low Stock' : item.out_of_stock ? 'Out of Stock' : 'In Stock'})`;
 };
 
 /**
@@ -236,8 +235,8 @@ export const formatBatch = (batch: BaseBatch): (string | number)[] => {
         batch.product_name || 'N/A',
         batch.quantity_available || 0,
         batch.expiry_date ? new Date(batch.expiry_date).toLocaleDateString() : 'N/A',
-        batch.mrp || 0,
-        batch.cost_price || 0
+        batch.mrp_per_unit || 0,
+        batch.cost_per_unit || 0
     ];
 };
 

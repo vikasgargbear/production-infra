@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircle, Share2, Calendar, Building2, Plus, Truck, CreditCard } from 'lucide-react';
-import { suppliersApi, productsApi, purchaseApi } from '../../../services/api';
-import { searchCache } from '../../../utils/searchCache';
+import React, { useRef } from 'react';
+import { Package, FileText, Building2, Truck, CreditCard } from 'lucide-react';
 import {
   EnhancedGlobalDocumentFlow,
   DocumentSummaryTop,
@@ -12,256 +10,60 @@ import {
   ProductCreationModal,
   GenericSuccessModal,
   ContentCard,
-  useToast,
   NumberInput,
-  MonthYearPicker,
   StandardDatePicker
 } from '../../global';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
+import { usePurchaseOrderLogic, PurchaseOrderData } from './hooks';
 
 /**
- * EnhancedPurchaseOrderFlow - Purchase Order using the full global document system
- * Creates purchase orders to request goods from suppliers
- * Uses /purchase-orders/ endpoint
+ * PurchaseOrderFlow - Purchase Order using the full global document system
+ * 
+ * REFACTORED: Now uses usePurchaseOrderLogic hook for all state and handlers.
+ * This component handles only the UI/JSX rendering.
+ * 
+ * Key features:
+ * - Creates purchase orders to request goods from suppliers
+ * - Uses /purchase-orders/ endpoint
  */
-const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledData?: any }) => {
-  const toast = useToast();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [createdPOData, setCreatedPOData] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<any>({});
 
+const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledData?: any }) => {
   const productSearchRef = useRef<any>(null);
 
-  // Purchase Order data state
-  const [purchaseOrder, setPurchaseOrder] = useState({
-    po_no: '',
-    po_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    supplier_id: prefilledData?.supplier_id || '',
-    supplier_name: prefilledData?.supplier_name || '',
-    supplier_details: prefilledData?.supplier_details || null,
-    items: prefilledData?.items || [],
-    payment_terms: '30 days',
-    delivery_terms: 'F.O.R. Destination',
-    delivery_location: 'Main Warehouse',
-    transport_mode: 'By Road',
-    gross_amount: 0,
-    discount_amount: 0,
-    tax_amount: 0,
-    freight_charges: 0,
-    net_amount: 0,
-    final_amount: 0,
-    notes: prefilledData?.notes || '',
-    status: 'draft'
-  });
+  // Use the extracted hook for all state and handlers
+  const {
+    // State
+    purchaseOrder,
+    setPurchaseOrder,
+    selectedSupplier,
+    currentStep,
+    setCurrentStep,
+    saving,
+    errors,
 
-  const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
+    // Modal states
+    showSupplierModal,
+    setShowSupplierModal,
+    showProductModal,
+    setShowProductModal,
+    showSuccessModal,
+    setShowSuccessModal,
 
-  // Generate PO number on mount
-  useEffect(() => {
-    const generateAndSetPONumber = async () => {
-      try {
-        const poNumber = await documentNumberGenerator.generatePONumber();
-        setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
-      } catch (error) {
-        const fallbackNumber = `PO-${Date.now().toString().slice(-8)}`;
-        setPurchaseOrder(prev => ({ ...prev, po_no: fallbackNumber }));
-      }
-    };
+    // Data
+    createdPOData,
 
-    generateAndSetPONumber();
-  }, []);
+    // Handlers
+    handleSupplierSelect,
+    handleAddItem,
+    handleUpdateItem,
+    handleRemoveItem,
+    handleSavePurchaseOrder,
+    handlePrint,
+    formatCurrency
+  } = usePurchaseOrderLogic({ prefilledData, onClose });
 
-  // Calculate totals whenever items change
-  useEffect(() => {
-    if (purchaseOrder.items) {
-      calculateTotals();
-    }
-  }, [purchaseOrder.items, purchaseOrder.discount_amount, purchaseOrder.freight_charges]);
+  // ==================== JSX RENDERING ====================
 
-  const calculateTotals = () => {
-    if (!purchaseOrder.items || purchaseOrder.items.length === 0) {
-      setPurchaseOrder(prev => ({
-        ...prev,
-        gross_amount: 0,
-        tax_amount: 0,
-        net_amount: 0,
-        final_amount: 0
-      }));
-      return;
-    }
-
-    let grossTotal = 0;
-    let taxTotal = 0;
-
-    (purchaseOrder.items || []).forEach(item => {
-      if (item.product_id) {
-        const quantity = parseFloat(item.quantity) || 0;
-        const unitPrice = parseFloat(item.unit_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || 0;
-
-        const itemTotal = quantity * unitPrice;
-        const itemTax = (itemTotal * taxPercent) / 100;
-
-        grossTotal += itemTotal;
-        taxTotal += itemTax;
-      }
-    });
-
-    const discountAmount = Number(purchaseOrder.discount_amount) || 0;
-    const freightCharges = Number(purchaseOrder.freight_charges) || 0;
-    const netAmount = grossTotal + taxTotal - discountAmount + freightCharges;
-
-    setPurchaseOrder(prev => ({
-      ...prev,
-      gross_amount: grossTotal,
-      tax_amount: taxTotal,
-      net_amount: netAmount,
-      final_amount: netAmount
-    }));
-  };
-
-  const handleSupplierSelect = (supplier) => {
-    setSelectedSupplier(supplier);
-    setPurchaseOrder(prev => ({
-      ...prev,
-      supplier_id: supplier.supplier_id,
-      supplier_name: supplier.supplier_name,
-      supplier_details: supplier
-    }));
-  };
-
-  const handleAddItem = (product) => {
-    const newItem = {
-      id: Date.now() + Math.random(),
-      product_id: product.product_id,
-      product_name: product.product_name,
-      product_code: product.product_code,
-      hsn_code: product.hsn_code || '',
-      batch_number: product.batch_number || '',
-      expiry_date: product.expiry_date || '',
-      quantity: 1,
-      unit: product.unit || product.uom || '',  // No default unit
-      unit_price: product.purchase_price || (product.mrp || 0) * 0.7,
-      mrp: product.mrp || 0,
-      expected_rate: product.sale_price || product.selling_price || product.mrp || 0,
-      tax_percent: product.tax_percent || 12,
-      discount_percent: 0,
-      free_quantity: 0,
-      pack_type: 'STRIP',
-      pack_size: 10,
-      packages_per_box: 10,
-      manufacturer: product.manufacturer || '',
-      total: product.purchase_price || 0
-    };
-
-    setPurchaseOrder(prev => ({
-      ...prev,
-      items: [...(prev.items || []), newItem]
-    }));
-
-    if (productSearchRef.current) {
-      setTimeout(() => productSearchRef.current?.focus(), 100);
-    }
-  };
-
-  const handleUpdateItem = (index, field, value) => {
-    setPurchaseOrder(prev => ({
-      ...prev,
-      items: (prev.items || []).map((item, i) => {
-        if (i === index) {
-          return { ...item, [field]: value };
-        }
-        return item;
-      })
-    }));
-  };
-
-  const handleRemoveItem = (index) => {
-    setPurchaseOrder(prev => ({
-      ...prev,
-      items: (prev.items || []).filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleSavePurchaseOrder = async () => {
-    if (!validatePurchaseOrder()) {
-      toast.error('Please fix validation errors');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const poData = {
-        po_no: purchaseOrder.po_no,
-        po_date: purchaseOrder.po_date,
-        expected_delivery_date: purchaseOrder.expected_delivery_date,
-        supplier_id: parseInt(purchaseOrder.supplier_id),
-        items: purchaseOrder.items.map(item => ({
-          product_id: parseInt(item.product_id),
-          quantity: parseFloat(item.quantity) || 1,
-          unit_price: parseFloat(item.unit_price) || 0,
-          tax_percent: parseFloat(item.tax_percent) || 12
-        })),
-        payment_terms: purchaseOrder.payment_terms,
-        delivery_terms: purchaseOrder.delivery_terms,
-        delivery_location: purchaseOrder.delivery_location,
-        discount_amount: Number(purchaseOrder.discount_amount) || 0,
-        freight_charges: Number(purchaseOrder.freight_charges) || 0,
-        notes: purchaseOrder.notes
-      };
-
-      const response = await purchaseApi.createPurchaseOrder(poData);
-
-      if (response && response.data) {
-        const poNumber = response.data.po_no || purchaseOrder.po_no;
-
-        setCreatedPOData({
-          poNumber: poNumber,
-          poId: response.data.po_id || response.data.id,
-          supplierName: selectedSupplier?.supplier_name || purchaseOrder.supplier_name,
-          totalAmount: purchaseOrder.final_amount
-        });
-
-        setShowSuccessModal(true);
-        toast.success(`Purchase Order ${poNumber} created successfully!`);
-
-        searchCache.clear();
-      }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create purchase order';
-      toast.error(errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const validatePurchaseOrder = () => {
-    const errors: any = {};
-
-    if (!selectedSupplier) {
-      errors.supplier = 'Supplier is required';
-    }
-
-    if (!purchaseOrder.items || purchaseOrder.items.length === 0) {
-      errors.items = 'At least one item is required';
-    }
-
-    return Object.keys(errors).length === 0;
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹${(amount || 0).toFixed(2)}`;
-  };
 
   // Create content for step 1
   const createContent = (
@@ -546,7 +348,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                   </div>
                   <div className="border-t pt-2 flex justify-between text-base font-semibold">
                     <span>Total Amount:</span>
-                    <span className="text-blue-600">₹{(purchaseOrder.final_amount || 0).toFixed(2)}</span>
+                    <span className="text-blue-600">₹{(purchaseOrder.total_amount || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -752,7 +554,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
               )}
               <tr className="border-t border-gray-300">
                 <td colSpan={7} className="text-right py-2 text-lg font-bold">Total Amount:</td>
-                <td className="text-right py-2 text-lg font-bold">{formatCurrency(purchaseOrder.final_amount)}</td>
+                <td className="text-right py-2 text-lg font-bold">{formatCurrency(purchaseOrder.total_amount)}</td>
               </tr>
             </tfoot>
           </table>
@@ -819,11 +621,11 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
         // Footer totals
         footerTotals={{
           itemCount: purchaseOrder.items?.length || 0,
-          totalAmount: purchaseOrder.final_amount,
+          totalAmount: purchaseOrder.total_amount,
           subtotal: purchaseOrder.gross_amount,
           tax: purchaseOrder.tax_amount,
           // freightCharges not supported in global footer interface
-          grandTotal: purchaseOrder.final_amount
+          grandTotal: purchaseOrder.total_amount
         }}
 
         // Keyboard shortcuts

@@ -21,9 +21,9 @@ interface Product {
     gst_percent?: number;
     mrp?: number;
     sale_price?: number;
-    cost_price?: number;
+    cost_per_unit?: number;
     batch_number?: string;
-    mfg_date?: string;
+    manufacturing_date?: string;
     expiry_date?: string;
     quantity_available?: number;
     [key: string]: unknown;
@@ -42,10 +42,10 @@ interface ProductFormData {
     product_type: string;
     type_id: string;
     batch_number: string;
-    mfg_date: string;
+    manufacturing_date: string;
     expiry_date: string;
     quantity_available: string;
-    cost_price: string;
+    cost_per_unit: string;
     salt_composition: string;
     schedule_type: string;
     is_narcotic: boolean;
@@ -126,10 +126,10 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
         product_type: '',
         type_id: '',
         batch_number: '',
-        mfg_date: '',
+        manufacturing_date: '',
         expiry_date: '',
         quantity_available: '',
-        cost_price: '',
+        cost_per_unit: '',
         salt_composition: '',
         schedule_type: '',
         is_narcotic: false,
@@ -277,7 +277,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
     const handleMfgDateChange = (date: string): void => {
         setNewProduct({
             ...newProduct,
-            mfg_date: date,
+            manufacturing_date: date,
             expiry_date: calculateExpiryDate(date)
         });
     };
@@ -306,7 +306,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
         if (!newProduct.hsn_code.trim()) validationErrors.push('HSN code is required');
         if (!newProduct.mrp || parseFloat(newProduct.mrp) <= 0) validationErrors.push('Valid MRP is required');
         if (!newProduct.sale_price || parseFloat(newProduct.sale_price) <= 0) validationErrors.push('Valid sale price is required');
-        if (!newProduct.cost_price || parseFloat(newProduct.cost_price) <= 0) validationErrors.push('Valid cost price is required');
+        if (!newProduct.cost_per_unit || parseFloat(newProduct.cost_per_unit) <= 0) validationErrors.push('Valid cost price is required');
         if (!newProduct.gst_percent && newProduct.gst_percent !== 0) validationErrors.push('GST percentage is required');
         if (!newProduct.quantity_available || parseInt(newProduct.quantity_available) <= 0) validationErrors.push('Valid quantity is required');
         if (!newProduct.expiry_date) validationErrors.push('Expiry date is required');
@@ -345,10 +345,10 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                 packages_per_box: packConfig.use_boxes ? packConfig.packages_per_box : null,
                 mrp: parseFloat(newProduct.mrp) || 0,
                 sale_price: parseFloat(newProduct.sale_price) || 0,
-                cost_price: parseFloat(newProduct.cost_price) || 0,
+                cost_per_unit: parseFloat(newProduct.cost_per_unit) || 0,
                 quantity_available: parseInt(newProduct.quantity_available) || 0,
                 batch_number: newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`,
-                manufacturing_date: formatDateForAPI(newProduct.mfg_date),
+                manufacturing_date: formatDateForAPI(newProduct.manufacturing_date),
                 expiry_date: formatDateForAPI(newProduct.expiry_date),
                 maintain_batch: true,
                 maintain_expiry: true,
@@ -373,12 +373,12 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                     product_id: productResponse.product_id || productResponse.id,
                     product_name: productResponse.product_name || newProduct.product_name,
                     batch_number: batchNumber,
-                    mfg_date: newProduct.mfg_date,
+                    manufacturing_date: newProduct.manufacturing_date,
                     expiry_date: newProduct.expiry_date,
                     quantity_available: parseInt(newProduct.quantity_available) || 0,
                     mrp_per_unit: parseFloat(newProduct.mrp) || 0,
                     sale_price_per_unit: parseFloat(newProduct.sale_price) || 0,
-                    cost_per_unit: parseFloat(newProduct.cost_price) || 0,
+                    cost_per_unit: parseFloat(newProduct.cost_per_unit) || 0,
                     mrp: parseFloat(newProduct.mrp) || 0,
                     sale_price: parseFloat(newProduct.sale_price) || 0,
                     gst_percent: parseFloat(String(newProduct.gst_percent)) || 0,
@@ -836,8 +836,8 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                                 <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                                 <input
                                     type="number"
-                                    value={newProduct.cost_price}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewProduct({ ...newProduct, cost_price: e.target.value })}
+                                    value={newProduct.cost_per_unit}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewProduct({ ...newProduct, cost_per_unit: e.target.value })}
                                     className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="0.00"
                                     step="0.01"
@@ -919,7 +919,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                                 Manufacturing Date
                             </label>
                             <MonthYearPicker
-                                value={newProduct.mfg_date}
+                                value={newProduct.manufacturing_date}
                                 onChange={(date: string) => handleMfgDateChange(date)}
                                 placeholder="MM/YYYY"
                             />
@@ -933,7 +933,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                                 value={newProduct.expiry_date}
                                 onChange={(date: string) => setNewProduct({ ...newProduct, expiry_date: date })}
                                 placeholder="MM/YYYY"
-                                minDate={newProduct.mfg_date ? new Date(newProduct.mfg_date + '-01') : null}
+                                minDate={newProduct.manufacturing_date ? new Date(newProduct.manufacturing_date + '-01') : null}
                             />
                         </div>
                     </div>

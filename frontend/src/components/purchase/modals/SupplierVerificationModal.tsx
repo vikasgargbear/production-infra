@@ -27,7 +27,7 @@ const SupplierVerificationModal = ({
       // Map to match the global component's field names
       setSuggestedSupplier({
         supplier_name: extractedSupplier.name,
-        gstin: extractedSupplier.gstin || '',
+        gst_number: extractedSupplier.gst_number || '',
         phone: extractedSupplier.mobile || extractedSupplier.phone || '',
         email: extractedSupplier.email || '',
         address: extractedSupplier.address || '',
@@ -105,8 +105,8 @@ const SupplierVerificationModal = ({
               <p className="text-sm font-medium text-gray-900">Extracted Supplier Info:</p>
               <div className="mt-1 text-xs text-gray-600 space-y-0.5">
                 <p><span className="font-medium">Name:</span> {extractedSupplier.name}</p>
-                {extractedSupplier.gstin && (
-                  <p><span className="font-medium">GSTIN:</span> {extractedSupplier.gstin}</p>
+                {extractedSupplier.gst_number && (
+                  <p><span className="font-medium">GSTIN:</span> {extractedSupplier.gst_number}</p>
                 )}
                 {extractedSupplier.address && (
                   <p><span className="font-medium">Address:</span> {extractedSupplier.address}</p>

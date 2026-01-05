@@ -18,7 +18,7 @@ interface InvoiceTotals {
     total_gst?: number;
     delivery_charges?: number;
     round_off?: number;
-    grand_total?: number;
+    total_amount?: number;
     [key: string]: unknown;
 }
 
@@ -199,7 +199,7 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
                         <div className="border-t pt-2 mt-2">
                             <div className="flex justify-between text-lg">
                                 <span className="font-bold text-gray-900">Grand Total</span>
-                                <span className="font-bold text-gray-900">₹{totals.grand_total?.toFixed(2) || '0.00'}</span>
+                                <span className="font-bold text-gray-900">₹{totals.total_amount?.toFixed(2) || '0.00'}</span>
                             </div>
                         </div>
                     </div>

@@ -14,7 +14,7 @@ interface Product {
     brand?: string;
     manufacturer?: string;
     mrp?: number;
-    cost_price?: number;
+    cost_per_unit?: number;
     pack_size?: string;
     unit?: string;
     tax_rate?: number;

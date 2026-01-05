@@ -27,12 +27,12 @@ interface StockMovementItem {
   reference_no?: string;
   movement_date: string;
   reason?: string;
-  batch_no?: string;
+  batch_number?: string;
   location_from?: string;
   location_to?: string;
   created_by?: string;
   status: MovementStatus;
-  unit_price: number;
+  unit_cost: number;
   total_value: number;
 }
 
@@ -82,13 +82,13 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         reference_no: movement.reference_no || movement.reference_document || movement.invoice_no,
         movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
         reason: movement.reason || movement.notes,
-        batch_no: movement.batch_no || movement.batch_number,
+        batch_number: movement.batch_number || movement.batch_number,
         location_from: movement.location_from || movement.from_location,
         location_to: movement.location_to || movement.to_location,
         created_by: movement.created_by || movement.user_name,
         status: movement.status || 'completed',
-        unit_price: parseFloat(movement.unit_price) || 0,
-        total_value: (parseFloat(movement.quantity) || 0) * (parseFloat(movement.unit_price) || 0)
+        unit_cost: parseFloat(movement.unit_cost) || 0,
+        total_value: (parseFloat(movement.quantity) || 0) * (parseFloat(movement.unit_cost) || 0)
       }));
 
       setMovements(movementsData);
@@ -118,7 +118,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         movement.movement_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.reference_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        movement.batch_no?.toLowerCase().includes(searchQuery.toLowerCase())
+        movement.batch_number?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -395,8 +395,8 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
       render: (value, movement) => (
         <div>
           <div className="text-app-900">{value}</div>
-          {movement.batch_no && (
-            <div className="text-sm text-app-500">Batch: {movement.batch_no}</div>
+          {movement.batch_number && (
+            <div className="text-sm text-app-500">Batch: {movement.batch_number}</div>
           )}
         </div>
       ),

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variable Naming Dictionary</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: #f8f9fa;
+            padding: 40px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .page { background: white; padding: 60px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 40px; }
+        h1 { color: #1a1a2e; font-size: 2.5rem; border-bottom: 4px solid #667eea; padding-bottom: 15px; margin-bottom: 30px; }
+        h2 { color: #667eea; font-size: 1.5rem; margin-top: 40px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e0e5ec; }
+        h3 { color: #4a5568; font-size: 1.2rem; margin-top: 25px; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.9rem; }
+        th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 15px; text-align: left; font-weight: 600; }
+        td { padding: 10px 15px; border-bottom: 1px solid #e0e5ec; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #eef1f6; }
+        .bad { color: #dc3545; font-weight: 600; }
+        .good { color: #28a745; font-weight: 600; }
+        code { background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 0.85em; color: #e83e8c; }
+        .note { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); padding: 15px 20px; border-radius: 8px; margin: 20px 0; }
+        .warning { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); padding: 15px 20px; border-radius: 8px; margin: 20px 0; }
+        .info { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); padding: 15px 20px; border-radius: 8px; margin: 20px 0; }
+        pre { background: #1a1a2e; color: #a5d6a7; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; margin: 15px 0; }
+        .toc { background: #f8f9fa; padding: 20px 30px; border-radius: 8px; margin-bottom: 30px; }
+        .toc ul { list-style: none; }
+        .toc li { padding: 5px 0; }
+        .toc a { color: #667eea; text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-left: 8px; }
+        .badge-done { background: #d4edda; color: #155724; }
+        .badge-review { background: #fff3cd; color: #856404; }
+        @media print { body { background: white; padding: 0; } .page { box-shadow: none; padding: 30px; } }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <h1>📚 Variable Naming Dictionary</h1>
+        <p style="font-size: 1.1rem; color: #666; margin-bottom: 30px;">
+            <strong>Purpose:</strong> Master reference for frontend → backend variable naming.<br>
+            <strong>Rule:</strong> Use ONLY canonical names from this document.<br>
+            <strong>Updated:</strong> 2026-01-04
+        </p>
+
+        <div class="toc">
+            <h3 style="margin-bottom: 15px;">📋 Table of Contents</h3>
+            <ul>
+                <li><a href="#quick-ref">Quick Reference: Don't Use → Use Instead</a></li>
+                <li><a href="#inventory">inventory.products / batches</a></li>
+                <li><a href="#procurement">procurement.purchase_orders / grn</a></li>
+                <li><a href="#sales">sales.invoices / orders</a></li>
+                <li><a href="#parties">parties.customers / suppliers</a></li>
+                <li><a href="#employees">master.employees</a></li>
+                <li><a href="#differences">Sales vs Purchase Differences</a></li>
+                <li><a href="#commands">Search & Replace Commands</a></li>
+            </ul>
+        </div>
+
+        <h2 id="quick-ref">🚫 Quick Reference: Don't Use → Use Instead</h2>
+        <table>
+            <tr><th class="bad">❌ Don't Use</th><th class="good">✅ Use Instead</th><th>Context</th></tr>
+            <tr><td><code class="bad">gstin</code></td><td><code class="good">gst_number</code></td><td>All party records</td></tr>
+            <tr><td><code class="bad">pan</code></td><td><code class="good">pan_number</code></td><td>All party records</td></tr>
+            <tr><td><code class="bad">dl_number</code></td><td><code class="good">drug_license_number</code></td><td>Customers/Suppliers</td></tr>
+            <tr><td><code class="bad">batch_no</code></td><td><code class="good">batch_number</code></td><td>All batches</td></tr>
+            <tr><td><code class="bad">mfg_date</code></td><td><code class="good">manufacturing_date</code></td><td>Batches</td></tr>
+            <tr><td><code class="bad">exp_date</code></td><td><code class="good">expiry_date</code></td><td>Batches</td></tr>
+            <tr><td><code class="bad">current_stock</code></td><td><code class="good">total_quantity_available</code></td><td>Product aggregate</td></tr>
+            <tr><td><code class="bad">current_stock</code></td><td><code class="good">quantity_available</code></td><td>Batch level</td></tr>
+            <tr><td><code class="bad">cost_price</code></td><td><code class="good">cost_per_unit</code></td><td>Batch pricing</td></tr>
+            <tr><td><code class="bad">purchase_price / rate</code></td><td><code class="good">unit_price</code></td><td>Purchase items</td></tr>
+            <tr><td><code class="bad">mrp</code></td><td><code class="good">mrp_per_unit</code></td><td>Batch pricing</td></tr>
+            <tr><td><code class="bad">final_amount</code></td><td><code class="good">total_amount</code></td><td>⚠️ Purchase/GRN only</td></tr>
+            <tr><td><code>final_amount</code></td><td><code>final_amount</code></td><td>✅ Sales/Invoices (keep)</td></tr>
+            <tr><td><code class="bad">order_number</code></td><td><code class="good">po_number</code></td><td>⚠️ Purchase orders only</td></tr>
+            <tr><td><code>order_number</code></td><td><code>order_number</code></td><td>✅ Sales orders (keep)</td></tr>
+            <tr><td><code class="bad">contact_person</code></td><td><code class="good">contact_person_name</code></td><td>Parties</td></tr>
+            <tr><td><code class="bad">phone / mobile</code></td><td><code class="good">primary_phone</code></td><td>Customer/Supplier</td></tr>
+            <tr><td><code class="bad">phone / mobile</code></td><td><code class="good">personal_mobile</code></td><td>Employee</td></tr>
+            <tr><td><code class="bad">outstanding / balance</code></td><td><code class="good">current_outstanding</code></td><td>Party balances</td></tr>
+            <tr><td><code class="bad">location</code></td><td><code class="good">storage_location</code></td><td>Batches</td></tr>
+        </table>
+
+        <h2 id="inventory">📦 inventory.products</h2>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>product_id</code></td><td>integer</td><td>-</td></tr>
+            <tr><td><code>product_code</code></td><td>text</td><td>sku, item_code</td></tr>
+            <tr><td><code>product_name</code></td><td>text</td><td>name, item_name</td></tr>
+            <tr><td><code>base_uom</code></td><td>text</td><td>unit, uom</td></tr>
+            <tr><td><code>gst_percent</code></td><td>numeric</td><td>gst_rate, tax_percent</td></tr>
+            <tr><td><code>min_stock_quantity</code></td><td>numeric</td><td>min_stock, minimum_stock</td></tr>
+            <tr><td><code>total_quantity_available</code></td><td>numeric</td><td>current_stock, stock, quantity</td></tr>
+        </table>
+
+        <h3>inventory.batches</h3>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>batch_number</code></td><td>text</td><td>batch_no, batch</td></tr>
+            <tr><td><code>quantity_available</code></td><td>numeric</td><td>current_stock, qty, available_qty</td></tr>
+            <tr><td><code>manufacturing_date</code></td><td>date</td><td>mfg_date</td></tr>
+            <tr><td><code>expiry_date</code></td><td>date</td><td>exp_date</td></tr>
+            <tr><td><code>mrp_per_unit</code></td><td>numeric</td><td>mrp</td></tr>
+            <tr><td><code>cost_per_unit</code></td><td>numeric</td><td>cost_price, purchase_price</td></tr>
+            <tr><td><code>sale_price_per_unit</code></td><td>numeric</td><td>sale_price, selling_price</td></tr>
+            <tr><td><code>storage_location</code></td><td>text</td><td>location, rack, warehouse</td></tr>
+        </table>
+
+        <h2 id="procurement">📋 procurement.purchase_orders</h2>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>po_number</code></td><td>text</td><td>order_number, po_no</td></tr>
+            <tr><td><code>po_date</code></td><td>date</td><td>order_date, date</td></tr>
+            <tr><td><code>po_status</code></td><td>text</td><td>status, order_status</td></tr>
+            <tr><td><code>total_amount</code></td><td>numeric</td><td>final_amount, grand_total</td></tr>
+        </table>
+
+        <h3>procurement.purchase_order_items</h3>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>ordered_quantity</code></td><td>numeric</td><td>quantity, qty</td></tr>
+            <tr><td><code>unit_price</code></td><td>numeric</td><td>rate, purchase_price, cost_price</td></tr>
+            <tr><td><code>line_total</code></td><td>numeric</td><td>total, amount</td></tr>
+            <tr><td><code>batch_number</code></td><td>text</td><td>batch_no</td></tr>
+        </table>
+
+        <h2 id="sales">💰 sales.invoices</h2>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>Notes</th></tr>
+            <tr><td><code>invoice_number</code></td><td>text</td><td>inv_no, invoice_no</td></tr>
+            <tr><td><code>invoice_status</code></td><td>text</td><td>status</td></tr>
+            <tr><td><code>final_amount</code></td><td>numeric</td><td><strong>KEEP - different from purchase!</strong></td></tr>
+            <tr><td><code>unit_price</code></td><td>numeric</td><td>rate, price</td></tr>
+        </table>
+
+        <h2 id="parties">👥 parties.customers / suppliers</h2>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>customer_name</code> / <code>supplier_name</code></td><td>text</td><td>name</td></tr>
+            <tr><td><code>primary_phone</code></td><td>text</td><td>phone, mobile, contact_no</td></tr>
+            <tr><td><code>primary_email</code></td><td>text</td><td>email</td></tr>
+            <tr><td><code>gst_number</code></td><td>text</td><td>gstin, gst, gst_no</td></tr>
+            <tr><td><code>pan_number</code></td><td>text</td><td>pan, pan_no</td></tr>
+            <tr><td><code>drug_license_number</code></td><td>text</td><td>dl_number, dl, license</td></tr>
+            <tr><td><code>current_outstanding</code></td><td>numeric</td><td>outstanding, balance, outstanding_amount</td></tr>
+            <tr><td><code>contact_person_name</code></td><td>text</td><td>contact_person, contact</td></tr>
+        </table>
+
+        <h2 id="employees">👤 master.employees</h2>
+        <table>
+            <tr><th>Canonical Name</th><th>Type</th><th>❌ Known Aliases</th></tr>
+            <tr><td><code>full_name</code></td><td>text</td><td>name</td></tr>
+            <tr><td><code>personal_mobile</code></td><td>text</td><td>phone, mobile</td></tr>
+            <tr><td><code>personal_email</code></td><td>text</td><td>email</td></tr>
+            <tr><td><code>date_of_birth</code></td><td>date</td><td>dob</td></tr>
+            <tr><td><code>aadhar_number</code></td><td>text</td><td>aadhar</td></tr>
+            <tr><td><code>pan_number</code></td><td>text</td><td>pan</td></tr>
+        </table>
+
+        <h2 id="differences">⚠️ Sales vs Purchase: KEY DIFFERENCES</h2>
+        <div class="warning">
+            <strong>CRITICAL:</strong> These fields differ between Sales and Purchase modules!
+        </div>
+        <table>
+            <tr><th>Field</th><th>Sales Module</th><th>Purchase Module</th></tr>
+            <tr><td>Document total</td><td><code>final_amount</code> ✅</td><td><code>total_amount</code> ✅</td></tr>
+            <tr><td>Order number</td><td><code>order_number</code> ✅</td><td><code>po_number</code> ✅</td></tr>
+            <tr><td>Status field</td><td><code>invoice_status</code></td><td><code>po_status</code> / <code>grn_status</code></td></tr>
+            <tr><td>Quantity</td><td><code>quantity</code></td><td><code>ordered_quantity</code> / <code>received_quantity</code></td></tr>
+        </table>
+
+        <h2 id="commands">🛠️ Search & Replace Commands</h2>
+        <pre>
+# Batch aliases
+sed -i '' 's/batch_no/batch_number/g' FILE
+sed -i '' 's/mfg_date/manufacturing_date/g' FILE
+
+# Pricing aliases
+sed -i '' 's/cost_price/cost_per_unit/g' FILE
+sed -i '' 's/purchase_price/unit_price/g' FILE
+
+# Party aliases
+sed -i '' 's/\.gstin/.gst_number/g' FILE
+sed -i '' 's/\.pan[^_]/.pan_number /g' FILE
+sed -i '' 's/dl_number/drug_license_number/g' FILE
+
+# Stock aliases
+sed -i '' 's/current_stock/total_quantity_available/g' FILE  # Products
+sed -i '' 's/current_stock/quantity_available/g' FILE  # Batches
+        </pre>
+
+        <h2>📊 Module Alignment Status</h2>
+        <table>
+            <tr><th>Module</th><th>Status</th></tr>
+            <tr><td>Inventory</td><td><span class="badge badge-done">✅ Fixed</span></td></tr>
+            <tr><td>Purchase</td><td><span class="badge badge-done">✅ Fixed</span></td></tr>
+            <tr><td>Master</td><td><span class="badge badge-done">✅ Fixed</span></td></tr>
+            <tr><td>Sales</td><td><span class="badge badge-review">⚠️ Review</span></td></tr>
+            <tr><td>Ledger</td><td><span class="badge badge-review">⚠️ Review</span></td></tr>
+            <tr><td>GST</td><td><span class="badge badge-review">⚠️ Review</span></td></tr>
+            <tr><td>Returns</td><td><span class="badge badge-review">⚠️ Review</span></td></tr>
+        </table>
+    </div>
+</body>
+</html>

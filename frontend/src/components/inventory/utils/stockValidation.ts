@@ -63,9 +63,9 @@ export const validateBatchData = (batch: any): boolean => {
  * @returns Standardized stock item
  */
 export const transformToStockItem = <T extends BaseStockItem>(product: any): T => {
-    const currentStock = Number(product.current_stock || product.total_quantity || 0);
+    const totalQtyAvailable = Number(product.total_quantity_available || product.total_quantity || 0);
     const reorderLevel = Number(product.reorder_level || 0);
-    const minStockLevel = Number(product.min_stock_quantity || product.minimum_stock_level || 0);
+    const minStockLevel = Number(product.min_stock_quantity || 0);
     const effectiveReorderLevel = reorderLevel || minStockLevel;
 
     return {
@@ -80,45 +80,43 @@ export const transformToStockItem = <T extends BaseStockItem>(product: any): T =
         manufacturer: product.manufacturer || '',
         brand: product.brand || '',
 
-        // Stock & Inventory
-        current_stock: currentStock,
-        available_stock: Number(product.available_stock || product.available_quantity || currentStock),
-        reserved_stock: Number(product.reserved_stock || product.allocated_quantity || 0),
+        // Stock & Inventory - CANONICAL NAMES
+        total_quantity_available: totalQtyAvailable,
+        total_quantity_reserved: Number(product.total_quantity_reserved || product.allocated_quantity || 0),
+        total_quantity_quarantine: Number(product.total_quantity_quarantine || 0),
         reorder_level: effectiveReorderLevel,
-        minimum_stock_level: minStockLevel,
-        maximum_stock_level: Number(product.max_stock_quantity || product.maximum_stock_level || 0),
+        min_stock_quantity: minStockLevel,
+        max_stock_quantity: Number(product.max_stock_quantity || 0),
 
-        // Pricing
-        mrp: Number(product.mrp || 0),
-        cost_price: Number(product.cost_price || product.average_cost || 0),
-        purchase_rate: Number(product.purchase_rate || product.cost_price || 0),
-        selling_rate: Number(product.selling_rate || product.sale_price || product.mrp || 0),
-        stock_value: currentStock * Number(product.cost_price || product.average_cost || 0),
+        // Pricing - CANONICAL with _per_unit suffix (NO FALLBACKS)
+        mrp_per_unit: Number(product.mrp_per_unit || 0),
+        cost_per_unit: Number(product.cost_per_unit || 0),
+        sale_price_per_unit: Number(product.sale_price_per_unit || 0),
+        stock_value: totalQtyAvailable * Number(product.cost_per_unit || 0),
 
-        // Units & Measurements
+        // Units & Measurements - CANONICAL
         unit: product.base_uom || product.unit || 'Units',
-        sale_unit: product.sale_unit || product.base_uom || product.unit || 'Units',
-        purchase_unit: product.purchase_unit || product.pack_uom || '',
+        base_uom: product.base_uom || product.unit || 'Units',
+        pack_uom: product.pack_uom || '',
         pack_size: Number(product.pack_size || 1),
-        pack_type: product.pack_type || product.pack_unit || '',
-        pack_unit_quantity: Number(product.units_per_pack || product.pack_unit_quantity || 1),
-        sub_unit_quantity: Number(product.tablets_per_strip || product.packs_per_box || 1),
+        pack_type: product.pack_type || '',
+        units_per_pack: Number(product.units_per_pack || 1),
+        packages_per_box: Number(product.packages_per_box || 1),
 
         // Tax
         gst_percent: Number(product.gst_percent || 0),
         cess_percentage: Number(product.cess_percentage || 0),
         hsn_code: product.hsn_code || '',
 
-        // Status & Alerts
+        // Status & Alerts (computed flags)
         is_active: Boolean(product.is_active),
-        low_stock: currentStock <= effectiveReorderLevel && effectiveReorderLevel > 0,
-        out_of_stock: currentStock === 0,
+        low_stock: totalQtyAvailable <= effectiveReorderLevel && effectiveReorderLevel > 0,
+        out_of_stock: totalQtyAvailable === 0,
         expiry_alert: Boolean(product.expiry_alert || product.near_expiry_batches > 0),
 
         // Metadata
         created_at: product.created_at,
-        updated_at: product.updated_at,
-        last_updated: product.updated_at
+        updated_at: product.updated_at
     } as T;
 };
 
@@ -131,29 +129,30 @@ export const transformToStockItem = <T extends BaseStockItem>(product: any): T =
 export const transformToBatch = <T extends BaseBatch>(batch: any): T => {
     return {
         batch_id: batch.batch_id,
-        batch_number: batch.batch_number || batch.batch_no || '',
+        batch_number: batch.batch_number || '',  // CANONICAL - no batch_number fallback
         product_id: batch.product_id,
         product_name: batch.product_name || '',
 
-        // Quantities
-        quantity_available: Number(batch.quantity_available || batch.current_stock || 0),
-        quantity_received: Number(batch.quantity_received || 0),
-        quantity_sold: Number(batch.quantity_sold || 0),
+        // Quantities - CANONICAL
+        quantity_available: Number(batch.quantity_available || 0),
+        quantity_reserved: Number(batch.quantity_reserved || 0),
+        quantity_quarantine: Number(batch.quantity_quarantine || 0),
+        initial_quantity: Number(batch.initial_quantity || 0),
 
-        // Dates - output backend-standard name only
+        // Dates - CANONICAL (output standard names only)
         expiry_date: batch.expiry_date,
-        manufacturing_date: batch.manufacturing_date || batch.mfg_date, // Accept both inputs, output standard
-        received_date: batch.received_date,
+        manufacturing_date: batch.manufacturing_date,  // CANONICAL - no manufacturing_date fallback
 
-        // Pricing
-        mrp: Number(batch.mrp || 0),
-        cost_price: Number(batch.cost_price || 0),
-        sale_price: Number(batch.sale_price || 0),
+        // Pricing - CANONICAL with _per_unit suffix (NO FALLBACKS)
+        mrp_per_unit: Number(batch.mrp_per_unit || 0),
+        cost_per_unit: Number(batch.cost_per_unit || 0),
+        sale_price_per_unit: Number(batch.sale_price_per_unit || 0),
 
-        // Metadata
-        supplier: batch.supplier || '',
-        location: batch.location || batch.warehouse || '',
-        is_active: Boolean(batch.is_active)
+        // Storage - CANONICAL
+        storage_location: batch.storage_location || '',
+        storage_condition: batch.storage_condition || '',
+        supplier_id: batch.supplier_id,
+        is_active: Boolean(batch.is_active !== false)
     } as T;
 };
 

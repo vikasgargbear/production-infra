@@ -20,7 +20,7 @@ interface Purchase {
     supplier_name?: string;
     supplier_id?: number | string;
     total_amount?: number;
-    grand_total?: number;
+    total_amount?: number;
     payment_status?: string;
     items?: PurchaseItem[];
 }
@@ -330,7 +330,7 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
                                 </div>
                                 <div className="text-right">
                                     <div className="font-semibold text-gray-900">
-                                        {formatCurrency(purchase.total_amount || purchase.grand_total)}
+                                        {formatCurrency(purchase.total_amount || purchase.total_amount)}
                                     </div>
                                     <div className="text-xs text-gray-500 mt-1">
                                         {purchase.payment_status || 'Unpaid'}

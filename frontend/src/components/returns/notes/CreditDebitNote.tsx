@@ -190,7 +190,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
             id: item.id || item.invoice_item_id,
             product_id: item.product_id,
             product_name: item.product_name || item.item_name,
-            batch_number: item.batch_number || item.batch_no,
+            batch_number: item.batch_number || item.batch_number,
             quantity: quantity,
             original_quantity: quantity,
             rate: rate,

@@ -32,7 +32,7 @@ const ProductVerificationModal = ({
     batch_number: product?.batch_number || '',
     expiry_date: product?.expiry_date || '',
     quantity: product?.quantity || '',
-    cost_price: product?.cost_price || product?.rate || '',
+    unit_price: product?.unit_price || product?.unit_price || '',
     mrp: product?.mrp || '',
     selling_price: product?.selling_price || '',
     tax_percent: product?.tax_percent || 0,
@@ -77,7 +77,7 @@ const ProductVerificationModal = ({
         batch_number: product.batch_number,
         expiry_date: formatDateForInput(product.expiry_date),
         quantity: product.quantity,
-        cost_price: product.cost_price,
+        unit_price: product.unit_price,
         mrp: product.mrp,
         selling_price: product.selling_price,
         tax_percent: product.tax_percent,
@@ -101,7 +101,7 @@ const ProductVerificationModal = ({
         batch_number: product?.batch_number || '',
         expiry_date: formatDateForInput(product?.expiry_date),
         quantity: product?.quantity || '',
-        cost_price: product?.cost_price || product?.rate || '',
+        unit_price: product?.unit_price || product?.unit_price || '',
         mrp: product?.mrp || '',
         selling_price: product?.selling_price || '', // Don't auto-calculate in extract mode
         tax_percent: product?.tax_percent || 0,
@@ -130,7 +130,7 @@ const ProductVerificationModal = ({
       mrp: selectedProd.mrp || productData.mrp || 0,
       // In extract mode, don't auto-fill selling price - let it come from customer
       selling_price: isExtractMode ? (productData.selling_price || '') : (selectedProd.selling_price || selectedProd.ptr || ''),
-      cost_price: productData.cost_price || selectedProd.cost_price || 0,
+      unit_price: productData.unit_price || selectedProd.unit_price || 0,
       tax_percent: selectedProd.tax_percent || selectedProd.gst_percent || productData.tax_percent || 12,
       // Keep extracted values for these
       quantity: productData.quantity || 1,
@@ -160,8 +160,8 @@ const ProductVerificationModal = ({
 
   // Auto-calculate prices only when NOT in extract mode
   useEffect(() => {
-    if (!isExtractMode && productData.cost_price && (!productData.mrp || productData.mrp === '')) {
-      const cost = parseFloat(productData.cost_price);
+    if (!isExtractMode && productData.unit_price && (!productData.mrp || productData.mrp === '')) {
+      const cost = parseFloat(productData.unit_price);
       if (!isNaN(cost) && cost > 0) {
         setProductData(prev => ({
           ...prev,
@@ -169,7 +169,7 @@ const ProductVerificationModal = ({
         }));
       }
     }
-  }, [productData.cost_price, isExtractMode]);
+  }, [productData.unit_price, isExtractMode]);
 
   useEffect(() => {
     // Don't auto-calculate selling price in extract mode - let customer provide it
@@ -201,13 +201,13 @@ const ProductVerificationModal = ({
     // Required fields
     if (!productData.product_name) errors.push('Product name is required');
     if (!productData.quantity || productData.quantity <= 0) errors.push('Quantity must be greater than 0');
-    if (!productData.cost_price || productData.cost_price <= 0) errors.push('Cost price must be greater than 0');
+    if (!productData.unit_price || productData.unit_price <= 0) errors.push('Cost price must be greater than 0');
     // Batch number is NOT required - will be auto-generated if missing
     if (!productData.expiry_date) errors.push('Expiry date is required');
 
     // Price logic
-    if (productData.mrp && productData.cost_price) {
-      if (parseFloat(productData.mrp) < parseFloat(productData.cost_price)) {
+    if (productData.mrp && productData.unit_price) {
+      if (parseFloat(productData.mrp) < parseFloat(productData.unit_price)) {
         errors.push('MRP cannot be less than cost price');
       }
     }
@@ -350,7 +350,7 @@ const ProductVerificationModal = ({
                   batch_number: '',
                   expiry_date: '',
                   quantity: '',
-                  cost_price: '',
+                  unit_price: '',
                   mrp: '',
                   selling_price: '',
                   tax_percent: 12,
@@ -509,10 +509,10 @@ const ProductVerificationModal = ({
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={productData.cost_price}
+                    value={productData.unit_price}
                     onChange={(e) => setProductData(prev => ({
                       ...prev,
-                      cost_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      unit_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
                     }))}
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
                   />

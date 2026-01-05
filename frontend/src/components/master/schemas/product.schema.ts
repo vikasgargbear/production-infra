@@ -23,7 +23,7 @@ export const productBaseSchema = z.object({
   // Pricing validation
   mrp: z.number().positive('MRP must be positive'),
   sale_price: z.number().positive('Sale price must be positive'),
-  cost_price: z.number().nonnegative('Cost price cannot be negative'),
+  cost_per_unit: z.number().nonnegative('Cost price cannot be negative'),
   gst_percent: z.number().min(0).max(100, 'GST must be between 0 and 100'),
   
   // Units
@@ -59,10 +59,10 @@ export const productCreateSchema = productBaseSchema.refine(
     path: ['sale_price'],
   }
 ).refine(
-  (data) => data.cost_price <= data.sale_price,
+  (data) => data.cost_per_unit <= data.sale_price,
   {
     message: 'Cost price should not be greater than sale price',
-    path: ['cost_price'],
+    path: ['cost_per_unit'],
   }
 );
 
@@ -77,7 +77,7 @@ export const productUpdateSchema = z.object({
   
   mrp: z.number().positive().optional(),
   sale_price: z.number().positive().optional(),
-  cost_price: z.number().nonnegative().optional(),
+  cost_per_unit: z.number().nonnegative().optional(),
   gst_percent: z.number().min(0).max(100).optional(),
   
   base_unit: z.string().min(1).max(20).optional(),
@@ -138,7 +138,7 @@ export const productBatchSchema = z.object({
   expiry_date: z.string().datetime(),
   quantity_available: z.number().int().nonnegative(),
   mrp: z.number().positive(),
-  purchase_price: z.number().positive(),
+  unit_price: z.number().positive(),
   sale_price: z.number().positive(),
   location: z.string().max(100).optional(),
 });

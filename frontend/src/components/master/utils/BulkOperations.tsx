@@ -36,12 +36,12 @@ const BulkOperations = ({ open, onClose }) => {
     },
     customers: {
       filename: 'customers_template.xlsx', 
-      columns: ['name', 'gstin', 'phone', 'email', 'address', 'city', 'state', 'pincode'],
+      columns: ['name', 'gst_number', 'phone', 'email', 'address', 'city', 'state', 'pincode'],
       sampleData: 'ABC Pharmacy, 27ABCDE1234F1Z5, 9876543210, abc@pharmacy.com, 123 Main St, Mumbai, Maharashtra, 400001'
     },
     suppliers: {
       filename: 'suppliers_template.xlsx',
-      columns: ['name', 'gstin', 'drug_license', 'phone', 'email', 'address', 'city', 'state'],
+      columns: ['name', 'gst_number', 'drug_license', 'phone', 'email', 'address', 'city', 'state'],
       sampleData: 'XYZ Distributors, 27XYZAB1234C1D2, DL-MH-001, 9876543210, xyz@dist.com, 456 Supply St, Pune, Maharashtra'
     }
   };

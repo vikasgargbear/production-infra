@@ -64,13 +64,13 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
   // Render customer result in dropdown - compact layout showing all key info
   const renderCustomerResult = (customer: Customer, isHighlighted: boolean, index: number) => {
-    const phone = (customer as any).contact_person?.phone ||
+    const phone = (customer as any).contact_person_phone ||
       customer.phone ||
       (customer as any).primary_phone;
     const city = (customer as any).billing_address?.city ||
       customer.billing_address?.city ||
       (customer as any).city;
-    const hasGst = customer.gstin || (customer as any).gst_number;
+    const hasGst = customer.gst_number || (customer as any).gst_number;
 
     return (
       <div
@@ -140,7 +140,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">B2B</span>
                 )}
                 {/* GST Status Badge */}
-                {(customer.gstin || (customer as any).gst_number) ? (
+                {(customer.gst_number || (customer as any).gst_number) ? (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
                     GST
                   </span>
@@ -153,7 +153,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
                 {/* Phone Number */}
                 {(() => {
-                  const phoneNumber = (customer as any).contact_person?.phone ||
+                  const phoneNumber = (customer as any).contact_person_phone ||
                     customer.phone ||
                     customer.contact_info?.primary_phone ||
                     (customer as any).primary_phone;

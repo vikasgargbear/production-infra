@@ -61,7 +61,7 @@ const SupplierQuickSelect = ({ value, onChange }: { value?: any; onChange: (supp
     onChange({
       id: supplier.supplier_id,
       name: supplier.supplier_name,
-      gstin: supplier.gstin,
+      gst_number: supplier.gst_number,
       address: supplier.address
     });
   };
@@ -126,7 +126,7 @@ const SupplierQuickSelect = ({ value, onChange }: { value?: any; onChange: (supp
                 >
                   <div className="font-medium">{supplier.supplier_name}</div>
                   <div className="text-xs text-gray-500">
-                    {supplier.gstin && `GSTIN: ${supplier.gstin}`}
+                    {supplier.gst_number && `GSTIN: ${supplier.gst_number}`}
                     {supplier.mobile && ` • ${supplier.mobile}`}
                   </div>
                 </div>

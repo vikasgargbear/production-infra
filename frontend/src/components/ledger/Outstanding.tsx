@@ -28,7 +28,7 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
-import PaymentAllocationModal from '../payment/modals/PaymentAllocationModal';
+import PaymentAllocationModal from '../payment/shared/PaymentAllocationModal';
 
 interface OutstandingProps {
   partyType?: 'customer' | 'supplier';
@@ -60,7 +60,7 @@ interface InvoiceDetail {
   due_date: string;
   original_amount: number;
   paid_amount: number;
-  outstanding_amount: number;
+  current_outstanding: number;
   days_overdue: number;
   aging_bucket: 'current' | '1-30' | '31-60' | '61-90' | 'over_90';
   status: 'pending' | 'partial' | 'overdue';
@@ -182,7 +182,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             due_date: invoice.due_date || '',
             original_amount: parseFloat(invoice.final_amount || 0),
             paid_amount: parseFloat(invoice.paid_amount || 0),
-            outstanding_amount: pendingAmount,
+            current_outstanding: pendingAmount,
             days_overdue: daysOverdue,
             aging_bucket: agingBucket,
             status: status
@@ -228,7 +228,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
           // Update aging summary
           party.invoices?.forEach(invoice => {
             const bucket = invoice.aging_bucket;
-            const amount = invoice.outstanding_amount;
+            const amount = invoice.current_outstanding;
 
             if (bucket === 'current') {
               summary.aging_summary.current.count++;
@@ -581,10 +581,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
       width: '120px'
     },
     {
-      key: 'outstanding_amount',
+      key: 'current_outstanding',
       header: 'Outstanding',
       align: 'right' as const,
-      render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.outstanding_amount),
+      render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.current_outstanding),
       width: '120px'
     },
     {
@@ -1133,7 +1133,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                             };
 
                             party.invoices?.forEach(invoice => {
-                              buckets[invoice.aging_bucket] += invoice.outstanding_amount;
+                              buckets[invoice.aging_bucket] += invoice.current_outstanding;
                             });
 
                             return (

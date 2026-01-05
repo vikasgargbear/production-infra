@@ -22,18 +22,18 @@ interface UploadedProduct {
   quantity?: number;
   free_quantity?: number;
   mrp?: number;
-  cost_price?: number;
+  unit_price?: number;
   sale_price?: number;
   gst_percent?: number;
   discount_percent?: number;
   schedule_type?: string;
   storage_condition?: string;
   batch_number?: string;
-  batch_no?: string;
+  batch_number?: string;
   tax_percent?: number;
   tax_amount?: number;
   selling_price?: number;
-  purchase_price?: number;
+  unit_price?: number;
   pack_size?: number;
   id?: number;
   product_id?: number | null;
@@ -71,7 +71,7 @@ const BulkUploadInline: React.FC<BulkUploadInlineProps> = ({ onProductsUploaded 
     { field: 'quantity', header: 'Qty*', required: true },
     { field: 'free_quantity', header: 'Free', required: false },
     { field: 'mrp', header: 'MRP*', required: true },
-    { field: 'cost_price', header: 'Cost*', required: true },
+    { field: 'unit_price', header: 'Cost*', required: true },
     { field: 'sale_price', header: 'Sale', required: false },
     { field: 'gst_percent', header: 'GST%', required: false },
     { field: 'discount_percent', header: 'Disc%', required: false },
@@ -271,7 +271,7 @@ const BulkUploadInline: React.FC<BulkUploadInlineProps> = ({ onProductsUploaded 
                     product[col.field] = parseInt(value) || 0;
                     break;
                   case 'mrp':
-                  case 'cost_price':
+                  case 'unit_price':
                   case 'sale_price':
                     product[col.field] = parseFloat(value) || 0;
                     break;
@@ -379,11 +379,11 @@ const BulkUploadInline: React.FC<BulkUploadInlineProps> = ({ onProductsUploaded 
               products.push({
                 ...product,
                 // Map fields for purchase items
-                batch_no: product.batch_number,
+                batch_number: product.batch_number,
                 tax_percent: product.gst_percent,
                 tax_amount: 0,
                 selling_price: product.sale_price,
-                purchase_price: product.cost_price,
+                unit_price: product.unit_price,
                 pack_size: product.units_per_pack,
                 id: Date.now() + index + Math.random(),
                 // Ensure product_id is null for new products

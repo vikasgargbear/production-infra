@@ -1,3 +1,9 @@
+/**
+ * PurchaseHub - Central navigation for Purchase module
+ * 
+ * Modernized: No longer uses PurchaseContext (each flow uses usePurchaseTransaction)
+ */
+
 import React from 'react';
 import {
   ShoppingBag, FileText, Package, ShoppingCart, List
@@ -7,7 +13,6 @@ import { PurchaseEntryFlow } from './purchase-entry';
 import { PurchaseOrderFlow } from './purchase-order';
 import { GRNFlow } from './grn';
 import PurchaseListHistory from './PurchaseListHistory';
-import { PurchaseProvider } from '../../contexts/PurchaseContext';
 
 interface PurchaseHubProps {
   open?: boolean;
@@ -64,15 +69,8 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
     }
   ];
 
-  // Wrap in PurchaseProvider
-  const PurchaseHubContent: React.FC<any> = (props) => (
-    <PurchaseProvider>
-      <ModuleHub {...props} />
-    </PurchaseProvider>
-  );
-
   return (
-    <PurchaseHubContent
+    <ModuleHub
       open={open}
       onClose={onClose || (() => { })}
       title="Purchase Hub"

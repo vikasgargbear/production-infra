@@ -141,19 +141,19 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
           product_name: stock.product_name,
           product_code: stock.product_code,
           generic_name: stock.generic_name,
-          category: stock.category || '',  // Backend now returns category name directly
+          category: stock.category || '',
           product_type: stock.product_type || 'standard',
           product_class: stock.product_class || 'medicine',
           manufacturer: stock.manufacturer,
           brand: stock.brand,
           hsn_code: stock.hsn_code,
           unit: stock.unit || 'Units',
-          current_stock: stock.total_quantity || 0,
-          available_stock: stock.available_quantity || 0,
-          reserved_stock: stock.allocated_quantity || 0,
-          mrp: stock.mrp || 0,
-          cost_price: stock.average_cost || 0,
-          sale_price: stock.sale_price || stock.mrp || 0,
+          // CANONICAL variable names from backend
+          total_quantity_available: stock.total_quantity_available || stock.total_quantity || 0,
+          total_quantity_reserved: stock.allocated_quantity || 0,
+          mrp_per_unit: stock.mrp_per_unit || 0,
+          cost_per_unit: stock.average_cost || 0,
+          sale_price_per_unit: stock.sale_price_per_unit || 0,
           reorder_level: stock.reorder_level || 0,
           low_stock: stock.is_below_minimum || stock.is_below_reorder || false,
           expiry_alert: stock.near_expiry_batches > 0,
@@ -242,10 +242,10 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
       const tableData = itemsToExport.map(item => [
         item.product_name || 'N/A',
         item.product_code || 'N/A',
-        item.current_stock || 0,
+        item.total_quantity_available || 0,
         item.unit || 'Units',
         item.reorder_level || 0,
-        item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')
+        item.low_stock ? 'Low Stock' : (item.total_quantity_available === 0 ? 'Out of Stock' : 'In Stock')
       ]);
 
       (doc as any).autoTable({
@@ -270,7 +270,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
       yPos += 10;
 
       itemsToExport.forEach(item => {
-        const rowText = `${item.product_name || 'N/A'} | ${item.product_code || 'N/A'} | ${item.current_stock || 0} | ${item.unit || 'Units'} | ${item.reorder_level || 0} | ${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')}`;
+        const rowText = `${item.product_name || 'N/A'} | ${item.product_code || 'N/A'} | ${item.total_quantity_available || 0} | ${item.unit || 'Units'} | ${item.reorder_level || 0} | ${item.low_stock ? 'Low Stock' : (item.total_quantity_available === 0 ? 'Out of Stock' : 'In Stock')}`;
         doc.text(rowText, 20, yPos);
         yPos += 8;
 
@@ -295,7 +295,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
       <h2>Current Stock Report</h2>
       <table><thead><tr><th>Product</th><th>Code</th><th>Stock</th><th>Unit</th><th>Reorder Level</th><th>Status</th></tr></thead>
       <tbody>
-      ${itemsToPrint.map(item => `<tr><td>${item.product_name || 'N/A'}</td><td>${item.product_code || 'N/A'}</td><td>${item.current_stock || 0}</td><td>${item.unit || 'Units'}</td><td>${item.reorder_level || 0}</td><td>${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')}</td></tr>`).join('')}
+      ${itemsToPrint.map(item => `<tr><td>${item.product_name || 'N/A'}</td><td>${item.product_code || 'N/A'}</td><td>${item.total_quantity_available || 0}</td><td>${item.unit || 'Units'}</td><td>${item.reorder_level || 0}</td><td>${item.low_stock ? 'Low Stock' : (item.total_quantity_available === 0 ? 'Out of Stock' : 'In Stock')}</td></tr>`).join('')}
       </tbody></table>
       </body></html>`;
     const w = window.open('', '_blank');
@@ -315,7 +315,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
 
     const message = encodeURIComponent(
       `Current Stock Report:\n\n${itemsToSend.map(item =>
-        `${item.product_name} - ${item.current_stock} ${item.unit || 'Units'} (${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')})`
+        `${item.product_name} - ${item.total_quantity_available} ${item.unit || 'Units'} (${item.low_stock ? 'Low Stock' : (item.total_quantity_available === 0 ? 'Out of Stock' : 'In Stock')})`
       ).join('\n')}`
     );
 
@@ -365,10 +365,10 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
     if (moreFilters.stockStatus !== 'all') {
       switch (moreFilters.stockStatus) {
         case 'in-stock':
-          filtered = filtered.filter(item => item.current_stock > 0);
+          filtered = filtered.filter(item => item.total_quantity_available > 0);
           break;
         case 'out-of-stock':
-          filtered = filtered.filter(item => item.current_stock === 0);
+          filtered = filtered.filter(item => item.total_quantity_available === 0);
           break;
         case 'low-stock':
           filtered = filtered.filter(item => item.low_stock);
@@ -461,14 +461,14 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
         item.product_name || '',
         item.product_code || '',
         item.category || '',
-        item.current_stock || 0,
+        item.total_quantity_available || 0,
         item.available_stock || 0,
         item.reserved_stock || 0,
         item.reorder_level || 0,
         item.unit || 'Units',
-        item.mrp || 0,
+        item.mrp_per_unit || 0,
         item.stock_value || 0,
-        item.low_stock ? 'Low Stock' : item.current_stock === 0 ? 'Out of Stock' : 'In Stock'
+        item.low_stock ? 'Low Stock' : item.total_quantity_available === 0 ? 'Out of Stock' : 'In Stock'
       ]);
 
       // Convert to CSV format
@@ -495,7 +495,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
   };
 
   const getStockStatus = (item) => {
-    if (item.current_stock === 0) {
+    if (item.total_quantity_available === 0) {
       return { color: 'red', text: 'Out of Stock', icon: AlertTriangle };
     } else if (item.low_stock) {
       return { color: 'orange', text: 'Low Stock', icon: TrendingDown };
@@ -558,16 +558,16 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
     },
     {
       header: 'Current Stock',
-      key: 'current_stock',
+      key: 'total_quantity_available',
       sortable: true,
       render: (value, row) => {
-        if (!row || typeof row.current_stock === 'undefined') {
+        if (!row || typeof row.total_quantity_available === 'undefined') {
           return <div className="text-red-500">Invalid Stock Data</div>;
         }
 
         const status = getStockStatus(row);
         const StatusIcon = status.icon;
-        const totalUnits = row.current_stock || 0;
+        const totalUnits = row.total_quantity_available || 0;
         const packQty = row.pack_unit_quantity || 1;
         const subQty = row.sub_unit_quantity || 1;
         const boxes = Math.floor(totalUnits / (packQty * subQty));
@@ -579,7 +579,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
           <div className="flex items-center space-x-2">
             <StatusIcon className={`w-4 h-4 text-${status.color}-500`} />
             <div>
-              <div className="font-medium">{row.current_stock} {row.sale_unit || row.unit}</div>
+              <div className="font-medium">{row.total_quantity_available} {row.sale_unit || row.unit}</div>
               {(packQty > 1 || subQty > 1) && (
                 <div className="text-xs text-gray-500">
                   {boxes > 0 && `${boxes} ${row.purchase_unit || 'Box'}${boxes > 1 ? 'es' : ''}`}
@@ -1032,7 +1032,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Current Stock</p>
-                    <p className="text-lg font-medium">{selectedProduct.current_stock} {selectedProduct.unit}</p>
+                    <p className="text-lg font-medium">{selectedProduct.total_quantity_available} {selectedProduct.unit}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Stock Value</p>
@@ -1054,7 +1054,7 @@ const CurrentStock: React.FC<CurrentStockProps> = ({ open = true, onClose }) => 
                     {selectedProduct.batches?.map((batch, index) => (
                       <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
-                          <p className="font-medium">{batch.batch_no}</p>
+                          <p className="font-medium">{batch.batch_number}</p>
                           <p className="text-sm text-gray-600">Expires: {new Date(batch.expiry_date).toLocaleDateString()}</p>
                         </div>
                         <p className="font-medium">{batch.quantity} {selectedProduct.unit}</p>

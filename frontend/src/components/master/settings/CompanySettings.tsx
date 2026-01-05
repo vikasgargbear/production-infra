@@ -4,24 +4,29 @@ import { useToast } from '../../global/ui/feedback/Toast';
 import { organizationsApi, companyAPI } from '../../../services/api';
 import { useCompany } from '../../../contexts/CompanyContext';
 
-const CompanySettings = ({ open = true, onClose }) => {
+const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: () => void }) => {
   const toast = useToast();
   const { companyInfo, updateCompanyInfo, getOrgId } = useCompany();
   const [isLoading, setIsLoading] = useState(false);
+
+  // Safe access to companyInfo with defaults
+  const safeCompanyInfo = companyInfo || {};
+  const businessSettings = (safeCompanyInfo as any).business_settings || {};
+
   const [settings, setSettings] = useState({
-    companyName: companyInfo.name || '',
-    companyAddress: companyInfo.address || '',
-    companyGST: companyInfo.gst || companyInfo.gst_number || '',
-    companyDL: companyInfo.drugLicense || companyInfo.drug_license || '',
-    companyState: companyInfo.state || '',
-    companyLogo: companyInfo.logo || '',
-    bankName: companyInfo.bank_name || '',
-    accountNumber: companyInfo.account_number || '',
-    ifscCode: companyInfo.ifsc_code || '',
-    digitalSignature: companyInfo.logo || '',
-    businessType: companyInfo.business_settings?.business_type || 'b2b',
-    paymentQR: companyInfo.paymentQR || '',
-    showTransportDetails: companyInfo.business_settings?.show_transport_details !== false // Default to true
+    companyName: (safeCompanyInfo as any).name || '',
+    companyAddress: (safeCompanyInfo as any).address || '',
+    companyGST: (safeCompanyInfo as any).gst || (safeCompanyInfo as any).gst_number || '',
+    companyDL: (safeCompanyInfo as any).drugLicense || (safeCompanyInfo as any).drug_license_number || '',
+    companyState: (safeCompanyInfo as any).state || '',
+    companyLogo: (safeCompanyInfo as any).logo || '',
+    bankName: (safeCompanyInfo as any).bank_name || '',
+    accountNumber: (safeCompanyInfo as any).account_number || '',
+    ifscCode: (safeCompanyInfo as any).ifsc_code || '',
+    digitalSignature: (safeCompanyInfo as any).logo || '',
+    businessType: businessSettings.business_type || 'b2b',
+    paymentQR: (safeCompanyInfo as any).paymentQR || '',
+    showTransportDetails: businessSettings.show_transport_details !== false // Default to true
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
@@ -30,24 +35,26 @@ const CompanySettings = ({ open = true, onClose }) => {
 
   useEffect(() => {
     if (open) {
+      const info = companyInfo || {} as any;
+      const bizSettings = info.business_settings || {};
       setSettings({
-        companyName: companyInfo.name || '',
-        companyAddress: companyInfo.address || '',
-        companyGST: companyInfo.gst || companyInfo.gst_number || '',
-        companyDL: companyInfo.drugLicense || companyInfo.drug_license || '',
-        companyState: companyInfo.state || '',
-        companyLogo: companyInfo.logo || '',
-        bankName: companyInfo.bank_name || '',
-        accountNumber: companyInfo.account_number || '',
-        ifscCode: companyInfo.ifsc_code || '',
-        digitalSignature: companyInfo.logo || '',
-        businessType: companyInfo.business_settings?.business_type || 'b2b',
-        showTransportDetails: companyInfo.business_settings?.show_transport_details !== false, // Default to true
-        paymentQR: companyInfo.paymentQR || ''
+        companyName: info.name || '',
+        companyAddress: info.address || '',
+        companyGST: info.gst || info.gst_number || '',
+        companyDL: info.drugLicense || info.drug_license_number || '',
+        companyState: info.state || '',
+        companyLogo: info.logo || '',
+        bankName: info.bank_name || '',
+        accountNumber: info.account_number || '',
+        ifscCode: info.ifsc_code || '',
+        digitalSignature: info.logo || '',
+        businessType: bizSettings.business_type || 'b2b',
+        showTransportDetails: bizSettings.show_transport_details !== false, // Default to true
+        paymentQR: info.paymentQR || ''
       });
-      setLogoPreview(companyInfo.logo || '');
-      setSignaturePreview(companyInfo.logo || '');
-      setQrPreview(companyInfo.paymentQR || '');
+      setLogoPreview(info.logo || '');
+      setSignaturePreview(info.logo || '');
+      setQrPreview(info.paymentQR || '');
     }
   }, [open, companyInfo]);
 
@@ -91,11 +98,12 @@ const CompanySettings = ({ open = true, onClose }) => {
     setIsLoading(true);
 
     try {
+      const info = companyInfo || {} as any;
       const companyData = {
         name: settings.companyName,
         address: settings.companyAddress,
-        phone: companyInfo.phone || '',
-        email: companyInfo.email || '',
+        phone: info.phone || '',
+        email: info.email || '',
         gst: settings.companyGST,
         state: settings.companyState,
         logo: settings.companyLogo,
@@ -103,9 +111,9 @@ const CompanySettings = ({ open = true, onClose }) => {
         bank_name: settings.bankName,
         account_number: settings.accountNumber,
         ifsc_code: settings.ifscCode,
-        upi_id: companyInfo.upi_id || '',
+        upi_id: info.upi_id || '',
         business_settings: {
-          ...(companyInfo.business_settings || {}),
+          ...(info.business_settings || {}),
           business_type: settings.businessType,
           show_transport_details: settings.showTransportDetails
         }
@@ -114,7 +122,7 @@ const CompanySettings = ({ open = true, onClose }) => {
       await updateCompanyInfo(companyData);
 
       // Upload QR code if changed
-      if (settings.paymentQR && settings.paymentQR !== companyInfo.paymentQR) {
+      if (settings.paymentQR && settings.paymentQR !== info.paymentQR) {
         await companyAPI.uploadQRCode(settings.paymentQR);
       }
 

@@ -31,7 +31,7 @@ interface Supplier {
   primary_email?: string;
   whatsapp_number?: string;
   gst_number?: string;
-  gstin?: string;
+  gst_number?: string;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string;
@@ -146,7 +146,7 @@ const getColumns = (
       header: 'GST/License',
       render: (_, supplier) => {
         if (!supplier) return <div>N/A</div>;
-        const gstNumber = supplier.gst_number || supplier.gstin;
+        const gstNumber = supplier.gst_number || supplier.gst_number;
         return (
           <div className="text-sm">
             {gstNumber ? (
@@ -259,7 +259,7 @@ const SupplierMaster: React.FC = () => {
       getAll: suppliersApi.getAll,
       update: suppliersApi.update
     },
-    searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number', 'gstin'],
+    searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number', 'gst_number'],
     filterField: 'supplier_type',
     softDelete: true
   });

@@ -50,12 +50,12 @@ export function groupByGSTIN(invoices: any[]): Map<string, B2BInvoice> {
     const grouped = new Map<string, B2BInvoice>();
 
     invoices.forEach(invoice => {
-        const gstin = invoice.customer_gstin || invoice.gstin || '';
+        const gst_number = invoice.customer_gst_number || invoice.gst_number || '';
         const name = invoice.customer_name || invoice.name || 'Unknown';
 
-        if (!grouped.has(gstin)) {
-            grouped.set(gstin, {
-                gstin,
+        if (!grouped.has(gst_number)) {
+            grouped.set(gst_number, {
+                gst_number,
                 name,
                 invoices: 0,
                 taxableValue: 0,
@@ -65,9 +65,9 @@ export function groupByGSTIN(invoices: any[]): Map<string, B2BInvoice> {
             });
         }
 
-        const group = grouped.get(gstin)!;
+        const group = grouped.get(gst_number)!;
         group.invoices += 1;
-        group.taxableValue += invoice.subtotal_amount || invoice.taxable_amount || 0;
+        group.taxableValue += invoice.taxable_amount || 0;
         group.cgst += invoice.cgst_amount || 0;
         group.sgst += invoice.sgst_amount || 0;
         group.igst += invoice.igst_amount || 0;
@@ -99,10 +99,10 @@ export function calculateB2CSummary(invoices: any[]): { small: B2CData; large: B
     const B2C_THRESHOLD = 250000; // Rs. 2.5 lakhs
 
     invoices.forEach(invoice => {
-        const hasGSTIN = invoice.customer_gstin || invoice.gstin;
+        const hasGSTIN = invoice.customer_gst_number || invoice.gst_number;
         if (hasGSTIN) return; // Skip B2B invoices
 
-        const taxableValue = invoice.subtotal_amount || invoice.taxable_amount || 0;
+        const taxableValue = invoice.taxable_amount || 0;
         const isLarge = taxableValue >= B2C_THRESHOLD;
 
         const target = isLarge ? large : small;
@@ -128,7 +128,7 @@ export function calculateGSTSummary(invoices: any[]): GSTSummary {
 
     invoices.forEach(invoice => {
         totalInvoices += 1;
-        totalTaxableValue += invoice.subtotal_amount || invoice.taxable_amount || 0;
+        totalTaxableValue += invoice.taxable_amount || 0;
         totalCGST += invoice.cgst_amount || 0;
         totalSGST += invoice.sgst_amount || 0;
         totalIGST += invoice.igst_amount || 0;

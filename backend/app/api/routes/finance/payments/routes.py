@@ -238,23 +238,11 @@ async def get_payment_by_id(
 ):
     """Get single payment by ID"""
     try:
-        result = db.execute(text("""
-            SELECT p.*, 
-                c.customer_name,
-                s.supplier_name,
-                i.invoice_number
-            FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
-            LEFT JOIN sales.invoices i ON p.reference_number = i.invoice_number
-            WHERE p.payment_id = :payment_id
-        """), {"payment_id": payment_id})
-        
-        payment = result.first()
+        # Use PaymentService instead of inline SQL
+        payment = PaymentService.get_payment_by_id(db, payment_id, str(context.org_id))
         if not payment:
             raise HTTPException(status_code=404, detail="Payment not found")
-            
-        return dict(payment._mapping)
+        return payment
     except HTTPException:
         raise
     except Exception as e:

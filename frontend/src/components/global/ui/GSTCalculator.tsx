@@ -235,21 +235,21 @@ class GSTCalculator {
         return { isValid: errors.length === 0, errors };
     }
 
-    private validateGSTIN(gstin?: string): boolean {
-        if (!gstin) return false;
-        if (gstin.length !== 15) return false;
+    private validateGSTIN(gst_number?: string): boolean {
+        if (!gst_number) return false;
+        if (gst_number.length !== 15) return false;
 
-        const stateCode = gstin.substring(0, 2);
+        const stateCode = gst_number.substring(0, 2);
         if (!STATE_CODES[stateCode]) return false;
 
-        const pan = gstin.substring(2, 12);
+        const pan = gst_number.substring(2, 12);
         if (!/^[A-Z0-9]+$/.test(pan)) return false;
 
         return true;
     }
 
-    private extractStateCode(gstin?: string): string | null {
-        return gstin ? gstin.substring(0, 2) : null;
+    private extractStateCode(gst_number?: string): string | null {
+        return gst_number ? gst_number.substring(0, 2) : null;
     }
 
     private determineCustomerType(customerGSTIN?: string, isExport?: boolean, isSEZ?: boolean): string {
@@ -346,7 +346,7 @@ const GSTCalculatorComponent: React.FC<GSTCalculatorComponentProps> = ({
 
         try {
             const result = calculator.calculateGST({
-                sellerGSTIN: orderData?.sellerGSTIN || localStorage.getItem('company_gstin') || '',
+                sellerGSTIN: orderData?.sellerGSTIN || localStorage.getItem('company_gst_number') || '',
                 customerGSTIN: orderData?.customerGSTIN,
                 billingState: orderData?.billingState ||
                     calculator.getStateFromPincode(orderData?.billingPincode),

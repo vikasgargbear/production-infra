@@ -27,7 +27,7 @@ interface CompanyInfo {
     name?: string;
     address?: string;
     phone?: string;
-    gstin?: string;
+    gst_number?: string;
     [key: string]: unknown;
 }
 
@@ -395,7 +395,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                             customer_details: {
                                 ...selectedCustomer,
                                 address: invoice.billing_address,
-                                gstin: selectedCustomer?.gstin,
+                                gst_number: selectedCustomer?.gst_number,
                                 phone: createdInvoiceData.customerPhone || selectedCustomer?.phone
                             },
                             shipping_address: invoice.shipping_address,

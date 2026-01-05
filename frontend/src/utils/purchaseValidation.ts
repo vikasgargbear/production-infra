@@ -88,7 +88,7 @@ export const validateSupplier = (supplier: any): ValidationResult => {
 interface PurchaseItem {
     product_id?: string;
     quantity?: number;
-    purchase_price?: number;
+    unit_price?: number;
     batch_number?: string;
     expiry_date?: string;
     mrp?: number;
@@ -113,10 +113,10 @@ export const validateItem = (item: PurchaseItem): ValidationResult => {
 
     // Price validation
     const priceConfig = PURCHASE_CONFIG.VALIDATION.PRICE;
-    if (!item.purchase_price || item.purchase_price <= 0) {
-        result.addError('purchase_price', 'Purchase price is required and must be greater than 0');
-    } else if (item.purchase_price < priceConfig.min || item.purchase_price > priceConfig.max) {
-        result.addError('purchase_price', priceConfig.message);
+    if (!item.unit_price || item.unit_price <= 0) {
+        result.addError('unit_price', 'Purchase price is required and must be greater than 0');
+    } else if (item.unit_price < priceConfig.min || item.unit_price > priceConfig.max) {
+        result.addError('unit_price', priceConfig.message);
     }
 
     // Batch number validation (if provided)
@@ -147,7 +147,7 @@ export const validateItem = (item: PurchaseItem): ValidationResult => {
     // MRP validation (if provided)
     if (item.mrp !== undefined && item.mrp !== null) {
         const mrp = parseFloat(String(item.mrp));
-        const purchasePrice = parseFloat(String(item.purchase_price));
+        const purchasePrice = parseFloat(String(item.unit_price));
         if (mrp < purchasePrice) {
             result.addError('mrp', 'MRP should be greater than or equal to purchase price');
         }
@@ -243,7 +243,7 @@ export const validatePurchaseForm = (formData: PurchaseFormData): ValidationResu
     // Validate totals (ensure calculations are correct)
     if (formData.items && formData.items.length > 0) {
         const calculatedSubtotal = formData.items.reduce((sum, item) => {
-            return sum + ((item.quantity || 0) * (item.purchase_price || 0));
+            return sum + ((item.quantity || 0) * (item.unit_price || 0));
         }, 0);
 
         const tolerance = 0.01; // Allow small rounding differences

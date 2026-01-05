@@ -15,7 +15,7 @@ export interface CompanyProfile {
     id?: number;
     name: string;
     legal_name?: string;
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     address?: string;
     city?: string;

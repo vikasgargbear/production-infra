@@ -21,8 +21,8 @@ interface Customer {
     customer_name?: string;
     name?: string;
     phone?: string;
-    gstin?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
 }
 
 interface Product {

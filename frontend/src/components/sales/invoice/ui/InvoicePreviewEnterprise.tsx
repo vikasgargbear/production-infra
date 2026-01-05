@@ -162,7 +162,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   <div className="flex-1">
                     <h2 className="text-xl font-bold text-gray-900">{companyInfo?.name || 'Your Company Name'}</h2>
                     <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || 'Company Address'}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gstin || ''}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || ''}</p>
                     <p className="text-sm text-gray-600">DL No: {companyInfo?.drugLicense || ''}</p>
                   </div>
                 </div>
@@ -305,8 +305,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
                         <div className="text-xs text-gray-700 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</div>
                       )}
-                      {invoice.customer_details?.gstin && (
-                        <div className="text-xs text-gray-700 font-medium">GST: {invoice.customer_details.gstin}</div>
+                      {invoice.customer_details?.gst_number && (
+                        <div className="text-xs text-gray-700 font-medium">GST: {invoice.customer_details.gst_number}</div>
                       )}
                     </td>
 

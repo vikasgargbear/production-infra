@@ -9,7 +9,10 @@ import { LucideIcon } from 'lucide-react';
 
 // ==================== BASE STOCK ITEM ====================
 
-/** Core stock item fields shared across all inventory views */
+/** 
+ * Core stock item fields shared across all inventory views 
+ * CANONICAL NAMES from inventory.products and inventory.batches
+ */
 export interface BaseStockItem {
     product_id: number;
     product_name: string;
@@ -19,33 +22,32 @@ export interface BaseStockItem {
     manufacturer?: string;
     brand?: string;
 
-    // Stock quantities
-    current_stock: number;
-    available_stock?: number;
-    reserved_stock?: number;
+    // Stock quantities - Product level aggregates
+    total_quantity_available: number; // PRODUCT-LEVEL: sum of all batches (not total_quantity_available)
+    total_quantity_reserved?: number; // PRODUCT-LEVEL: sum reserved across batches
+    total_quantity_quarantine?: number; // PRODUCT-LEVEL: sum quarantine
 
-    // Thresholds
+    // Thresholds - CANONICAL from inventory.products
     reorder_level?: number;
-    minimum_stock_level?: number;
-    maximum_stock_level?: number;
+    min_stock_quantity?: number;      // CANONICAL (not minimum_stock_level)
+    max_stock_quantity?: number;      // CANONICAL (not maximum_stock_level)
 
-    // Pricing (product-level, use _per_unit variants for batch pricing)
-    mrp?: number;                    // Product MRP
-    cost_price?: number;             // = cost_price from schema
-    purchase_rate?: number;
-    selling_rate?: number;           // = sale_price from schema
+    // Pricing - use _per_unit suffix for batch-level pricing
+    mrp_per_unit?: number;            // CANONICAL batch MRP
+    cost_per_unit?: number;           // CANONICAL batch cost
+    sale_price_per_unit?: number;     // CANONICAL batch selling price
     stock_value?: number;
 
     // Units
     unit?: string;
-    sale_unit?: string;
-    purchase_unit?: string;
+    base_uom?: string;                // CANONICAL from inventory.batches
+    pack_uom?: string;                // CANONICAL from inventory.batches
 
-    // Pack configuration
+    // Pack configuration - CANONICAL from inventory.batches
     pack_size?: number;
     pack_type?: string;
-    pack_unit_quantity?: number;
-    sub_unit_quantity?: number;
+    units_per_pack?: number;          // CANONICAL (not pack_unit_quantity)
+    packages_per_box?: number;        // CANONICAL
 
     // Tax
     gst_percent?: number;
@@ -54,44 +56,44 @@ export interface BaseStockItem {
 
     // Status flags
     is_active?: boolean;
-    low_stock?: boolean;
-    out_of_stock?: boolean;
-    expiry_alert?: boolean;
+    low_stock?: boolean;              // computed flag
+    out_of_stock?: boolean;           // computed flag
+    expiry_alert?: boolean;           // computed flag
 
     // Metadata
     created_at?: string;
     updated_at?: string;
-    last_updated?: string;
 }
 
-// ==================== BASE BATCH ====================
-
-/** Core batch fields shared across inventory operations */
+/** 
+ * Core batch fields shared across inventory operations 
+ * CANONICAL NAMES from inventory.batches
+ */
 export interface BaseBatch {
     batch_id: number;
-    batch_number: string;
+    batch_number: string;              // CANONICAL (not batch_number)
     product_id: number;
     product_name?: string;
 
-    // Quantities
-    quantity_available: number;
-    quantity_received?: number;
-    quantity_sold?: number;
+    // Quantities - CANONICAL
+    quantity_available: number;        // CANONICAL
+    quantity_reserved?: number;        // CANONICAL
+    quantity_quarantine?: number;      // CANONICAL
+    initial_quantity?: number;         // CANONICAL
 
-    // Dates (use backend-standard names only)
-    expiry_date?: string;
-    manufacturing_date?: string;     // Backend: manufacturing_date (NOT mfg_date)
-    received_date?: string;
+    // Dates - CANONICAL
+    expiry_date?: string;              // CANONICAL
+    manufacturing_date?: string;       // CANONICAL (NOT manufacturing_date)
 
-    // Pricing
-    mrp?: number;
-    cost_price?: number;
-    sale_price?: number;
+    // Pricing - CANONICAL with _per_unit suffix
+    mrp_per_unit: number;              // CANONICAL (not mrp)
+    cost_per_unit?: number;            // CANONICAL (not cost_per_unit)
+    sale_price_per_unit?: number;      // CANONICAL (not sale_price)
 
-    // Metadata
-    supplier?: string;
-    location?: string;
-    warehouse?: string;
+    // Storage - CANONICAL
+    storage_location?: string;         // CANONICAL (not location)
+    storage_condition?: string;        // CANONICAL
+    supplier_id?: number;              // CANONICAL
     is_active?: boolean;
 }
 

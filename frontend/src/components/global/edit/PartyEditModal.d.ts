@@ -9,7 +9,7 @@ interface Party {
   code?: string;
   party_code?: string;
   type?: 'customer' | 'supplier';
-  gstin?: string;
+  gst_number?: string;
   pan?: string;
   contact_person?: string;
   contact?: string;

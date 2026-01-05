@@ -18,7 +18,7 @@ interface PartyWiseReportProps {
 
 interface PartyData {
     party_name: string;
-    gstin: string;
+    gst_number: string;
     invoice_count: number;
     total_taxable_value: number;
     total_cgst: number;
@@ -54,7 +54,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                     if (!partyGroups[partyName]) {
                         partyGroups[partyName] = {
                             party_name: partyName,
-                            gstin: inv.customer_gstin || '',
+                            gst_number: inv.customer_gst_number || '',
                             invoice_count: 0,
                             total_taxable_value: 0,
                             total_cgst: 0,
@@ -146,7 +146,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                     data={data}
                     columns={[
                         { key: 'party_name', label: 'Party Name' },
-                        { key: 'gstin', label: 'GSTIN', render: (v) => v || '-' },
+                        { key: 'gst_number', label: 'GSTIN', render: (v) => v || '-' },
                         { key: 'invoice_count', label: 'Invoices' },
                         { key: 'total_taxable_value', label: 'Taxable Value', render: (v) => formatCurrency(v) },
                         { key: 'total_cgst', label: 'CGST', render: (v) => formatCurrency(v) },

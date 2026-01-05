@@ -30,7 +30,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
     const gstBreakup = {};
     
     returnItems.forEach(item => {
-      const price = parseFloat(item.purchase_price || item.rate || item.unit_price || 0);
+      const price = parseFloat(item.unit_price || item.rate || item.unit_price || 0);
       const discountPercent = parseFloat(item.discount_percent || 0);
       const returnAmount = item.return_quantity * price;
       const discountAmount = (returnAmount * discountPercent) / 100;
@@ -97,7 +97,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
                 <div className="text-xs text-gray-600 space-y-0.5">
                   <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
                   <div className="flex gap-4">
-                    <span>GSTIN: {localStorage.getItem('company_gstin') || ''}</span>
+                    <span>GSTIN: {localStorage.getItem('company_gst_number') || ''}</span>
                     <span>DL: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</span>
                     <span>Ph: {localStorage.getItem('company_phone') || '+91 99999 99999'}</span>
                   </div>
@@ -229,7 +229,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const price = item.purchase_price || item.rate || item.unit_price || 0;
+                  const price = item.unit_price || item.rate || item.unit_price || 0;
                   const returnAmount = item.return_quantity * price;
                   const discountAmount = (returnAmount * (item.discount_percent || 0)) / 100;
                   const afterDiscount = returnAmount - discountAmount;

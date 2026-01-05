@@ -2008,6 +2008,9 @@ Tables: 16
 | created_by | integer | ✓ |
 | type_id | integer | ✓ |
 | quantity_returned | numeric | ✓ |
+| total_quantity_available | numeric | ✓ |
+
+
 
 ### inventory.reorder_suggestions
 

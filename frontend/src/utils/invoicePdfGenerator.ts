@@ -8,7 +8,7 @@
 export interface InvoiceItem {
     product_name?: string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     hsn_code?: string;
     pack_type?: string;
     pack_size?: number;
@@ -33,7 +33,7 @@ export interface InvoiceData {
     org_name?: string;
     customer_name?: string;
     customer_phone?: string;
-    customer_gstin?: string;
+    customer_gst_number?: string;
     billing_address?: string;
     shipping_address?: string;
     shipping_contact_name?: string;
@@ -115,7 +115,7 @@ const numberToWords = (num: number): string => {
  * Generate HTML content for invoice
  */
 const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
-    const totalAmount = parseFloat(String(invoiceData.final_amount || invoiceData.total_amount || 0));
+    const totalAmount = parseFloat(String(invoiceData.final_amount || 0));
     const totalGst = (parseFloat(String(invoiceData.cgst_amount || 0))) + (parseFloat(String(invoiceData.sgst_amount || 0)));
 
     const documentTitle = invoiceData.invoice_number ? 'INVOICE' : 'SALES ORDER';
@@ -538,7 +538,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
                 <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
                 ${invoiceData.billing_address ? invoiceData.billing_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
                 ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}
-                ${invoiceData.customer_gstin ? `<p class="customer-detail">GSTIN: ${invoiceData.customer_gstin}</p>` : ''}
+                ${invoiceData.customer_gst_number ? `<p class="customer-detail">GSTIN: ${invoiceData.customer_gst_number}</p>` : ''}
             </div>
             <div>
                 <h3 class="section-title">Ship To</h3>
@@ -574,7 +574,7 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
                         <tr>
                             <td>
                                 <div class="product-name">${item.product_name || 'Unknown Product'}</div>
-                                <div class="product-batch">Batch: ${item.batch_number || item.batch_no || 'N/A'}</div>
+                                <div class="product-batch">Batch: ${item.batch_number || item.batch_number || 'N/A'}</div>
                             </td>
                             <td style="text-align: center;">${item.hsn_code || '3004'}</td>
                             <td style="text-align: center;">

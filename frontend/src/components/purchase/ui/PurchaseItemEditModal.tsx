@@ -9,13 +9,13 @@ interface EditedItem {
   product_name?: string;
   hsn_code?: string;
   batch_number?: string;
-  batch_no?: string;
+  batch_number?: string;
   manufacturing_date?: string;
-  mfg_date?: string;
+  manufacturing_date?: string;
   expiry_date?: string;
   mrp?: number | string;
-  purchase_price?: number | string;
-  cost_price?: number | string;
+  unit_price?: number | string;
+  unit_price?: number | string;
   rate?: number | string;
   selling_price?: number | string;
   sale_price?: number | string;
@@ -59,13 +59,13 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
       setEditedItem({
         ...item,
         // Batch-specific fields
-        batch_number: item.batch_number || item.batch_no || '',
-        manufacturing_date: item.manufacturing_date || item.mfg_date || '',
+        batch_number: item.batch_number || item.batch_number || '',
+        manufacturing_date: item.manufacturing_date || item.manufacturing_date || '',
         expiry_date: item.expiry_date || '',
 
         // Pricing (batch-specific)
         mrp: item.mrp || 0,
-        purchase_price: item.purchase_price || item.cost_price || item.rate || 0,
+        unit_price: item.unit_price || item.unit_price || item.unit_price || 0,
         selling_price: item.selling_price || item.sale_price || item.mrp || 0,
 
         // Quantities
@@ -96,7 +96,7 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
 
   const calculateTotal = () => {
     const qty = parseFloat(String(editedItem.quantity ?? 0));
-    const cost = parseFloat(String(editedItem.purchase_price ?? 0));
+    const cost = parseFloat(String(editedItem.unit_price ?? 0));
     const taxPercent = parseFloat(String(editedItem.tax_percent ?? 0));
     const discountPercent = parseFloat(String(editedItem.discount_percent ?? 0));
 
@@ -132,8 +132,8 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
     if (!editedItem.mrp || mrp <= 0) {
       errors.push('MRP');
     }
-    const purchasePrice = parseFloat(String(editedItem.purchase_price)) || 0;
-    if (!editedItem.purchase_price || purchasePrice <= 0) {
+    const purchasePrice = parseFloat(String(editedItem.unit_price)) || 0;
+    if (!editedItem.unit_price || purchasePrice <= 0) {
       errors.push('Purchase Price/Cost');
     }
     const sellingPrice = parseFloat(String(editedItem.selling_price)) || 0;
@@ -160,7 +160,7 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
       pack_size: editedItem.pack_size || 1,
       units_per_pack: editedItem.units_per_pack || 1,
       mrp: editedItem.mrp || 0,
-      purchase_price: editedItem.purchase_price || 0,
+      unit_price: editedItem.unit_price || 0,
       selling_price: editedItem.selling_price || 0,
       discount_percent: editedItem.discount_percent || 0,
       scheme_discount: editedItem.scheme_discount || 0,
@@ -380,8 +380,8 @@ const PurchaseItemEditModal: React.FC<PurchaseItemEditModalProps> = ({
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={editedItem.purchase_price || ''}
-                    onChange={(e) => handleFieldChange('purchase_price', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                    value={editedItem.unit_price || ''}
+                    onChange={(e) => handleFieldChange('unit_price', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                     className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
                   />

@@ -48,7 +48,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     pincode: supplier?.pincode || '',
     
     // Compliance & GST
-    gst_number: supplier?.gst_number || supplier?.gstin || '',
+    gst_number: supplier?.gst_number || supplier?.gst_number || '',
     pan_number: supplier?.pan_number || '',
     drug_license_number: supplier?.drug_license_number || '',
     drug_license_validity: supplier?.drug_license_validity || '',
@@ -185,7 +185,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         minimum_order_value: parseFloat(String(formData.minimum_order_value)) || 0,
         // Map GST field properly
-        gstin: formData.gst_number,
+        gst_number: formData.gst_number,
         gst_number: formData.gst_number
       };
       

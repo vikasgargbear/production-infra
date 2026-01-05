@@ -28,13 +28,13 @@ export interface CustomerDetails {
     pincode?: string;
     pin_code?: string;
     postal_code?: string;
-    gstin?: string;
+    gst_number?: string;
     gst_number?: string;
     phone?: string;
     primary_phone?: string;
     mobile?: string;
     contact_number?: string;
-    contact_person?: string;
+    contact_person_name?: string;
 }
 
 // ==================== CHALLAN ITEM ====================
@@ -47,7 +47,7 @@ export interface ChallanItem {
     product_code?: string;
     hsn_code?: string;
     batch_id?: string | number;
-    batch_no?: string;
+    batch_number?: string;
     batch_number?: string;
     expiry_date?: string;
     quantity: number;
@@ -103,7 +103,7 @@ export interface Challan {
     delivery_city: string;
     delivery_state: string;
     delivery_pincode: string;
-    delivery_contact_person: string;
+    delivery_contact_person_name: string;
     delivery_contact_phone: string;
 
     // Items
@@ -173,7 +173,7 @@ export interface CreatedChallanData {
 export interface CompanyInfo {
     name?: string;
     address?: string;
-    gstin?: string;
+    gst_number?: string;
     logo?: string;
     drugLicense?: string;
 }
@@ -246,7 +246,7 @@ export const getInitialChallan = (): Challan => ({
     delivery_city: '',
     delivery_state: '',
     delivery_pincode: '',
-    delivery_contact_person: '',
+    delivery_contact_person_name: '',
     delivery_contact_phone: '',
     items: [],
     transport_company: '',

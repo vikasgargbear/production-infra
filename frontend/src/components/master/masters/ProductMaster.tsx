@@ -34,13 +34,13 @@ interface Product {
   brand?: string;
   manufacturer?: string;
   mrp?: number;
-  cost_price?: number;
+  cost_per_unit?: number;
   pack_size?: string;
   unit?: string;
   tax_rate?: number;
   status?: string;
   is_active?: boolean;
-  current_stock?: number;
+  total_quantity_available?: number;
   [key: string]: unknown;
 }
 
@@ -89,7 +89,7 @@ const getColumns = (
       render: (value) => value ? `₹${Number(value).toFixed(2)}` : '-',
     },
     {
-      key: 'cost_price',
+      key: 'cost_per_unit',
       header: 'Cost',
       align: 'right' as const,
       render: (value) => value ? `₹${Number(value).toFixed(2)}` : '-',
@@ -129,7 +129,7 @@ const getColumns = (
             title={product?.is_active !== false ? 'Deactivate Product' : 'Reactivate Product'}
           >
             {product?.is_active !== false ? (
-              product?.current_stock && product.current_stock > 0
+              product?.total_quantity_available && product.total_quantity_available > 0
                 ? <AlertTriangle className="w-4 h-4" />
                 : <Trash2 className="w-4 h-4" />
             ) : <Check className="w-4 h-4" />}

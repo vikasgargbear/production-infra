@@ -16,7 +16,7 @@ interface ProductItem {
   batch_number?: string;
   expiry_date?: string;
   quantity?: number | string;
-  cost_price?: number | string;
+  unit_price?: number | string;
   mrp?: number | string;
   selling_price?: number | string;
   tax_percent?: number | string;
@@ -55,7 +55,7 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
 
   // Calculate line total
   const quantity = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity)) || 0;
-  const costPrice = typeof item.cost_price === 'number' ? item.cost_price : parseFloat(String(item.cost_price)) || 0;
+  const costPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
   const taxPercent = typeof item.tax_percent === 'number' ? item.tax_percent : parseFloat(String(item.tax_percent)) || 0;
   const lineTotal = quantity * costPrice * (1 + taxPercent / 100);
 
@@ -102,7 +102,7 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
       hsn_code: product.hsn_code || item.hsn_code,
       is_new_product: false,
       // Suggest last pricing but allow override
-      cost_price: product.last_cost || item.cost_price,
+      unit_price: product.last_cost || item.unit_price,
       mrp: product.last_mrp || item.mrp,
       validation: {
         errors: [],
@@ -123,12 +123,12 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
 
   // Auto-calculate MRP when cost changes
   useEffect(() => {
-    if (item.cost_price && !item.mrp) {
+    if (item.unit_price && !item.mrp) {
       // Default MRP = 1.5x cost
-      const costNum = typeof item.cost_price === 'number' ? item.cost_price : parseFloat(String(item.cost_price)) || 0;
+      const costNum = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
       onUpdate({ mrp: (costNum * 1.5).toFixed(2) });
     }
-  }, [item.cost_price]);
+  }, [item.unit_price]);
 
   // Validate expiry date
   const validateExpiry = (date: string): void => {
@@ -266,8 +266,8 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
         <input
           type="text"
           inputMode="decimal"
-          value={item.cost_price || ''}
-          onChange={(e) => onUpdate({ cost_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
+          value={item.unit_price || ''}
+          onChange={(e) => onUpdate({ unit_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
           placeholder="0.00"
           className="w-24 px-2 py-1 border rounded text-right focus:ring-2 focus:ring-indigo-500"
         />

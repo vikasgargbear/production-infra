@@ -20,8 +20,8 @@ interface CompanyData {
     logo: string | null;
 
     // Registration Details
-    pan: string;
-    gstin: string;
+    pan_number: string;
+    gst_number: string;
     drugLicenseNo: string;
     fssaiNo: string;
 
@@ -89,8 +89,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         logo: null,
 
         // Registration Details
-        pan: '',
-        gstin: '',
+        pan_number: '',
+        gst_number: '',
         drugLicenseNo: '',
         fssaiNo: '',
 
@@ -177,8 +177,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     logo: data.logo || null,
 
                     // Registration Details
-                    pan: data.pan || '',
-                    gstin: data.gst || '',
+                    pan_number: data.pan_number || '',
+                    gst_number: data.gst || '',
                     drugLicenseNo: data.drug_license_no || '',
                     fssaiNo: data.fssai_no || '',
 
@@ -305,8 +305,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 phone: companyData.phone,
                 email: companyData.email,
                 website: companyData.website,
-                gst: companyData.gstin,
-                pan: companyData.pan,
+                gst: companyData.gst_number,
+                pan_number: companyData.pan_number,
                 logo: companyData.logo,
                 // Additional fields can be stored here
                 tagline: companyData.tagline,
@@ -528,8 +528,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </label>
                                 <input
                                     type="text"
-                                    value={companyData.pan}
-                                    onChange={(e) => handleInputChange('pan', e.target.value)}
+                                    value={companyData.pan_number}
+                                    onChange={(e) => handleInputChange('pan_number', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     placeholder="AABCP1234C"
                                 />
@@ -541,8 +541,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </label>
                                 <input
                                     type="text"
-                                    value={companyData.gstin}
-                                    onChange={(e) => handleInputChange('gstin', e.target.value)}
+                                    value={companyData.gst_number}
+                                    onChange={(e) => handleInputChange('gst_number', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     placeholder="29AABCP1234C1Z1"
                                 />

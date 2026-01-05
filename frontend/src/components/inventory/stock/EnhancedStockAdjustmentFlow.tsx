@@ -146,7 +146,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       product_code: selectedProduct.product_code || selectedProduct.code,
       batch_id: batch.batch_id,
       batch_number: batch.batch_number,
-      current_stock: batch.quantity_available || 0,
+      quantity_available: batch.quantity_available || 0,
       adjustment_quantity: 1, // Default quantity, editable in table
       unit: selectedProduct.unit || batch.base_uom || 'Units',
       expiry_date: batch.expiry_date,
@@ -213,8 +213,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             ...item,
             adjustment_quantity: qty,
             after_adjustment: adjustmentData.adjustment_type === 'increase'
-              ? item.current_stock + qty
-              : Math.max(0, item.current_stock - qty)
+              ? item.quantity_available + qty
+              : Math.max(0, item.quantity_available - qty)
           };
         }
         return item;
@@ -279,7 +279,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               product_code: productCode,
               include_batches: false
             });
-            currentStock = stockResponse.data?.[0]?.current_stock || 0;
+            currentStock = stockResponse.data?.[0]?.quantity_available || 0;
           } catch (stockError) {
             currentStock = 0;
           }
@@ -290,7 +290,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             product_code: productCode,
             product_name: productName,
             product_id: i,
-            current_stock: currentStock,
+            quantity_available: currentStock,
             adjustment_quantity: Math.abs(adjustmentQty),
             adjustment_type: isIncrease ? 'increase' : 'decrease',
             reason: reason,
@@ -754,7 +754,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">{item.current_stock}</td>
+                          <td className="px-4 py-3 text-center">{item.quantity_available}</td>
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
@@ -875,7 +875,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                       <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">{item.current_stock}</td>
+                  <td className="px-4 py-3 text-center">{item.quantity_available}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`font-medium ${adjustmentData.adjustment_type === 'increase' ? 'text-green-600' : 'text-red-600'
                       }`}>

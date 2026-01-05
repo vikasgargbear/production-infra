@@ -71,13 +71,13 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                 customer: {
                                     name: selectedCustomer?.customer_name || selectedCustomer?.name,
                                     phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
-                                    gstin: selectedCustomer?.gstin,
-                                    dl_number: selectedCustomer?.dl_number
+                                    gst_number: selectedCustomer?.gst_number,
+                                    drug_license_number: selectedCustomer?.drug_license_number
                                 },
                                 items: (invoice.items || []).map(item => ({
                                     product_name: item.product_name || item.name,
                                     hsn_code: item.hsn_code,
-                                    batch_no: item.batch_no || item.batch_number,
+                                    batch_number: item.batch_number || item.batch_number,
                                     quantity: item.quantity,
                                     free_quantity: item.free_quantity || 0,
                                     unit_price: item.unit_price || item.selling_price,
@@ -112,7 +112,7 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                     customer_details: {
                                         ...selectedCustomer,
                                         address: invoice.billing_address,
-                                        gstin: selectedCustomer?.gstin,
+                                        gst_number: selectedCustomer?.gst_number,
                                         phone: selectedCustomer?.phone || selectedCustomer?.mobile
                                     },
                                     shipping_address: invoice.shipping_address,
@@ -149,7 +149,7 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                         </div>
 
                         {/* E-invoice Section */}
-                        {selectedCustomer?.gstin && parseFloat(String(invoice.final_amount || 0)) >= 500 && (
+                        {selectedCustomer?.gst_number && parseFloat(String(invoice.final_amount || 0)) >= 500 && (
                             <div className="w-full mt-4 mb-4">
                                 <div className="bg-orange-50 rounded-lg border border-orange-200 p-3">
                                     <div className="flex items-center justify-between mb-3">

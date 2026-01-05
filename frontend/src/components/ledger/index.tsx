@@ -17,10 +17,13 @@ export { default as LedgerHub } from './LedgerHub';
 export { default as Outstanding } from './Outstanding';
 export { default as CollectionCenter } from './CollectionCenter';
 export { default as LedgerReports } from './LedgerReports';
+export { default as CreditManagement } from './CreditManagement';
 
 // Ledger Components
 export { default as PartyLedgerV3 } from './PartyLedgerV3';
-// Main production ledger component
+
+// Hooks - re-export from hooks folder
+export * from './hooks';
 
 // Ledger Constants
 export const TRANSACTION_TYPES = {
@@ -79,7 +82,7 @@ export const groupByAgingBucket = (transactions: Transaction[], referenceDate: D
 
   transactions.forEach(transaction => {
     const daysDiff = Math.floor((referenceDate.getTime() - new Date(transaction.date).getTime()) / (1000 * 60 * 60 * 24));
-    
+
     if (daysDiff <= 0) {
       buckets.CURRENT.push(transaction);
     } else if (daysDiff <= 30) {
@@ -129,23 +132,23 @@ interface LedgerModule {
 const LedgerModule: LedgerModule = {
   // Main Hub
   LedgerHub,
-  
+
   components: {
     // Core Components  
     Outstanding,
     CollectionCenter,
     LedgerReports,
-    
+
     // Ledger Components
     PartyLedgerV3
   },
-  
+
   constants: {
     TRANSACTION_TYPES,
     AGING_BUCKETS,
     PARTY_TYPES
   },
-  
+
   utils: {
     calculateBalance,
     groupByAgingBucket

@@ -364,7 +364,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             <CashCalculatorModal
                 isOpen={showCashCalculatorModal}
                 onClose={() => setShowCashCalculatorModal(false)}
-                billAmount={invoice.totals?.grand_total || 0}
+                billAmount={invoice.totals?.total_amount || 0}
             />
 
             <LastDealModal

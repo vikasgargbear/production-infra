@@ -58,7 +58,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
     gross_amount: 0,
     tax_amount: 0,
     net_amount: 0,
-    final_amount: 0,
+    total_amount: 0,
     notes: prefilledData?.notes || '',
     status: 'received'
   });
@@ -94,7 +94,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
         gross_amount: 0,
         tax_amount: 0,
         net_amount: 0,
-        final_amount: 0
+        total_amount: 0
       }));
       return;
     }
@@ -123,7 +123,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
       gross_amount: grossTotal,
       tax_amount: taxTotal,
       net_amount: netAmount,
-      final_amount: netAmount
+      total_amount: netAmount
     }));
   };
 
@@ -150,7 +150,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
       ordered_qty: 0,
       received_qty: 1,
       unit: product.unit || product.uom || '',  // No default unit
-      unit_price: product.purchase_price || (product.mrp || 0) * 0.7,
+      unit_price: product.unit_price || (product.mrp || 0) * 0.7,
       mrp: product.mrp || 0,
       selling_price: product.sale_price || product.selling_price || product.mrp || 0,
       tax_percent: product.tax_percent || 12,
@@ -160,7 +160,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
       pack_size: 10,
       packages_per_box: 10,
       quality_status: 'Approved',
-      total: product.purchase_price || 0
+      total: product.unit_price || 0
     };
 
     setGrn(prev => ({
@@ -230,7 +230,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
           grnNumber: grnNumber,
           grnId: response.data.grn_id || response.data.id,
           supplierName: selectedSupplier?.supplier_name || grn.supplier_name,
-          totalAmount: grn.final_amount
+          totalAmount: grn.total_amount
         });
 
         setShowSuccessModal(true);
@@ -504,7 +504,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
           <div className="text-center mb-6 pb-4 border-b-2 border-gray-300">
             <h1 className="text-3xl font-bold text-green-600 mb-2">PHARMA SOLUTIONS PVT. LTD.</h1>
             <p className="text-sm text-gray-600">Wholesale Pharmaceutical Distributor</p>
-            <p className="text-sm text-gray-600">GST: {localStorage.getItem('company_gstin') || ''} | Drug License: {localStorage.getItem('drug_license') || ''}</p>
+            <p className="text-sm text-gray-600">GST: {localStorage.getItem('company_gst_number') || ''} | Drug License: {localStorage.getItem('drug_license') || ''}</p>
             <p className="text-sm text-gray-600">{localStorage.getItem('company_address') || ''}</p>
           </div>
 
@@ -602,7 +602,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
               </tr>
               <tr className="border-t border-gray-300">
                 <td colSpan={11} className="text-right py-2 text-lg font-bold">Total Amount:</td>
-                <td className="text-right py-2 text-lg font-bold">{formatCurrency(grn.final_amount)}</td>
+                <td className="text-right py-2 text-lg font-bold">{formatCurrency(grn.total_amount)}</td>
               </tr>
             </tfoot>
           </table>
@@ -662,10 +662,10 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
         // Footer totals
         footerTotals={{
           itemCount: grn.items?.length || 0,
-          totalAmount: grn.final_amount,
+          totalAmount: grn.total_amount,
           subtotal: grn.gross_amount,
           tax: grn.tax_amount,
-          grandTotal: grn.final_amount
+          grandTotal: grn.total_amount
         }}
 
         // Keyboard shortcuts

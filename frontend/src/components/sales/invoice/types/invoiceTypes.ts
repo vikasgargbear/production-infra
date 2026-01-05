@@ -68,12 +68,12 @@ export interface Customer {
     primary_phone?: string;
     mobile?: string;
     email?: string;
-    contact_person?: string;
+    contact_person_name?: string;
 
     // GST/Business
-    gstin?: string;
     gst_number?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
     drug_license_number?: string;
     pan_number?: string;
 
@@ -195,7 +195,7 @@ export interface InvoiceItem {
     hsn_code?: string;
 
     // Batch info
-    batch_no?: string;
+    batch_number?: string;
     batch_number?: string;
     batch_id?: number | string;
     expiry_date?: string;
@@ -210,8 +210,8 @@ export interface InvoiceItem {
     // Pricing - CANONICAL ONLY
     unit_price?: number;  // CANONICAL: selling price per unit
     mrp?: number;
-    purchase_price?: number;
-    cost_price?: number;
+    unit_price?: number;
+    cost_per_unit?: number;
 
     // Discounts - CANONICAL ONLY
     discount_percent?: number;  // CANONICAL: % discount on item
@@ -279,7 +279,7 @@ export interface InvoiceTotals {
 
     // Final totals
     net_amount?: number;
-    grand_total?: number;
+    total_amount?: number;
     final_amount?: number;
 
     // Payment tracking
@@ -342,7 +342,7 @@ export interface Invoice {
     customer_name?: string;
     customer_details?: Customer | null;
     customer_phone?: string;
-    customer_gstin?: string;
+    customer_gst_number?: string;
 
     // Items
     items?: InvoiceItem[];
@@ -467,7 +467,7 @@ export interface CompanyInfo {
     company_name?: string;
     name?: string;
     address?: string;
-    gstin?: string;
+    gst_number?: string;
     phone?: string;
     email?: string;
     logo?: string;
@@ -487,7 +487,7 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;
-    batch_no?: string;  // Alias used by some search results
+    batch_number?: string;  // Alias used by some search results
     expiry_date?: string;
     manufacturing_date?: string;
     // Pricing - batch level uses _per_unit suffix
@@ -504,7 +504,7 @@ export interface ProductInput {
     free_quantity?: number;
     quantity_available?: number;
     available_quantity?: number;
-    current_stock?: number;  // Alias from product search
+    total_quantity_available?: number;  // Alias from product search
     discount_percent?: number;
 }
 

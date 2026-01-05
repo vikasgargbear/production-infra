@@ -461,3 +461,104 @@ class OrderService:
             "month_amount": month_stats.amount,
             "top_products": [dict(row._mapping) for row in top_products]
         }
+    
+    @staticmethod
+    def list_orders(
+        db: Session,
+        org_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        customer_id: int = None,
+        status: str = None,
+        from_date: date = None,
+        to_date: date = None,
+        order_type: str = "regular"
+    ) -> Dict[str, Any]:
+        """
+        List sales orders with filters and pagination.
+        
+        Args:
+            db: Database session
+            org_id: Organization ID
+            skip: Offset for pagination
+            limit: Number of records to return
+            customer_id: Filter by customer
+            status: Filter by order status
+            from_date: Filter by start date
+            to_date: Filter by end date
+            order_type: Order type filter (default: regular)
+            
+        Returns:
+            Dict with orders list and total count
+        """
+        # Build WHERE clauses
+        where_clauses = ["o.org_id = :org_id", "o.order_type = :order_type"]
+        params = {"org_id": org_id, "order_type": order_type, "limit": limit, "skip": skip}
+        
+        if customer_id:
+            where_clauses.append("o.customer_id = :customer_id")
+            params["customer_id"] = customer_id
+        
+        if status:
+            where_clauses.append("o.order_status = :status")
+            params["status"] = status
+        
+        if from_date:
+            where_clauses.append("o.order_date >= :from_date")
+            params["from_date"] = from_date
+        
+        if to_date:
+            where_clauses.append("o.order_date <= :to_date")
+            params["to_date"] = to_date
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Count query
+        total = db.execute(text(f"""
+            SELECT COUNT(*) FROM sales.orders o WHERE {where_sql}
+        """), params).scalar()
+        
+        # Main query with customer data
+        result = db.execute(text(f"""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE {where_sql}
+            ORDER BY o.order_date DESC, o.order_id DESC
+            LIMIT :limit OFFSET :skip
+        """), params)
+        order_rows = list(result)
+        
+        # Batch load items for all orders
+        items_by_order = {}
+        if order_rows:
+            order_ids = [row.order_id for row in order_rows]
+            items_result = db.execute(text("""
+                SELECT oi.*, p.product_name, p.product_code
+                FROM sales.order_items oi
+                JOIN inventory.products p ON oi.product_id = p.product_id
+                WHERE oi.order_id = ANY(:order_ids)
+                ORDER BY oi.order_id, oi.order_item_id
+            """), {"order_ids": order_ids})
+            
+            for item in items_result:
+                order_id = item.order_id
+                if order_id not in items_by_order:
+                    items_by_order[order_id] = []
+                items_by_order[order_id].append(dict(item._mapping))
+        
+        # Build order list with items
+        orders = []
+        for row in order_rows:
+            order_dict = dict(row._mapping)
+            order_dict["items"] = items_by_order.get(row.order_id, [])
+            order_dict["total_amount"] = order_dict.get("final_amount", 0)
+            order_dict["balance_amount"] = order_dict["total_amount"] - order_dict.get("paid_amount", 0)
+            orders.append(order_dict)
+        
+        return {
+            "orders": orders,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }

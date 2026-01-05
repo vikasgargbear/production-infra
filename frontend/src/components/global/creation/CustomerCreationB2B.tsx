@@ -232,7 +232,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         contact_person: formData.contact_person_name || null,
         contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
         contact_person_email: formData.contact_person_email || null,
-        gstin: formData.gst_number || null,
+        gst_number: formData.gst_number || null,
         pan_number: formData.pan_number || null,
         drug_license_number: formData.drug_license_number || null,
         drug_license_validity: formData.drug_license_validity || null,

@@ -27,7 +27,7 @@ const prepareSupplierForAPI = (supplierData: Record<string, unknown>) => ({
     city: supplierData.city || null,
     state: supplierData.state || null,
     pincode: supplierData.pincode || null,
-    gst_number: supplierData.gstin || null,
+    gst_number: supplierData.gst_number || null,
     pan_number: supplierData.pan_number || null,
     drug_license_number: supplierData.drug_license_no || null,
     drug_license_validity: supplierData.drug_license_validity || null,
@@ -59,7 +59,7 @@ const transformSupplier = (supplier: Record<string, unknown>) => ({
     contact_person: String(supplier.contact_person_name || supplier.contact_person || ''),
     phone: String(supplier.primary_phone || supplier.phone || ''),
     email: String(supplier.primary_email || supplier.email || ''),
-    gst_number: String(supplier.gst_number || supplier.gstin || ''),
+    gst_number: String(supplier.gst_number || supplier.gst_number || ''),
     pan_number: String(supplier.pan_number || ''),
     is_active: supplier.is_active ?? true,
 });
@@ -100,7 +100,7 @@ interface SupplierFormData {
     state: string;
     pincode: string;
     country: string;
-    gstin: string;
+    gst_number: string;
     pan_number: string;
     drug_license_no: string;
     drug_license_validity: string;
@@ -162,7 +162,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
         state: 'Maharashtra',
         pincode: '',
         country: 'India',
-        gstin: '',
+        gst_number: '',
         pan_number: '',
         drug_license_no: '',
         drug_license_validity: '',
@@ -213,10 +213,10 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
         }
     }, [useBusinessContactForPerson, formData.phone, formData.email]);
 
-    const validateGSTIN = (gstin: string): boolean => {
-        if (!gstin) return true;
-        const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-        return gstinRegex.test(gstin);
+    const validateGSTIN = (gst_number: string): boolean => {
+        if (!gst_number) return true;
+        const gst_numberRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        return gst_numberRegex.test(gst_number);
     };
 
     const validatePAN = (pan: string): boolean => {
@@ -253,8 +253,8 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
             newErrors.pincode = 'Pincode must be 6 digits';
         }
 
-        if (formData.gstin && !validateGSTIN(formData.gstin)) {
-            newErrors.gstin = 'Invalid GSTIN format';
+        if (formData.gst_number && !validateGSTIN(formData.gst_number)) {
+            newErrors.gst_number = 'Invalid GSTIN format';
         }
 
         if (formData.pan_number && !validatePAN(formData.pan_number)) {
@@ -583,15 +583,15 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
                         <div>
                             <input
                                 type="text"
-                                value={formData.gstin}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('gstin', e.target.value.toUpperCase())}
-                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.gstin ? 'border-red-300' : 'border-gray-300'
+                                value={formData.gst_number}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('gst_number', e.target.value.toUpperCase())}
+                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.gst_number ? 'border-red-300' : 'border-gray-300'
                                     }`}
                                 placeholder="GSTIN (15 chars)"
                                 maxLength={15}
                             />
-                            {errors.gstin && (
-                                <p className="mt-1 text-xs text-red-600">{errors.gstin}</p>
+                            {errors.gst_number && (
+                                <p className="mt-1 text-xs text-red-600">{errors.gst_number}</p>
                             )}
                         </div>
 

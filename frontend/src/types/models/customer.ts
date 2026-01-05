@@ -45,7 +45,7 @@ export interface Customer {
   
   // GST and compliance
   gst_number?: string; // Backend field name
-  gstin?: string; // Frontend uses gstin, backend uses gst_number
+  gst_number?: string; // Frontend uses gst_number, backend uses gst_number
   gst_state_code?: string;
   pan_number?: string;
   drug_license_number?: string;
@@ -97,7 +97,7 @@ export interface CustomerCreateInput {
     shipping_state?: string;
     shipping_pincode?: string;
   };
-  gstin?: string;
+  gst_number?: string;
   pan_number?: string;
   drug_license_number?: string;
   credit_limit?: number;

@@ -7,7 +7,7 @@ export interface PrintUtilityDocumentItem {
     product_name?: string;
     name?: string;
     hsn_code?: string;
-    batch_no?: string;
+    batch_number?: string;
     quantity?: number;
     free_quantity?: number;
     unit_price?: number;
@@ -38,8 +38,8 @@ export interface PrintUtilityCustomer {
     name?: string;
     customer_name?: string;
     phone?: string;
-    gstin?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
     [key: string]: unknown;
 }
 
@@ -61,7 +61,7 @@ export interface PrintUtilityCompanyInfo {
     name?: string;
     address?: string;
     phone?: string;
-    gstin?: string;
+    gst_number?: string;
     website?: string;
     [key: string]: unknown;
 }
@@ -142,7 +142,7 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
                 <div className="thermal-company-name">{companyInfo.name || 'Company Name'}</div>
                 {companyInfo.address && <div>{companyInfo.address}</div>}
                 {companyInfo.phone && <div>Ph: {companyInfo.phone}</div>}
-                {companyInfo.gstin && <div>GSTIN: {companyInfo.gstin}</div>}
+                {companyInfo.gst_number && <div>GSTIN: {companyInfo.gst_number}</div>}
             </div>
 
             <div className="thermal-doc-title">{documentType.toUpperCase().replace('-', ' ')}</div>
@@ -164,7 +164,7 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
                 <div className="thermal-label">BILL TO:</div>
                 <div>{customer?.name || customer?.customer_name}</div>
                 {customer?.phone && <div>Ph: {customer.phone}</div>}
-                {customer?.gstin && <div>GST: {customer.gstin}</div>}
+                {customer?.gst_number && <div>GST: {customer.gst_number}</div>}
                 {addresses.billing && <div style={{ fontSize: '10px', marginTop: '1mm' }}>{addresses.billing}</div>}
             </div>
 
@@ -185,7 +185,7 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
                         <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{item.product_name || item.name}</div>
                         {item.hsn_code && <div style={{ fontSize: '9px', color: '#666' }}>HSN: {item.hsn_code}</div>}
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1mm' }}>
-                            <span style={{ ...style50, fontSize: '10px' }}>{item.batch_no && `Batch: ${item.batch_no}`}</span>
+                            <span style={{ ...style50, fontSize: '10px' }}>{item.batch_number && `Batch: ${item.batch_number}`}</span>
                             <span style={style15Center}>
                                 {item.quantity}
                                 {(item.free_quantity ?? 0) > 0 && `+${item.free_quantity}F`}

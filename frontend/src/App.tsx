@@ -27,7 +27,7 @@ import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
 // OLD InitialSetup moved to _OLD - not used with new AuthContext
 // import InitialSetup from './components/InitialSetup';
-import ModularPaymentEntry from './components/payment/ModularPaymentEntry';
+import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
 import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
@@ -45,15 +45,15 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
 // BatchesInventory removed - use StockHub instead
-const PaymentTracking = lazy(() => import('./components/payment/PaymentTracking'));
-const PaymentDashboard = lazy(() => import('./components/payment/PaymentDashboard'));
+const PaymentTracking = lazy(() => import('./components/payment/tracking/PaymentTracking'));
+const PaymentDashboard = lazy(() => import('./components/payment/tracking/PaymentDashboard'));
 const CreditManagement = lazy(() => import('./components/ledger/CreditManagement'));
 const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
 // const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
 const CompanyProfile = lazy(() => import('./components/master/settings/CompanyProfile'));
 // InventoryManagement deleted - now uses StockHub
-const AccountingLedgers = lazy(() => import('./components/ledger/AccountingLedgers'));
+// AccountingLedgers deleted - was just placeholder stub
 // const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
 
 // Define types for better TypeScript support
@@ -250,7 +250,7 @@ const AppContent = (): JSX.Element => {
       case 'inventory':
         return <StockHub key="inventory" open={true} onClose={() => setActiveTab('home')} />;
       case 'accounting':
-        return <AccountingLedgers key="accounting" />;
+        return <LedgerHub key="accounting" open={true} onClose={() => setActiveTab('home')} />;
       case 'analytics':
         return <AnalyticsPlaceholder key="analytics" />;
       case 'reports':

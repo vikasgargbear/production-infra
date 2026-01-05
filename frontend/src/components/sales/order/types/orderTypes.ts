@@ -29,8 +29,8 @@ export interface Customer {
     phone?: string;
     primary_phone?: string;
     email?: string;
-    gstin?: string;
-    dl_number?: string;
+    gst_number?: string;
+    drug_license_number?: string;
 }
 
 export interface Employee {
@@ -46,7 +46,7 @@ export interface CompanyInfo {
     address?: string;
     phone?: string;
     email?: string;
-    gstin?: string;
+    gst_number?: string;
     pan?: string;
     state?: string;
     city?: string;
@@ -59,7 +59,7 @@ export interface Product {
     hsn_code?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_no?: string;
+    batch_number?: string;
     quantity?: number;
     unit?: string;
     uom?: string;

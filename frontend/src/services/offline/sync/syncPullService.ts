@@ -244,7 +244,7 @@ class SyncPullService {
 
                 // Pricing
                 cost_per_unit: parseFloat(batch.cost_per_unit) || 0,
-                purchase_price: parseFloat(batch.cost_per_unit) || 0,
+                unit_price: parseFloat(batch.cost_per_unit) || 0,
                 mrp: parseFloat(batch.mrp_per_unit) || 0,
                 mrp_per_unit: parseFloat(batch.mrp_per_unit) || 0,
                 sale_price: parseFloat(batch.sale_price_per_unit) || 0,
@@ -276,7 +276,7 @@ class SyncPullService {
             generic_name: product.generic_name || '',
             gst_percent: product.gst_percent || 0,
             // CANONICAL: use total_quantity_available from backend (fallback to legacy names)
-            total_stock: product.total_quantity_available ?? product.total_stock ?? product.current_stock ?? 0,
+            total_stock: product.total_quantity_available ?? product.total_stock ?? product.total_quantity_available ?? 0,
             mrp_per_unit: product.mrp_per_unit || product.mrp || 0,
             sale_price_per_unit: product.sale_price_per_unit || product.sale_price || 0,
             batches,
@@ -455,7 +455,7 @@ class SyncPullService {
             primary_email: customer.primary_email || customer.email || '',
             secondary_phone: customer.secondary_phone || '',
             whatsapp_number: customer.whatsapp_number || '',
-            gst_number: customer.gst_number || customer.gstin || '',
+            gst_number: customer.gst_number || customer.gst_number || '',
             customer_type: customer.customer_type || 'regular',
             business_type: customer.business_type || '',
             credit_limit: customer.credit_limit || 0,
@@ -477,7 +477,7 @@ class SyncPullService {
             // Search fields (indexed for fast lookup)
             _search_name: (customer.customer_name || customer.name || '').toLowerCase(),
             _search_phone: (customer.primary_phone || customer.phone || '').replace(/\D/g, ''),
-            _search_gst: (customer.gst_number || customer.gstin || '').toLowerCase(),
+            _search_gst: (customer.gst_number || customer.gst_number || '').toLowerCase(),
             // Metadata
             is_active: customer.is_active !== false,
             updated_at: customer.updated_at || new Date().toISOString()
