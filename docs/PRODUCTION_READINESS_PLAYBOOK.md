@@ -18,10 +18,10 @@ This playbook documents all improvements applied to `backend/app/core` and `back
 | ✅ `routes/purchase/` | **COMPLETE** | Reorganized into 3 subdirs: orders/, supplier_invoices/, upload/ |
 | ✅ `routes/finance/` | **COMPLETE** | Reorganized into 7 subdirs: payments/, credit_notes/, ledger/, expenses/, journal/, allocation/, tax/ |
 | ✅ `routes/returns/` | **COMPLETE** | Reorganized into 2 subdirs: purchase/, sales/ |
-| ⏳ `services/master/` | **PENDING** | Needs modular restructure |
-| ⏳ `services/purchase/` | **PENDING** | Needs modular restructure |
-| ⏳ `services/sales/` | **PENDING** | Needs modular restructure (invoice/, order/, shared/) |
-| ⏳ `services/finance/` | **PENDING** | Needs modular restructure |
+| ✅ `services/master/` | **COMPLETE** | Reorganized into 2 subdirs: customer/, product/ |
+| ✅ `services/finance/` | **COMPLETE** | Reorganized into 4 subdirs: payment/, credit_note/, ledger/, outstanding/ |
+| ✅ `services/purchase/` | **COMPLETE** | Already modular: grn/, order/, supplier_invoice/, parsers/, shared/ |
+| ✅ `services/sales/` | **COMPLETE** | Already modular: invoice/, order/, challan/, shared/ |
 
 **Last Updated**: 2026-01-05
 
