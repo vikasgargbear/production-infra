@@ -247,123 +247,25 @@ async def cancel_note(
     Cancel a credit/debit note
     """
     try:
-        # Check if note exists
-        note = db.execute(
-            text("SELECT * FROM financial_notes WHERE note_id = :note_id"),
-            {"note_id": note_id}
-        ).first()
-        
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-            
-        if note.status == ReturnStatus.CANCELLED.value:
-            raise HTTPException(status_code=400, detail="Note already cancelled")
-            
-        # Update note status
-        db.execute(
-            text("""
-                UPDATE financial_notes 
-                SET status = :cancelled_status,
-                    cancellation_reason = :reason,
-                    cancelled_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE note_id = :note_id
-            """),
-            {
-                "note_id": note_id,
-                "reason": cancellation_reason,
-                "cancelled_status": ReturnStatus.CANCELLED.value
-            }
+        # Use CreditNoteService for centralized cancellation logic
+        result = CreditNoteService.cancel_note(
+            db=db,
+            org_id=str(context.org_id),
+            note_id=note_id,
+            cancellation_reason=cancellation_reason
         )
-        
-        # Reverse ledger entry
-        if note.note_type == "credit":
-            # Reverse credit note - debit the customer
-            db.execute(
-                text("""
-                    INSERT INTO party_ledger (
-                        ledger_id, org_id, party_id, transaction_date,
-                        transaction_type, reference_type, reference_id,
-                        debit_amount, credit_amount, description
-                    ) VALUES (
-                        :ledger_id, :org_id, :party_id, CURRENT_DATE,
-                        'debit', 'credit_note_reversal', :note_id,
-                        :amount, 0, :description
-                    )
-                """),
-                {
-                    "ledger_id": str(uuid.uuid4()),
-                    "org_id": str(context.org_id),
-                    "party_id": note.party_id,
-                    "note_id": note_id,
-                    "amount": note.total_amount,
-                    "description": f"Credit Note Reversal - {note.note_number}"
-                }
-            )
-        else:  # debit note
-            # Check party type
-            party = db.execute(
-                text("SELECT party_type FROM parties WHERE party_id = :party_id"),
-                {"party_id": note.party_id}
-            ).first()
-            
-            if party.party_type == "customer":
-                # Reverse debit note for customer - credit them
-                db.execute(
-                    text("""
-                        INSERT INTO party_ledger (
-                            ledger_id, org_id, party_id, transaction_date,
-                            transaction_type, reference_type, reference_id,
-                            debit_amount, credit_amount, description
-                        ) VALUES (
-                            :ledger_id, :org_id, :party_id, CURRENT_DATE,
-                            'credit', 'debit_note_reversal', :note_id,
-                            0, :amount, :description
-                        )
-                    """),
-                    {
-                        "ledger_id": str(uuid.uuid4()),
-                        "org_id": str(context.org_id),
-                        "party_id": note.party_id,
-                        "note_id": note_id,
-                        "amount": note.total_amount,
-                        "description": f"Debit Note Reversal - {note.note_number}"
-                    }
-                )
-            else:  # supplier
-                # Reverse debit note for supplier
-                db.execute(
-                    text("""
-                        INSERT INTO supplier_ledger (
-                            ledger_id, org_id, supplier_id, transaction_date,
-                            transaction_type, reference_type, reference_id,
-                            debit_amount, credit_amount, description
-                        ) VALUES (
-                            :ledger_id, :org_id, :supplier_id, CURRENT_DATE,
-                            'credit', 'debit_note_reversal', :note_id,
-                            0, :amount, :description
-                        )
-                    """),
-                    {
-                        "ledger_id": str(uuid.uuid4()),
-                        "org_id": str(context.org_id),
-                        "supplier_id": note.party_id,
-                        "note_id": note_id,
-                        "amount": note.total_amount,
-                        "description": f"Debit Note Reversal - {note.note_number}"
-                    }
-                )
-        
-        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
-            "message": f"{note.note_type.title()} note {note.note_number} cancelled successfully"
+            "message": result["message"]
         }
         
     except HTTPException:
         db.rollback()
         raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Error cancelling note: {e}")
