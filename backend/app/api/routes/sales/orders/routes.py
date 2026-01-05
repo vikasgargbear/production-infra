@@ -52,19 +52,8 @@ async def get_employees_for_created_by(
 ):
     """Get list of employees for 'Created By' dropdown"""
     try:
-        # Convert org_id to UUID if needed
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
-            
-        result = db.execute(text("""
-            SELECT user_id, full_name, email, role_id, is_active
-            FROM master.org_users 
-            WHERE org_id = :org_id AND is_active = true
-            ORDER BY full_name
-        """), {"org_id": str(context.org_id)})
-        
-        employees = [dict(row._mapping) for row in result]
-        return employees
+        # Use OrderService instead of inline SQL
+        return OrderService.get_employees(db, str(context.org_id))
         
     except Exception as e:
         logger.error(f"Error fetching employees: {str(e)}")
@@ -541,27 +530,8 @@ async def get_sales_order_dashboard(
 ):
     """Get sales order dashboard statistics"""
     try:
-        # Get sales order specific stats
-        stats = db.execute(text("""
-            SELECT 
-                COUNT(*) as total_orders,
-                COUNT(*) FILTER (WHERE order_status = 'pending') as pending_orders,
-                COUNT(*) FILTER (WHERE order_status = 'approved') as approved_orders,
-                COUNT(*) FILTER (WHERE order_status = 'invoiced') as invoiced_orders,
-                COALESCE(SUM(final_amount), 0) as total_value,
-                COALESCE(SUM(final_amount) FILTER (WHERE order_date = CURRENT_DATE), 0) as today_value
-            FROM sales.orders 
-            WHERE order_type = 'sales'
-        """), {}).fetchone()
-        
-        return {
-            "total_orders": stats.total_orders,
-            "pending_orders": stats.pending_orders,
-            "approved_orders": stats.approved_orders,
-            "invoiced_orders": stats.invoiced_orders,
-            "total_value": float(stats.total_value),
-            "today_value": float(stats.today_value)
-        }
+        # Use OrderService instead of inline SQL
+        return OrderService.get_dashboard(db, str(context.org_id))
         
     except Exception as e:
         logger.error(f"Error getting sales order dashboard: {str(e)}")

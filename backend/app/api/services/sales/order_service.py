@@ -612,3 +612,44 @@ class OrderService:
         order_dict["delivered_at"] = order_dict.get("delivered_at", None)
         
         return order_dict
+    
+    @staticmethod
+    def get_employees(db: Session, org_id: str) -> List[Dict[str, Any]]:
+        """
+        Get list of employees for 'Created By' dropdown.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT user_id, full_name, email, role_id, is_active
+            FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY full_name
+        """), {"org_id": org_id})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_dashboard(db: Session, org_id: str) -> Dict[str, Any]:
+        """
+        Get sales order dashboard statistics.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT
+                COUNT(*) as total_orders,
+                COUNT(CASE WHEN order_status = 'draft' THEN 1 END) as draft_orders,
+                COUNT(CASE WHEN order_status = 'confirmed' THEN 1 END) as confirmed_orders,
+                COUNT(CASE WHEN order_status = 'delivered' THEN 1 END) as delivered_orders,
+                COUNT(CASE WHEN order_status = 'cancelled' THEN 1 END) as cancelled_orders,
+                COALESCE(SUM(CASE WHEN order_status NOT IN ('cancelled') THEN final_amount END), 0) as total_value
+            FROM sales.orders
+            WHERE order_type = 'sales'
+        """)).fetchone()
+        
+        return {
+            "total_orders": result.total_orders if result else 0,
+            "draft_orders": result.draft_orders if result else 0,
+            "confirmed_orders": result.confirmed_orders if result else 0,
+            "delivered_orders": result.delivered_orders if result else 0,
+            "cancelled_orders": result.cancelled_orders if result else 0,
+            "total_value": float(result.total_value) if result and result.total_value else 0
+        }

@@ -405,503 +405,514 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
 
     const customerId = customer.customer_id || customer.id || customer.party_id;
-    payment_status: 'pending,partial'
-  });
 
-  if (response && response.success && response.data) {
-    // The invoices are in response.data.invoices array
-    const invoices = response.data.invoices || [];
+    try {
+      setIsLoading(true);
 
-    // Fetch existing allocations for each invoice
-    const invoicesWithAllocations = await Promise.all(
-      invoices.map(async (inv: any) => {
-        try {
-          // Fetch existing payment allocations for this invoice
-          const allocResponse = await apiClient.get(`/payment-allocation/invoice/${inv.invoice_id}/payments`);
-          const existingAllocations = allocResponse.data?.allocations || [];
-          const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
-            sum + (alloc.allocated_amount || 0), 0);
-
-          return {
-            ...inv,
-            existing_allocations: existingAllocations,
-            total_allocated: totalAllocated,
-            remaining_due: (inv.credit_amount || inv.final_amount) - totalAllocated
-          };
-        } catch (error) {
-          // If allocation fetch fails, use invoice as-is
-          return {
-            ...inv,
-            existing_allocations: [],
-            total_allocated: 0,
-            remaining_due: inv.credit_amount || inv.final_amount
-          };
-        }
-      })
-    );
-
-    // Filter and map outstanding invoices
-    const outstandingInvoices = invoicesWithAllocations
-      .filter((inv: any) => {
-        // Use remaining_due which accounts for existing allocations
-        return inv.remaining_due > 0.01;
-      })
-      .map((inv: any) => {
-        const totalAmount = inv.final_amount || inv.total_amount || inv.total_amount || 0;
-        const paidAmount = inv.paid_amount || 0;
-
-        // Use remaining_due which already accounts for existing allocations
-        const amountDue = inv.remaining_due;
-
-        return {
-          invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
-          invoice_date: inv.invoice_date || inv.created_at,
-          total_amount: totalAmount,
-          paid_amount: paidAmount,
-          amount_due: amountDue,
-          remaining_due: amountDue, // Same as amount_due since it's already calculated
-          // Show existing allocations info
-          total_allocated: inv.total_allocated || 0,
-          existing_allocations: inv.existing_allocations || 0, // Changed to number for display
-          status: inv.payment_status || 'pending',
-          invoice_id: inv.invoice_id || inv.id,
-          customer_id: customerId
-        };
+      // Import invoicesApi for fetching invoices
+      const { invoicesApi } = await import('../../services/api');
+      const response = await invoicesApi.getAll({
+        customer_id: customerId,
+        limit: 100,
+        offset: 0,
+        payment_status: 'pending,partial'
       });
 
-    // Sort invoices by date (oldest first) for display
-    outstandingInvoices.sort((a, b) =>
-      new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
-    );
+      const invoiceData = response?.data || response;
+      if (invoiceData && invoiceData.invoices) {
+        // The invoices are in invoiceData.invoices array
+        const invoices = invoiceData.invoices || [];
 
-    setOutstandingInvoices(outstandingInvoices);
+        // Fetch existing allocations for each invoice
+        const invoicesWithAllocations = await Promise.all(
+          invoices.map(async (inv: any) => {
+            try {
+              // Fetch existing payment allocations for this invoice
+              const allocResponse = await apiClient.get(`/payment-allocation/invoice/${inv.invoice_id}/payments`);
+              const existingAllocations = allocResponse.data?.allocations || [];
+              const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
+                sum + (alloc.allocated_amount || 0), 0);
 
-    // Keep manual as default - don't auto-allocate
-    if (!payment.allocation_method) {
-      setPaymentField('allocation_method', 'manual');
+              return {
+                ...inv,
+                existing_allocations: existingAllocations,
+                total_allocated: totalAllocated,
+                remaining_due: (inv.credit_amount || inv.final_amount) - totalAllocated
+              };
+            } catch (error) {
+              // If allocation fetch fails, use invoice as-is
+              return {
+                ...inv,
+                existing_allocations: [],
+                total_allocated: 0,
+                remaining_due: inv.credit_amount || inv.final_amount
+              };
+            }
+          })
+        );
+
+        // Filter and map outstanding invoices
+        const outstandingInvoices = invoicesWithAllocations
+          .filter((inv: any) => {
+            // Use remaining_due which accounts for existing allocations
+            return inv.remaining_due > 0.01;
+          })
+          .map((inv: any) => {
+            const totalAmount = inv.final_amount || inv.total_amount || inv.total_amount || 0;
+            const paidAmount = inv.paid_amount || 0;
+
+            // Use remaining_due which already accounts for existing allocations
+            const amountDue = inv.remaining_due;
+
+            return {
+              invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
+              invoice_date: inv.invoice_date || inv.created_at,
+              total_amount: totalAmount,
+              paid_amount: paidAmount,
+              amount_due: amountDue,
+              remaining_due: amountDue, // Same as amount_due since it's already calculated
+              // Show existing allocations info
+              total_allocated: inv.total_allocated || 0,
+              existing_allocations: inv.existing_allocations || 0, // Changed to number for display
+              status: inv.payment_status || 'pending',
+              invoice_id: inv.invoice_id || inv.id,
+              customer_id: customerId
+            };
+          });
+
+        // Sort invoices by date (oldest first) for display
+        outstandingInvoices.sort((a, b) =>
+          new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
+        );
+
+        setOutstandingInvoices(outstandingInvoices);
+
+        // Keep manual as default - don't auto-allocate
+        if (!payment.allocation_method) {
+          setPaymentField('allocation_method', 'manual');
+        }
+      } else {
+        setOutstandingInvoices([]);
+      }
+    } catch (error: any) {
+      setOutstandingInvoices([]);
+      // Don't show error message, just silently handle it
+    } finally {
+      setIsLoading(false);
     }
-  } else {
-    setOutstandingInvoices([]);
-  }
-} catch (error: any) {
-  setOutstandingInvoices([]);
-  // Don't show error message, just silently handle it
-} finally {
-  setIsLoading(false);
-}
   };
 
-// Success Step
-if (currentStep === 3) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-8 py-16">
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="py-8">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-blue-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Payment Recorded Successfully!
-            </h2>
-            <p className="text-2xl font-bold text-gray-900 mb-8">
-              Amount: ₹{parseFloat(payment.amount).toFixed(2)}
-            </p>
+  // Success Step
+  if (currentStep === 3) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-8 py-16">
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+            <div className="py-8">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Payment Recorded Successfully!
+              </h2>
+              <p className="text-2xl font-bold text-gray-900 mb-8">
+                Amount: ₹{parseFloat(payment.amount).toFixed(2)}
+              </p>
 
-            <div className="flex justify-center space-x-3">
-              <button
-                onClick={generateReceipt}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-              >
-                <Printer className="w-4 h-4" />
-                Print Receipt
-              </button>
-              <button
-                onClick={handleNewPayment}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-              >
-                New Payment
-              </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Close
-              </button>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={generateReceipt}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print Receipt
+                </button>
+                <button
+                  onClick={handleNewPayment}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  New Payment
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-return (
-  <div className="h-full bg-blue-50">
-    <div className="h-full flex flex-col">
-      {/* Header - Using Global ModuleHeader */}
-      <ModuleHeader
-        title="Payment Entry"
-        documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
-        status={currentStep === 1 ? 'draft' : 'review'}
-        icon={CreditCard}
-        iconColor="text-blue-600"
-        onClose={onClose}
-        historyType="payment"
-        showSaveDraft={currentStep === 1}
-        onSaveDraft={() => {
-          // TODO: Implement save draft
-        }}
-        additionalActions={[
-          {
-            label: "GST Calculator",
-            onClick: () => setShowGSTCalculator(true),
-            icon: Calculator,
-            variant: "default"
-          }
-        ] as any}
-      />
+  return (
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Payment Entry"
+          documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
+          status={currentStep === 1 ? 'draft' : 'review'}
+          icon={CreditCard}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="payment"
+          showSaveDraft={currentStep === 1}
+          onSaveDraft={() => {
+            // TODO: Implement save draft
+          }}
+          additionalActions={[
+            {
+              label: "GST Calculator",
+              onClick: () => setShowGSTCalculator(true),
+              icon: Calculator,
+              variant: "default"
+            }
+          ] as any}
+        />
 
-      {/* Keyboard Shortcuts Help */}
-      <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-        Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
-      </div>
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-blue-50">
-        <div className="max-w-6xl mx-auto px-6 py-6">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto bg-blue-50">
+          <div className="max-w-6xl mx-auto px-6 py-6">
 
-          {/* Loading State */}
-          {isLoading && (
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                <p className="text-gray-600">Loading payment entry form...</p>
+            {/* Loading State */}
+            {isLoading && (
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Loading payment entry form...</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Error State */}
-          {error && (
-            <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
-              <div className="text-center max-w-md mx-auto">
-                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
-                <p className="text-red-700 mb-4">{error}</p>
-                <button
-                  onClick={() => setError(null)}
-                  className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
-                >
-                  Dismiss
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Message Display */}
+            {message && (
+              <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+                messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+                  'bg-blue-50 text-blue-800 border border-blue-200'
+                }`}>
+                {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+                <div className="flex-1">{message}</div>
+                <button onClick={clearMessage} className="ml-2 hover:opacity-70">
+                  <X className="w-3 h-3" />
                 </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Message Display */}
-          {message && (
-            <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
-              messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
-                'bg-blue-50 text-blue-800 border border-blue-200'
-              }`}>
-              {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-              <div className="flex-1">{message}</div>
-              <button onClick={clearMessage} className="ml-2 hover:opacity-70">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {currentStep === 1 ? (
-            <>
-              {/* New Optimized Payment Flow */}
-              <div className="mb-6">
-                <PaymentFlowOptimized />
-              </div>
-
-              {/* Outstanding Invoices - Proper tile display */}
-              {selectedCustomer && (
+            {currentStep === 1 ? (
+              <>
+                {/* New Optimized Payment Flow */}
                 <div className="mb-6">
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
-                        <FileText className="w-4 h-4 mr-2" />
-                        OUTSTANDING INVOICES
-                      </h3>
-                      <div className="flex items-center space-x-3">
-                        {/* FIFO Quick Allocation Button */}
-                        {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && parseFloat(payment.amount) > 0 && (
-                          <button
-                            onClick={() => {
-                              setPaymentField('allocation_method', 'fifo');
-                              applyAllocationMethod('fifo');
-                            }}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
-                          >
-                            <span>📅</span>
-                            <span>Auto FIFO</span>
-                          </button>
-                        )}
+                  <PaymentFlowOptimized />
+                </div>
 
-                        {/* Allocation Method Dropdown (simplified) */}
-                        <select
-                          value={payment.allocation_method || 'manual'}
-                          onChange={(e) => {
-                            setPaymentField('allocation_method', e.target.value);
-                            if (e.target.value === 'advance') {
-                              setPaymentField('allocations', []);
-                            } else if (e.target.value !== 'manual') {
-                              applyAllocationMethod(e.target.value);
-                            }
-                          }}
-                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="manual">Manual</option>
-                          <option value="fifo">FIFO (Oldest First)</option>
-                          <option value="lifo">LIFO (Newest First)</option>
-                          <option value="highest">Highest First</option>
-                          <option value="advance">Keep as Advance</option>
-                        </select>
+                {/* Outstanding Invoices - Proper tile display */}
+                {selectedCustomer && (
+                  <div className="mb-6">
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+                          <FileText className="w-4 h-4 mr-2" />
+                          OUTSTANDING INVOICES
+                        </h3>
+                        <div className="flex items-center space-x-3">
+                          {/* FIFO Quick Allocation Button */}
+                          {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && parseFloat(payment.amount) > 0 && (
+                            <button
+                              onClick={() => {
+                                setPaymentField('allocation_method', 'fifo');
+                                applyAllocationMethod('fifo');
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                            >
+                              <span>📅</span>
+                              <span>Auto FIFO</span>
+                            </button>
+                          )}
+
+                          {/* Allocation Method Dropdown (simplified) */}
+                          <select
+                            value={payment.allocation_method || 'manual'}
+                            onChange={(e) => {
+                              setPaymentField('allocation_method', e.target.value);
+                              if (e.target.value === 'advance') {
+                                setPaymentField('allocations', []);
+                              } else if (e.target.value !== 'manual') {
+                                applyAllocationMethod(e.target.value);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="manual">Manual</option>
+                            <option value="fifo">FIFO (Oldest First)</option>
+                            <option value="lifo">LIFO (Newest First)</option>
+                            <option value="highest">Highest First</option>
+                            <option value="advance">Keep as Advance</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Invoice Display Tile - Like payment amount tile */}
-                  <Card className="p-6 bg-white border border-gray-200">
-                    {/* Loading state */}
-                    {isLoading && (
-                      <div className="flex flex-col items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
-                        <p className="text-gray-600">Loading invoices...</p>
-                      </div>
-                    )}
+                    {/* Invoice Display Tile - Like payment amount tile */}
+                    <Card className="p-6 bg-white border border-gray-200">
+                      {/* Loading state */}
+                      {isLoading && (
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                          <p className="text-gray-600">Loading invoices...</p>
+                        </div>
+                      )}
 
-                    {/* Show Auto Allocation Status */}
-                    {!isLoading && payment.allocation_method && payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && payment.allocations && payment.allocations.length > 0 && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-medium text-blue-800">
-                              {payment.allocation_method === 'fifo' && '📅 FIFO Applied'}
-                              {payment.allocation_method === 'lifo' && '📆 LIFO Applied'}
-                              {payment.allocation_method === 'highest' && '💰 Highest First Applied'}
-                            </span>
-                            <span className="text-sm text-blue-600">
-                              ({payment.allocations.length} invoices, ₹{payment.allocations.reduce((sum: number, alloc: any) => sum + parseFloat(alloc.allocated_amount || 0), 0).toFixed(2)})
-                            </span>
+                      {/* Show Auto Allocation Status */}
+                      {!isLoading && payment.allocation_method && payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && payment.allocations && payment.allocations.length > 0 && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-medium text-blue-800">
+                                {payment.allocation_method === 'fifo' && '📅 FIFO Applied'}
+                                {payment.allocation_method === 'lifo' && '📆 LIFO Applied'}
+                                {payment.allocation_method === 'highest' && '💰 Highest First Applied'}
+                              </span>
+                              <span className="text-sm text-blue-600">
+                                ({payment.allocations.length} invoices, ₹{payment.allocations.reduce((sum: number, alloc: any) => sum + parseFloat(alloc.allocated_amount || 0), 0).toFixed(2)})
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setPaymentField('allocation_method', 'manual');
+                                setPaymentField('allocations', []);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              Edit manually
+                            </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              setPaymentField('allocation_method', 'manual');
-                              setPaymentField('allocations', []);
-                            }}
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            Edit manually
-                          </button>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Advance Payment Notice */}
-                    {!isLoading && payment.allocation_method === 'advance' && (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                        <div className="text-2xl mb-2">💳</div>
-                        <h4 className="font-semibold text-green-800 mb-1">Customer Advance Payment</h4>
-                        <p className="text-sm text-green-700">
-                          This payment will be recorded as customer advance for future use.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* No invoices message */}
-                    {!isLoading && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
-                      <div className="text-center py-8">
-                        <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                          This customer has no pending invoices. The payment will be recorded as an advance.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Show invoices table - Clean and simple */}
-                    {!isLoading && outstandingInvoices && outstandingInvoices.length > 0 && payment.allocation_method !== 'advance' && (
-                      <div>
-                        {/* Summary row */}
-                        <div className="mb-3 text-sm text-gray-600">
-                          <span>{outstandingInvoices.length} invoices • Outstanding: ₹{outstandingInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_due || 0), 0).toFixed(2)}</span>
+                      {/* Advance Payment Notice */}
+                      {!isLoading && payment.allocation_method === 'advance' && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                          <div className="text-2xl mb-2">💳</div>
+                          <h4 className="font-semibold text-green-800 mb-1">Customer Advance Payment</h4>
+                          <p className="text-sm text-green-700">
+                            This payment will be recorded as customer advance for future use.
+                          </p>
                         </div>
+                      )}
 
-                        {/* Simple table */}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b bg-gray-50">
-                                <th className="text-left py-2 px-3">
-                                  {payment.allocation_method === 'manual' && (
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedInvoiceIds.size === outstandingInvoices.length}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          // Select all with FIFO-like allocation up to payment amount
-                                          const paymentAmount = parseFloat(payment.amount) || 0;
-                                          const newSelected = new Set<number>();
-                                          const newAllocations: { [key: number]: number } = {};
-                                          let remainingPayment = paymentAmount;
+                      {/* No invoices message */}
+                      {!isLoading && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
+                        <div className="text-center py-8">
+                          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
+                          <p className="text-sm text-gray-500 mt-2">
+                            This customer has no pending invoices. The payment will be recorded as an advance.
+                          </p>
+                        </div>
+                      )}
 
-                                          outstandingInvoices.forEach((inv: any) => {
-                                            if (remainingPayment > 0) {
-                                              const id = inv.invoice_id;
-                                              newSelected.add(id);
-                                              const allocateAmount = Math.min(remainingPayment, inv.amount_due);
-                                              newAllocations[id] = allocateAmount;
-                                              remainingPayment -= allocateAmount;
-                                            }
-                                          });
+                      {/* Show invoices table - Clean and simple */}
+                      {!isLoading && outstandingInvoices && outstandingInvoices.length > 0 && payment.allocation_method !== 'advance' && (
+                        <div>
+                          {/* Summary row */}
+                          <div className="mb-3 text-sm text-gray-600">
+                            <span>{outstandingInvoices.length} invoices • Outstanding: ₹{outstandingInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_due || 0), 0).toFixed(2)}</span>
+                          </div>
 
-                                          setSelectedInvoiceIds(newSelected);
-                                          setManualAllocations(newAllocations);
+                          {/* Simple table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-gray-50">
+                                  <th className="text-left py-2 px-3">
+                                    {payment.allocation_method === 'manual' && (
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedInvoiceIds.size === outstandingInvoices.length}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            // Select all with FIFO-like allocation up to payment amount
+                                            const paymentAmount = parseFloat(payment.amount) || 0;
+                                            const newSelected = new Set<number>();
+                                            const newAllocations: { [key: number]: number } = {};
+                                            let remainingPayment = paymentAmount;
 
-                                          // Update payment allocations
-                                          const allocations = Array.from(newSelected).map(id => {
-                                            const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
-                                            return {
-                                              invoice_id: id,
-                                              invoice_no: inv?.invoice_no || '',
-                                              allocated_amount: newAllocations[id] || 0
-                                            };
-                                          });
-                                          setPaymentField('allocations', allocations);
-                                        } else {
-                                          setSelectedInvoiceIds(new Set());
-                                          setManualAllocations({});
-                                          setPaymentField('allocations', []);
+                                            outstandingInvoices.forEach((inv: any) => {
+                                              if (remainingPayment > 0) {
+                                                const id = inv.invoice_id;
+                                                newSelected.add(id);
+                                                const allocateAmount = Math.min(remainingPayment, inv.amount_due);
+                                                newAllocations[id] = allocateAmount;
+                                                remainingPayment -= allocateAmount;
+                                              }
+                                            });
+
+                                            setSelectedInvoiceIds(newSelected);
+                                            setManualAllocations(newAllocations);
+
+                                            // Update payment allocations
+                                            const allocations = Array.from(newSelected).map(id => {
+                                              const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
+                                              return {
+                                                invoice_id: id,
+                                                invoice_no: inv?.invoice_no || '',
+                                                allocated_amount: newAllocations[id] || 0
+                                              };
+                                            });
+                                            setPaymentField('allocations', allocations);
+                                          } else {
+                                            setSelectedInvoiceIds(new Set());
+                                            setManualAllocations({});
+                                            setPaymentField('allocations', []);
+                                          }
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                    )}
+                                  </th>
+                                  <th className="text-left py-2 px-2">Invoice No</th>
+                                  <th className="text-left py-2 px-2">Date</th>
+                                  <th className="text-right py-2 px-2">Total</th>
+                                  <th className="text-right py-2 px-2">Already Paid</th>
+                                  <th className="text-right py-2 px-2">Outstanding</th>
+                                  <th className="text-right py-2 px-2">Allocate Now</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {outstandingInvoices.map((invoice: any, index: number) => {
+                                  const invoiceId = invoice.invoice_id || index;
+                                  const isSelected = selectedInvoiceIds.has(invoiceId);
+                                  const autoAllocation = payment.allocations?.find((alloc: any) =>
+                                    alloc.invoice_id === invoiceId || alloc.invoice_no === invoice.invoice_no
+                                  );
+
+                                  return (
+                                    <tr key={invoiceId} className={`border-b hover:bg-gray-50 ${isSelected || autoAllocation ? 'bg-blue-50' : ''}`}>
+                                      <td className="py-2 px-3">
+                                        {payment.allocation_method === 'manual' && (
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={(e) => {
+                                              handleManualInvoiceSelection(e.target.checked, invoiceId, invoice);
+                                            }}
+                                            className="rounded border-gray-300"
+                                          />
+                                        )}
+                                      </td>
+                                      <td className="py-2 px-2 font-medium">{invoice.invoice_no}</td>
+                                      <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
+                                      <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2 text-gray-600">
+                                        ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
+                                        {invoice.total_allocated > 0 && (
+                                          <span className="block text-xs text-blue-600">
+                                            (incl. ₹{invoice.total_allocated.toFixed(2)} recent)
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2 font-medium text-green-600">
+                                        {payment.allocation_method === 'manual'
+                                          ? (isSelected ? `₹${(manualAllocations[invoiceId] || 0).toFixed(2)}` : '-')
+                                          : (autoAllocation ? `₹${(autoAllocation.allocated_amount || 0).toFixed(2)}` : '-')
                                         }
-                                      }}
-                                      className="rounded border-gray-300"
-                                    />
-                                  )}
-                                </th>
-                                <th className="text-left py-2 px-2">Invoice No</th>
-                                <th className="text-left py-2 px-2">Date</th>
-                                <th className="text-right py-2 px-2">Total</th>
-                                <th className="text-right py-2 px-2">Already Paid</th>
-                                <th className="text-right py-2 px-2">Outstanding</th>
-                                <th className="text-right py-2 px-2">Allocate Now</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {outstandingInvoices.map((invoice: any, index: number) => {
-                                const invoiceId = invoice.invoice_id || index;
-                                const isSelected = selectedInvoiceIds.has(invoiceId);
-                                const autoAllocation = payment.allocations?.find((alloc: any) =>
-                                  alloc.invoice_id === invoiceId || alloc.invoice_no === invoice.invoice_no
-                                );
-
-                                return (
-                                  <tr key={invoiceId} className={`border-b hover:bg-gray-50 ${isSelected || autoAllocation ? 'bg-blue-50' : ''}`}>
-                                    <td className="py-2 px-3">
-                                      {payment.allocation_method === 'manual' && (
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={(e) => {
-                                            handleManualInvoiceSelection(e.target.checked, invoiceId, invoice);
-                                          }}
-                                          className="rounded border-gray-300"
-                                        />
-                                      )}
-                                    </td>
-                                    <td className="py-2 px-2 font-medium">{invoice.invoice_no}</td>
-                                    <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
-                                    <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
-                                    <td className="text-right py-2 px-2 text-gray-600">
-                                      ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
-                                      {invoice.total_allocated > 0 && (
-                                        <span className="block text-xs text-blue-600">
-                                          (incl. ₹{invoice.total_allocated.toFixed(2)} recent)
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
-                                    <td className="text-right py-2 px-2 font-medium text-green-600">
-                                      {payment.allocation_method === 'manual'
-                                        ? (isSelected ? `₹${(manualAllocations[invoiceId] || 0).toFixed(2)}` : '-')
-                                        : (autoAllocation ? `₹${(autoAllocation.allocated_amount || 0).toFixed(2)}` : '-')
-                                      }
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </Card>
-                </div>
-              )}
-            </>
-          ) : (
-            // Step 2: Payment Summary
-            <div className="mb-8">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
-                <CheckCircle className="w-4 h-4 mr-2" />
-                PAYMENT SUMMARY
-              </h3>
-              <PaymentSummaryCompact />
-            </div>
-          )}
+                      )}
+                    </Card>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Step 2: Payment Summary
+              <div className="mb-8">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  PAYMENT SUMMARY
+                </h3>
+                <PaymentSummaryCompact />
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Footer - Using Global Component */}
+        <ProceedToReviewComponent
+          currentStep={currentStep}
+          canProceed={
+            (currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode) ||
+            (currentStep === 2)
+          }
+          onBack={currentStep === 2 ? () => setCurrentStep(1) : null}
+          onProceed={() => {
+            if (currentStep === 1) {
+              goToSummary();
+            } else if (currentStep === 2) {
+              savePayment();
+            }
+          }}
+          onReset={currentStep === 1 ? resetPayment : null}
+          totalItems={payment.allocations ? payment.allocations.length : 0}
+          totalAmount={parseFloat(payment.amount) || 0}
+          proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
+          saving={saving}
+        />
       </div>
 
-      {/* Footer - Using Global Component */}
-      <ProceedToReviewComponent
-        currentStep={currentStep}
-        canProceed={
-          (currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode) ||
-          (currentStep === 2)
-        }
-        onBack={currentStep === 2 ? () => setCurrentStep(1) : null}
-        onProceed={() => {
-          if (currentStep === 1) {
-            goToSummary();
-          } else if (currentStep === 2) {
-            savePayment();
-          }
-        }}
-        onReset={currentStep === 1 ? resetPayment : null}
-        totalItems={payment.allocations ? payment.allocations.length : 0}
-        totalAmount={parseFloat(payment.amount) || 0}
-        proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
-        saving={saving}
-      />
+      {/* GST Calculator Modal */}
+      {showGSTCalculator && (
+        <GSTCalculator
+          orderData={null}
+          onCalculationComplete={() => setShowGSTCalculator(false)}
+          showDetails={true}
+        />
+      )}
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            setCustomer(customer);
+            setShowCustomerModal(false);
+            // You can add toast notification here if needed
+          }}
+        />
+      )}
     </div>
-
-    {/* GST Calculator Modal */}
-    {showGSTCalculator && (
-      <GSTCalculator
-        orderData={null}
-        onCalculationComplete={() => setShowGSTCalculator(false)}
-        showDetails={true}
-      />
-    )}
-
-    {/* Customer Creation Modal */}
-    {showCustomerModal && (
-      <CustomerCreationB2B
-        onClose={() => setShowCustomerModal(false)}
-        onCustomerCreated={(customer) => {
-          setCustomer(customer);
-          setShowCustomerModal(false);
-          // You can add toast notification here if needed
-        }}
-      />
-    )}
-  </div>
-);
+  );
 };
 
 interface ModularPaymentEntryV3Props {

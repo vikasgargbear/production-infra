@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import Button from '../ui/Button';
 import { StatusBadge, DataTable } from '../ui';
-import InvoiceApiService from '../../../services/invoicesApiService';
+import { invoicesApi } from '../../../services/api';
 // Debug logger removed for production
 
 interface InvoiceSelectorProps {
@@ -84,7 +84,8 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
 
       // debugLogger.api('Fetching invoices with params:', params);
 
-      const response = await InvoiceApiService.getInvoices(params);
+      const response = await invoicesApi.getAll(params);
+      const invoiceData = response?.data || response;
 
       if (response.success) {
         // Transform backend data to match our interface

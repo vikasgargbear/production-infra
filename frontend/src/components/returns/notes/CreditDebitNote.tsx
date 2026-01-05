@@ -18,7 +18,7 @@ import {
 } from '../../global';
 import { theme, classes } from '../../../config/theme.config';
 import { notesApi } from '../../../services/api';
-import InvoiceApiService from '../../../services/invoicesApiService';
+import { invoicesApi } from '../../../services/api';
 
 interface CreditDebitNoteSimpleProps {
   noteType?: 'credit' | 'debit';
@@ -164,7 +164,8 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         fullInvoice = { data: invoice };
       } else {
         // Load full invoice details
-        const response = await InvoiceApiService.getInvoiceById(invoice.id || invoice.invoice_id);
+        const response = await invoicesApi.getById(invoice.id || invoice.invoice_id);
+        const fullInvoice = response?.data || response;
         if (response.success && response.data) {
           fullInvoice = response;
         } else {
