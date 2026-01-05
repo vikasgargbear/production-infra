@@ -279,42 +279,48 @@ async def create_direct_purchase_entry(
         
         # Process items and create batches
         items = purchase_data.get("items", [])
+        
+        # OPTIMIZATION: Batch fetch all existing products BEFORE the loop
+        product_names = [item.get("product_name") for item in items if item.get("product_name") and not item.get("product_id")]
+        product_lookup = {}
+        if product_names:
+            existing_products = db.execute(text("""
+                SELECT product_id, LOWER(TRIM(product_name)) as name_key
+                FROM inventory.products 
+                WHERE LOWER(TRIM(product_name)) = ANY(:names)
+                AND org_id = :org_id
+            """), {"names": [n.lower().strip() for n in product_names], "org_id": context.org_id})
+            for row in existing_products:
+                product_lookup[row.name_key] = row.product_id
+        
+        # OPTIMIZATION: Get default category ONCE before loop
+        default_category_id = None
+        category_result = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories 
+            WHERE org_id = :org_id
+            ORDER BY category_id
+            LIMIT 1
+        """), {"org_id": context.org_id}).fetchone()
+        if category_result:
+            default_category_id = category_result.category_id
+        
         for item in items:
             # Get or create product_id if not provided
             product_id = item.get("product_id")
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # In pharma, products must match very closely (95%+)
-                # Different dosages/strengths are different products
-                # First try exact match (case-insensitive, trimmed)
-                existing_product = db.execute(text("""
-                    SELECT product_id FROM inventory.products 
-                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
-                    AND org_id = :org_id
-                    LIMIT 1
-                """), {"product_name": product_name, "org_id": context.org_id}).fetchone()
-                
-                # For pharma, we DON'T do partial matching
-                # PARACETAMOL 500MG and PARACETAMOL 650MG are different products
-                # Only exact name matches are acceptable
-                
-                if existing_product:
-                    product_id = existing_product.product_id
+                # OPTIMIZED: Use pre-fetched lookup instead of per-item query
+                # For pharma, we use exact name matching (different dosages are different products)
+                name_key = product_name.lower().strip()
+                if name_key in product_lookup:
+                    product_id = product_lookup[name_key]
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
-                    # Get or create a default category first
-                    category_result = db.execute(text("""
-                        SELECT category_id FROM inventory.product_categories 
-                        WHERE org_id = :org_id
-                        ORDER BY category_id
-                        LIMIT 1
-                    """), {"org_id": context.org_id}).fetchone()
-                    
-                    if category_result:
-                        category_id = category_result.category_id
-                    else:
-                        # Create a default category
+                    # OPTIMIZED: Use pre-fetched category instead of per-item query
+                    category_id = default_category_id
+                    if not category_id:
+                        # Create a default category only if needed (first time)
                         new_category = db.execute(text("""
                             INSERT INTO inventory.product_categories (
                                 org_id, category_name, category_code, is_active
@@ -323,12 +329,10 @@ async def create_direct_purchase_entry(
                             ) RETURNING category_id
                         """), {"org_id": context.org_id}).fetchone()
                         category_id = new_category.category_id if new_category else None
+                        default_category_id = category_id  # Cache for next items
                     
                     # Create new product with minimal required fields
-                    # Generate a meaningful product code
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    
-                    # Extract HSN from item data or use default
                     hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
                     
                     new_product = db.execute(text("""
@@ -347,6 +351,8 @@ async def create_direct_purchase_entry(
                         "hsn_code": hsn_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
+                    # Add to lookup so we don't create again if same name appears
+                    product_lookup[name_key] = product_id
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
             # Create PO item (with required UOM and pack_type fields)
@@ -558,6 +564,30 @@ async def create_purchase_entry(
         # Log the received data for debugging
         logger.info(f"Processing {len(items)} items for purchase entry")
         
+        # OPTIMIZATION: Batch fetch all existing products BEFORE the loop
+        product_names = [item.get("product_name") for item in items if item.get("product_name") and not item.get("product_id")]
+        product_lookup = {}
+        if product_names:
+            existing_products = db.execute(text("""
+                SELECT product_id, LOWER(TRIM(product_name)) as name_key
+                FROM inventory.products 
+                WHERE LOWER(TRIM(product_name)) = ANY(:names)
+                AND org_id = :org_id
+            """), {"names": [n.lower().strip() for n in product_names], "org_id": context.org_id})
+            for row in existing_products:
+                product_lookup[row.name_key] = row.product_id
+        
+        # OPTIMIZATION: Get default category ONCE before loop
+        default_category_id = None
+        category_result = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories 
+            WHERE org_id = :org_id
+            ORDER BY category_id
+            LIMIT 1
+        """), {"org_id": context.org_id}).fetchone()
+        if category_result:
+            default_category_id = category_result.category_id
+        
         for idx, item in enumerate(items):
             logger.info(f"Item {idx + 1}: {item}")
             # Get or create product_id if not provided
@@ -565,30 +595,16 @@ async def create_purchase_entry(
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # First try exact match (case-insensitive, trimmed)
-                existing_product = db.execute(text("""
-                    SELECT product_id FROM inventory.products 
-                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
-                    AND org_id = :org_id
-                    LIMIT 1
-                """), {"product_name": product_name, "org_id": context.org_id}).fetchone()
-                
-                if existing_product:
-                    product_id = existing_product.product_id
+                # OPTIMIZED: Use pre-fetched lookup instead of per-item query
+                name_key = product_name.lower().strip()
+                if name_key in product_lookup:
+                    product_id = product_lookup[name_key]
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
-                    # Get or create a default category first
-                    category_result = db.execute(text("""
-                        SELECT category_id FROM inventory.product_categories 
-                        WHERE org_id = :org_id
-                        ORDER BY category_id
-                        LIMIT 1
-                    """), {"org_id": context.org_id}).fetchone()
-                    
-                    if category_result:
-                        category_id = category_result.category_id
-                    else:
-                        # Create a default category
+                    # OPTIMIZED: Use pre-fetched category instead of per-item query
+                    category_id = default_category_id
+                    if not category_id:
+                        # Create a default category only if needed (first time)
                         new_category = db.execute(text("""
                             INSERT INTO inventory.product_categories (
                                 org_id, category_name, category_code, is_active
@@ -597,6 +613,7 @@ async def create_purchase_entry(
                             ) RETURNING category_id
                         """), {"org_id": context.org_id}).fetchone()
                         category_id = new_category.category_id if new_category else None
+                        default_category_id = category_id  # Cache for next items
                     
                     # Create new product with minimal required fields
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -618,6 +635,8 @@ async def create_purchase_entry(
                         "hsn_code": hsn_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
+                    # Add to lookup so we don't create again if same name appears
+                    product_lookup[name_key] = product_id
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
             # Calculate item totals

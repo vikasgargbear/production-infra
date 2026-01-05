@@ -54,18 +54,8 @@ export const productsApi = {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
-  // Alias for localFirstService compatibility
-  list: (params: ProductParams = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, { params });
-  },
-
   // Get product by ID
   getById: (id: number | string) => {
-    return apiHelpers.get(ENDPOINTS.DETAILS(id));
-  },
-
-  // Alias for getById (backward compatibility)
-  getDetails: (id: number | string) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 

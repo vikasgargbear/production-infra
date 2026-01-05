@@ -62,7 +62,7 @@ export function useProduct(
 ) {
   return useQuery<ApiResponse<Product>>(
     productKeys.detail(productId),
-    () => productAPI.getDetails(productId),
+    () => productAPI.getById(productId),
     {
       enabled: !!productId,
       staleTime: 5 * 60 * 1000,

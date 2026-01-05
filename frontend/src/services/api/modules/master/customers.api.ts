@@ -41,11 +41,6 @@ export const customersApi = {
     return apiHelpers.get(ENDPOINTS.BASE, { params });
   },
 
-  // Alias for backward compatibility
-  list: (params: CustomerParams = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, { params });
-  },
-
   // Get all customers with embedded addresses (for offline sync)
   getAllWithAddresses: (params: any = {}) => {
     return apiHelpers.get(`${ENDPOINTS.BASE}/all-with-addresses`, { params });
@@ -53,11 +48,6 @@ export const customersApi = {
 
   // Get customer by ID
   getById: (id: number | string) => {
-    return apiHelpers.get(ENDPOINTS.DETAILS(id));
-  },
-
-  // Alias for getById (backward compatibility)
-  getDetails: (id: number | string) => {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 

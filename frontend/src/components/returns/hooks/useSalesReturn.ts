@@ -281,7 +281,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         }));
 
         try {
-            const detailResponse = await customerAPI.getDetails(customer.id || customer.customer_id);
+            const detailResponse = await customerAPI.getById(customer.id || customer.customer_id);
             if (detailResponse?.data) {
                 setSelectedCustomer({ ...fullCustomer, ...detailResponse.data });
                 setCustomerDues(detailResponse.data.outstanding_amount || 0);

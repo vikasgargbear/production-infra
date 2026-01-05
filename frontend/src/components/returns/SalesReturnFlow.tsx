@@ -328,7 +328,7 @@ const SalesReturnFlow = ({ onClose }) => {
     // Fetch complete customer details including outstanding balance
     try {
       // Try to get full customer details
-      const detailResponse = await customerAPI.getDetails(customerId);
+      const detailResponse = await customerAPI.getById(customerId);
       if (detailResponse?.data) {
         const detailedCustomer = {
           ...fullCustomer,

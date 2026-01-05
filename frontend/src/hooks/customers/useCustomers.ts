@@ -63,7 +63,7 @@ export function useCustomer(
 ) {
   return useQuery<ApiResponse<Customer>>(
     customerKeys.detail(parseInt(customerId)),
-    () => customerAPI.getDetails(customerId),
+    () => customerAPI.getById(customerId),
     {
       enabled: !!customerId,
       staleTime: 5 * 60 * 1000,
