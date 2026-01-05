@@ -1,21 +1,63 @@
 """
 Purchase Services Module
-Organized following same pattern as sales module:
-- calculations.py - PurchaseCalculator for precise calculations
-- purchase_service.py - Purchase order business logic
-- grn_service.py - GRN business logic
-- supplier_invoice_service.py - Supplier invoice business logic
+Follows same structure as sales module with subdirectories for each domain.
+
+Structure:
+├── calculations.py          # PurchaseCalculator for precise calculations
+├── grn/                     # Goods Receipt Note operations
+│   ├── grn_service.py       # Business logic
+│   └── grn_repository.py    # Data access
+├── supplier_invoice/        # Supplier invoice operations
+│   ├── supplier_invoice_service.py
+│   └── supplier_invoice_repository.py
+├── order/                   # Purchase order operations
+│   ├── order_service.py
+│   └── order_repository.py
+├── shared/                  # Common utilities
+│   └── purchase_shared_repository.py
+└── parsers/                 # PDF parsing utilities
 """
-from .purchase_service import PurchaseService
+
+# Core calculations
 from .calculations import PurchaseCalculator, CalculatedPurchaseItem, PurchaseTotals
-from .grn_service import GRNService
-from .supplier_invoice_service import SupplierInvoiceService
+
+# GRN operations
+from .grn import GRNService, GRNRepository
+
+# Supplier Invoice operations
+from .supplier_invoice import SupplierInvoiceService, SupplierInvoiceRepository
+
+# Purchase Order operations
+from .order import PurchaseOrderService, PurchaseOrderRepository
+
+# Shared utilities
+from .shared import PurchaseSharedRepository
+
+# Legacy support - also export from old location
+# TODO: Migrate routes to use new imports, then remove this
+from .purchase_service import PurchaseService
 
 __all__ = [
-    "PurchaseService",
+    # Calculations
     "PurchaseCalculator",
     "CalculatedPurchaseItem",
     "PurchaseTotals",
+    
+    # GRN
     "GRNService",
-    "SupplierInvoiceService"
+    "GRNRepository",
+    
+    # Supplier Invoice
+    "SupplierInvoiceService",
+    "SupplierInvoiceRepository",
+    
+    # Purchase Order
+    "PurchaseOrderService",
+    "PurchaseOrderRepository",
+    
+    # Shared
+    "PurchaseSharedRepository",
+    
+    # Legacy
+    "PurchaseService",
 ]
