@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, X, Save, Upload, FileText, User, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { employeesAPI, apiClient } from '../../../services/api';
+import { employeesApi, apiClient } from '../../../services/api';
 import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS } from '../../../constants/pharmaEmployeeOptions';
 
 const EmployeeManagementEnhanced = () => {
@@ -65,7 +65,7 @@ const EmployeeManagementEnhanced = () => {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      const response = await employeesAPI.getAll({ limit: 100 });
+      const response = await employeesApi.getAll({ limit: 100 });
       if (response.success) {
         setEmployees(response.data || []);
       } else {
@@ -289,9 +289,9 @@ const EmployeeManagementEnhanced = () => {
 
       let response;
       if (editingEmployee) {
-        response = await employeesAPI.update(editingEmployee.employee_id, employeeData);
+        response = await employeesApi.update(editingEmployee.employee_id, employeeData);
       } else {
-        response = await employeesAPI.create(employeeData);
+        response = await employeesApi.create(employeeData);
       }
 
       if (response.success) {
@@ -347,7 +347,7 @@ const EmployeeManagementEnhanced = () => {
 
     setLoading(true);
     try {
-      const response = await employeesAPI.delete(employee.employee_id);
+      const response = await employeesApi.delete(employee.employee_id);
       if (response.success) {
         toast.success('Employee deactivated successfully');
         loadEmployees();

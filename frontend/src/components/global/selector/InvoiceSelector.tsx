@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import Button from '../ui/Button';
 import { StatusBadge, DataTable } from '../ui';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import InvoiceApiService from '../../../services/invoicesApiService';
 // Debug logger removed for production
 
 interface InvoiceSelectorProps {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, FileText, Download } from 'lucide-react';
 import api from '../../../services/api';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import { invoicesApi } from '../../../services/api';
 import { downloadInvoicePDF } from '../../../utils/invoicePdfGenerator';
 
 // Type definitions
@@ -268,7 +268,8 @@ const Orders: React.FC = () => {
 
     try {
       // Generate invoice and get details
-      const invoiceDetails = await InvoiceApiService.generateFromOrder(orderId);
+      const response = await invoicesApi.generateFromOrder(orderId);
+      const invoiceDetails = response?.data || response;
 
       // Store invoice info
       setOrderInvoices(prev => ({

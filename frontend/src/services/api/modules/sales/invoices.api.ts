@@ -185,6 +185,89 @@ export const invoicesApi = {
     getLastDeals: (productId: number | string, customerId: number | string | null = null) => {
         const params = customerId ? { customer_id: customerId } : {};
         return apiHelpers.get(`${ENDPOINTS.BASE}/last-deals/${productId}`, { params });
+    },
+
+    // =========================================================================
+    // CALCULATIONS & VALIDATION (migrated from invoiceApiService.ts)
+    // =========================================================================
+
+    /** Calculate invoice totals and item amounts on backend */
+    calculateLive: (data: {
+        customer_id?: number;
+        delivery_type?: string;
+        payment_mode?: string;
+        invoice_date?: string;
+        items: Array<{
+            product_id: number;
+            batch_id?: number;
+            quantity: number;
+            discount_percent?: number;
+            free_quantity?: number;
+        }>;
+        delivery_charges?: number;
+        additional_discount?: number;
+    }) => {
+        return apiHelpers.post(`${ENDPOINTS.BASE}/calculate-live`, {
+            customer_id: data.customer_id,
+            delivery_type: data.delivery_type || 'PICKUP',
+            payment_mode: data.payment_mode || 'CASH',
+            invoice_date: data.invoice_date || new Date().toISOString().split('T')[0],
+            items: data.items.map(item => ({
+                product_id: item.product_id,
+                batch_id: item.batch_id,
+                quantity: parseFloat(String(item.quantity)) || 0,
+                discount_percent: parseFloat(String(item.discount_percent)) || 0,
+                free_quantity: parseFloat(String(item.free_quantity)) || 0
+            })),
+            delivery_charges: parseFloat(String(data.delivery_charges)) || 0,
+            additional_discount: parseFloat(String(data.additional_discount)) || 0,
+            round_off: true
+        });
+    },
+
+    /** Validate invoice against business rules */
+    validate: (data: { customer_id?: number; items: Array<{ product_id: number; batch_id?: number; quantity: number; discount_percent?: number }> }) => {
+        return apiHelpers.post(`${ENDPOINTS.BASE}/validate`, {
+            customer_id: data.customer_id,
+            items: data.items.map(item => ({
+                product_id: item.product_id,
+                batch_id: item.batch_id,
+                quantity: parseFloat(String(item.quantity)) || 0,
+                discount_percent: parseFloat(String(item.discount_percent)) || 0
+            }))
+        });
+    },
+
+    // =========================================================================
+    // DRAFTS (migrated from invoiceApiService.ts)
+    // =========================================================================
+
+    /** Get saved invoice drafts */
+    getDrafts: () => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/drafts`);
+    },
+
+    /** Save invoice draft */
+    saveDraft: (data: { draft_id?: string; customer_id?: number; items: unknown[]; totals?: unknown; created_by?: string }) => {
+        return apiHelpers.post(`${ENDPOINTS.BASE}/drafts`, {
+            draft_id: data.draft_id,
+            customer_id: data.customer_id,
+            items: data.items,
+            totals: data.totals,
+            metadata: {
+                last_modified: new Date().toISOString(),
+                created_by: data.created_by || 'CURRENT_USER'
+            }
+        });
+    },
+
+    // =========================================================================
+    // ORDER CONVERSION (migrated from invoiceApiService.ts)
+    // =========================================================================
+
+    /** Generate invoice from order */
+    generateFromOrder: (orderId: number | string) => {
+        return apiHelpers.post(`${ENDPOINTS.BASE}/generate-from-order`, { order_id: orderId });
     }
 };
 

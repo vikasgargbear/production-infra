@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { productsApi as productAPI } from '../../services/api';
+import { productsApi as productsApi } from '../../services/api';
 import { useCallback } from 'react';
 import { Product, ProductCreateInput } from '../../types/models/product';
 
@@ -39,7 +39,7 @@ export function useProductSearch(
 ) {
   return useQuery<ApiResponse<Product[]>>(
     productKeys.search(query, params),
-    () => productAPI.search(query, {
+    () => productsApi.search(query, {
       limit: params?.limit || 50,
       category: params?.category,
       manufacturer: params?.manufacturer
@@ -62,7 +62,7 @@ export function useProduct(
 ) {
   return useQuery<ApiResponse<Product>>(
     productKeys.detail(productId),
-    () => productAPI.getById(productId),
+    () => productsApi.getById(productId),
     {
       enabled: !!productId,
       staleTime: 5 * 60 * 1000,
@@ -80,7 +80,7 @@ export function useCreateProduct(
   const queryClient = useQueryClient();
 
   return useMutation(
-    (data: ProductCreateInput) => productAPI.create(data),
+    (data: ProductCreateInput) => productsApi.create(data),
     {
       onSuccess: (response) => {
         // Invalidate product queries
@@ -100,7 +100,7 @@ export function useProductBatches(
 ) {
   return useQuery(
     productKeys.batches(productId),
-    () => productAPI.getBatches(productId),
+    () => productsApi.getBatches(productId),
     {
       enabled: !!productId,
       staleTime: 2 * 60 * 1000, // 2 minutes

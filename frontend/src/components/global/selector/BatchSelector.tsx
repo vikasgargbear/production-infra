@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, ReactNode } from 'react';
 import { X, Package, AlertCircle, CheckCircle, Shield, Clock, Box } from 'lucide-react';
-import { batchAPI } from '../../../services/api';
+import { batchesApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
@@ -203,7 +203,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     const fetchAndStoreBatches = async (productId: string | number, showLoadingSpinner: boolean = true): Promise<Batch[]> => {
         try {
-            const response = await batchAPI.getByProduct(productId);
+            const response = await batchesApi.getByProduct(productId);
             const batchesData = response.data?.batches || response.data || [];
 
             // Update caches

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import { invoicesApi } from '../../../services/api';
 
 // ============================================
 // Type Definitions
@@ -193,7 +193,7 @@ export function useInvoiceList(onClose?: () => void) {
                 searchParams.search = filters.search.trim();
             }
 
-            const response = await InvoiceApiService.getInvoices(searchParams);
+            const response = await invoicesApi.getAll(searchParams);
 
             if (response.success) {
                 const transformedInvoices = response.data.invoices.map((invoice: any) => ({

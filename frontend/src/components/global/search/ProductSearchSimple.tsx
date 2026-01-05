@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, KeyboardEvent, MouseEvent } from 'react';
 import { Search, Package } from 'lucide-react';
-import { productAPI } from '../../../services/api';
+import { productsApi } from '../../../services/api';
 import BatchSelector from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
 

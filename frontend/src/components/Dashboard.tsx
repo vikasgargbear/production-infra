@@ -13,7 +13,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ModularChallanCreatorV5 } from './sales/challan'; // New improved version - alias for ChallanFlow
 // import { AddSalePage } from './Home';
 import InvoiceFlow from './sales/invoice/InvoiceFlow'; // Modern TypeScript version
-import { dashboardApi, ordersApi, invoiceAPI, invoicesApi, purchasesAPI, productsApi, customersApi } from '../services/api';
+import { dashboardApi, ordersApi, invoicesApi, invoicesApi, purchasesApi, productsApi, customersApi } from '../services/api';
 import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
 // Type definitions
@@ -366,7 +366,7 @@ const Dashboard: React.FC = () => {
         customersResponse
       ] = await Promise.all([
         dashboardApi.getStats(),
-        invoiceAPI.getAll({ limit: 10 }).catch(() => ({ data: [] })), // Get recent invoices
+        invoicesApi.getAll({ limit: 10 }).catch(() => ({ data: [] })), // Get recent invoices
         dashboardApi.getRecentOrders(10),
         dashboardApi.getRevenueData('monthly'),
         dashboardApi.getTopProducts(10),

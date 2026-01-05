@@ -1,6 +1,6 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, Calendar, Banknote, MessageCircle, AlertCircle, User, Clock, Star, Package, Hash, Globe, Briefcase, Check } from 'lucide-react';
-import { supplierAPI } from '../../../services/api';
+import { suppliersApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -279,7 +279,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
         try {
             const supplierData = prepareSupplierForAPI(formData as unknown as Record<string, unknown>);
 
-            const response = await supplierAPI.create(supplierData);
+            const response = await suppliersApi.create(supplierData);
 
             if (response) {
                 searchCache.clearType('suppliers');

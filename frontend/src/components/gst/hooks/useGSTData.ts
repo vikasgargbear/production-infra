@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import type { DateRange } from '../types';
-import { invoiceAPI, purchasesAPI, gstApi } from '../../../services/api';
+import { invoicesApi, purchasesApi, gstApi } from '../../../services/api';
 
 interface GSTDataResult {
     invoices: any[];
@@ -29,7 +29,7 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
 
     const loadInvoices = useCallback(async () => {
         try {
-            const response = await invoiceAPI.search({
+            const response = await invoicesApi.search({
                 dateFrom: dateRange.from,
                 dateTo: dateRange.to,
                 limit: 5000
@@ -46,7 +46,7 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
 
     const loadPurchases = useCallback(async () => {
         try {
-            const response = await purchasesAPI.search({
+            const response = await purchasesApi.search({
                 dateFrom: dateRange.from,
                 dateTo: dateRange.to,
                 limit: 5000

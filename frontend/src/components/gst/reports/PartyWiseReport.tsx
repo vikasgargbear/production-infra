@@ -7,7 +7,7 @@ import { Loader2, AlertCircle, Users } from 'lucide-react';
 import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
-import { invoiceAPI } from '../../../services/api';
+import { invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface PartyWiseReportProps {
@@ -39,7 +39,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
             setError(null);
 
             try {
-                const response = await invoiceAPI.search({
+                const response = await invoicesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000

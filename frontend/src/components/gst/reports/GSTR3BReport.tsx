@@ -8,7 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, IndianRupee } from 'lucide-react';
 import type { DateRange } from '../types';
 import { formatCurrency, calculateNetPayable } from '../utils';
-import { invoiceAPI, purchasesAPI } from '../../../services/api';
+import { invoicesApi, purchasesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTR3BReportProps {
@@ -31,7 +31,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger }
 
             try {
                 // Load invoices for output tax
-                const invoiceRes = await invoiceAPI.search({
+                const invoiceRes = await invoicesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000
@@ -48,7 +48,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger }
                 setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal });
 
                 // Load purchases for input credit
-                const purchaseRes = await purchasesAPI.search({
+                const purchaseRes = await purchasesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000

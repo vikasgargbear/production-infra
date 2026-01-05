@@ -410,7 +410,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setIsLoading(true);
 
       // Import the invoice service
-      const InvoiceApiService = (await import('../../services/invoiceApiService')).default;
+      const InvoiceApiService = (await import('../../services/invoicesApiService')).default;
 
       // Use the same API call structure as return component
       const response = await InvoiceApiService.getInvoices({

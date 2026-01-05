@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { purchaseApi } from '../../../../services/api';
+import { purchasesApi } from '../../../../services/api';
 import { searchCache } from '../../../../utils/searchCache';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { useToast } from '../../../global';
@@ -305,7 +305,7 @@ export function usePurchaseOrderLogic({
                 notes: purchaseOrder.notes
             };
 
-            const response = await purchaseApi.createPurchaseOrder(poData);
+            const response = await purchasesApi.createPurchaseOrder(poData);
 
             if (response?.data) {
                 const poNumber = response.data.po_no || purchaseOrder.po_no;

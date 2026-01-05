@@ -17,7 +17,7 @@
  */
 
 import offlineDB from '../core/offlineDatabase';
-import { productAPI, customersApi } from '../../api';
+import { productsApi, customersApi } from '../../api';
 import { employeesApi } from '../../api/modules/master/employees.api';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -147,7 +147,7 @@ class SyncPullService {
             while (hasMore) {
                 console.log(`[SyncPull] Fetching products page ${page}...`);
 
-                const response = await productAPI.getAllWithBatches({
+                const response = await productsApi.getAllWithBatches({
                     page,
                     pageSize,
                     since

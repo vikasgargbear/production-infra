@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import { invoicesApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator, { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
-import { employeesAPI } from '../../../../services/api';
+import { employeesApi } from '../../../../services/api';
 import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { getTodayBusinessDate, getDaysFromToday, getUTCTimestamp } from '../../../../utils/indianDateUtils';
@@ -288,7 +288,7 @@ export const useInvoiceLogic = (
                         setEmployees(uniqueCached);
                     } else {
                         console.log('[Invoice] Fetching employees from API');
-                        const employeeResponse = await employeesAPI.getAll({ limit: 100 });
+                        const employeeResponse = await employeesApi.getAll({ limit: 100 });
 
                         const rawData = employeeResponse?.data || employeeResponse || [];
                         const employeesList = Array.isArray(rawData)

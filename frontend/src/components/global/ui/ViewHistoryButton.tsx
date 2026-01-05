@@ -5,7 +5,7 @@ import {
     Share2, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
 import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
-import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
+import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, salesOrdersApi, purchasesApi, returnsApi, stockApi } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -88,10 +88,10 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
             switch (historyType) {
                 case 'invoice':
                     try {
-                        response = await (invoiceAPI as any).search({ limit: 10 });
+                        response = await (invoicesApi as any).search({ limit: 10 });
                     } catch {
                         try {
-                            response = await (ordersAPI as any).search({ limit: 10 });
+                            response = await (ordersApi as any).search({ limit: 10 });
                         } catch {
                             response = { data: [] };
                         }
@@ -115,7 +115,7 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
 
                 case 'challan':
                     try {
-                        response = await (challansAPI as any).search({ limit: 20 });
+                        response = await (challansApi as any).search({ limit: 20 });
                         const challanData = response.data || response;
                         const challans = Array.isArray(challanData) ? challanData :
                             (challanData.data && Array.isArray(challanData.data)) ? challanData.data :
@@ -136,7 +136,7 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
                     break;
 
                 case 'payment':
-                    response = await (paymentAPI as any).search({ limit: 10 });
+                    response = await (paymentsApi as any).search({ limit: 10 });
                     const paymentResponse = response.data || response;
                     if (paymentResponse.data && Array.isArray(paymentResponse.data)) {
                         formattedItems = paymentResponse.data.map((payment: any) => ({
@@ -229,10 +229,10 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
                 case 'order':
                 case 'sales-order':
                     try {
-                        response = await (salesOrdersAPI as any).getAll({ limit: 10 });
+                        response = await (salesOrdersApi as any).getAll({ limit: 10 });
                     } catch {
                         try {
-                            response = await (ordersAPI as any).search({ limit: 10 });
+                            response = await (ordersApi as any).search({ limit: 10 });
                         } catch {
                             response = { data: [] };
                         }

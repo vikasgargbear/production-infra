@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
-import { productAPI, productsApi } from '../../../services/api';
+import { productsApi, productsApi } from '../../../services/api';
 import PackTypeSelector from '../selector/PackTypeSelector';
 import MonthYearPicker from '../ui/forms/MonthYearPicker';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -361,7 +361,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                 packages_per_box: packConfig.packages_per_box ? parseInt(String(packConfig.packages_per_box)) : null
             };
 
-            const productResponse = await productAPI.create(apiData) as any;
+            const productResponse = await productsApi.create(apiData) as any;
 
             if (productResponse) {
                 const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, TrendingUp, User, Calendar } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
-import { invoiceAPI } from '../../../services/api';
+import { invoicesApi } from '../../../services/api';
 
 interface Deal {
     invoice_date: string;
@@ -41,7 +41,7 @@ const LastDealModal: React.FC<LastDealModalProps> = ({ isOpen, onClose, productI
         try {
             // Fetch last deals for this product (optionally filtered by customer)
             // API expects null instead of number|undefined for optional customerId
-            const response = await (invoiceAPI.getLastDeals as any)(productId, customerId);
+            const response = await (invoicesApi.getLastDeals as any)(productId, customerId);
             setLastDeals(response.data || []);
         } catch (err) {
             console.error('Failed to load last deals:', err);

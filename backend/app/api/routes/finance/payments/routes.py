@@ -73,58 +73,18 @@ async def search_payments(
 ):
     """Search payments with filters"""
     try:
-        # Base params with status constants
-        params = {"cancelled_status": PaymentRecordStatus.CANCELLED.value}
-        query = """
-            SELECT p.*, 
-                COALESCE(c.customer_name, s.supplier_name) as party_name
-            FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
-            WHERE p.payment_status != :cancelled_status
-        """
-        
-        if q:
-            query += """ AND (
-                p.payment_number ILIKE :q 
-                OR p.transaction_reference ILIKE :q
-                OR c.customer_name ILIKE :q
-                OR s.supplier_name ILIKE :q
-            )"""
-            params["q"] = f"%{q}%"
-        
-        if party_id and party_type == PartyType.CUSTOMER.value:
-            query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
-            params["party_id"] = party_id
-        elif party_id and party_type == PartyType.SUPPLIER.value:
-            query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
-            params["party_id"] = party_id
-            
-        if payment_mode:
-            query += " AND p.payment_mode = :payment_mode"
-            params["payment_mode"] = payment_mode
-            
-        if date_from:
-            query += " AND p.payment_date >= :date_from"
-            params["date_from"] = date_from
-        if date_to:
-            query += " AND p.payment_date <= :date_to"
-            params["date_to"] = date_to
-            
-        query += " ORDER BY p.payment_date DESC LIMIT :limit OFFSET :offset"
-        params["limit"] = limit
-        params["offset"] = offset
-        
-        result = db.execute(text(query), params)
-        payments = [dict(row._mapping) for row in result]
-        
-        # Get total count
-        count_query = query.replace("SELECT p.*", "SELECT COUNT(*)")
-        count_query = count_query.split("ORDER BY")[0]
-        count_result = db.execute(text(count_query), {k: v for k, v in params.items() if k not in ["limit", "offset"]})
-        total = count_result.scalar() or 0
-        
-        return {"payments": payments, "total": total}
+        # Use PaymentService instead of inline SQL
+        return PaymentService.search_payments(
+            db=db,
+            q=q,
+            party_id=party_id,
+            party_type=party_type,
+            payment_mode=payment_mode,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset
+        )
     except Exception as e:
         logger.error(f"Error searching payments: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to search payments")
@@ -141,33 +101,12 @@ async def get_pending_payments(
 ):
     """Get pending/uncleared payments"""
     try:
-        query = """
-            SELECT p.*, 
-                COALESCE(c.customer_name, s.supplier_name) as party_name
-            FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
-            WHERE p.payment_status = :pending_status
-                OR (p.payment_method_id IS NOT NULL AND p.clearance_date IS NULL)
-        """
-        params = {
-            "pending_status": PaymentRecordStatus.PENDING.value,
-            "cheque_mode": PaymentMethod.CHEQUE.value
-        }
-        
-        if party_type == PartyType.CUSTOMER.value and party_id:
-            query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
-            params["party_id"] = party_id
-        elif party_type == PartyType.SUPPLIER.value and party_id:
-            query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
-            params["party_id"] = party_id
-            
-        query += " ORDER BY p.payment_date DESC"
-        
-        result = db.execute(text(query), params)
-        payments = [dict(row._mapping) for row in result]
-        
-        return {"payments": payments, "total": len(payments)}
+        # Use PaymentService instead of inline SQL
+        return PaymentService.get_pending_payments(
+            db=db,
+            party_type=party_type,
+            party_id=party_id
+        )
     except Exception as e:
         logger.error(f"Error getting pending payments: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get pending payments")
@@ -182,26 +121,8 @@ async def get_payment_methods(
 ):
     """Get available payment methods"""
     try:
-        result = db.execute(text("""
-            SELECT payment_method_id, method_name, method_type, is_active
-            FROM financial.payment_methods
-            WHERE is_active = true
-            ORDER BY method_name
-        """))
-        methods = [dict(row._mapping) for row in result]
-        
-        # Fallback if no methods in DB
-        if not methods:
-            methods = [
-                {"method_type": "cash", "method_name": "Cash"},
-                {"method_type": "cheque", "method_name": "Cheque"},
-                {"method_type": "upi", "method_name": "UPI"},
-                {"method_type": "neft", "method_name": "NEFT/RTGS"},
-                {"method_type": "card", "method_name": "Card"},
-                {"method_type": "online", "method_name": "Online Transfer"}
-            ]
-        
-        return {"methods": methods}
+        # Use PaymentService instead of inline SQL
+        return PaymentService.get_payment_methods(db)
     except Exception as e:
         logger.error(f"Error getting payment methods: {str(e)}")
         # Return default methods on error

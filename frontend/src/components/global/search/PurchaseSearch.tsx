@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle, KeyboardEvent } from 'react';
 import { Search, FileText, Building2, Loader2, AlertCircle } from 'lucide-react';
-import { purchasesAPI } from '../../../services/api';
+import { purchasesApi } from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -155,7 +155,7 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
                 ...filters
             };
 
-            const response = await purchasesAPI.search(params);
+            const response = await purchasesApi.search(params);
             const recentPurchases = (response as any).data?.purchases || [];
 
             cacheRef.current.set(cacheKey, {
@@ -192,7 +192,7 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
                 ...filters
             };
 
-            const response = await purchasesAPI.search(params);
+            const response = await purchasesApi.search(params);
             const searchResults = (response as any).data?.purchases || [];
 
             cacheRef.current.set(cacheKey, {

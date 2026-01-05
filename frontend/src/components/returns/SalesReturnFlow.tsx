@@ -9,8 +9,8 @@ import {
   ProceedToReviewComponent, StandardDatePicker, InvoiceSelector, ItemsTable
 } from '../global';
 import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
-import { returnsApi, customersApi, customerAPI, settingsApi, metadataApi } from '../../services/api';
-import InvoiceApiService from '../../services/invoiceApiService';
+import { returnsApi, customersApi, customersApi, settingsApi, metadataApi } from '../../services/api';
+import InvoiceApiService from '../../services/invoicesApiService';
 import CreditNotePreview from './ui/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 import { getApiBaseUrl } from '../../config/apiBase';
@@ -328,7 +328,7 @@ const SalesReturnFlow = ({ onClose }) => {
     // Fetch complete customer details including outstanding balance
     try {
       // Try to get full customer details
-      const detailResponse = await customerAPI.getById(customerId);
+      const detailResponse = await customersApi.getById(customerId);
       if (detailResponse?.data) {
         const detailedCustomer = {
           ...fullCustomer,

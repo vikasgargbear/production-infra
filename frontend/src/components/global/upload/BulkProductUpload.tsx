@@ -5,7 +5,7 @@ import {
     Package, Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { productAPI } from '../../../services/api';
+import { productsApi } from '../../../services/api';
 import { useToast } from '../ui/feedback/Toast';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -363,7 +363,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                 const batch = products.slice(i, i + batchSize);
                 const promises = batch.map(async (product) => {
                     try {
-                        const response = await (productAPI as any).create(product);
+                        const response = await (productsApi as any).create(product);
                         return { success: true, product: response.data };
                     } catch (error: any) {
                         return {

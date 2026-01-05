@@ -3,7 +3,7 @@ import {
   Building2, Phone, Mail, MapPin, Globe, FileText,
   Save, Edit2, Upload, X, Check, AlertCircle, Loader2
 } from 'lucide-react';
-import { companyAPI } from '../../../services/api';
+import { companyApi } from '../../../services/api';
 
 const CompanySettings = () => {
   const [companyInfo, setCompanyInfo] = useState({
@@ -39,7 +39,7 @@ const CompanySettings = () => {
       setLoading(true);
       setError(null);
 
-      const response = await companyAPI.getCompanyInfo();
+      const response = await companyApi.getCompanyInfo();
 
       if (response) {
         setCompanyInfo(response);
@@ -124,7 +124,7 @@ const CompanySettings = () => {
       };
 
       // Save company info using the correct API
-      const response = await companyAPI.updateCompanyInfo(dataToSave);
+      const response = await companyApi.updateCompanyInfo(dataToSave);
 
       setCompanyInfo(response);
       setSuccess(true);

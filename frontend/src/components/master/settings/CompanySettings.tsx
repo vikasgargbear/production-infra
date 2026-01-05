@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Building2, QrCode } from 'lucide-react';
 import { useToast } from '../../global/ui/feedback/Toast';
-import { organizationsApi, companyAPI } from '../../../services/api';
+import { organizationsApi, companyApi } from '../../../services/api';
 import { useCompany } from '../../../contexts/CompanyContext';
 
 const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: () => void }) => {
@@ -123,7 +123,7 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
 
       // Upload QR code if changed
       if (settings.paymentQR && settings.paymentQR !== info.paymentQR) {
-        await companyAPI.uploadQRCode(settings.paymentQR);
+        await companyApi.uploadQRCode(settings.paymentQR);
       }
 
       toast.saved('Company Settings');

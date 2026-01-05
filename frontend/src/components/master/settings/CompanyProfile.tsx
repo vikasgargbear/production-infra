@@ -5,7 +5,7 @@ import {
     Globe, Image, Loader2,
     AlertCircle, RefreshCw
 } from 'lucide-react';
-import { companyAPI } from '../../../services/api';
+import { companyApi } from '../../../services/api';
 import BankAccountManager from '../masters/BankAccountManager';
 
 interface CompanyProfileProps {
@@ -164,7 +164,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             setIsLoading(true);
             setError(null);
 
-            const response = await companyAPI.getCompanyInfo();
+            const response = await companyApi.getCompanyInfo();
 
             if (response) {
                 const data = response;
@@ -347,7 +347,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             localStorage.setItem('date_format', companyData.dateFormat);
             localStorage.setItem('time_format', companyData.timeFormat);
 
-            const response = await companyAPI.updateCompanyInfo(profileData);
+            const response = await companyApi.updateCompanyInfo(profileData);
 
             if (response) {
                 setSuccessMessage('Company profile saved successfully!');

@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, IndianRupee, TrendingUp, TrendingDown } from 'lucide-react';
 import type { DateRange } from '../types';
 import { formatCurrency, calculateNetPayable } from '../utils';
-import { invoiceAPI, purchasesAPI } from '../../../services/api';
+import { invoicesApi, purchasesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTPayableReportProps {
@@ -28,7 +28,7 @@ const GSTPayableReport: React.FC<GSTPayableReportProps> = ({ dateRange, refreshT
 
             try {
                 // Load invoices
-                const invoiceRes = await invoiceAPI.search({
+                const invoiceRes = await invoicesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000
@@ -44,7 +44,7 @@ const GSTPayableReport: React.FC<GSTPayableReportProps> = ({ dateRange, refreshT
                 setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outCgst + outSgst + outIgst });
 
                 // Load purchases
-                const purchaseRes = await purchasesAPI.search({
+                const purchaseRes = await purchasesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000

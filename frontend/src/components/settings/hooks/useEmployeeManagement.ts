@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
-import { employeesAPI, apiClient } from '../../../services/api';
+import { employeesApi, apiClient } from '../../../services/api';
 
 // ============================================
 // Type Definitions
@@ -173,7 +173,7 @@ export function useEmployeeManagement() {
     const loadEmployees = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await employeesAPI.getAll({ limit: 100 });
+            const response = await employeesApi.getAll({ limit: 100 });
             if (response.success) {
                 setEmployees(response.data || []);
             } else {
@@ -332,9 +332,9 @@ export function useEmployeeManagement() {
 
             let response;
             if (editingEmployee) {
-                response = await employeesAPI.update(editingEmployee.employee_id, payload);
+                response = await employeesApi.update(editingEmployee.employee_id, payload);
             } else {
-                response = await employeesAPI.create(payload);
+                response = await employeesApi.create(payload);
             }
 
             if (response.success) {
@@ -362,7 +362,7 @@ export function useEmployeeManagement() {
 
         setLoading(true);
         try {
-            const response = await employeesAPI.delete(employee.employee_id);
+            const response = await employeesApi.delete(employee.employee_id);
             if (response.success) {
                 toast.success('Employee deleted');
                 loadEmployees();
@@ -382,7 +382,7 @@ export function useEmployeeManagement() {
 
     const toggleEmployeeStatus = useCallback(async (employee: Employee) => {
         try {
-            const response = await employeesAPI.update(employee.employee_id, {
+            const response = await employeesApi.update(employee.employee_id, {
                 is_active: !employee.is_active
             });
             if (response.success) {

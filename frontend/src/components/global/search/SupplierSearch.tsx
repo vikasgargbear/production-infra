@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
 import { Building2, Phone, MapPin, UserPlus, Trash2 } from 'lucide-react';
 import { EntitySearch, EntitySearchRef, EntitySearchProps } from './EntitySearch';
-import { supplierAPI } from '../../../services/api';
+import { suppliersApi } from '../../../services/api';
 import searchCache, { smartSearch } from '../../../utils/searchCache';
 
 /**
@@ -80,14 +80,14 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
             const results = await smartSearch(
                 'suppliers',
                 query,
-                supplierAPI.search.bind(supplierAPI),
+                suppliersApi.search.bind(suppliersApi),
                 { limit: 20 }
             );
             return results as Supplier[];
         } catch (error) {
             // Fallback to direct API search
             try {
-                const response = await supplierAPI.search(query);
+                const response = await suppliersApi.search(query);
                 const results = (response as any)?.data || response || [];
                 if (results.length > 0) {
                     searchCache.setItems('suppliers', results);

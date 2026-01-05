@@ -10,7 +10,7 @@ import {
     Package, DollarSign, ShoppingCart, AlertCircle,
     TrendingUp, TrendingDown, Percent, RefreshCw, FileText
 } from 'lucide-react';
-import { dashboardApi, invoiceAPI, productsApi, customersApi } from '../../services/api';
+import { dashboardApi, invoicesApi, productsApi, customersApi } from '../../services/api';
 
 // ============================================
 // Type Definitions
@@ -335,7 +335,7 @@ export function useDashboard() {
                 customersResponse
             ] = await Promise.all([
                 dashboardApi.getStats(),
-                invoiceAPI.getAll({ limit: 10 }).catch(() => ({ data: [] })),
+                invoicesApi.getAll({ limit: 10 }).catch(() => ({ data: [] })),
                 dashboardApi.getRecentOrders(10),
                 dashboardApi.getRevenueData('monthly'),
                 dashboardApi.getTopProducts(10),

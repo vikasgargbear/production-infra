@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, FileText, Truck, ShoppingCart, Calendar, LucideIcon } from 'lucide-react';
-import { ordersApi, challansApi, salesOrdersAPI } from '../../../services/api';
+import { ordersApi, challansApi, salesOrdersApi } from '../../../services/api';
 
 interface DocumentItem {
   item_id?: number;
@@ -99,7 +99,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       switch (documentType) {
         case 'sales-order':
           // Get sales orders that haven't been invoiced
-          const ordersResponse = await salesOrdersAPI.getAll({
+          const ordersResponse = await salesOrdersApi.getAll({
             limit: 20,
             order_status: 'approved',
             invoice_created: false
@@ -152,7 +152,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       let results: Document[] = [];
 
       if (documentType === 'sales-order') {
-        const response = await salesOrdersAPI.search({
+        const response = await salesOrdersApi.search({
           query: searchQuery,
           invoice_created: false
         });

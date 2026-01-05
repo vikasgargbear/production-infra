@@ -1,6 +1,6 @@
 import React, { useState, ChangeEvent } from 'react';
 import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
-import { customerAPI } from '../../../services/api';
+import { customersApi } from '../../../services/api';
 import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../modals/FullScreenModal';
 
@@ -99,7 +99,7 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
                 org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
             });
 
-            const response = await customerAPI.create(customerData);
+            const response = await customersApi.create(customerData);
 
             if (response) {
                 const createdCustomer = transformCustomer(response.data as Record<string, unknown>);

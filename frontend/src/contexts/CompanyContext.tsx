@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { companyAPI } from '../services/api';
+import { companyApi } from '../services/api';
 
 interface BankAccount {
     id?: number;
@@ -104,7 +104,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             const currentOrgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
             if (currentOrgId) {
                 try {
-                    const profileResponse = await companyAPI.getCompanyProfile();
+                    const profileResponse = await companyApi.getCompanyProfile();
 
                     if (profileResponse.success && profileResponse.data) {
                         const profileData = profileResponse.data;
@@ -142,7 +142,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                         }
 
                         // Also get org ID
-                        const orgResponse = await companyAPI.getOrganizationId();
+                        const orgResponse = await companyApi.getOrganizationId();
                         if (orgResponse.org_id) {
                             setOrgId(orgResponse.org_id);
                             localStorage.setItem('orgId', orgResponse.org_id);
@@ -150,8 +150,8 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     } else {
                         // Fallback to old API
                         const [companyResponse, orgResponse] = await Promise.all([
-                            companyAPI.getCompanyInfo(),
-                            companyAPI.getOrganizationId()
+                            companyApi.getCompanyInfo(),
+                            companyApi.getOrganizationId()
                         ]);
 
                         if (companyResponse) {
@@ -223,7 +223,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
 
             // Try to update via API
             try {
-                const response = await companyAPI.updateCompanyInfo(updates);
+                const response = await companyApi.updateCompanyInfo(updates);
                 if (!response.success) {
                     throw new Error(response.message || 'Failed to update company info');
                 }

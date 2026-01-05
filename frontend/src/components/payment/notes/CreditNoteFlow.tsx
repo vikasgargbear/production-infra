@@ -239,7 +239,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     setLoadingItems(true);
     try {
       // Use InvoiceApiService to get full invoice details with items
-      const InvoiceApiService = require('../../../services/invoiceApiService').default;
+      const InvoiceApiService = require('../../../services/invoicesApiService').default;
       const fullInvoice = await InvoiceApiService.getInvoiceById(invoice.id);
       
       if (fullInvoice.success && fullInvoice.data && fullInvoice.data.items) {

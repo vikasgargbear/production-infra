@@ -44,18 +44,46 @@
 
 ### Canonical Exports (use these)
 
-| Module | Canonical Export | ❌ Deprecated Aliases |
-|--------|-----------------|----------------------|
-| Customers | `customersApi` | `customerAPI` |
-| Products | `productsApi` | `productAPI` |
-| Suppliers | `suppliersApi` | `supplierAPI` |
-| Invoices | `invoicesApi` | `invoiceAPI` |
-| Payments | `paymentsApi` | `paymentAPI` |
-| Users | `usersApi` | `userAPI` |
-| Batches | `batchesApi` | `batchAPI` |
-| Settings | `settingsApi` | `settingsAPI` |
+| Domain | Canonical Export | Status |
+|--------|-----------------|--------|
+| Customers | `customersApi` | ✅ Active |
+| Products | `productsApi` | ✅ Active |
+| Suppliers | `suppliersApi` | ✅ Active |
+| Invoices | `invoicesApi` | ✅ Active |
+| Orders | `ordersApi` | ✅ Active |
+| Purchases | `purchasesApi` | ✅ Active |
+| Payments | `paymentsApi` | ✅ Active |
+| Challans | `challansApi` | ✅ Active |
+| Sales Orders | `salesOrdersApi` | ✅ Active |
+| Users | `usersApi` | ✅ Active |
+| Employees | `employeesApi` | ✅ Active |
+| Bank Accounts | `bankAccountsApi` | ✅ Active |
+| Batches | `batchesApi` | ✅ Active |
+| Company | `companyApi` | ✅ Active |
+| Party Ledger | `partyLedgerApi` | ✅ Active |
 
-> **Note**: Legacy exports with `API` suffix are maintained in `services/api/index.ts` for backward compatibility but should be migrated.
+### Removed Aliases (2026-01-05)
+
+The following legacy aliases have been **completely removed** from `services/api/index.ts`:
+
+| ❌ Removed Alias | → Canonical Name |
+|-----------------|------------------|
+| `customerAPI` | `customersApi` |
+| `productAPI` | `productsApi` |
+| `supplierAPI` | `suppliersApi` |
+| `invoiceAPI` | `invoicesApi` |
+| `ordersAPI` | `ordersApi` |
+| `purchasesAPI` | `purchasesApi` |
+| `paymentAPI` | `paymentsApi` |
+| `challansAPI` | `challansApi` |
+| `salesOrdersAPI` | `salesOrdersApi` |
+| `employeesAPI` | `employeesApi` |
+| `bankAccountsAPI` | `bankAccountsApi` |
+| `batchAPI` | `batchesApi` |
+| `companyAPI` | `companyApi` |
+| `partyLedgerAPI` | `partyLedgerApi` |
+| `purchaseApi` | `purchasesApi` |
+| `invoiceApi` | `invoicesApi` |
 
 ---
 

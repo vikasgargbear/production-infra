@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, RefObject } from 'react';
-import { employeesAPI, apiClient } from '../../../services/api';
+import { employeesApi, apiClient } from '../../../services/api';
 import { BaseEmployee, BaseCustomer, BaseLineItem } from '../types/salesSharedTypes';
 
 // ==================== CONFIGURATION ====================
@@ -95,7 +95,7 @@ export function useSalesTransaction<
     const loadEmployees = useCallback(async () => {
         setLoadingEmployees(true);
         try {
-            const response = await employeesAPI.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
+            const response = await employeesApi.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
             if (response.success || response.data) {
                 setEmployees(response.data || []);
             }

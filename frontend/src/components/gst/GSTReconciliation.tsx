@@ -10,7 +10,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
-import { gstApi, invoiceAPI, purchasesAPI, reportsApi } from '../../services/api';
+import { gstApi, invoicesApi, purchasesApi, reportsApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface ReconciliationItem {
@@ -74,8 +74,8 @@ const GSTReconciliation: React.FC = () => {
 
       try {
         const [invoiceResponse, purchaseResponse] = await Promise.all([
-          invoiceAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
-          purchasesAPI.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 })
+          invoicesApi.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
+          purchasesApi.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 })
         ]) as [any, any];
 
         invoices = Array.isArray(invoiceResponse) ? invoiceResponse :

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, CreditCard, Star, Building2 } from 'lucide-react';
-import { bankAccountsAPI } from '../../../services/api';
+import { bankAccountsApi } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -82,7 +82,7 @@ const BankAccountSelector: React.FC<BankAccountSelectorProps> = ({
     const fetchBankAccounts = async (): Promise<void> => {
         try {
             setLoading(true);
-            const data = await bankAccountsAPI.getBankAccounts();
+            const data = await bankAccountsApi.getBankAccounts();
 
             // Filter based on transaction type if needed
             let filteredAccounts = data as BankAccount[];

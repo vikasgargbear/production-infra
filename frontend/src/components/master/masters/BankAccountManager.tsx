@@ -3,7 +3,7 @@ import {
     CreditCard, Plus, Trash2, Check,
     X, AlertCircle, Building2, Star, Loader2
 } from 'lucide-react';
-import { bankAccountsAPI } from '../../../services/api';
+import { bankAccountsApi } from '../../../services/api';
 
 interface BankAccount {
     id: number | string;
@@ -60,7 +60,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         try {
             setIsLoading(true);
             setError(null);
-            const data = await bankAccountsAPI.getBankAccounts();
+            const data = await bankAccountsApi.getBankAccounts();
             setAccounts(data || []);
         } catch (error: any) {
             // Check if it's a 404 (API not deployed yet) vs actual error
@@ -115,7 +115,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
 
             // Save to backend
             // @ts-ignore
-            const response = await bankAccountsAPI.createBankAccount(accountToAdd);
+            const response = await bankAccountsApi.createBankAccount(accountToAdd);
 
             // Refresh the list
             await fetchAccounts();
@@ -144,7 +144,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         }
 
         try {
-            await bankAccountsAPI.deleteBankAccount(id);
+            await bankAccountsApi.deleteBankAccount(id);
             await fetchAccounts();
             setError(null);
         } catch (error) {
@@ -154,7 +154,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
 
     const handleSetDefault = async (id: number | string) => {
         try {
-            await bankAccountsAPI.setDefaultAccount(id);
+            await bankAccountsApi.setDefaultAccount(id);
             await fetchAccounts();
 
             // Update parent with the new default

@@ -3,7 +3,7 @@ import {
     FileText, Truck, Search,
     Eye, Download, Printer, Calendar, ChevronDown, MessageCircle
 } from 'lucide-react';
-import { salesOrdersAPI } from '../../../services/api';
+import { salesOrdersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
 import jsPDF from 'jspdf';
 
@@ -62,7 +62,7 @@ const SalesOrderList: React.FC = () => {
                 params.order_status = filterStatus;
             }
 
-            const response = await salesOrdersAPI.getAll(params);
+            const response = await salesOrdersApi.getAll(params);
             setOrders(response.data || []);
         } catch {
             // Silent error handling

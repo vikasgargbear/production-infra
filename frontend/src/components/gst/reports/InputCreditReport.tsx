@@ -7,7 +7,7 @@ import { Loader2, AlertCircle, TrendingDown } from 'lucide-react';
 import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
-import { purchasesAPI } from '../../../services/api';
+import { purchasesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface InputCreditReportProps {
@@ -41,7 +41,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
             setError(null);
 
             try {
-                const response = await purchasesAPI.search({
+                const response = await purchasesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000

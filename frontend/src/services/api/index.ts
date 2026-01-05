@@ -182,23 +182,10 @@ export {
 };
 
 // =========================================================================
-// BACKWARD COMPATIBILITY ALIASES
-// Legacy export names used by some components
+// BACKWARD COMPATIBILITY ALIASES REMOVED
+// All callers have been migrated to use canonical exports (customersApi, productsApi, etc.)
+// See docs/API_METHOD_NAMING_DICTIONARY.md for naming conventions
 // =========================================================================
-export const invoiceAPI = invoicesApi;
-export const ordersAPI = ordersApi;
-export const purchasesAPI = purchasesApi;
-export const paymentAPI = paymentsApi;
-export const challansAPI = challansApi;
-export const salesOrdersAPI = salesOrdersApi;
-export const customerAPI = customersApi;
-export const productAPI = productsApi;
-export const supplierAPI = suppliersApi;
-export const employeesAPI = employeesApi;
-export const bankAccountsAPI = bankAccountsApi;
-export const batchAPI = batchesApi;
-export const companyAPI = companyApi;
-export const partyLedgerAPI = partyLedgerApi;
 
 // Utility functions for backward compatibility
 export const clearGSTCache = (): void => {
@@ -206,9 +193,7 @@ export const clearGSTCache = (): void => {
   console.debug('GST cache cleared (no-op in new architecture)');
 };
 
-// Singular name aliases (some components use singular)
-export const purchaseApi = purchasesApi;
-export const invoiceApi = invoicesApi;
+// Singular name aliases removed - use purchasesApi and invoicesApi
 
 // API object with all modules grouped by domain
 const apiModules = {

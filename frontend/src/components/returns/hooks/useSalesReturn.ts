@@ -6,8 +6,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { returnsApi, customerAPI, metadataApi } from '../../../services/api';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import { returnsApi, customersApi, metadataApi } from '../../../services/api';
+import InvoiceApiService from '../../../services/invoicesApiService';
 import offlineStorage from '../../../services/offlineStorage';
 import { getApiBaseUrl } from '../../../config/apiBase';
 import { useToast } from '../../global';
@@ -281,7 +281,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         }));
 
         try {
-            const detailResponse = await customerAPI.getById(customer.id || customer.customer_id);
+            const detailResponse = await customersApi.getById(customer.id || customer.customer_id);
             if (detailResponse?.data) {
                 setSelectedCustomer({ ...fullCustomer, ...detailResponse.data });
                 setCustomerDues(detailResponse.data.outstanding_amount || 0);

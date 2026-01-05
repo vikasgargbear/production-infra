@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { employeesAPI } from '../../../services/api';
+import { employeesApi } from '../../../services/api';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
 import { BaseEmployee } from '../types/salesSharedTypes';
 
@@ -32,7 +32,7 @@ export function useEmployees(): UseEmployeesReturn {
 
         try {
             // Try API first
-            const response = await employeesAPI.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
+            const response = await employeesApi.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
 
             if (response.success || response.data) {
                 const data = response.data || [];

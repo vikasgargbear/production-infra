@@ -188,8 +188,8 @@ class LocalSearchService {
      */
     private async searchProductsFromCloud(query: string, limit: number): Promise<ProductSearchResult[]> {
         try {
-            const { productAPI } = await import('../../api');
-            const response = await productAPI.search(query, { limit });
+            const { productsApi } = await import('../../api');
+            const response = await productsApi.search(query, { limit });
             const products = response.data?.products || response.data || [];
             console.log(`[LocalSearch] ☁️ Found ${products.length} products from API`);
             return products;

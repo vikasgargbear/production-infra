@@ -13,7 +13,7 @@ import {
     applyNoteAdjustments,
     formatCurrency
 } from '../utils';
-import { gstApi, invoiceAPI } from '../../../services/api';
+import { gstApi, invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTR1ReportProps {
@@ -30,7 +30,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
 
     // Load invoice data
     const loadInvoices = async (): Promise<any[]> => {
-        const response = await invoiceAPI.search({
+        const response = await invoicesApi.search({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
             limit: 5000

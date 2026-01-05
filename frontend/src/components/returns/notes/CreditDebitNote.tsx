@@ -18,7 +18,7 @@ import {
 } from '../../global';
 import { theme, classes } from '../../../config/theme.config';
 import { notesApi } from '../../../services/api';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import InvoiceApiService from '../../../services/invoicesApiService';
 
 interface CreditDebitNoteSimpleProps {
   noteType?: 'credit' | 'debit';

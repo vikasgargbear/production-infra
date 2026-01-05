@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileText, ShoppingCart, Calendar } from 'lucide-react';
-import { invoicesApi, salesOrdersAPI } from '../../../../services/api';
+import { invoicesApi, salesOrdersApi } from '../../../../services/api';
 
 interface DocumentItem {
     product_id: string;
@@ -87,7 +87,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                     (response?.data && Array.isArray(response.data)) ? response.data :
                         (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
             } else {
-                const response = await salesOrdersAPI.search('', { limit: 10 });
+                const response = await salesOrdersApi.search('', { limit: 10 });
                 results = response?.data || [];
             }
             setSearchResults(results);
@@ -115,7 +115,7 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
                     (response?.data && Array.isArray(response.data)) ? response.data :
                         (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
             } else {
-                const response = await salesOrdersAPI.search(searchQuery);
+                const response = await salesOrdersApi.search(searchQuery);
                 results = response?.data || [];
             }
             setSearchResults(results);

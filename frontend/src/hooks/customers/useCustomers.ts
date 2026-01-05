@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { customersApi as customerAPI } from '../../services/api';
+import { customersApi as customersApi } from '../../services/api';
 import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
 import localSearchService from '../../services/offline/search/localSearchService';
@@ -63,7 +63,7 @@ export function useCustomer(
 ) {
   return useQuery<ApiResponse<Customer>>(
     customerKeys.detail(parseInt(customerId)),
-    () => customerAPI.getById(customerId),
+    () => customersApi.getById(customerId),
     {
       enabled: !!customerId,
       staleTime: 5 * 60 * 1000,
@@ -81,7 +81,7 @@ export function useCreateCustomer(
   const queryClient = useQueryClient();
 
   return useMutation(
-    (data: CustomerCreateInput) => customerAPI.create(data),
+    (data: CustomerCreateInput) => customersApi.create(data),
     {
       onSuccess: (response) => {
         // Invalidate customer queries

@@ -7,7 +7,7 @@ import { Loader2, AlertCircle, Package } from 'lucide-react';
 import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
-import { invoiceAPI, gstApi } from '../../../services/api';
+import { invoicesApi, gstApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
 interface HSNSummaryReportProps {
@@ -53,7 +53,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                 }
 
                 // Compute from invoices
-                const invoiceRes = await invoiceAPI.search({
+                const invoiceRes = await invoicesApi.search({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000

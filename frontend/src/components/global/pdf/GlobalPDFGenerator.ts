@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { companyAPI } from '../../../services/api';
+import { companyApi } from '../../../services/api';
 
 interface CompanyInfo {
   name: string;
@@ -168,7 +168,7 @@ class GlobalPDFGenerator {
    */
   private async loadCompanyInfo(): Promise<void> {
     try {
-      const response = await companyAPI.getCompanyInfo();
+      const response = await companyApi.getCompanyInfo();
       if (response && response.data) {
         this.companyInfo = {
           name: response.data.name || '',

@@ -35,7 +35,7 @@ import {
   Building
 } from 'lucide-react';
 import { format, parseISO, subMonths, subDays, differenceInDays, isWithinInterval } from 'date-fns';
-import { partyLedgerAPI } from '../../services/api';
+import { partyLedgerApi } from '../../services/api';
 import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
@@ -155,7 +155,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   // Fetch party details
   const { data: partyDetails, isLoading: loadingParty, error: partyError } = useQuery(
     ['party-details', partyId, partyType],
-    () => partyLedgerAPI.getBalance(partyId, partyType),
+    () => partyLedgerApi.getBalance(partyId, partyType),
     {
       enabled: !!partyId,
       retry: 1,
@@ -169,7 +169,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   const { data: ledgerData, isLoading: loadingLedger, error: ledgerError, refetch } = useQuery(
     ['party-ledger', partyId, partyType, dateRange],
     async () => {
-      const response = await partyLedgerAPI.getStatement(
+      const response = await partyLedgerApi.getStatement(
         partyId,
         partyType,
         {

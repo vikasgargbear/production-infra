@@ -6,7 +6,7 @@ import {
   Share2, Copy, MoreVertical, CheckCircle, Clock
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../../global';
-import InvoiceApiService from '../../../services/invoiceApiService';
+import { invoicesApi } from '../../../services/api';
 // Debug logger removed for production
 
 interface InvoiceListProps {
@@ -325,7 +325,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
       // debugLogger.api('Fetching invoices with params:', searchParams);
 
-      const response = await InvoiceApiService.getInvoices(searchParams);
+      const response = await invoicesApi.getAll(searchParams);
 
       if (response.success) {
         // Transform backend data to match our interface
@@ -544,7 +544,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handlePrintInvoice = async (invoice: Invoice) => {
     try {
       // Fetch full invoice details
-      const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+      const response = await invoicesApi.getById(invoice.invoice_id || invoice.id);
 
       if (response.success && response.data) {
         const fullInvoice = response.data;
@@ -564,7 +564,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleDownloadInvoice = async (invoice: Invoice) => {
     try {
       // Fetch full invoice details
-      const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+      const response = await invoicesApi.getById(invoice.invoice_id || invoice.id);
 
       if (response.success && response.data) {
         const fullInvoice = response.data;
