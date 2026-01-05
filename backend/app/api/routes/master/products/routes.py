@@ -1132,15 +1132,8 @@ async def get_product_categories(
 ):
     """Get all active product categories"""
     try:
-        # Check if org_id field exists in the table
-        result = db.execute(text("""
-            SELECT category_id, category_name, category_code, parent_category_id
-            FROM inventory.product_categories
-            WHERE is_active = true
-            ORDER BY category_name
-        """), {})
-        
-        categories = [dict(row._mapping) for row in result]
+        # Use ProductService instead of inline SQL
+        categories = ProductService.get_categories(db)
         return {"success": True, "data": categories}
         
     except Exception as e:
@@ -1154,14 +1147,8 @@ async def get_product_types(
 ):
     """Get all active product types"""
     try:
-        result = db.execute(text("""
-            SELECT type_id, type_name, type_code, default_base_uom
-            FROM inventory.product_types
-            WHERE is_active = true
-            ORDER BY type_name
-        """))
-        
-        types = [dict(row._mapping) for row in result]
+        # Use ProductService instead of inline SQL
+        types = ProductService.get_types(db)
         return {"success": True, "data": types}
         
     except Exception as e:

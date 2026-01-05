@@ -10,7 +10,7 @@ import {
 } from '../global';
 import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
 import { returnsApi, customersApi, customersApi, settingsApi, metadataApi } from '../../services/api';
-import InvoiceApiService from '../../services/invoicesApiService';
+import { invoicesApi } from '../../services/api';
 import CreditNotePreview from './ui/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 import { getApiBaseUrl } from '../../config/apiBase';
@@ -191,7 +191,8 @@ const SalesReturnFlow = ({ onClose }) => {
     // Load invoice items if not already loaded
     if (!invoice.items || invoice.items.length === 0) {
       try {
-        const fullInvoice = await InvoiceApiService.getInvoiceById(invoice.id || invoice.invoice_id);
+        const response = await invoicesApi.getById(invoice.id || invoice.invoice_id);
+        const fullInvoice = response?.data || response;
         if (fullInvoice.success && fullInvoice.data) {
           const items = fullInvoice.data.items || [];
           setReturnData(prev => ({

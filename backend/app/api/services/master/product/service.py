@@ -461,3 +461,31 @@ class ProductService:
                 "supplier_name": supplier_result.supplier_name
             }
         return None
+    
+    @staticmethod
+    def get_categories(db: Session) -> List[Dict[str, Any]]:
+        """
+        Get all active product categories.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT category_id, category_name, category_code, parent_category_id
+            FROM inventory.product_categories
+            WHERE is_active = true
+            ORDER BY category_name
+        """))
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_types(db: Session) -> List[Dict[str, Any]]:
+        """
+        Get all active product types.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT type_id, type_name, type_code, default_base_uom
+            FROM inventory.product_types
+            WHERE is_active = true
+            ORDER BY type_name
+        """))
+        return [dict(row._mapping) for row in result]

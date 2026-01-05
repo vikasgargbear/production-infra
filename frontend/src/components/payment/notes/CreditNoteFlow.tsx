@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   CreditCard, Save, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
@@ -33,7 +33,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Pagination and filter state
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoiceFilters, setInvoiceFilters] = useState({
@@ -70,7 +70,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   const loadInitialData = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const [reasonsResponse, settlementsResponse] = await Promise.all([
         notesApi.getCreditNoteReasons(),
@@ -155,49 +155,49 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       setLoadingInvoices(true);
       try {
         const data = await notesApi.getLinkedInvoices(
-          customerId, 
+          customerId,
           'sales'
         );
-        
+
         let allInvoices = data.invoices?.map((invoice: any) => ({
           id: invoice.invoice_id || invoice.id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
           total_amount: parseFloat(invoice.final_amount || invoice.total_amount || invoice.total_amount) || 0,
-          outstanding_amount: parseFloat(invoice.credit_amount || 
-            (parseFloat(invoice.final_amount || invoice.total_amount || invoice.total_amount || 0) - 
-             parseFloat(invoice.paid_amount || 0))),
+          outstanding_amount: parseFloat(invoice.credit_amount ||
+            (parseFloat(invoice.final_amount || invoice.total_amount || invoice.total_amount || 0) -
+              parseFloat(invoice.paid_amount || 0))),
           status: invoice.payment_status || 'pending',
           items: invoice.items || []
         })) || [];
 
         // Apply frontend filters
         if (invoiceFilters.dateFrom) {
-          allInvoices = allInvoices.filter(invoice => 
+          allInvoices = allInvoices.filter(invoice =>
             new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
           );
         }
-        
+
         if (invoiceFilters.dateTo) {
-          allInvoices = allInvoices.filter(invoice => 
+          allInvoices = allInvoices.filter(invoice =>
             new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
           );
         }
-        
+
         if (invoiceFilters.status !== 'all') {
-          allInvoices = allInvoices.filter(invoice => 
+          allInvoices = allInvoices.filter(invoice =>
             invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
           );
         }
-        
+
         if (invoiceFilters.minAmount) {
-          allInvoices = allInvoices.filter(invoice => 
+          allInvoices = allInvoices.filter(invoice =>
             invoice.total_amount >= parseFloat(invoiceFilters.minAmount)
           );
         }
-        
+
         if (invoiceFilters.maxAmount) {
-          allInvoices = allInvoices.filter(invoice => 
+          allInvoices = allInvoices.filter(invoice =>
             invoice.total_amount <= parseFloat(invoiceFilters.maxAmount)
           );
         }
@@ -234,14 +234,15 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
 
   const handleInvoiceSelect = async (invoice: any) => {
     setNoteData(prev => ({ ...prev, selected_invoice: invoice }));
-    
+
     // Load invoice items
     setLoadingItems(true);
     try {
-      // Use InvoiceApiService to get full invoice details with items
-      const InvoiceApiService = require('../../../services/invoicesApiService').default;
-      const fullInvoice = await InvoiceApiService.getInvoiceById(invoice.id);
-      
+      // Use invoicesApi to get full invoice details with items
+      const { invoicesApi } = require('../../../services/api');
+      const response = await invoicesApi.getById(invoice.id);
+      const fullInvoice = response?.data || response;
+
       if (fullInvoice.success && fullInvoice.data && fullInvoice.data.items) {
         const transformedItems = fullInvoice.data.items.map((item: any, index: number) => ({
           id: item.invoice_item_id || item.id || `item-${index}`,
@@ -252,7 +253,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           discount_percent: parseFloat(item.discount_percent || 0),
           total_amount: parseFloat(item.line_total || item.total_amount || (item.quantity * item.unit_price) || 0)
         }));
-        
+
         setNoteItems(transformedItems);
       } else {
         // If invoice already has items, use them
@@ -297,7 +298,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     const subtotal = noteItems.reduce((sum, item) => sum + item.total_amount, 0);
     const taxAmount = subtotal * 0.18; // Assuming 18% GST
     const grandTotal = subtotal + taxAmount;
-    
+
     return {
       subtotal,
       taxAmount,
@@ -308,13 +309,13 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   // Check if ready to show review page
   const canShowReview = () => {
     const basicFieldsValid = selectedCustomer && noteData.reason && noteData.settlement_type;
-    
+
     if (createWithoutInvoice) {
       // For standalone credit notes, require description and amount
-      return basicFieldsValid && 
-             noteItems.length > 0 && 
-             noteItems[0].product_name.trim() !== '' && 
-             noteItems[0].total_amount > 0;
+      return basicFieldsValid &&
+        noteItems.length > 0 &&
+        noteItems[0].product_name.trim() !== '' &&
+        noteItems[0].total_amount > 0;
     } else {
       // For invoice-linked credit notes, require items selection
       return basicFieldsValid && noteItems.length > 0;
@@ -334,7 +335,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
 
     setSaving(true);
     setError(null);
-    
+
     try {
       const totals = calculateTotals();
       const payload = {
@@ -356,10 +357,10 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       };
 
       await notesApi.createCreditNote(payload);
-      
+
       // Success feedback
       if (onClose) onClose();
-      
+
     } catch (error) {
       setError(`Error saving credit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -393,7 +394,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           onClose={onClose}
           historyType="credit_note"
           showSaveDraft={false}
-          onSaveDraft={() => {}}
+          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: refreshing ? 'Refreshing...' : 'Refresh',
@@ -413,7 +414,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-green-50">
           <div className="px-6 py-6">
-            
+
             {/* Error Display */}
             {error && (
               <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
@@ -472,7 +473,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         <ProceedToReviewComponent
           currentStep={showReviewPage ? 2 : 1}
           canProceed={
-            showReviewPage 
+            showReviewPage
               ? canSave()
               : canShowReview()
           }
