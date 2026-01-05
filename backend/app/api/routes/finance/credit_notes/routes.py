@@ -92,98 +92,28 @@ async def create_credit_note(
                     status_code=400, 
                     detail=f"Missing required field: {field}"
                 )
-                
-        # Validate party is a customer
-        party = db.execute(
-            text("SELECT * FROM parties WHERE party_id = :party_id"),
-            {"party_id": note_data["party_id"]}
-        ).first()
         
-        if not party:
-            raise HTTPException(status_code=404, detail="Party not found")
-            
-        if party.party_type != PartyType.CUSTOMER.value:
-            raise HTTPException(
-                status_code=400, 
-                detail="Credit notes can only be issued to customers"
-            )
-            
-        note_id = str(uuid.uuid4())
-        note_number = DocumentNumberService.generate_number(db.session, "credit_note", str(context.org_id))
-        
-        # Calculate tax if applicable
-        subtotal = Decimal(str(note_data["amount"]))
-        tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
-        tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
-        total_amount = subtotal + tax_amount
-        
-        # Create note record
-        db.execute(
-            text("""
-                INSERT INTO financial_notes (
-                    note_id, org_id, note_number, note_type,
-                    note_date, party_id, linked_invoice_id,
-                    reason, subtotal_amount, tax_percent,
-                    tax_amount, total_amount, notes, status
-                ) VALUES (
-                    :note_id, :org_id, :note_number, 'credit',
-                    :note_date, :party_id, :linked_invoice,
-                    :reason, :subtotal, :tax_percent,
-                    :tax_amount, :total_amount, :notes, 'active'
-                )
-            """),
-            {
-                "note_id": note_id,
-                "org_id": str(context.org_id),
-                "note_number": note_number,
-                "note_date": note_data["note_date"],
-                "party_id": note_data["party_id"],
-                "linked_invoice": note_data.get("linked_invoice_id"),
-                "reason": note_data["reason"],
-                "subtotal": subtotal,
-                "tax_percent": tax_percent,
-                "tax_amount": tax_amount,
-                "total_amount": total_amount,
-                "notes": note_data.get("notes", "")
-            }
+        # Use CreditNoteService for centralized creation logic
+        result = CreditNoteService.create_credit_note(
+            db=db,
+            org_id=str(context.org_id),
+            user_id=context.user_id,
+            note_data=note_data
         )
-        
-        # Create ledger entry (credit reduces customer balance)
-        db.execute(
-            text("""
-                INSERT INTO party_ledger (
-                    ledger_id, org_id, party_id, transaction_date,
-                    transaction_type, reference_type, reference_id,
-                    debit_amount, credit_amount, description
-                ) VALUES (
-                    :ledger_id, :org_id, :party_id, :date,
-                    'credit', 'credit_note', :note_id,
-                    0, :amount, :description
-                )
-            """),
-            {
-                "ledger_id": str(uuid.uuid4()),
-                "org_id": str(context.org_id),
-                "party_id": note_data["party_id"],
-                "date": note_data["note_date"],
-                "note_id": note_id,
-                "amount": total_amount,
-                "description": f"Credit Note - {note_number}: {note_data['reason']}"
-            }
-        )
-        
-        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
-            "note_id": note_id,
-            "note_number": note_number,
-            "message": f"Credit note {note_number} created successfully"
+            "note_id": result["note_id"],
+            "note_number": result["note_number"],
+            "message": result["message"]
         }
         
     except HTTPException:
         db.rollback()
         raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating credit note: {e}")
@@ -209,131 +139,28 @@ async def create_debit_note(
                     status_code=400, 
                     detail=f"Missing required field: {field}"
                 )
-                
-        # Get party details
-        party = db.execute(
-            text("SELECT * FROM parties WHERE party_id = :party_id"),
-            {"party_id": note_data["party_id"]}
-        ).first()
         
-        if not party:
-            raise HTTPException(status_code=404, detail="Party not found")
-            
-        note_id = str(uuid.uuid4())
-        note_number = DocumentNumberService.generate_number(db.session, "debit_note", str(context.org_id))
-        
-        # Calculate tax if applicable
-        subtotal = Decimal(str(note_data["amount"]))
-        tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
-        tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
-        total_amount = subtotal + tax_amount
-        
-        # Create note record
-        db.execute(
-            text("""
-                INSERT INTO financial_notes (
-                    note_id, org_id, note_number, note_type,
-                    note_date, party_id, linked_invoice_id,
-                    reason, subtotal_amount, tax_percent,
-                    tax_amount, total_amount, notes, status
-                ) VALUES (
-                    :note_id, :org_id, :note_number, 'debit',
-                    :note_date, :party_id, :linked_invoice,
-                    :reason, :subtotal, :tax_percent,
-                    :tax_amount, :total_amount, :notes, 'active'
-                )
-            """),
-            {
-                "note_id": note_id,
-                "org_id": str(context.org_id),
-                "note_number": note_number,
-                "note_date": note_data["note_date"],
-                "party_id": note_data["party_id"],
-                "linked_invoice": note_data.get("linked_invoice_id"),
-                "reason": note_data["reason"],
-                "subtotal": subtotal,
-                "tax_percent": tax_percent,
-                "tax_amount": tax_amount,
-                "total_amount": total_amount,
-                "notes": note_data.get("notes", "")
-            }
+        # Use CreditNoteService for centralized creation logic
+        result = CreditNoteService.create_debit_note(
+            db=db,
+            org_id=str(context.org_id),
+            user_id=context.user_id,
+            note_data=note_data
         )
-        
-        # Create appropriate ledger entry based on party type
-        if party.party_type == "customer":
-            # Debit increases customer balance
-            debit_amt = total_amount
-            credit_amt = Decimal("0")
-            ledger_desc = f"Debit Note - {note_number}: {note_data['reason']}"
-        else:  # supplier
-            # Debit reduces supplier balance (we owe less)
-            debit_amt = total_amount
-            credit_amt = Decimal("0")
-            ledger_desc = f"Debit Note - {note_number}: {note_data['reason']}"
-            
-            # Use supplier_ledger table for suppliers
-            db.execute(
-                text("""
-                    INSERT INTO supplier_ledger (
-                        ledger_id, org_id, supplier_id, transaction_date,
-                        transaction_type, reference_type, reference_id,
-                        debit_amount, credit_amount, description
-                    ) VALUES (
-                        :ledger_id, :org_id, :supplier_id, :date,
-                        'debit', 'debit_note', :note_id,
-                        :debit, :credit, :description
-                    )
-                """),
-                {
-                    "ledger_id": str(uuid.uuid4()),
-                    "org_id": str(context.org_id),
-                    "supplier_id": note_data["party_id"],
-                    "date": note_data["note_date"],
-                    "note_id": note_id,
-                    "debit": debit_amt,
-                    "credit": credit_amt,
-                    "description": ledger_desc
-                }
-            )
-        
-        if party.party_type == "customer":
-            # Create party ledger entry for customers
-            db.execute(
-                text("""
-                    INSERT INTO party_ledger (
-                        ledger_id, org_id, party_id, transaction_date,
-                        transaction_type, reference_type, reference_id,
-                        debit_amount, credit_amount, description
-                    ) VALUES (
-                        :ledger_id, :org_id, :party_id, :date,
-                        'debit', 'debit_note', :note_id,
-                        :debit, :credit, :description
-                    )
-                """),
-                {
-                    "ledger_id": str(uuid.uuid4()),
-                    "org_id": str(context.org_id),
-                    "party_id": note_data["party_id"],
-                    "date": note_data["note_date"],
-                    "note_id": note_id,
-                    "debit": debit_amt,
-                    "credit": credit_amt,
-                    "description": ledger_desc
-                }
-            )
-        
-        # TenantAwareSession auto-commits
         
         return {
             "status": "success",
-            "note_id": note_id,
-            "note_number": note_number,
-            "message": f"Debit note {note_number} created successfully"
+            "note_id": result["note_id"],
+            "note_number": result["note_number"],
+            "message": result["message"]
         }
         
     except HTTPException:
         db.rollback()
         raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating debit note: {e}")
