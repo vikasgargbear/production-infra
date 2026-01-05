@@ -140,3 +140,26 @@ class PurchaseOrderService:
     ) -> List[Dict[str, Any]]:
         """Get purchase orders pending receipt."""
         return PurchaseOrderRepository.get_pending_receipt_orders(db, org_id, supplier_id)
+    
+    @staticmethod
+    def get_items_for_order(
+        db: Session,
+        purchase_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all items for a purchase order with product details.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT 
+                pi.*,
+                p.product_name as product_full_name,
+                p.hsn_code,
+                p.category_id,
+                p.brand
+            FROM procurement.purchase_order_items pi
+            LEFT JOIN inventory.products p ON pi.product_id = p.product_id
+            WHERE pi.purchase_order_id = :purchase_id
+            ORDER BY pi.po_item_id
+        """), {"purchase_id": purchase_id})
+        return [dict(row._mapping) for row in result]

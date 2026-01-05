@@ -1150,23 +1150,8 @@ async def get_purchase_items(
 ):
     """Get all items for a purchase order"""
     try:
-        items = db.execute(
-            text("""
-                SELECT 
-                    pi.*,
-                    p.product_name as product_full_name,
-                    p.hsn_code,
-                    p.category_id,
-                    p.brand
-                FROM procurement.purchase_order_items pi
-                LEFT JOIN inventory.products p ON pi.product_id = p.product_id
-                WHERE pi.purchase_order_id = :purchase_id
-                ORDER BY pi.po_item_id
-            """),
-            {"purchase_id": purchase_id, "org_id": context.org_id}
-        ).fetchall()
-        
-        return [dict(item._mapping) for item in items]
+        # Use PurchaseOrderService instead of inline SQL
+        return PurchaseOrderService.get_items_for_order(db, purchase_id)
         
     except Exception as e:
         logger.error(f"Error fetching purchase items: {str(e)}")
@@ -1346,28 +1331,8 @@ async def get_pending_receipts(
 ):
     """Get purchases pending receipt"""
     try:
-        query = """
-            SELECT 
-                p.*,
-                s.supplier_name,
-                COUNT(pi.po_item_id) as total_items,
-                COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
-            FROM procurement.purchase_orders p
-            JOIN parties.suppliers s ON p.supplier_id = s.supplier_id AND p.org_id = s.org_id
-            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id
-            WHERE p.org_id = :org_id
-            AND p.po_status IN ('draft', 'approved', 'partial')
-        """
-        params = {}
-        
-        if supplier_id:
-            query += " AND p.supplier_id = :supplier_id"
-            params["supplier_id"] = supplier_id
-        
-        query += " GROUP BY p.po_id, s.supplier_name ORDER BY p.po_date DESC"
-        
-        result = db.execute(text(query), params)
-        return [dict(row._mapping) for row in result]
+        # Use PurchaseOrderService instead of inline SQL
+        return PurchaseOrderService.get_pending_receipts(db, str(context.org_id), supplier_id)
         
     except Exception as e:
         logger.error(f"Error fetching pending receipts: {str(e)}")

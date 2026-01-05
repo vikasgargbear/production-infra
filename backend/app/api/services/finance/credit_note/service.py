@@ -441,3 +441,46 @@ class CreditNoteService:
     def get_debit_note_reasons() -> List[Dict[str, str]]:
         """Get predefined debit note reasons"""
         return DEBIT_NOTE_REASONS
+    
+    @staticmethod
+    def get_invoice_items(
+        db: Session,
+        invoice_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get invoice items for creating credit/debit notes.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT 
+                ii.invoice_item_id,
+                ii.product_id,
+                ii.product_name,
+                ii.hsn_code,
+                ii.batch_number,
+                ii.quantity,
+                ii.uom,
+                ii.pack_type,
+                ii.unit_price,
+                ii.discount_percent,
+                ii.discount_amount,
+                ii.taxable_amount,
+                ii.igst_rate,
+                ii.cgst_rate,
+                ii.sgst_rate,
+                ii.igst_amount,
+                ii.cgst_amount,
+                ii.sgst_amount,
+                ii.line_total
+            FROM sales.invoice_items ii
+            WHERE ii.invoice_id = :invoice_id
+            ORDER BY ii.display_order, ii.invoice_item_id
+        """), {"invoice_id": invoice_id})
+        
+        items = [dict(row._mapping) for row in result]
+        
+        return {
+            "invoice_id": invoice_id,
+            "items": items,
+            "items_count": len(items)
+        }
