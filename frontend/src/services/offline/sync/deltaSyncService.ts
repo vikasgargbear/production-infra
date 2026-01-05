@@ -116,6 +116,28 @@ class DeltaSyncService {
         this.notify({ type: 'sync_started', trigger, tables });
 
         try {
+            // ============================================================
+            // PUSH-BEFORE-PULL: Sync local changes to server FIRST
+            // This ensures server has latest data before we pull updates
+            // Critical for offline-first: prevents stock inconsistencies
+            // ============================================================
+            if (navigator.onLine) {
+                try {
+                    const { default: syncEngine } = await import('./syncEngine');
+                    const pushResult = await syncEngine.startSync();
+
+                    if (pushResult.synced > 0) {
+                        console.log(`[DeltaSync] 📤 Pushed ${pushResult.synced} pending items before pull`);
+                    }
+                    if (pushResult.conflicts > 0) {
+                        console.warn(`[DeltaSync] ⚠️ ${pushResult.conflicts} conflicts during push`);
+                    }
+                } catch (pushError) {
+                    // Don't fail delta sync if push fails - just log and continue
+                    console.warn('[DeltaSync] Push before pull failed, continuing with pull:', pushError);
+                }
+            }
+
             console.log(`[DeltaSync] Starting delta sync for [${tables.join(', ')}] since ${since}`);
 
             const response = await syncApi.getDelta(since, tables.join(','));
