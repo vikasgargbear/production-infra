@@ -145,11 +145,13 @@ class TenantQueryBuilder:
         'location_wise_stock', 'inventory_movements', 'movement_summary',
         
         # ===== SALES SCHEMA =====
-        'invoices', 'invoice_items',
-        'orders', 'order_items',
-        'delivery_challans', 'delivery_challan_items',
+        # NOTE: invoice_items, order_items, challan_items do NOT have org_id column
+        # They are secured via FK to parent tables (invoices, orders, challans) which DO have org_id
+        'invoices',  # HAS org_id
+        'orders',    # HAS org_id
+        'delivery_challans',  # HAS org_id
         'credit_notes', 'debit_notes',
-        'sales_returns', 'sales_return_items',
+        'sales_returns',  # HAS org_id (but sales_return_items does NOT)
         'promotional_schemes', 'scheme_customers', 'scheme_products', 'scheme_volume_slabs',
         'loyalty_programs', 'loyalty_tiers', 'loyalty_transactions',
         'payment_promises',
