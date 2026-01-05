@@ -12,17 +12,18 @@ This playbook documents all improvements applied to `backend/app/core` and `back
 | ✅ `core/` | **COMPLETE** | Reorganized into auth/, security/, utils/. All files have type hints, clean exports |
 | ✅ `services/purchase/parsers/` | **COMPLETE** | Consolidated 8 files → 3 files. Added Pydantic schemas, removed duplicates |
 | ✅ `services/inventory/` | **COMPLETE** | Extracted schemas to schemas/inventory/stock.py. Security audit passed |
-| ✅ `routes/inventory/` | **COMPLETE** | Consolidated 3 files → 1, removed 990 lines of inline SQL |
-| ⚠️ `routes/sales/` | **NEEDS WORK** | 82 instances of inline SQL, needs modular service structure |
-| 🔄 `services/master/` | **IN PROGRESS** | Starting audit |
-| ⏳ `services/purchase/` | **PENDING** | |
+| ✅ `routes/inventory/` | **COMPLETE** | Reorganized into 4 subdirs: adjustments/, movements/, stock/, writeoff/ |
+| ✅ `routes/sales/` | **COMPLETE** | Already organized in subdirs: invoices/, orders/, challans/, conversions/ |
+| ✅ `routes/master/` | **COMPLETE** | Reorganized into 7 subdirs: products/, customers/, suppliers/, employees/, branches/, bank_accounts/, departments/ |
+| ✅ `routes/purchase/` | **COMPLETE** | Reorganized into 3 subdirs: orders/, supplier_invoices/, upload/ |
+| ✅ `routes/finance/` | **COMPLETE** | Reorganized into 7 subdirs: payments/, credit_notes/, ledger/, expenses/, journal/, allocation/, tax/ |
+| ✅ `routes/returns/` | **COMPLETE** | Reorganized into 2 subdirs: purchase/, sales/ |
+| ⏳ `services/master/` | **PENDING** | Needs modular restructure |
+| ⏳ `services/purchase/` | **PENDING** | Needs modular restructure |
 | ⏳ `services/sales/` | **PENDING** | Needs modular restructure (invoice/, order/, shared/) |
-| ⏳ `services/finance/` | **PENDING** | |
-| ⏳ `routes/master/` | **PENDING** | |
-| ⏳ `routes/purchase/` | **PENDING** | |
-| ⏳ `routes/finance/` | **PENDING** | |
+| ⏳ `services/finance/` | **PENDING** | Needs modular restructure |
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-05
 
 ---
 
