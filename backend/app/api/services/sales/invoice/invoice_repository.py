@@ -324,9 +324,16 @@ class InvoiceRepository:
         params = {}
         
         for i, item_data in enumerate(invoice_items_data):
+            # Schema columns: invoice_id, product_id, product_name, hsn_code,
+            # batch_id, batch_number, manufacturing_date, expiry_date,
+            # quantity, uom, pack_type, pack_size, base_quantity,
+            # mrp, unit_price, discount_percent, discount_amount, taxable_amount,
+            # igst_rate, igst_amount, cgst_rate, cgst_amount,
+            # sgst_rate, sgst_amount, total_tax_amount, line_total, free_quantity
+            # NOTE: org_id does NOT exist in sales.invoice_items!
             values_list.append(f"""(
-                :org_id_{i}, :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
-                :batch_number_{i}, :manufacturing_date_{i}, :expiry_date_{i},
+                :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
+                :batch_id_{i}, :batch_number_{i}, :manufacturing_date_{i}, :expiry_date_{i},
                 :quantity_{i}, :uom_{i}, :pack_type_{i}, :pack_size_{i}, :base_quantity_{i},
                 :mrp_{i}, :unit_price_{i}, :discount_percent_{i}, :discount_amount_{i}, :taxable_amount_{i},
                 :igst_rate_{i}, :igst_amount_{i}, :cgst_rate_{i}, :cgst_amount_{i},
@@ -334,13 +341,20 @@ class InvoiceRepository:
                 :free_quantity_{i}
             )""")
             
+            # Ensure batch_id is in params (even if None)
+            if 'batch_id' not in item_data:
+                item_data['batch_id'] = None
+            
             for key, value in item_data.items():
+                # Skip org_id - it doesn't exist in invoice_items table
+                if key == 'org_id':
+                    continue
                 params[f"{key}_{i}"] = value
         
         bulk_insert_sql = f"""
             INSERT INTO sales.invoice_items (
-                org_id, invoice_id, product_id, product_name, hsn_code,
-                batch_number, manufacturing_date, expiry_date,
+                invoice_id, product_id, product_name, hsn_code,
+                batch_id, batch_number, manufacturing_date, expiry_date,
                 quantity, uom, pack_type, pack_size, base_quantity,
                 mrp, unit_price, discount_percent, discount_amount, taxable_amount,
                 igst_rate, igst_amount, cgst_rate, cgst_amount,
@@ -351,3 +365,4 @@ class InvoiceRepository:
         
         db.execute(text(bulk_insert_sql), params)
         logger.info(f"✅ Bulk inserted {len(invoice_items_data)} invoice items")
+
