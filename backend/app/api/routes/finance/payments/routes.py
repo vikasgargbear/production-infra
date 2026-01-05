@@ -40,23 +40,8 @@ async def get_payments_overview(
 ):
     """Get payments overview"""
     try:
-        # Simple payments overview
-        result = db.execute(text("""
-            SELECT
-                COUNT(*) as total_payments,
-                SUM(amount) as total_amount,
-                COUNT(CASE WHEN payment_type = 'receipt' THEN 1 END) as receipts_count,
-                COUNT(CASE WHEN payment_type = 'payment' THEN 1 END) as payments_count
-            FROM financial.payments
-            WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
-        """), {}).fetchone()
-        
-        return {
-            "total_payments": result.total_payments if result else 0,
-            "total_amount": float(result.total_amount) if result and result.total_amount else 0,
-            "receipts_count": result.receipts_count if result else 0,
-            "payments_count": result.payments_count if result else 0
-        }
+        # Use PaymentService instead of inline SQL
+        return PaymentService.get_overview(db)
     except Exception as e:
         logger.error(f"Error getting payments overview: {str(e)}")
         return {
@@ -338,20 +323,19 @@ async def create_payment(
             doc_type = "receipt" if payment.customer_id else "payment"
             payment.payment_number = DocumentNumberService.generate_number(db, doc_type, org_id)
         
-        # Get party name if needed
+        # Get party name - combined lookup instead of separate queries
         party_name = None
-        if payment.customer_id:
-            party_result = db.execute(
-                text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
-                {"id": payment.customer_id}
-            ).first()
-            party_name = party_result.customer_name if party_result else f"Customer {payment.customer_id}"
-        elif payment.supplier_id:
-            party_result = db.execute(
-                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
-                {"id": payment.supplier_id}
-            ).first()
-            party_name = party_result.supplier_name if party_result else f"Supplier {payment.supplier_id}"
+        party_id = payment.customer_id or payment.supplier_id
+        if party_id:
+            party_result = db.execute(text("""
+                SELECT customer_name as party_name FROM parties.customers WHERE customer_id = :id
+                UNION ALL
+                SELECT supplier_name as party_name FROM parties.suppliers WHERE supplier_id = :id
+            """), {"id": party_id}).first()
+            if party_result:
+                party_name = party_result.party_name
+            else:
+                party_name = f"{'Customer' if payment.customer_id else 'Supplier'} {party_id}"
         
         # SECURITY FIX: Use authenticated user from JWT context
         if not payment.created_by:

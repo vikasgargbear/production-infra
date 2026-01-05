@@ -169,8 +169,8 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                 setLoadingMasterData(true);
 
                 const [categoriesResponse, typesResponse] = await Promise.all([
-                    productsApi.get('/products/master/categories'),
-                    productsApi.get('/products/master/types')
+                    productsApi.getMasterCategories(),
+                    productsApi.getProductTypes()
                 ]);
 
                 if (categoriesResponse.data?.success) {
@@ -208,9 +208,7 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
         if (!customCategoryName.trim()) return;
 
         try {
-            const response = await productsApi.post('/products/master/categories', {
-                category_name: customCategoryName.trim()
-            });
+            const response = await productsApi.createCategory(customCategoryName.trim());
 
             if (response.data?.success) {
                 const newCategory = response.data.data;
@@ -238,10 +236,10 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
         if (!customTypeName.trim()) return;
 
         try {
-            const response = await productsApi.post('/products/master/types', {
-                type_name: customTypeName.trim(),
-                default_base_uom: 'Unit'
-            });
+            const response = await productsApi.createProductType(
+                customTypeName.trim(),
+                'Unit'
+            );
 
             if (response.data?.success) {
                 const newType = response.data.data;

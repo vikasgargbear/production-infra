@@ -5,7 +5,7 @@ Handles order processing, inventory validation, and invoice generation
 SECURITY: Uses TenantAwareSession for automatic org_id/branch_id filtering
 Do NOT manually filter by org_id or branch_id - TenantAwareSession handles it
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -562,3 +562,53 @@ class OrderService:
             "skip": skip,
             "limit": limit
         }
+    
+    @staticmethod
+    def get_order_with_items(
+        db: Session,
+        org_id: str,
+        order_id: int,
+        order_type: str = "sales"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a single order with its items in one operation.
+        
+        Args:
+            db: Database session
+            org_id: Organization ID
+            order_id: Order ID
+            order_type: Order type filter (default: sales)
+            
+        Returns:
+            Order dict with items or None if not found
+        """
+        # Get order with customer details
+        result = db.execute(text("""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
+            WHERE o.order_id = :order_id AND o.org_id = :org_id AND o.order_type = :order_type
+        """), {"order_id": order_id, "org_id": org_id, "order_type": order_type})
+        
+        order = result.fetchone()
+        if not order:
+            return None
+        
+        order_dict = dict(order._mapping)
+        
+        # Get order items with product and batch details
+        items_result = db.execute(text("""
+            SELECT oi.*, p.product_name, p.product_code,
+                   b.batch_number, b.expiry_date
+            FROM sales.order_items oi
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
+        
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
+        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
+        
+        return order_dict

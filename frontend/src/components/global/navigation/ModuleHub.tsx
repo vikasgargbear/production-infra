@@ -1,37 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, HelpCircle, ChevronRight, Activity } from 'lucide-react';
+import { X, Settings, HelpCircle, ChevronRight, Activity, LucideIcon } from 'lucide-react';
+
+// TypeScript interface for module configuration
+interface Module {
+  id: string;
+  label?: string;
+  fullLabel: string;
+  description?: string;
+  icon: LucideIcon;
+  color: string;
+  component?: React.ComponentType<{ open?: boolean; onClose?: () => void }>;
+  badge?: string;
+}
+
+interface ModuleHubProps {
+  open?: boolean;
+  onClose?: () => void;
+  title?: string;
+  subtitle?: string;
+  icon?: LucideIcon;
+  modules?: Module[];
+  defaultModule?: string | null;
+  layout?: 'sidebar' | 'centered';
+}
 
 /**
  * ModuleHub - A reusable hub component with Apple-inspired layout
- * 
- * @param {Object} props
- * @param {boolean} props.open - Whether the hub is open
- * @param {Function} props.onClose - Close handler
- * @param {string} props.title - Hub title
- * @param {string} props.subtitle - Hub subtitle
- * @param {React.Component} props.icon - Hub icon component
- * @param {Array} props.modules - Array of module objects
- * @param {string} props.defaultModule - Default active module ID
- * @param {('sidebar'|'centered')} props.layout - Layout variant
- * 
- * Module object structure:
- * {
- *   id: string,
- *   label: string,
- *   fullLabel: string,
- *   description: string,
- *   icon: React.Component,
- *   color: string (tailwind color name),
- *   component: React.Component
- * }
  */
-const ModuleHub = ({ 
-  open = true, 
-  onClose, 
+const ModuleHub: React.FC<ModuleHubProps> = ({
+  open = true,
+  onClose,
   title = "Module Hub",
   subtitle = "Select a module",
   icon: HubIcon,
-  modules = [],
+  modules = [] as Module[],
   defaultModule = null,
   layout = 'sidebar'
 }) => {
@@ -114,7 +116,7 @@ const ModuleHub = ({
           setActiveModule(modules[index].id);
         }
       }
-      
+
       // ESC to close
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -133,11 +135,11 @@ const ModuleHub = ({
   // Render the appropriate module
   const renderModule = () => {
     const activeModuleConfig = modules.find(m => m.id === activeModule);
-    
+
     if (activeModuleConfig && activeModuleConfig.component) {
       const Component = activeModuleConfig.component;
       return (
-        <Component 
+        <Component
           onClose={onClose}
           key={activeModule}
           open={true}
@@ -148,7 +150,7 @@ const ModuleHub = ({
     // Placeholder for modules not yet implemented
     const moduleInfo = modules.find(m => m.id === activeModule);
     const Icon = moduleInfo?.icon;
-    
+
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
@@ -243,7 +245,7 @@ const ModuleHub = ({
               </div>
             </div>
           </div>
-        
+
           {/* Module List - Medical Professional Design */}
           <div className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-transparent to-teal-50/10">
             <nav className="px-3">
@@ -251,7 +253,7 @@ const ModuleHub = ({
                 const Icon = module.icon;
                 const isActive = activeModule === module.id;
                 const colors = colorStyles[module.color] || colorStyles.gray;
-                
+
                 return (
                   <button
                     key={module.id}
@@ -259,8 +261,8 @@ const ModuleHub = ({
                     className={`
                       w-full mb-1 px-3 py-2.5 rounded-xl flex items-center justify-between
                       transition-all duration-200 group
-                      ${isActive 
-                        ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25' 
+                      ${isActive
+                        ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25'
                         : 'hover:bg-teal-50/50 text-slate-700 hover:text-teal-900 hover:shadow-sm'
                       }
                     `}
@@ -278,13 +280,13 @@ const ModuleHub = ({
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Status indicator or badge */}
                     {module.badge && (
                       <span className={`
                         text-xs px-1.5 py-0.5 rounded
-                        ${isActive 
-                          ? 'bg-white/20 text-white' 
+                        ${isActive
+                          ? 'bg-white/20 text-white'
                           : 'bg-teal-100/50 text-teal-700'
                         }
                       `}>

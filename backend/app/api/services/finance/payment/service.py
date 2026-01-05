@@ -404,3 +404,26 @@ class PaymentService:
             "amount": float(payment.payment_amount),
             "message": "Payment receipt created successfully"
         }
+    
+    @staticmethod
+    def get_overview(db: Session) -> Dict[str, Any]:
+        """
+        Get payments overview for last 30 days.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT
+                COUNT(*) as total_payments,
+                COALESCE(SUM(payment_amount), 0) as total_amount,
+                COUNT(CASE WHEN payment_type = 'receipt' THEN 1 END) as receipts_count,
+                COUNT(CASE WHEN payment_type = 'payment' THEN 1 END) as payments_count
+            FROM financial.payments
+            WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
+        """)).fetchone()
+        
+        return {
+            "total_payments": result.total_payments if result else 0,
+            "total_amount": float(result.total_amount) if result and result.total_amount else 0,
+            "receipts_count": result.receipts_count if result else 0,
+            "payments_count": result.payments_count if result else 0
+        }

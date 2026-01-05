@@ -64,6 +64,11 @@ export const productsApi = {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 
+  // Alias for getById (backward compatibility)
+  getDetails: (id: number | string) => {
+    return apiHelpers.get(ENDPOINTS.DETAILS(id));
+  },
+
   // Create new product
   create: (data: any) => {
     const cleanedData = cleanData(data);
@@ -113,12 +118,35 @@ export const productsApi = {
   },
 
   // =========================================================================
-  // CATEGORIES
+  // CATEGORIES & TYPES
   // =========================================================================
 
   // Get product categories
   getCategories: () => {
     return apiHelpers.get(ENDPOINTS.CATEGORIES);
+  },
+
+  // Get master categories (alias)
+  getMasterCategories: () => {
+    return apiHelpers.get('/products/master/categories');
+  },
+
+  // Get product types
+  getProductTypes: () => {
+    return apiHelpers.get('/products/master/types');
+  },
+
+  // Create new category
+  createCategory: (categoryName: string) => {
+    return apiHelpers.post('/products/master/categories', { category_name: categoryName });
+  },
+
+  // Create new product type
+  createProductType: (typeName: string, defaultBaseUom: string = 'Unit') => {
+    return apiHelpers.post('/products/master/types', {
+      type_name: typeName,
+      default_base_uom: defaultBaseUom
+    });
   },
 
   // =========================================================================

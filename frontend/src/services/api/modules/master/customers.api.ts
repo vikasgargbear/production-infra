@@ -56,6 +56,11 @@ export const customersApi = {
     return apiHelpers.get(ENDPOINTS.DETAILS(id));
   },
 
+  // Alias for getById (backward compatibility)
+  getDetails: (id: number | string) => {
+    return apiHelpers.get(ENDPOINTS.DETAILS(id));
+  },
+
   // Create new customer
   create: (data: any) => {
     const cleanedData = cleanData(data);
