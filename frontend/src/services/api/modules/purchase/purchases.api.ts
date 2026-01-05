@@ -86,5 +86,11 @@ export const purchasesApi = {
 
     print: (poId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${poId}/print`, { responseType: 'blob' });
+    },
+
+    parseInvoice: (formData: FormData): Promise<AxiosResponse> => {
+        return apiHelpers.post('/purchase-orders/parse-invoice', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
     }
 };

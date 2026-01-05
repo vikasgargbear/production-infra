@@ -337,43 +337,23 @@ async def create_purchase_entry(
         
         invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
         
-        # Get supplier name first
+        # Get supplier name - use PurchaseOrderService for centralized lookup
         supplier_name = None
         if purchase_data.get("supplier_id"):
-            supplier_result = db.execute(
-                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id AND org_id = :org_id"),
-                {"id": purchase_data.get("supplier_id"), "org_id": context.org_id}
-            ).first()
-            if supplier_result:
-                supplier_name = supplier_result.supplier_name
+            supplier_name = PurchaseOrderService.get_supplier_name(db, purchase_data.get("supplier_id"), str(context.org_id))
         
-        # Get created_by from JWT token user_id or use default
+        # Get created_by from JWT token user_id or use default via service
         created_by = purchase_data.get("created_by") or context.user_id
         if not created_by:
-            # For header-based auth, use a default user ID or get from org
-            if context.org_id:
-                # Try to get any user from this org
-                user_result = db.execute(text("""
-                    SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id AND is_active = true
-                    ORDER BY user_id LIMIT 1
-                """), {"org_id": context.org_id}).fetchone()
-                created_by = user_result.user_id if user_result else 1
+            created_by = PurchaseOrderService.get_default_user(db, str(context.org_id))
         if not created_by:
             raise HTTPException(status_code=400, detail="User context required for purchase entry")
         
-        # Get branch_id from JWT token (authentication context)
+        # Get branch_id from JWT token or use default via service
         branch_id = context.branch_id
         if branch_id is None:
-            # Try to get default branch for org
-            result = db.execute(text("""
-                SELECT branch_id FROM master.org_branches 
-                WHERE org_id = :org_id AND is_active = true
-                ORDER BY branch_id LIMIT 1
-            """), {"org_id": context.org_id}).fetchone()
-            if result:
-                branch_id = result.branch_id
-            else:
+            branch_id = PurchaseOrderService.get_default_branch(db, str(context.org_id))
+            if not branch_id:
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         
@@ -683,43 +663,23 @@ async def create_purchase_with_items(
         # Generate purchase number
         purchase_number = DocumentNumberService.generate_number(db, "purchase_order", str(context.org_id))
         
-        # Get supplier name first
+        # Get supplier name - use PurchaseOrderService for centralized lookup
         supplier_name = None
         if purchase_data.get("supplier_id"):
-            supplier_result = db.execute(
-                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id AND org_id = :org_id"),
-                {"id": purchase_data.get("supplier_id"), "org_id": context.org_id}
-            ).first()
-            if supplier_result:
-                supplier_name = supplier_result.supplier_name
+            supplier_name = PurchaseOrderService.get_supplier_name(db, purchase_data.get("supplier_id"), str(context.org_id))
         
-        # Get created_by from JWT token user_id or use default
+        # Get created_by from JWT token user_id or use default via service
         created_by = purchase_data.get("created_by") or context.user_id
         if not created_by:
-            # For header-based auth, use a default user ID or get from org
-            if context.org_id:
-                # Try to get any user from this org
-                user_result = db.execute(text("""
-                    SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id AND is_active = true
-                    ORDER BY user_id LIMIT 1
-                """), {"org_id": context.org_id}).fetchone()
-                created_by = user_result.user_id if user_result else 1
+            created_by = PurchaseOrderService.get_default_user(db, str(context.org_id))
         if not created_by:
             raise HTTPException(status_code=400, detail="User context required for purchase order")
         
-        # Get branch_id from JWT token (authentication context)
+        # Get branch_id from JWT token or use default via service
         branch_id = context.branch_id
         if branch_id is None:
-            # Try to get default branch for org
-            result = db.execute(text("""
-                SELECT branch_id FROM master.org_branches 
-                WHERE org_id = :org_id AND is_active = true
-                ORDER BY branch_id LIMIT 1
-            """), {"org_id": context.org_id}).fetchone()
-            if result:
-                branch_id = result.branch_id
-            else:
+            branch_id = PurchaseOrderService.get_default_branch(db, str(context.org_id))
+            if not branch_id:
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         

@@ -91,5 +91,26 @@ export const notesApi = {
 
     print: (noteId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}/print`, { responseType: 'blob' });
+    },
+
+    // Additional methods for compatibility
+    getCreditNoteReasons: (): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.REASONS, { params: { note_type: 'credit' } });
+    },
+
+    getSettlementTypes: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/notes/settlement-types');
+    },
+
+    getLinkedInvoices: (noteId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}/invoices`);
+    },
+
+    getInvoiceItems: (invoiceId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(`/invoices/${invoiceId}/items`);
+    },
+
+    createCreditDebitNote: (data: NoteData): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.BASE, data);
     }
 };

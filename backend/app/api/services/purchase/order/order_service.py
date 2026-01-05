@@ -163,3 +163,32 @@ class PurchaseOrderService:
             ORDER BY pi.po_item_id
         """), {"purchase_id": purchase_id})
         return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_supplier_name(db: Session, supplier_id: int, org_id: str) -> Optional[str]:
+        """Get supplier name by ID."""
+        result = db.execute(text("""
+            SELECT supplier_name FROM parties.suppliers 
+            WHERE supplier_id = :id AND org_id = :org_id
+        """), {"id": supplier_id, "org_id": org_id}).first()
+        return result.supplier_name if result else None
+    
+    @staticmethod
+    def get_default_user(db: Session, org_id: str) -> Optional[int]:
+        """Get default user for an org when context is missing."""
+        result = db.execute(text("""
+            SELECT user_id FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY user_id LIMIT 1
+        """), {"org_id": org_id}).first()
+        return result.user_id if result else None
+    
+    @staticmethod
+    def get_default_branch(db: Session, org_id: str) -> Optional[int]:
+        """Get default branch for an org when context is missing."""
+        result = db.execute(text("""
+            SELECT branch_id FROM master.org_branches 
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY branch_id LIMIT 1
+        """), {"org_id": org_id}).first()
+        return result.branch_id if result else None
