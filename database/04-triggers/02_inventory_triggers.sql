@@ -730,3 +730,49 @@ COMMENT ON FUNCTION sync_location_stock_with_batch() IS 'Synchronizes location-w
 COMMENT ON FUNCTION calculate_pack_quantities() IS 'Calculates base quantities from pack hierarchy';
 COMMENT ON FUNCTION update_batch_expiry_status() IS 'Monitors batch expiry and creates alerts';
 COMMENT ON FUNCTION check_reorder_levels() IS 'Monitors stock levels and creates reorder suggestions';
+
+-- =============================================
+-- 8. PRODUCT STOCK AGGREGATE UPDATE
+-- =============================================
+-- Keeps products.total_quantity_available in sync with batch totals
+-- Updates on any INSERT, UPDATE, DELETE to batches table
+CREATE OR REPLACE FUNCTION update_product_stock_aggregate()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_product_id INTEGER;
+    v_total_available NUMERIC;
+BEGIN
+    -- Determine which product_id to update
+    v_product_id := COALESCE(NEW.product_id, OLD.product_id);
+    
+    -- Skip if no product_id (safety check)
+    IF v_product_id IS NULL THEN
+        RETURN COALESCE(NEW, OLD);
+    END IF;
+    
+    -- Calculate total quantity across all active batches for this product
+    SELECT COALESCE(SUM(quantity_available), 0)
+    INTO v_total_available
+    FROM inventory.batches
+    WHERE product_id = v_product_id
+    AND batch_status = 'active';
+    
+    -- Update the product's aggregate stock
+    UPDATE inventory.products
+    SET 
+        total_quantity_available = v_total_available,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE product_id = v_product_id;
+    
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger on batch INSERT/UPDATE/DELETE
+CREATE TRIGGER trigger_update_product_stock_aggregate
+    AFTER INSERT OR UPDATE OF quantity_available, batch_status OR DELETE 
+    ON inventory.batches
+    FOR EACH ROW
+    EXECUTE FUNCTION update_product_stock_aggregate();
+
+COMMENT ON FUNCTION update_product_stock_aggregate() IS 'Maintains products.total_quantity_available as sum of batch quantities';
