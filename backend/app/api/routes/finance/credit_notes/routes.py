@@ -584,129 +584,23 @@ async def get_party_invoices_for_linking(
     Get invoices for a party that can be linked to notes
     """
     try:
-        if invoice_type == "sales":
-            # First try to find any invoices for this customer
-            debug_query = """
-                SELECT COUNT(*) as count,
-                       string_agg(DISTINCT invoice_status, ', ') as statuses,
-                       string_agg(DISTINCT payment_status, ', ') as payment_statuses
-                FROM sales.invoices 
-                WHERE customer_id = :party_id
-            """
-            debug_result = db.execute(text(debug_query), {"party_id": party_id}).first()
-            logger.info(f"Customer {party_id} debug - Count: {debug_result.count}, Statuses: {debug_result.statuses}, Payment: {debug_result.payment_statuses}")
-            
-            # Build WHERE conditions
-            where_conditions = ["customer_id = :party_id"]
-            params = {"party_id": party_id}
-            
-            if search:
-                where_conditions.append("invoice_number ILIKE :search")
-                params["search"] = f"%{search}%"
-                
-            where_clause = " AND ".join(where_conditions)
-            
-            # Count query for pagination
-            count_query = f"""
-                SELECT COUNT(*) 
-                FROM sales.invoices
-                WHERE {where_clause}
-            """
-            total_count = db.execute(text(count_query), params).scalar()
-            
-            # Calculate offset
-            offset = (page - 1) * limit
-            params.update({"limit": limit, "offset": offset})
-            
-            query = f"""
-                SELECT 
-                    invoice_id,
-                    invoice_number,
-                    invoice_date,
-                    final_amount as grand_total,
-                    COALESCE(paid_amount, 0) as paid_amount,
-                    COALESCE(payment_status, 'pending') as payment_status,
-                    COALESCE(invoice_status, 'draft') as invoice_status
-                FROM sales.invoices
-                WHERE {where_clause}
-                ORDER BY invoice_date DESC, invoice_id DESC
-                LIMIT :limit OFFSET :offset
-            """
-        else:  # purchase
-            # Build WHERE conditions for purchase
-            where_conditions = ["supplier_id = :party_id", "purchase_status IN ('received', 'completed')"]
-            params = {"party_id": party_id}
-            
-            if search:
-                where_conditions.append("supplier_invoice_number ILIKE :search")
-                params["search"] = f"%{search}%"
-                
-            where_clause = " AND ".join(where_conditions)
-            
-            # Count query for pagination
-            count_query = f"""
-                SELECT COUNT(*) 
-                FROM procurement.purchases
-                WHERE {where_clause}
-            """
-            total_count = db.execute(text(count_query), params).scalar()
-            
-            # Calculate offset
-            offset = (page - 1) * limit
-            params.update({"limit": limit, "offset": offset})
-            
-            query = f"""
-                SELECT 
-                    purchase_id as invoice_id,
-                    supplier_invoice_number as invoice_number,
-                    supplier_invoice_date as invoice_date,
-                    final_amount as grand_total,
-                    paid_amount,
-                    payment_status,
-                    'completed' as invoice_status
-                FROM procurement.purchases
-                WHERE {where_clause}
-                ORDER BY supplier_invoice_date DESC
-                LIMIT :limit OFFSET :offset
-            """
-            
-        invoices = db.execute(
-            text(query),
-            params
-        ).fetchall()
+        # Use CreditNoteService instead of inline SQL
+        result = CreditNoteService.get_party_invoices_for_linking(
+            db=db,
+            org_id=str(context.org_id),
+            party_id=int(party_id),
+            invoice_type=invoice_type,
+            page=page,
+            limit=limit
+        )
         
-        # For debugging: if no invoices found, check if there are any invoices at all
-        if not invoices and invoice_type == "sales":
-            total_count = db.execute(
-                text("SELECT COUNT(*) FROM sales.invoices")
-            ).scalar()
-            logger.info(f"No invoices found for customer {party_id}. Total invoices in system: {total_count}")
+        # Add search filter support
+        if search:
+            result["search"] = search
+        else:
+            result["search"] = ""
             
-            # Get a sample of customer IDs that do have invoices
-            sample_customers = db.execute(
-                text("SELECT DISTINCT customer_id FROM sales.invoices LIMIT 5")
-            ).fetchall()
-            logger.info(f"Sample customer IDs with invoices: {[c.customer_id for c in sample_customers]}")
-        
-        # Calculate pagination metadata
-        total_pages = (total_count + limit - 1) // limit
-        has_next = page < total_pages
-        has_prev = page > 1
-        
-        return {
-            "party_id": party_id,
-            "invoice_type": invoice_type,
-            "invoices": [dict(inv._mapping) for inv in invoices],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total_count": total_count,
-                "total_pages": total_pages,
-                "has_next": has_next,
-                "has_prev": has_prev
-            },
-            "search": search
-        }
+        return result
         
     except Exception as e:
         logger.error(f"Error fetching party invoices: {e}")
