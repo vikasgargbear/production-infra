@@ -12,20 +12,20 @@ import logging
 import json
 
 # Core utilities - shared across all APIs
-from ....core.database import SessionLocal
-from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession  
-from ....core.auth.org_context import get_org_context, OrgContext
-from ....core.utils.state_utils import get_state_code  # Shared Indian GST state codes
-from ....core.utils.api_utils import handle_error  # Shared error handler
-from ....core.security.permissions import PermissionChecker  # RBAC
+from .....core.database import SessionLocal
+from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession  
+from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.utils.state_utils import get_state_code  # Shared Indian GST state codes
+from .....core.utils.api_utils import handle_error  # Shared error handler
+from .....core.security.permissions import PermissionChecker  # RBAC
 
 # Customer-specific imports
-from ...schemas.master.customer import (
+from ....schemas.master.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
     PaymentRecord, PaymentResponse
 )
-from ...services.master.customer_service import CustomerService
+from ....services.master.customer_service import CustomerService
 
 logger = logging.getLogger(__name__)
 

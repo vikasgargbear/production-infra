@@ -13,13 +13,13 @@ import logging
 import random
 import json
 
-from ....core.config import settings
-from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.auth.org_context import get_org_context, OrgContext
-from ....core.utils.api_utils import handle_error
-from ....core.security.permissions import PermissionChecker  # RBAC
-from ...services.master.product_service import ProductService  # Service layer
-from ...schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
+from .....core.config import settings
+from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.utils.api_utils import handle_error
+from .....core.security.permissions import PermissionChecker  # RBAC
+from ....services.master.product_service import ProductService  # Service layer
+from ....schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 
 logger = logging.getLogger(__name__)
 
