@@ -90,12 +90,28 @@ class InvoiceService:
             
             # 6. Calculate due date
             # Note: Frontend may send payment_mode instead of payment_terms
+            # Frontend may also send due_date directly (as date string) OR due_days (as integer)
             payment_terms = getattr(invoice_data, 'payment_terms', None) or getattr(invoice_data, 'payment_mode', 'cash')
-            due_date = InvoiceService._calculate_due_date(
-                invoice_data.invoice_date,
-                payment_terms,
-                getattr(invoice_data, 'due_days', None) or getattr(invoice_data, 'due_date', None)
-            )
+            
+            # Check if frontend sent due_date directly
+            frontend_due_date = getattr(invoice_data, 'due_date', None)
+            frontend_due_days = getattr(invoice_data, 'due_days', None)
+            
+            # If due_date is provided directly, use it; otherwise calculate from due_days
+            if frontend_due_date and isinstance(frontend_due_date, (str, date)):
+                from datetime import datetime
+                if isinstance(frontend_due_date, str):
+                    due_date = datetime.strptime(frontend_due_date, "%Y-%m-%d").date() if frontend_due_date else None
+                else:
+                    due_date = frontend_due_date
+            else:
+                # Convert due_days to int if it's a string
+                due_days_int = int(frontend_due_days) if frontend_due_days and str(frontend_due_days).isdigit() else None
+                due_date = InvoiceService._calculate_due_date(
+                    invoice_data.invoice_date,
+                    payment_terms,
+                    due_days_int
+                )
             
             # 7. Create invoice
             invoice_id = InvoiceRepository.create_invoice(
