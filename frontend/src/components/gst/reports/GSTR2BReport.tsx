@@ -34,12 +34,13 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
                     from_date: dateRange.from,
                     to_date: dateRange.to
                 });
+                const responseData = response?.data || response;
 
-                if (response) {
-                    const totalCount = response.summary?.totalInvoices || response.invoices?.length || 0;
+                if (responseData) {
+                    const totalCount = responseData.summary?.totalInvoices || responseData.invoices?.length || 0;
                     setTotalInvoices(totalCount);
 
-                    const invoices = response.invoices || [];
+                    const invoices = responseData.invoices || [];
                     const firstPage = invoices.slice(0, pageSize);
 
                     setData({
@@ -52,7 +53,7 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
                             sgst: inv.sgst_amount || 0,
                             igst: inv.igst_amount || 0
                         })),
-                        summary: response.summary || {
+                        summary: responseData.summary || {
                             totalInvoices: totalCount,
                             totalTaxableValue: 0,
                             totalCGST: 0,

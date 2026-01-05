@@ -43,9 +43,10 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                         from_date: dateRange.from,
                         to_date: dateRange.to
                     });
+                    const responseData = response?.data || response;
 
-                    if (response?.hsn_summary) {
-                        setData(response.hsn_summary);
+                    if (responseData?.hsn_summary) {
+                        setData(responseData.hsn_summary);
                         return;
                     }
                 } catch {
@@ -58,7 +59,8 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                     dateTo: dateRange.to,
                     limit: 5000
                 });
-                const invoices = Array.isArray(invoiceRes) ? invoiceRes : invoiceRes?.invoices || [];
+                const invoiceData = invoiceRes?.data || invoiceRes;
+                const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
 
                 const hsnGroups: Record<string, HSNItem> = {};
 

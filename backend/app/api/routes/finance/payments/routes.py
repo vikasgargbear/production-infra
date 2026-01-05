@@ -244,54 +244,22 @@ async def create_payment(
             doc_type = "receipt" if payment.customer_id else "payment"
             payment.payment_number = DocumentNumberService.generate_number(db, doc_type, org_id)
         
-        # Get party name - combined lookup instead of separate queries
+        # Get party name - use PaymentService for centralized lookup
         party_name = None
         party_id = payment.customer_id or payment.supplier_id
         if party_id:
-            party_result = db.execute(text("""
-                SELECT customer_name as party_name FROM parties.customers WHERE customer_id = :id
-                UNION ALL
-                SELECT supplier_name as party_name FROM parties.suppliers WHERE supplier_id = :id
-            """), {"id": party_id}).first()
-            if party_result:
-                party_name = party_result.party_name
-            else:
+            party_name = PaymentService.get_party_name(db, party_id)
+            if not party_name:
                 party_name = f"{'Customer' if payment.customer_id else 'Supplier'} {party_id}"
         
         # SECURITY FIX: Use authenticated user from JWT context
         if not payment.created_by:
             payment.created_by = context.user_id
         
-        # Get or create payment method ID for the payment mode
+        # Get or create payment method ID - use PaymentService for centralized logic
         payment_method_id = 1  # Default to cash
         if payment.payment_mode:
-            method_result = db.execute(
-                text("""
-                    SELECT payment_method_id FROM financial.payment_methods 
-                    WHERE method_type = :method_type
-                    LIMIT 1
-                """),
-                {"method_type": payment.payment_mode}
-            ).first()
-            
-            if method_result:
-                payment_method_id = method_result.payment_method_id
-            else:
-                # Create payment method if it doesn't exist
-                create_method = db.execute(
-                    text("""
-                        INSERT INTO financial.payment_methods (org_id, method_code, method_name, method_type)
-                        VALUES (:org_id, :code, :name, :type)
-                        RETURNING payment_method_id
-                    """),
-                    {
-                        "org_id": org_id,
-                        "code": payment.payment_mode.upper(),
-                        "name": payment.payment_mode.title(),
-                        "type": payment.payment_mode
-                    }
-                ).first()
-                payment_method_id = create_method.payment_method_id if create_method else 1
+            payment_method_id = PaymentService.get_or_create_method(db, str(org_id), payment.payment_mode)
         
         # Validate we have a created_by user
         if not payment.created_by:

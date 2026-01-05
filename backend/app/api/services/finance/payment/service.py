@@ -557,3 +557,54 @@ class PaymentService:
             ]
         
         return {"methods": methods}
+    
+    @staticmethod
+    def get_party_name(
+        db: Session,
+        party_id: int,
+        party_type: str = "customer"
+    ) -> Optional[str]:
+        """
+        Get party name for a customer or supplier.
+        Returns None if not found.
+        """
+        result = db.execute(text("""
+            SELECT customer_name as party_name FROM parties.customers WHERE customer_id = :id
+            UNION ALL
+            SELECT supplier_name as party_name FROM parties.suppliers WHERE supplier_id = :id
+        """), {"id": party_id}).first()
+        
+        return result.party_name if result else None
+    
+    @staticmethod
+    def get_or_create_method(
+        db: Session,
+        org_id: str,
+        payment_mode: str
+    ) -> int:
+        """
+        Get payment method ID, creating if doesn't exist.
+        Returns method ID.
+        """
+        # First try to find existing
+        method_result = db.execute(text("""
+            SELECT payment_method_id FROM financial.payment_methods 
+            WHERE LOWER(method_type) = LOWER(:mode)
+            LIMIT 1
+        """), {"mode": payment_mode}).first()
+        
+        if method_result:
+            return method_result.payment_method_id
+        
+        # Create new method
+        create_result = db.execute(text("""
+            INSERT INTO financial.payment_methods (org_id, method_type, method_name, is_active)
+            VALUES (:org_id, :mode, :name, true)
+            RETURNING payment_method_id
+        """), {
+            "org_id": org_id,
+            "mode": payment_mode,
+            "name": payment_mode.title()
+        }).first()
+        
+        return create_result.payment_method_id if create_result else 1

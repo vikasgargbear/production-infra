@@ -35,7 +35,8 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
             dateTo: dateRange.to,
             limit: 5000
         });
-        return Array.isArray(response) ? response : response?.invoices || response?.data?.invoices || [];
+        const responseData = response?.data || response;
+        return Array.isArray(responseData) ? responseData : responseData?.invoices || [];
     };
 
     // Load credit/debit notes
@@ -46,7 +47,8 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
                 to_date: dateRange.to,
                 note_type: 'all'
             });
-            return response.notes || [];
+            const responseData = response?.data || response;
+            return responseData?.notes || [];
         } catch (err) {
             console.error('Failed to load credit/debit notes:', err);
             return [];

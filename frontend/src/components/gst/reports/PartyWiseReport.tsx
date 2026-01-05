@@ -44,7 +44,8 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                     dateTo: dateRange.to,
                     limit: 5000
                 });
-                const invoices = Array.isArray(response) ? response : response?.invoices || [];
+                const responseData = response?.data || response;
+                const invoices = Array.isArray(responseData) ? responseData : responseData?.invoices || [];
 
                 const partyGroups: Record<string, PartyData> = {};
 

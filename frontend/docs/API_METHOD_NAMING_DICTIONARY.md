@@ -1,5 +1,8 @@
 # API Method Naming Dictionary
 
+> **See also**: [TYPESCRIPT_ERROR_REMEDIATION.md](./TYPESCRIPT_ERROR_REMEDIATION.md) for remaining cleanup work
+
+
 > **Canonical Reference**: Use ONLY these method names when calling API modules.
 > 
 > This document establishes naming conventions for all API method calls, eliminating aliases to maintain consistency.

@@ -33,7 +33,8 @@ const GSTPayableReport: React.FC<GSTPayableReportProps> = ({ dateRange, refreshT
                     dateTo: dateRange.to,
                     limit: 5000
                 });
-                const invoices = Array.isArray(invoiceRes) ? invoiceRes : invoiceRes?.invoices || [];
+                const invoiceData = invoiceRes?.data || invoiceRes;
+                const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
 
                 let outCgst = 0, outSgst = 0, outIgst = 0;
                 invoices.forEach((inv: any) => {
@@ -44,12 +45,13 @@ const GSTPayableReport: React.FC<GSTPayableReportProps> = ({ dateRange, refreshT
                 setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outCgst + outSgst + outIgst });
 
                 // Load purchases
-                const purchaseRes = await purchasesApi.search({
+                const purchaseRes = await purchasesApi.getOrders({
                     dateFrom: dateRange.from,
                     dateTo: dateRange.to,
                     limit: 5000
                 });
-                const purchases = Array.isArray(purchaseRes) ? purchaseRes : purchaseRes?.data?.purchases || [];
+                const purchaseData = purchaseRes?.data || purchaseRes;
+                const purchases = Array.isArray(purchaseData) ? purchaseData : purchaseData?.purchases || purchaseData?.orders || [];
 
                 let inCgst = 0, inSgst = 0, inIgst = 0;
                 purchases.forEach((p: any) => {
