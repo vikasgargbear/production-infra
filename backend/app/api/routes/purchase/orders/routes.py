@@ -11,6 +11,7 @@ from sqlalchemy import text
 import logging
 from ....services.document_number_service import DocumentNumberService
 from ....services.gst_service import GSTService
+from ....services.purchase.order.order_service import PurchaseOrderService
 from datetime import datetime
 from decimal import Decimal
 
@@ -210,131 +211,17 @@ async def get_purchases(
 ):
     """Get list of purchase orders with pagination and filtering"""
     try:
-        # Build base query
-        query = """
-            SELECT 
-                p.purchase_order_id,
-                p.po_number,
-                p.po_date,
-                p.po_type,
-                p.supplier_id,
-                p.supplier_name,
-                p.subtotal_amount,
-                p.tax_amount,
-                p.total_amount,
-                p.po_status,
-                p.expected_delivery_date,
-                p.created_at,
-                COUNT(poi.po_item_id) as items_count
-            FROM procurement.purchase_orders p
-            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id
-            WHERE p.org_id = :org_id
-        """
-
-        params = {"org_id": context.org_id}
-        
-        # Add search filter
-        if search:
-            query += """ AND (
-                p.po_number ILIKE :search OR 
-                p.supplier_name ILIKE :search
-            )"""
-            params["search"] = f"%{search}%"
-        
-        # Add status filter
-        if status:
-            query += " AND p.po_status = :po_status"
-            params["po_status"] = status
-        
-        # Add supplier filter
-        if supplier_id:
-            query += " AND p.supplier_id = :supplier_id"
-            params["supplier_id"] = supplier_id
-        
-        # Add date filter
-        if dateFilter:
-            from datetime import datetime, timedelta
-            today = datetime.now().date()
-            
-            if dateFilter == "today":
-                query += " AND DATE(p.po_date) = :date"
-                params["date"] = today
-            elif dateFilter == "week":
-                week_ago = today - timedelta(days=7)
-                query += " AND DATE(p.po_date) >= :date"
-                params["date"] = week_ago
-            elif dateFilter == "month":
-                month_ago = today - timedelta(days=30)
-                query += " AND DATE(p.po_date) >= :date"
-                params["date"] = month_ago
-        
-        # Group by and order
-        query += """
-            GROUP BY p.purchase_order_id, p.po_number, p.po_date, p.po_type,
-                     p.supplier_id, p.supplier_name, p.subtotal_amount,
-                     p.tax_amount, p.total_amount, p.po_status,
-                     p.expected_delivery_date, p.created_at
-            ORDER BY p.po_date DESC, p.created_at DESC
-        """
-        
-        # Get total count for pagination
-        count_query = """
-            SELECT COUNT(DISTINCT p.purchase_order_id) as total
-            FROM procurement.purchase_orders p
-            WHERE p.org_id = :org_id
-        """
-        
-        # Apply same filters to count query
-        if search:
-            count_query += """ AND (
-                p.po_number ILIKE :search OR 
-                p.supplier_name ILIKE :search
-            )"""
-        
-        if status:
-            count_query += " AND p.po_status = :po_status"
-        
-        if supplier_id:
-            count_query += " AND p.supplier_id = :supplier_id"
-        
-        if dateFilter and "date" in params:
-            if dateFilter == "today":
-                count_query += " AND DATE(p.po_date) = :date"
-            else:
-                count_query += " AND DATE(p.po_date) >= :date"
-        
-        # Execute count query
-        count_result = db.execute(text(count_query), params)
-        total_count = count_result.scalar() or 0
-        
-        # Add pagination to main query
-        query += " LIMIT :limit OFFSET :offset"
-        params["limit"] = limit
-        params["offset"] = offset if offset else skip
-        
-        # Execute main query
-        result = db.execute(text(query), params)
-        purchases = []
-        for row in result:
-            purchase = dict(row._mapping)
-            # Add default values for fields frontend expects
-            purchase['payment_status'] = 'pending'  # Default since not in DB
-            purchase['receipt_status'] = purchase.get('receipt_status', 'pending')
-            purchases.append(purchase)
-        
-        # Calculate pagination info
-        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
-        current_page = (offset // limit) + 1 if limit > 0 else 1
-        
-        return {
-            "purchases": purchases,
-            "pagination": {
-                "total": total_count,
-                "page": current_page,
-                "per_page": limit,
-                "total_pages": total_pages
-            }
-        }
+        # Use service layer instead of inline SQL
+        return PurchaseOrderService.list_orders(
+            db=db,
+            org_id=str(context.org_id),
+            skip=offset if offset else skip,
+            limit=limit,
+            search=search,
+            status=status,
+            supplier_id=supplier_id,
+            date_filter=dateFilter
+        )
         
     except Exception as e:
         logger.error(f"Error fetching purchases: {str(e)}")

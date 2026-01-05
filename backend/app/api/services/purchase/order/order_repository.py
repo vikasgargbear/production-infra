@@ -170,3 +170,154 @@ class PurchaseOrderRepository:
                 SET {", ".join(updates)}
                 WHERE purchase_order_id = :order_id
             """), params)
+    
+    @staticmethod
+    def list_orders(
+        db: Session,
+        org_id: str,
+        skip: int = 0,
+        limit: int = 25,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        supplier_id: Optional[int] = None,
+        date_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        List purchase orders with filters and pagination.
+        
+        Args:
+            db: Database session
+            org_id: Organization ID
+            skip: Offset for pagination
+            limit: Number of records to return
+            search: Search term for PO number or supplier name
+            status: Filter by PO status
+            supplier_id: Filter by supplier
+            date_filter: Filter by date (today, week, month)
+            
+        Returns:
+            Dict with purchases list and pagination info
+        """
+        from datetime import datetime, timedelta
+        
+        # Build WHERE clauses
+        where_clauses = ["p.org_id = :org_id"]
+        params = {"org_id": org_id, "limit": limit, "skip": skip}
+        
+        if search:
+            where_clauses.append("(p.po_number ILIKE :search OR p.supplier_name ILIKE :search)")
+            params["search"] = f"%{search}%"
+        
+        if status:
+            where_clauses.append("p.po_status = :po_status")
+            params["po_status"] = status
+        
+        if supplier_id:
+            where_clauses.append("p.supplier_id = :supplier_id")
+            params["supplier_id"] = supplier_id
+        
+        if date_filter:
+            today = datetime.now().date()
+            if date_filter == "today":
+                where_clauses.append("DATE(p.po_date) = :filter_date")
+                params["filter_date"] = today
+            elif date_filter == "week":
+                where_clauses.append("DATE(p.po_date) >= :filter_date")
+                params["filter_date"] = today - timedelta(days=7)
+            elif date_filter == "month":
+                where_clauses.append("DATE(p.po_date) >= :filter_date")
+                params["filter_date"] = today - timedelta(days=30)
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        # Count query
+        count_result = db.execute(text(f"""
+            SELECT COUNT(DISTINCT p.purchase_order_id) as total
+            FROM procurement.purchase_orders p
+            WHERE {where_sql}
+        """), params)
+        total_count = count_result.scalar() or 0
+        
+        # Main query with pagination
+        result = db.execute(text(f"""
+            SELECT 
+                p.purchase_order_id,
+                p.po_number,
+                p.po_date,
+                p.po_type,
+                p.supplier_id,
+                p.supplier_name,
+                p.subtotal_amount,
+                p.tax_amount,
+                p.total_amount,
+                p.po_status,
+                p.receipt_status,
+                p.expected_delivery_date,
+                p.created_at,
+                COUNT(poi.po_item_id) as items_count
+            FROM procurement.purchase_orders p
+            LEFT JOIN procurement.purchase_order_items poi 
+                ON p.purchase_order_id = poi.purchase_order_id
+            WHERE {where_sql}
+            GROUP BY p.purchase_order_id, p.po_number, p.po_date, p.po_type,
+                     p.supplier_id, p.supplier_name, p.subtotal_amount,
+                     p.tax_amount, p.total_amount, p.po_status, p.receipt_status,
+                     p.expected_delivery_date, p.created_at
+            ORDER BY p.po_date DESC, p.created_at DESC
+            LIMIT :limit OFFSET :skip
+        """), params)
+        
+        purchases = []
+        for row in result:
+            purchase = dict(row._mapping)
+            # Add default payment_status if not in DB
+            purchase['payment_status'] = 'pending'
+            purchases.append(purchase)
+        
+        # Calculate pagination
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+        current_page = (skip // limit) + 1 if limit > 0 else 1
+        
+        return {
+            "purchases": purchases,
+            "pagination": {
+                "total": total_count,
+                "page": current_page,
+                "per_page": limit,
+                "total_pages": total_pages
+            }
+        }
+    
+    @staticmethod
+    def get_pending_receipt_orders(
+        db: Session,
+        org_id: str,
+        supplier_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get purchase orders pending receipt."""
+        query = """
+            SELECT 
+                p.purchase_order_id,
+                p.po_number,
+                p.po_date,
+                p.supplier_id,
+                p.supplier_name,
+                p.total_amount,
+                p.po_status,
+                p.receipt_status
+            FROM procurement.purchase_orders p
+            WHERE p.org_id = :org_id
+              AND p.receipt_status IN ('pending', 'partial')
+              AND p.po_status IN ('approved', 'confirmed')
+        """
+        params = {"org_id": org_id}
+        
+        if supplier_id:
+            query += " AND p.supplier_id = :supplier_id"
+            params["supplier_id"] = supplier_id
+        
+        query += " ORDER BY p.po_date DESC"
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+

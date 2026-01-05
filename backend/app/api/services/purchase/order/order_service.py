@@ -112,3 +112,31 @@ class PurchaseOrderService:
         """Update purchase order status."""
         PurchaseOrderRepository.update_order_status(db, order_id, po_status, receipt_status)
         return {"message": "Order status updated", "order_id": order_id}
+    
+    @staticmethod
+    def list_orders(
+        db: Session,
+        org_id: str,
+        skip: int = 0,
+        limit: int = 25,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        supplier_id: Optional[int] = None,
+        date_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        List purchase orders with filters and pagination.
+        Delegates to repository for data access.
+        """
+        return PurchaseOrderRepository.list_orders(
+            db, org_id, skip, limit, search, status, supplier_id, date_filter
+        )
+    
+    @staticmethod
+    def get_pending_receipts(
+        db: Session,
+        org_id: str,
+        supplier_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get purchase orders pending receipt."""
+        return PurchaseOrderRepository.get_pending_receipt_orders(db, org_id, supplier_id)
