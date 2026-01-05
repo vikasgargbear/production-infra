@@ -1307,16 +1307,8 @@ async def get_product_classes(
 ):
     """Get all distinct product classes"""
     try:
-        # Get distinct classes from products table since there's no separate product_classes table
-        result = db.execute(text("""
-            SELECT DISTINCT product_class
-            FROM inventory.products
-            AND product_class IS NOT NULL
-            AND product_class != ''
-            ORDER BY product_class
-        """), {})
-        
-        classes = [{"class_name": row.product_class} for row in result if row.product_class]
+        # Use ProductService for centralized lookup
+        classes = ProductService.get_classes(db)
         return {"success": True, "data": classes}
         
     except Exception as e:

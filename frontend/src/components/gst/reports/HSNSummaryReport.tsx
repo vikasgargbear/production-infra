@@ -161,12 +161,12 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                 <DataTable
                     data={data}
                     columns={[
-                        { key: 'hsn_code', label: 'HSN Code' },
-                        { key: 'description', label: 'Description' },
-                        { key: 'quantity', label: 'Quantity', render: (v) => v.toLocaleString() },
-                        { key: 'taxable_value', label: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'tax_rate', label: 'Tax Rate', render: (v) => `${v}%` },
-                        { key: 'tax_amount', label: 'Tax Amount', render: (v) => formatCurrency(v) }
+                        { key: 'hsn_code', header: 'HSN Code' },
+                        { key: 'description', header: 'Description' },
+                        { key: 'quantity', header: 'Quantity', render: (v) => v.toLocaleString() },
+                        { key: 'taxable_value', header: 'Taxable Value', render: (v) => formatCurrency(v) },
+                        { key: 'tax_rate', header: 'Tax Rate', render: (v) => `${v}%` },
+                        { key: 'tax_amount', header: 'Tax Amount', render: (v) => formatCurrency(v) }
                     ]}
                 />
             </div>

@@ -172,13 +172,13 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
                 <DataTable
                     data={data?.b2b || []}
                     columns={[
-                        { key: 'gst_number', label: 'GSTIN' },
-                        { key: 'name', label: 'Party Name' },
-                        { key: 'invoices', label: 'Invoices' },
-                        { key: 'taxableValue', label: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'cgst', label: 'CGST', render: (v) => formatCurrency(v) },
-                        { key: 'sgst', label: 'SGST', render: (v) => formatCurrency(v) },
-                        { key: 'igst', label: 'IGST', render: (v) => formatCurrency(v) }
+                        { key: 'gst_number', header: 'GSTIN' },
+                        { key: 'name', header: 'Party Name' },
+                        { key: 'invoices', header: 'Invoices' },
+                        { key: 'taxableValue', header: 'Taxable Value', render: (v) => formatCurrency(v) },
+                        { key: 'cgst', header: 'CGST', render: (v) => formatCurrency(v) },
+                        { key: 'sgst', header: 'SGST', render: (v) => formatCurrency(v) },
+                        { key: 'igst', header: 'IGST', render: (v) => formatCurrency(v) }
                     ]}
                 />
             </div>

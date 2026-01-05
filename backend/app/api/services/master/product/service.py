@@ -655,3 +655,18 @@ class ProductService:
             "new_products_count": sum(1 for item in validated_items if not item.get("product_exists")),
             "existing_products_count": sum(1 for item in validated_items if item.get("product_exists"))
         }
+    
+    @staticmethod
+    def get_classes(db: Session) -> List[Dict[str, Any]]:
+        """
+        Get all distinct product classes.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT DISTINCT product_class
+            FROM inventory.products
+            WHERE product_class IS NOT NULL
+            AND product_class != ''
+            ORDER BY product_class
+        """))
+        return [{"class_name": row.product_class} for row in result if row.product_class]

@@ -146,14 +146,14 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                 <DataTable
                     data={data}
                     columns={[
-                        { key: 'party_name', label: 'Party Name' },
-                        { key: 'gst_number', label: 'GSTIN', render: (v) => v || '-' },
-                        { key: 'invoice_count', label: 'Invoices' },
-                        { key: 'total_taxable_value', label: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'total_cgst', label: 'CGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_sgst', label: 'SGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_igst', label: 'IGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_tax', label: 'Total Tax', render: (v) => formatCurrency(v) }
+                        { key: 'party_name', header: 'Party Name' },
+                        { key: 'gst_number', header: 'GSTIN', render: (v) => v || '-' },
+                        { key: 'invoice_count', header: 'Invoices' },
+                        { key: 'total_taxable_value', header: 'Taxable Value', render: (v) => formatCurrency(v) },
+                        { key: 'total_cgst', header: 'CGST', render: (v) => formatCurrency(v) },
+                        { key: 'total_sgst', header: 'SGST', render: (v) => formatCurrency(v) },
+                        { key: 'total_igst', header: 'IGST', render: (v) => formatCurrency(v) },
+                        { key: 'total_tax', header: 'Total Tax', render: (v) => formatCurrency(v) }
                     ]}
                 />
             </div>

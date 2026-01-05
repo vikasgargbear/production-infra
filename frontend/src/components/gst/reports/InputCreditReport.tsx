@@ -149,15 +149,15 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                 <DataTable
                     data={data}
                     columns={[
-                        { key: 'invoice_no', label: 'Invoice No' },
-                        { key: 'invoice_date', label: 'Date' },
-                        { key: 'supplier_name', label: 'Supplier' },
-                        { key: 'supplier_gst_number', label: 'GSTIN' },
-                        { key: 'taxable_amount', label: 'Taxable', render: (v) => formatCurrency(v) },
-                        { key: 'cgst', label: 'CGST', render: (v) => formatCurrency(v) },
-                        { key: 'sgst', label: 'SGST', render: (v) => formatCurrency(v) },
-                        { key: 'igst', label: 'IGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_itc', label: 'Total ITC', render: (v) => formatCurrency(v) }
+                        { key: 'invoice_no', header: 'Invoice No' },
+                        { key: 'invoice_date', header: 'Date' },
+                        { key: 'supplier_name', header: 'Supplier' },
+                        { key: 'supplier_gst_number', header: 'GSTIN' },
+                        { key: 'taxable_amount', header: 'Taxable', render: (v) => formatCurrency(v) },
+                        { key: 'cgst', header: 'CGST', render: (v) => formatCurrency(v) },
+                        { key: 'sgst', header: 'SGST', render: (v) => formatCurrency(v) },
+                        { key: 'igst', header: 'IGST', render: (v) => formatCurrency(v) },
+                        { key: 'total_itc', header: 'Total ITC', render: (v) => formatCurrency(v) }
                     ]}
                 />
             </div>
