@@ -9,15 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
-from ...services.document_number_service import DocumentNumberService
-from ...services.gst_service import GSTService
+from ....services.document_number_service import DocumentNumberService
+from ....services.gst_service import GSTService
 from datetime import datetime
 from decimal import Decimal
 
 # Modern imports - fully modernized
-from ....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
-from ....core.auth.org_context import OrgContext, get_org_context
-from ....core.security.permissions import PermissionChecker
+from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
+from .....core.auth.org_context import OrgContext, get_org_context
+from .....core.security.permissions import PermissionChecker
 
 logger = logging.getLogger(__name__)
 

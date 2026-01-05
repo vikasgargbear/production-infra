@@ -10,12 +10,12 @@ from datetime import datetime
 import os
 import tempfile
 import shutil
-from ...services.document_number_service import DocumentNumberService
+from ....services.document_number_service import DocumentNumberService
 from decimal import Decimal
 
-from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.auth.org_context import get_org_context, OrgContext
-from ....core.security.permissions import PermissionChecker
+from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.security.permissions import PermissionChecker
 # get_org_id_string replaced with OrgContext
 
 # Try to import bill_parser if available
@@ -31,14 +31,14 @@ except ImportError:
 
 # Try to import custom parser at module level
 try:
-    from ...parsers import InvoiceParserFactory
+    from ....parsers import InvoiceParserFactory
     FACTORY_PARSER_AVAILABLE = True
 except ImportError:
     FACTORY_PARSER_AVAILABLE = False
 
 # Fallback to simple parser if factory not available
 try:
-    from .pharma_invoice_parser import parse_pharma_invoice
+    from ..pharma_invoice_parser import parse_pharma_invoice
     CUSTOM_PARSER_AVAILABLE = True
 except ImportError:
     CUSTOM_PARSER_AVAILABLE = False
