@@ -86,34 +86,10 @@ async def create_sales_order(
             order_data=order
         )
         
-        # Fetch created order for response
-        order_result = db.execute(text("""
-            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
-            FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
-            WHERE o.order_id = :id AND o.org_id = :org_id
-        """), {"id": result["order_id"], "org_id": org_id})
-        
-        order_row = order_result.fetchone()
-        if not order_row:
+        # Use service method to fetch complete order (consolidates 2 SQL into 1 reusable call)
+        order_dict = OrderService.get_order_with_items(db, org_id, result["order_id"], "sales")
+        if not order_dict:
             raise HTTPException(status_code=404, detail=f"Order {result['order_id']} not found")
-        
-        order_dict = dict(order_row._mapping)
-        
-        # Get order items
-        items_result = db.execute(text("""
-            SELECT oi.*, p.product_name, p.product_code,
-                   b.batch_number, b.expiry_date
-            FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": result["order_id"]})
-        
-        order_dict["items"] = [dict(item._mapping) for item in items_result]
-        order_dict["total_amount"] = order_dict.get("final_amount", 0)
-        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
-        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
         
         return OrderResponse(**order_dict)
         
@@ -249,34 +225,10 @@ async def update_sales_order(
         db.execute(text(update_query), params)
         # TenantAwareSession auto-commits
         
-        # Return updated order by fetching it directly
-        result = db.execute(text("""
-            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
-            FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
-            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
-        """), {"id": order_id, "org_id": str(context.org_id)})
-        
-        order = result.fetchone()
-        if not order:
+        # Use service method to fetch updated order (consolidates 2 SQL)
+        order_dict = OrderService.get_order_with_items(db, str(context.org_id), order_id, "sales")
+        if not order_dict:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
-        
-        order_dict = dict(order._mapping)
-        
-        # Get order items
-        items_result = db.execute(text("""
-            SELECT oi.*, p.product_name, p.product_code,
-                   b.batch_number, b.expiry_date
-            FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": order_id})
-        
-        order_dict["items"] = [dict(item._mapping) for item in items_result]
-        order_dict["total_amount"] = order_dict.get("final_amount", 0)
-        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
-        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
         
         return OrderResponse(**order_dict)
         

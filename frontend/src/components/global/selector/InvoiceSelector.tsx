@@ -85,11 +85,12 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
       // debugLogger.api('Fetching invoices with params:', params);
 
       const response = await invoicesApi.getAll(params);
-      const invoiceData = response?.data || response;
+      const responseData = response?.data || response;
 
-      if (response.success) {
+      if (responseData?.invoices || responseData?.success) {
+        const invoicesData = responseData.invoices || responseData.data?.invoices || [];
         // Transform backend data to match our interface
-        const transformedInvoices = (response.data as any).invoices.map((invoice: any) => ({
+        const transformedInvoices = invoicesData.map((invoice: any) => ({
           id: invoice.invoice_id?.toString() || invoice.invoice_number,
           invoice_id: invoice.invoice_id,
           invoice_number: invoice.invoice_number,
@@ -104,14 +105,15 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
 
         // debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
+        const total = responseData.total || responseData.data?.total || 0;
         setPagination({
-          total: (response.data as any).total || 0,
+          total: total,
           page: page,
           per_page: pagination.per_page,
-          total_pages: Math.ceil(((response.data as any).total || 0) / pagination.per_page)
+          total_pages: Math.ceil(total / pagination.per_page)
         });
       } else {
-        setError(response.error?.message || 'Failed to fetch invoices');
+        setError(responseData?.error?.message || 'Failed to fetch invoices');
       }
     } catch (error) {
       setError('Failed to fetch invoices. Please try again.');

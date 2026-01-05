@@ -326,23 +326,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       // debugLogger.api('Fetching invoices with params:', searchParams);
 
       const response = await invoicesApi.getAll(searchParams);
+      const responseData = response?.data || response;
 
-      if (response.success) {
+      if (responseData?.invoices || responseData?.success) {
+        const invoicesData = responseData.invoices || responseData.data?.invoices || [];
         // Transform backend data to match our interface
-        const transformedInvoices = response.data.invoices.map((invoice: any) => {
-          // Log raw backend data for debugging
-          // debugLogger.api('Raw invoice from backend:', {
-          //   invoice_id: invoice.invoice_id,
-          //   invoice_number: invoice.invoice_number,
-          //   customer_name: invoice.customer_name,
-          //   invoice_date: invoice.invoice_date,
-          //   final_amount: invoice.final_amount,
-          //   invoice_status: invoice.invoice_status,
-          //   payment_status: invoice.payment_status,
-          //   order_number: invoice.order_number,
-          //   order_date: invoice.order_date
-          // });
-
+        const transformedInvoices = invoicesData.map((invoice: any) => {
           return {
             id: invoice.invoice_id?.toString() || invoice.invoice_number,
             invoice_id: invoice.invoice_id,
@@ -366,14 +355,15 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
         // debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
+        const total = responseData.total || responseData.data?.total || 0;
         setPagination({
-          total: response.data.total || 0,
+          total: total,
           page: page,
           per_page: pagination.per_page,
-          total_pages: Math.ceil((response.data.total || 0) / pagination.per_page)
+          total_pages: Math.ceil(total / pagination.per_page)
         });
       } else {
-        setError(response.error?.message || 'Failed to fetch invoices');
+        setError(responseData?.error?.message || 'Failed to fetch invoices');
       }
     } catch (error) {
       setError('Failed to fetch invoices. Please try again.');
@@ -545,9 +535,10 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     try {
       // Fetch full invoice details
       const response = await invoicesApi.getById(invoice.invoice_id || invoice.id);
+      const responseData = response?.data || response;
 
-      if (response.success && response.data) {
-        const fullInvoice = response.data;
+      if (responseData) {
+        const fullInvoice = responseData;
 
         // Use the print function for print dialog
         const { printInvoice } = await import('../../../utils/invoicePdfGenerator');
@@ -565,9 +556,10 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     try {
       // Fetch full invoice details
       const response = await invoicesApi.getById(invoice.invoice_id || invoice.id);
+      const responseData = response?.data || response;
 
-      if (response.success && response.data) {
-        const fullInvoice = response.data;
+      if (responseData) {
+        const fullInvoice = responseData;
 
         // Use the download function for direct PDF save
         const { downloadInvoicePDF } = await import('../../../utils/invoicePdfGenerator');
