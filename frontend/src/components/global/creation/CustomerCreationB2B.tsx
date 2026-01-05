@@ -23,12 +23,12 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   const [messageType, setMessageType] = useState('');
   const [customerType, setCustomerType] = useState('B2B'); // B2B or B2C toggle
   const [useBusinessContactInfo, setUseBusinessContactInfo] = useState(false);
-  
+
   const customerFormRef = useRef(null);
-  
+
   // Enable Enter-as-Tab navigation (Marg ERP style)
-  useEnterAsTab({ 
-    containerRef: customerFormRef, 
+  useEnterAsTab({
+    containerRef: customerFormRef,
     enabled: true,
     excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
   });
@@ -47,17 +47,17 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     customer_name: '',
     customer_type: customerType === 'B2B' ? 'wholesale' : 'retail', // Map to backend values
     business_type: '',
-    
+
     // Contact Information
     primary_phone: '',
     primary_email: '',
     whatsapp_number: '',
-    
+
     // B2B Specific - Contact Person
-    contact_person_name: '',
+    contact_person: '',
     contact_person_phone: '',
     contact_person_email: '',
-    
+
     // Address Information
     address: {
       address_line1: '',
@@ -66,25 +66,38 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       state: '',
       pincode: ''
     },
-    
+
     // Compliance & Licensing
     gst_number: '',
     pan_number: '',
     drug_license_number: '',
     drug_license_validity: '',
-    
+
     // Credit Terms (aligned with schema)
     credit_limit: 50000,
     credit_days: 30,
     credit_rating: 'B',
     payment_terms: 'Credit',
     customer_category: 'Regular',
-    
+
     // Status
     is_active: true
   });
 
-  const [errors, setErrors] = useState({});
+  interface FormErrors {
+    customer_name?: string;
+    contact_person?: string;
+    primary_phone?: string;
+    contact_person_phone?: string;
+    whatsapp_number?: string;
+    primary_email?: string;
+    contact_person_email?: string;
+    gst_number?: string;
+    pan_number?: string;
+    [key: string]: string | undefined;
+  }
+
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // Handle copying business contact info to contact person
   useEffect(() => {
@@ -98,46 +111,46 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   }, [useBusinessContactInfo, formData.primary_phone, formData.primary_email, customerType]);
 
   const validateForm = () => {
-    const newErrors = {};
-    
+    const newErrors: FormErrors = {};
+
     // Required fields validation
     if (!formData.customer_name.trim()) {
       newErrors.customer_name = 'Customer/Business name is required';
     }
-    
+
     // For B2B, contact person is required
-    if (customerType === 'B2B' && !formData.contact_person_name.trim()) {
-      newErrors.contact_person_name = 'Contact person name is required for B2B customers';
+    if (customerType === 'B2B' && !formData.contact_person.trim()) {
+      newErrors.contact_person = 'Contact person name is required for B2B customers';
     }
-    
+
     if (!formData.primary_phone.trim()) {
       newErrors.primary_phone = 'Phone number is required';
     }
-    
+
     // Phone validation
     const phoneRegex = /^[6-9]\d{9}$/;
     if (formData.primary_phone && !phoneRegex.test(formData.primary_phone.replace(/\D/g, ''))) {
       newErrors.primary_phone = 'Enter valid 10-digit phone number';
     }
-    
+
     if (formData.contact_person_phone && !phoneRegex.test(formData.contact_person_phone.replace(/\D/g, ''))) {
       newErrors.contact_person_phone = 'Enter valid 10-digit phone number';
     }
-    
+
     if (formData.whatsapp_number && !phoneRegex.test(formData.whatsapp_number.replace(/\D/g, ''))) {
       newErrors.whatsapp_number = 'Enter valid 10-digit WhatsApp number';
     }
-    
+
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (formData.primary_email && !emailRegex.test(formData.primary_email)) {
       newErrors.primary_email = 'Enter valid email address';
     }
-    
+
     if (formData.contact_person_email && !emailRegex.test(formData.contact_person_email)) {
       newErrors.contact_person_email = 'Enter valid email address';
     }
-    
+
     // GST validation (optional but if provided should be valid)
     if (formData.gst_number) {
       const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
@@ -145,7 +158,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         newErrors.gst_number = 'Enter valid GST number (15 characters)';
       }
     }
-    
+
     // PAN validation (optional but if provided should be valid)
     if (formData.pan_number) {
       const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -153,7 +166,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         newErrors.pan_number = 'Enter valid PAN number';
       }
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -174,7 +187,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         [field]: value
       }));
     }
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({
@@ -191,7 +204,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       customer_type: type === 'B2B' ? 'wholesale' : 'retail', // Map to backend values
       // Clear B2B specific fields when switching to B2C
       ...(type === 'B2C' ? {
-        contact_person_name: '',
+        contact_person: '',
         contact_person_phone: '',
         contact_person_email: ''
       } : {})
@@ -220,37 +233,37 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
     // Auto-fill WhatsApp number with primary phone if not provided
     const whatsappNumber = formData.whatsapp_number || formData.primary_phone;
-    
+
     const customerData = {
-        // org_id should NOT be sent - backend gets it from auth token
-        customer_name: formData.customer_name,
-        customer_type: customerType === 'B2B' ? 'wholesale' : 'retail',
-        primary_phone: formData.primary_phone.replace(/\D/g, ''),
-        email: formData.primary_email || null,
-        secondary_phone: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null,
-        whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null, // Also save as whatsapp_number
-        contact_person: formData.contact_person_name || null,
-        contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
-        contact_person_email: formData.contact_person_email || null,
-        gst_number: formData.gst_number || null,
-        pan_number: formData.pan_number || null,
-        drug_license_number: formData.drug_license_number || null,
-        drug_license_validity: formData.drug_license_validity || null,
-        business_type: formData.business_type || 'retail_pharmacy', // Send as its own field
-        // Address fields
-        address_line1: formData.address.address_line1 || null,
-        address_line2: formData.address.address_line2 || null,
-        city: formData.address.city || null,
-        state: formData.address.state || null,
-        pincode: formData.address.pincode || null,
-        // Credit configuration - ALL fields saved to backend
-        credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
-        credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,
-        credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
-        payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
-        notes: `${customerType} customer`, // Remove business_type from notes
-        is_active: true
-      };
+      // org_id should NOT be sent - backend gets it from auth token
+      customer_name: formData.customer_name,
+      customer_type: customerType === 'B2B' ? 'wholesale' : 'retail',
+      primary_phone: formData.primary_phone.replace(/\D/g, ''),
+      email: formData.primary_email || null,
+      secondary_phone: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null,
+      whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null, // Also save as whatsapp_number
+      contact_person: formData.contact_person || null,
+      contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
+      contact_person_email: formData.contact_person_email || null,
+      gst_number: formData.gst_number || null,
+      pan_number: formData.pan_number || null,
+      drug_license_number: formData.drug_license_number || null,
+      drug_license_validity: formData.drug_license_validity || null,
+      business_type: formData.business_type || 'retail_pharmacy', // Send as its own field
+      // Address fields
+      address_line1: formData.address.address_line1 || null,
+      address_line2: formData.address.address_line2 || null,
+      city: formData.address.city || null,
+      state: formData.address.state || null,
+      pincode: formData.address.pincode || null,
+      // Credit configuration - ALL fields saved to backend
+      credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
+      credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,
+      credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
+      payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
+      notes: `${customerType} customer`, // Remove business_type from notes
+      is_active: true
+    };
 
     try {
       // If offline, queue operation and exit gracefully
@@ -268,31 +281,31 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       }
 
       const response = await customersApi.create(customerData);
-      
+
       if (response.data) {
         setMessage(`${customerType} Customer created successfully!`);
         setMessageType('success');
-        
+
         // Call the callback with the created customer
         if (onCustomerCreated) {
           const createdCustomer = {
             customer_id: response.data.customer_id || response.data.id,
             customer_name: customerData.customer_name,
-            contact_person_name: customerData.contact_person_name,
+            contact_person: customerData.contact_person,
             primary_phone: customerData.primary_phone,
             customer_type: 'B2B',
             ...response.data
           };
           onCustomerCreated(createdCustomer);
         }
-        
+
         // Close modal after 1.5 seconds
         setTimeout(() => {
           onClose();
         }, 1500);
       }
     } catch (error) {
-      
+
       // Queue on server error/network issues as well
       offlineStorage.queueOfflineOperation({
         type: 'CREATE_CUSTOMER',
@@ -300,7 +313,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         payload: customerData,
         priority: 'high'
       });
-      
+
       setMessage('Network issue: Saved locally and queued for sync.');
       setMessageType('error');
     } finally {
@@ -313,7 +326,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[95vh] overflow-hidden transform transition-all animate-slide-up" ref={customerFormRef}>
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4 border-b border-gray-100">
           <div className="flex items-center justify-between">
@@ -326,34 +339,32 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                 <p className="text-gray-600 text-sm">Add new customer to your business</p>
               </div>
             </div>
-            
+
             {/* B2B/B2C Toggle */}
             <div className="flex items-center gap-4">
               <div className="flex items-center bg-white rounded-lg p-1 shadow-sm border">
                 <button
                   onClick={() => handleCustomerTypeToggle('B2B')}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    customerType === 'B2B'
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${customerType === 'B2B'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
                 >
                   <Building2 className="w-3.5 h-3.5 inline mr-1.5" />
                   B2B Business
                 </button>
                 <button
                   onClick={() => handleCustomerTypeToggle('B2C')}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    customerType === 'B2C'
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${customerType === 'B2C'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                    }`}
                 >
                   <User className="w-3.5 h-3.5 inline mr-1.5" />
                   B2C Individual
                 </button>
               </div>
-              
+
               <button
                 onClick={onClose}
                 className="p-1.5 hover:bg-white/80 rounded-lg transition-colors"
@@ -366,14 +377,14 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
         {/* Content - Optimized Height */}
         <div className="p-6 max-h-[calc(95vh-120px)] overflow-y-auto">
-          
+
           {/* Message Display */}
           {message && (
             <div className={`
               mb-4 p-3 rounded-lg flex items-start text-sm animate-slide-down
-              ${messageType === 'success' ? 'bg-gray-50 text-green-700 border border-green-200' : 
-                messageType === 'error' ? 'bg-gray-50 text-red-700 border border-red-200' : 
-                'bg-gray-50 text-blue-700 border border-blue-200'
+              ${messageType === 'success' ? 'bg-gray-50 text-green-700 border border-green-200' :
+                messageType === 'error' ? 'bg-gray-50 text-red-700 border border-red-200' :
+                  'bg-gray-50 text-blue-700 border border-blue-200'
               }
             `}>
               {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
@@ -401,9 +412,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       value={formData.customer_name}
                       onChange={(e) => handleInputChange('customer_name', e.target.value)}
                       placeholder={customerType === 'B2B' ? 'Business/Company Name' : 'Full Name'}
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.customer_name ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.customer_name ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white`}
                     />
                   </div>
                   <select
@@ -431,7 +441,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     )}
                   </select>
                 </div>
-                
+
                 <div className="grid grid-cols-3 gap-3">
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -440,9 +450,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       value={formData.primary_phone}
                       onChange={(e) => handleInputChange('primary_phone', e.target.value)}
                       placeholder="Primary Phone Number"
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.primary_phone ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.primary_phone ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                     />
                   </div>
                   <div className="relative">
@@ -452,9 +461,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       value={formData.primary_email}
                       onChange={(e) => handleInputChange('primary_email', e.target.value)}
                       placeholder="Email Address"
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.primary_email ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.primary_email ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                     />
                   </div>
                   <div className="relative">
@@ -464,9 +472,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       value={formData.whatsapp_number}
                       onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
                       placeholder="WhatsApp (defaults to primary phone)"
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                     />
                   </div>
                 </div>
@@ -495,12 +502,11 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      value={formData.contact_person_name}
-                      onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
+                      value={formData.contact_person}
+                      onChange={(e) => handleInputChange('contact_person', e.target.value)}
                       placeholder="Contact Person Name"
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.contact_person_name ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.contact_person ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                     />
                   </div>
                   <div className="relative">
@@ -511,11 +517,9 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
                       placeholder="Contact Phone"
                       disabled={useBusinessContactInfo}
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.contact_person_phone ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 ${
-                        useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
-                      }`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.contact_person_phone ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 ${useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
+                        }`}
                     />
                   </div>
                   <div className="relative">
@@ -526,11 +530,9 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
                       placeholder="Contact Email"
                       disabled={useBusinessContactInfo}
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
-                        errors.contact_person_email ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-green-500 ${
-                        useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
-                      }`}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${errors.contact_person_email ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-green-500 ${useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
+                        }`}
                     />
                   </div>
                 </div>
@@ -601,9 +603,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     onChange={(e) => handleInputChange('gst_number', e.target.value.toUpperCase())}
                     placeholder="GST Number"
                     maxLength={15}
-                    className={`w-full px-3 py-2.5 text-sm border ${
-                      errors.gst_number ? 'border-red-300' : 'border-gray-200'
-                    } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                    className={`w-full px-3 py-2.5 text-sm border ${errors.gst_number ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                   />
                   <input
                     type="text"
@@ -611,9 +612,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     onChange={(e) => handleInputChange('pan_number', e.target.value.toUpperCase())}
                     placeholder="PAN Number"
                     maxLength={10}
-                    className={`w-full px-3 py-2.5 text-sm border ${
-                      errors.pan_number ? 'border-red-300' : 'border-gray-200'
-                    } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                    className={`w-full px-3 py-2.5 text-sm border ${errors.pan_number ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                   />
                   <input
                     type="text"
@@ -700,13 +700,13 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               <span className="font-medium">Type:</span> {customerType}
-              {customerType === 'B2B' && formData.contact_person_name && (
+              {customerType === 'B2B' && formData.contact_person && (
                 <span className="ml-3">
-                  <span className="font-medium">Contact:</span> {formData.contact_person_name}
+                  <span className="font-medium">Contact:</span> {formData.contact_person}
                 </span>
               )}
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}

@@ -37,7 +37,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     primary_email: customer?.primary_email || '',
     secondary_phone: customer?.secondary_phone || '',
     whatsapp_number: customer?.whatsapp_number || '',
-    contact_person_name: customer?.contact_person_name || '',
+    contact_person: customer?.contact_person || '',
     contact_person_phone: customer?.contact_person_phone || '',
     contact_person_email: customer?.contact_person_email || '',
     
@@ -437,8 +437,8 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                         </label>
                         <Input
                           type="text"
-                          value={formData.contact_person_name}
-                          onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
+                          value={formData.contact_person}
+                          onChange={(e) => handleInputChange('contact_person', e.target.value)}
                           placeholder="John Doe"
                         />
                       </div>

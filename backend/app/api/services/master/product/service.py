@@ -670,3 +670,272 @@ class ProductService:
             ORDER BY product_class
         """))
         return [{"class_name": row.product_class} for row in result if row.product_class]
+    
+    @staticmethod
+    def list_products(
+        db: Session,
+        skip: int = 0,
+        limit: int = 50,
+        category_id: Optional[int] = None,
+        search: Optional[str] = None,
+        manufacturer: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        List products with filters and pagination.
+        TenantAwareSession auto-filters by org_id.
+        """
+        query = """
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent,
+                p.category_id, p.total_quantity_available,
+                c.category_name
+            FROM inventory.products p
+            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id
+            WHERE 1=1
+        """
+        params: Dict[str, Any] = {}
+        
+        if category_id:
+            query += " AND p.category_id = :category_id"
+            params["category_id"] = category_id
+        
+        if search:
+            query += " AND (p.product_name ILIKE :search OR p.product_code ILIKE :search OR p.brand ILIKE :search)"
+            params["search"] = f"%{search}%"
+        
+        if manufacturer:
+            query += " AND p.manufacturer ILIKE :manufacturer"
+            params["manufacturer"] = f"%{manufacturer}%"
+        
+        query += " ORDER BY p.created_at DESC LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def search_products(
+        db: Session,
+        q: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Search products by name, brand, HSN, or code.
+        Includes average pricing from active batches.
+        TenantAwareSession auto-filters by org_id.
+        """
+        if not q:
+            # Return empty search for no query
+            return []
+        
+        result = db.execute(text("""
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.total_quantity_available,
+                COALESCE(AVG(b.mrp_per_unit), 0) as mrp_per_unit,
+                COALESCE(AVG(b.sale_price_per_unit), 0) as sale_price_per_unit,
+                COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                AND p.org_id = b.org_id
+                AND b.batch_status = 'active'
+                AND b.quantity_available > 0
+            WHERE (p.product_name ILIKE :search 
+                OR p.brand ILIKE :search 
+                OR p.manufacturer ILIKE :search
+                OR p.hsn_code ILIKE :search
+                OR p.product_code ILIKE :search)
+            GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.total_quantity_available
+            ORDER BY p.product_name
+            LIMIT :limit OFFSET :offset
+        """), {"search": f"%{q}%", "limit": limit, "offset": offset})
+        
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def search_products_with_batches(
+        db: Session,
+        search: Optional[str] = None,
+        category_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 50,
+        include_zero_stock: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Search products with their active batch details.
+        Returns products with nested batches array.
+        TenantAwareSession auto-filters by org_id.
+        """
+        # Build product query
+        product_query = """
+            SELECT DISTINCT
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.total_quantity_available, p.created_at,
+                pc.category_name
+            FROM inventory.products p
+            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
+            WHERE 1=1
+        """
+        params: Dict[str, Any] = {}
+        
+        if search:
+            product_query += """ AND (p.product_name ILIKE :search 
+                OR p.product_code ILIKE :search 
+                OR p.brand ILIKE :search
+                OR p.hsn_code ILIKE :search)"""
+            params["search"] = f"%{search}%"
+        
+        if category_id:
+            product_query += " AND p.category_id = :category_id"
+            params["category_id"] = category_id
+        
+        if not include_zero_stock:
+            product_query += " AND p.total_quantity_available > 0"
+        
+        product_query += " ORDER BY p.product_name LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        products_result = db.execute(text(product_query), params)
+        products = [dict(row._mapping) for row in products_result]
+        
+        if not products:
+            return {"products": [], "total": 0}
+        
+        # Get batches for found products
+        product_ids = [p["product_id"] for p in products]
+        batches_result = db.execute(text("""
+            SELECT 
+                b.batch_id, b.product_id, b.batch_number, b.expiry_date,
+                b.quantity_available, b.mrp_per_unit, b.sale_price_per_unit,
+                b.cost_per_unit, b.batch_status
+            FROM inventory.batches b
+            WHERE b.product_id = ANY(:product_ids)
+            AND b.batch_status = 'active'
+            AND b.quantity_available > 0
+            ORDER BY b.expiry_date ASC
+        """), {"product_ids": product_ids})
+        
+        batches = [dict(row._mapping) for row in batches_result]
+        
+        # Group batches by product
+        batches_by_product: Dict[int, List[Dict]] = {}
+        for batch in batches:
+            pid = batch["product_id"]
+            if pid not in batches_by_product:
+                batches_by_product[pid] = []
+            batches_by_product[pid].append(batch)
+        
+        # Add batches to products
+        for product in products:
+            product["batches"] = batches_by_product.get(product["product_id"], [])
+        
+        return {"products": products, "total": len(products)}
+    
+    @staticmethod
+    def create_category(
+        db: Session,
+        org_id: str,
+        category_name: str,
+        description: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new product category.
+        Returns created category or raises ValueError if exists.
+        """
+        if not category_name or not category_name.strip():
+            raise ValueError("Category name is required")
+        
+        category_name = category_name.strip()
+        category_code = category_name.upper().replace(" ", "_").replace("-", "_")
+        
+        # Check if already exists
+        existing = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories
+            WHERE org_id = :org_id
+            AND (LOWER(category_name) = LOWER(:category_name)
+            OR LOWER(category_code) = LOWER(:category_code))
+        """), {
+            "org_id": org_id,
+            "category_name": category_name,
+            "category_code": category_code
+        }).first()
+        
+        if existing:
+            raise ValueError("Category already exists")
+        
+        # Insert new category
+        result = db.execute(text("""
+            INSERT INTO inventory.product_categories (
+                org_id, category_name, category_code, is_active, created_at
+            ) VALUES (
+                :org_id, :category_name, :category_code, true, CURRENT_TIMESTAMP
+            ) RETURNING category_id, category_name, category_code
+        """), {
+            "org_id": org_id,
+            "category_name": category_name,
+            "category_code": category_code
+        })
+        
+        created = result.fetchone()
+        return {
+            "category_id": created.category_id,
+            "category_name": created.category_name,
+            "category_code": created.category_code
+        }
+    
+    @staticmethod
+    def create_type(
+        db: Session,
+        type_name: str,
+        default_base_uom: str = "Unit"
+    ) -> Dict[str, Any]:
+        """
+        Create a new product type.
+        Returns created type or raises ValueError if exists.
+        Note: product_types may be org-agnostic in some implementations.
+        """
+        if not type_name or not type_name.strip():
+            raise ValueError("Type name is required")
+        
+        type_name = type_name.strip()
+        type_code = type_name.upper().replace(" ", "_").replace("-", "_")
+        
+        # Check if already exists
+        existing = db.execute(text("""
+            SELECT type_id FROM inventory.product_types
+            WHERE LOWER(type_name) = LOWER(:type_name)
+            OR LOWER(type_code) = LOWER(:type_code)
+        """), {
+            "type_name": type_name,
+            "type_code": type_code
+        }).first()
+        
+        if existing:
+            raise ValueError("Product type already exists")
+        
+        # Insert new type
+        result = db.execute(text("""
+            INSERT INTO inventory.product_types (
+                type_name, type_code, default_base_uom, is_active
+            ) VALUES (
+                :type_name, :type_code, :default_base_uom, true
+            ) RETURNING type_id, type_name, type_code, default_base_uom
+        """), {
+            "type_name": type_name,
+            "type_code": type_code,
+            "default_base_uom": default_base_uom
+        })
+        
+        created = result.fetchone()
+        return {
+            "type_id": created.type_id,
+            "type_name": created.type_name,
+            "type_code": created.type_code,
+            "default_base_uom": created.default_base_uom
+        }

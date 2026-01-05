@@ -34,7 +34,7 @@ export interface CustomerDetails {
     primary_phone?: string;
     mobile?: string;
     contact_number?: string;
-    contact_person_name?: string;
+    contact_person?: string;
 }
 
 // ==================== CHALLAN ITEM ====================
@@ -103,7 +103,7 @@ export interface Challan {
     delivery_city: string;
     delivery_state: string;
     delivery_pincode: string;
-    delivery_contact_person_name: string;
+    delivery_contact_person: string;
     delivery_contact_phone: string;
 
     // Items
@@ -246,7 +246,7 @@ export const getInitialChallan = (): Challan => ({
     delivery_city: '',
     delivery_state: '',
     delivery_pincode: '',
-    delivery_contact_person_name: '',
+    delivery_contact_person: '',
     delivery_contact_phone: '',
     items: [],
     transport_company: '',

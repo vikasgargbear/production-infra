@@ -73,5 +73,22 @@ export const companyApi = {
 
     updateBankDetails: (data: Record<string, any>): Promise<AxiosResponse> => {
         return apiHelpers.put(ENDPOINTS.BANK, data);
+    },
+
+    // Aliases for compatibility
+    getCompanyProfile: (): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.INFO);
+    },
+
+    getOrganizationId: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/company/org-id');
+    },
+
+    getCompanyInfo: (): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.INFO);
+    },
+
+    updateCompanyInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {
+        return apiHelpers.put(ENDPOINTS.INFO, data);
     }
 };

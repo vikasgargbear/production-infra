@@ -35,7 +35,7 @@ interface OrderItem {
 interface Customer {
   customer_id: number;
   customer_name: string;
-  contact_person_name?: string;
+  contact_person?: string;
   phone?: string;
   email?: string;
 }

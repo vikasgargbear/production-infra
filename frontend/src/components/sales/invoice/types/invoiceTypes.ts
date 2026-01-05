@@ -68,7 +68,7 @@ export interface Customer {
     primary_phone?: string;
     mobile?: string;
     email?: string;
-    contact_person_name?: string;
+    contact_person?: string;
 
     // GST/Business
     gst_number?: string;

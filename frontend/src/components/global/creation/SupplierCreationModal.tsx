@@ -56,7 +56,7 @@ const transformSupplier = (supplier: Record<string, unknown>) => ({
     name: String(supplier.supplier_name || supplier.name || ''),
     code: String(supplier.supplier_code || ''),
     type: String(supplier.supplier_type || ''),
-    contact_person: String(supplier.contact_person_name || supplier.contact_person || ''),
+    contact_person: String(supplier.contact_person || supplier.contact_person || ''),
     phone: String(supplier.primary_phone || supplier.phone || ''),
     email: String(supplier.primary_email || supplier.email || ''),
     gst_number: String(supplier.gst_number || supplier.gst_number || ''),

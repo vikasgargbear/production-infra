@@ -12,7 +12,7 @@ const transformSupplierForAPI = (formData: Record<string, unknown>) => ({
   name: formData.supplier_name,
   code: formData.supplier_code || null,
   supplier_type: formData.supplier_type || 'distributor',
-  contact_person_name: formData.contact_person_name || null,
+  contact_person: formData.contact_person || null,
   contact_person_phone: formData.contact_person_phone || null,
   phone: formData.phone || null,
   whatsapp_number: formData.whatsapp_number || formData.phone || null,
@@ -77,7 +77,7 @@ const SupplierCreationForm = ({
     // Basic Information
     supplier_name: '',
     supplier_code: '',
-    contact_person_name: '',
+    contact_person: '',
     contact_person_phone: '',
     contact_person_email: '',
     phone: '',
@@ -350,7 +350,7 @@ const SupplierCreationForm = ({
                 <input
                   type="text"
                   value={formData.contact_person}
-                  onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
+                  onChange={(e) => handleInputChange('contact_person', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500"
                   placeholder="Contact person name"
                 />

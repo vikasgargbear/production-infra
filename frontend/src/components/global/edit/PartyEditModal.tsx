@@ -21,7 +21,7 @@ interface Party {
     type?: 'customer' | 'supplier' | 'both';
     gst_number?: string;
     pan?: string;
-    contact_person_name?: string;
+    contact_person?: string;
     contact?: string;
     phone?: string;
     alt_phone?: string;
@@ -50,7 +50,7 @@ interface FormData {
     type: 'customer' | 'supplier' | 'both';
     gst_number: string;
     pan_number: string;
-    contact_person_name: string;
+    contact_person: string;
     phone: string;
     alt_phone: string;
     email: string;
@@ -96,7 +96,7 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
         type: partyType,
         gst_number: '',
         pan_number: '',
-        contact_person_name: '',
+        contact_person: '',
         phone: '',
         alt_phone: '',
         email: '',
@@ -169,7 +169,7 @@ const PartyEditModal: React.FC<PartyEditModalProps> = ({
                 type: (party.type as 'customer' | 'supplier' | 'both') || partyType,
                 gst_number: party.gst_number || '',
                 pan_number: party.pan_number || '',
-                contact_person_name: party.contact_person || party.contact || '',
+                contact_person: party.contact_person || party.contact || '',
                 phone: party.phone || '',
                 alt_phone: party.alt_phone || party.altPhone || '',
                 email: party.email || '',

@@ -203,8 +203,8 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 {customer.email && (
                   <p><Mail className="w-3 h-3 inline mr-1" /> {customer.email}</p>
                 )}
-                {customer.contact_person_name_name && (
-                  <p><User className="w-3 h-3 inline mr-1" /> {customer.contact_person_name}</p>
+                {customer.contact_person_name && (
+                  <p><User className="w-3 h-3 inline mr-1" /> {customer.contact_person}</p>
                 )}
               </div>
             </div>

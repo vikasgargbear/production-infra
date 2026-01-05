@@ -305,7 +305,7 @@ const SalesReturnFlow = ({ onClose }) => {
       phone: customer.phone || customer.mobile || customer.contact_phone || '',
       mobile: customer.mobile || customer.phone || '',
       email: customer.email || customer.contact_email || '',
-      contact_person_name: customer.contact_person_name || customer.contact_person_name || '',
+      contact_person: customer.contact_person || customer.contact_person || '',
       gst_number: customer.gst_number || customer.gst_number || customer.gst || '',
       drug_license_number: customer.drug_license_number || customer.drug_license || '',
       credit_limit: customer.credit_limit || 0,

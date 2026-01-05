@@ -30,46 +30,44 @@ export interface BaseEmployee {
 
 // ==================== CUSTOMER (SHARED CORE) ====================
 
-/** Core customer fields used across all sales documents */
+/** Core customer fields used across all sales documents - aligned with backend schema */
 export interface BaseCustomer {
     // Primary identifiers
     customer_id?: string | number;
     customer_name?: string;
-    name?: string;
 
-    // Contact
-    phone?: string;
+    // Contact - backend uses primary_phone, not phone/mobile
     primary_phone?: string;
-    mobile?: string;
+    secondary_phone?: string;
+    whatsapp_number?: string;
     email?: string;
-    contact_person_name?: string;
+    contact_person?: string;  // Backend uses contact_person, not contact_person
+    contact_person_phone?: string;
+    contact_person_email?: string;
 
     // GST
     gst_number?: string;
-    gst_number?: string;
+    pan_number?: string;
 
-    // Address (flat structure)
+    // Address (flat structure) - backend uses pincode, not pin_code
     address?: string;
     address_line1?: string;
+    address_line2?: string;
     city?: string;
     state?: string;
-    state_name?: string;
     pincode?: string;
-    pin_code?: string;
-    postal_code?: string;
 }
 
 // ==================== LINE ITEM (SHARED CORE) ====================
 
-/** Core fields for any sales line item */
+/** Core fields for any sales line item - aligned with backend schema */
 export interface BaseLineItem {
     id?: number | string;
     product_id: string | number;
     product_name: string;
 
-    // Batch
+    // Batch - backend uses batch_number
     batch_id?: string | number;
-    batch_number?: string;
     batch_number?: string;
     expiry_date?: string;
 
@@ -78,18 +76,19 @@ export interface BaseLineItem {
     free_quantity?: number;
     unit?: string;
 
-    // Pricing
+    // Pricing - backend uses unit_price and mrp
     mrp?: number;
     unit_price?: number;
-    rate?: number;
-    sale_price?: number;
+    discount_percent?: number;
 
     // Tax
     gst_percent?: number;
     hsn_code?: string;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
 
-    // Totals
-    total?: number;
+    // Totals - backend uses line_total
     line_total?: number;
 }
 

@@ -36,7 +36,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     primary_email: supplier?.primary_email || '',
     secondary_phone: supplier?.secondary_phone || '',
     whatsapp_number: supplier?.whatsapp_number || '',
-    contact_person_name: supplier?.contact_person_name || '',
+    contact_person: supplier?.contact_person || '',
     contact_person_phone: supplier?.contact_person_phone || '',
     contact_person_designation: supplier?.contact_person_designation || '',
     
@@ -442,8 +442,8 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                         </label>
                         <Input
                           type="text"
-                          value={formData.contact_person_name}
-                          onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
+                          value={formData.contact_person}
+                          onChange={(e) => handleInputChange('contact_person', e.target.value)}
                           placeholder="John Doe"
                         />
                       </div>

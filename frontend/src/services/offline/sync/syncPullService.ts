@@ -440,8 +440,8 @@ class SyncPullService {
         } : null;
 
         // Build contact person object for B2B customers
-        const contactPerson = customer.contact_person_name ? {
-            name: customer.contact_person_name,
+        const contactPerson = customer.contact_person ? {
+            name: customer.contact_person,
             phone: customer.contact_person_phone || '',
             email: customer.contact_person_email || ''
         } : null;

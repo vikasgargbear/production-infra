@@ -11,29 +11,33 @@ export type EntityStatus = 'active' | 'inactive' | 'suspended' | 'deleted';
 
 // ==================== CUSTOMER ====================
 
-/** Base customer fields */
+/** Base customer fields - aligned with backend schema */
 export interface BaseCustomer {
     customer_id: number;
     customer_name: string;
     customer_code?: string;
     customer_type?: 'retail' | 'wholesale' | 'dealer' | 'hospital' | 'institution';
 
-    // Contact
-    contact_person_name?: string;
-    phone?: string;
-    alternate_phone?: string;
+    // Contact - backend uses primary_phone and contact_person
+    contact_person?: string;
+    primary_phone?: string;
+    secondary_phone?: string;
+    whatsapp_number?: string;
     email?: string;
+    contact_person_phone?: string;
+    contact_person_email?: string;
 
     // Address
     address?: string;
+    address_line1?: string;
+    address_line2?: string;
     city?: string;
     state?: string;
     pincode?: string;
-    country?: string;
 
-    // Tax info
+    // Tax info - backend uses pan_number
     gst_number?: string;
-    pan?: string;
+    pan_number?: string;
     drug_license_number?: string;
 
     // Credit
@@ -53,29 +57,30 @@ export interface BaseCustomer {
 
 // ==================== SUPPLIER ====================
 
-/** Base supplier fields */
+/** Base supplier fields - aligned with backend schema */
 export interface BaseSupplier {
     supplier_id: number;
     supplier_name: string;
     supplier_code?: string;
     supplier_type?: 'manufacturer' | 'distributor' | 'wholesaler' | 'importer';
 
-    // Contact
-    contact_person_name?: string;
-    phone?: string;
-    alternate_phone?: string;
+    // Contact - backend uses primary_phone and contact_person
+    contact_person?: string;
+    primary_phone?: string;
+    secondary_phone?: string;
     email?: string;
 
     // Address
     address?: string;
+    address_line1?: string;
+    address_line2?: string;
     city?: string;
     state?: string;
     pincode?: string;
-    country?: string;
 
-    // Tax info
+    // Tax info - backend uses pan_number
     gst_number?: string;
-    pan?: string;
+    pan_number?: string;
     drug_license_number?: string;
 
     // Credit

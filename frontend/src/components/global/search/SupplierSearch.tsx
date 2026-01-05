@@ -23,7 +23,7 @@ export interface Supplier {
     city?: string;
     state?: string;
     address?: string;
-    contact_person_name?: string;
+    contact_person?: string;
     contact_person_email?: string;
 }
 
@@ -123,9 +123,9 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
                             <span className="ml-2">GST: {supplier.gst_number}</span>
                         )}
                     </div>
-                    {supplier.contact_person_name && (
+                    {supplier.contact_person && (
                         <div className="text-xs text-gray-500 mt-1">
-                            Contact: {supplier.contact_person_name}
+                            Contact: {supplier.contact_person}
                         </div>
                     )}
                 </div>
@@ -162,9 +162,9 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 mt-0.5">
                             {/* Contact Person */}
-                            {supplier.contact_person_name && (
+                            {supplier.contact_person && (
                                 <span className="flex items-center gap-1">
-                                    <UserPlus className="w-3 h-3" /> {supplier.contact_person_name}
+                                    <UserPlus className="w-3 h-3" /> {supplier.contact_person}
                                 </span>
                             )}
                             {/* Phone Number */}

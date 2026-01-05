@@ -158,64 +158,13 @@ async def search_products(
     Search products by name, brand, or HSN
     """
     try:
-        # Build search query - uses database column names directly (no aliases)
-        if q:
-            result = db.execute(text("""
-                SELECT 
-                    p.product_id, p.product_code, p.product_name, p.generic_name,
-                    p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                    p.total_quantity_available,
-                    COALESCE(AVG(b.mrp_per_unit), 0) as mrp_per_unit,
-                    COALESCE(AVG(b.sale_price_per_unit), 0) as sale_price_per_unit,
-                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit
-                FROM inventory.products p
-                LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                    AND p.org_id = b.org_id
-                    AND b.batch_status = 'active'
-                    AND b.quantity_available > 0
-                WHERE (p.product_name ILIKE :search 
-                    OR p.brand ILIKE :search 
-                    OR p.manufacturer ILIKE :search
-                    OR p.hsn_code ILIKE :search
-                    OR p.product_code ILIKE :search)
-                    AND p.is_active = true
-                GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                         p.total_quantity_available
-                ORDER BY p.product_name
-                LIMIT :limit OFFSET :offset
-            """), {
-                "search": f"%{q}%",
-                "limit": limit,
-                "offset": offset
-            })
-        else:
-            # List all products 
-            result = db.execute(text("""
-                SELECT 
-                    p.product_id, p.product_code, p.product_name, p.generic_name,
-                    p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                    p.total_quantity_available,
-                    COALESCE(AVG(b.mrp_per_unit), 0) as mrp_per_unit,
-                    COALESCE(AVG(b.sale_price_per_unit), 0) as sale_price_per_unit,
-                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit
-                FROM inventory.products p
-                LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                    AND b.batch_status = 'active'
-                    AND b.quantity_available > 0
-                WHERE p.is_active = true
-                GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                         p.total_quantity_available
-                ORDER BY p.product_name
-                LIMIT :limit OFFSET :offset
-            """), {
-                "limit": limit,
-                "offset": offset
-            })
-        
-        # Return complete data using database field names
-        return [dict(row._mapping) for row in result]
+        # Use ProductService for centralized search logic
+        return ProductService.search_products(
+            db=db,
+            q=q,
+            limit=limit,
+            offset=offset
+        )
         
     except Exception as e:
         raise handle_error(e, "search products")
@@ -1163,62 +1112,25 @@ async def create_product_category(
 ):
     """Create a new product category"""
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
-        
         category_name = category_data.get("category_name", "").strip()
-        if not category_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Category name is required"
-            )
         
-        # Generate category code from name
-        category_code = category_name.upper().replace(" ", "_").replace("-", "_")
+        # Use ProductService for centralized creation logic
+        result = ProductService.create_category(
+            db=db,
+            org_id=str(context.org_id),
+            category_name=category_name
+        )
         
-        # Check if category already exists
-        existing = db.execute(text("""
-            SELECT category_id FROM inventory.product_categories
-            AND (LOWER(category_name) = LOWER(:category_name)
-            OR LOWER(category_code) = LOWER(:category_code))
-        """), {
-                        "category_name": category_name,
-            "category_code": category_code
-        }).fetchone()
-        
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Category already exists"
-            )
-        
-        # Insert new category
-        result = db.execute(text("""
-            INSERT INTO inventory.product_categories (
-                org_id, category_name, category_code, is_active, created_at
-            ) VALUES (
-                :org_id, :category_name, :category_code, true, CURRENT_TIMESTAMP
-            ) RETURNING category_id, category_name, category_code
-        """), {
-                        "category_name": category_name,
-            "category_code": category_code
-        })
-        
-        created = result.fetchone()
         db.commit()
         
         return {
             "success": True,
-            "data": {
-                "category_id": created.category_id,
-                "category_name": created.category_name,
-                "category_code": created.category_code
-            },
+            "data": result,
             "message": f"Category '{category_name}' created successfully"
         }
         
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -1234,65 +1146,26 @@ async def create_product_type(
 ):
     """Create a new product type"""
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
-        
         type_name = type_data.get("type_name", "").strip()
-        if not type_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Type name is required"
-            )
-        
-        # Generate type code from name
-        type_code = type_name.upper().replace(" ", "_").replace("-", "_")
         default_base_uom = type_data.get("default_base_uom", "Unit")
         
-        # Check if type already exists
-        existing = db.execute(text("""
-            SELECT type_id FROM inventory.product_types
-            WHERE LOWER(type_name) = LOWER(:type_name)
-            OR LOWER(type_code) = LOWER(:type_code)
-        """), {
-            "type_name": type_name,
-            "type_code": type_code
-        }).fetchone()
+        # Use ProductService for centralized creation logic
+        result = ProductService.create_type(
+            db=db,
+            type_name=type_name,
+            default_base_uom=default_base_uom
+        )
         
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Product type already exists"
-            )
-        
-        # Insert new type
-        result = db.execute(text("""
-            INSERT INTO inventory.product_types (
-                type_name, type_code, default_base_uom, is_active
-            ) VALUES (
-                :type_name, :type_code, :default_base_uom, true
-            ) RETURNING type_id, type_name, type_code, default_base_uom
-        """), {
-            "type_name": type_name,
-            "type_code": type_code,
-            "default_base_uom": default_base_uom
-        })
-        
-        created = result.fetchone()
         db.commit()
         
         return {
             "success": True,
-            "data": {
-                "type_id": created.type_id,
-                "type_name": created.type_name,
-                "type_code": created.type_code,
-                "default_base_uom": created.default_base_uom
-            },
+            "data": result,
             "message": f"Product type '{type_name}' created successfully"
         }
         
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

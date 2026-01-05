@@ -32,6 +32,7 @@ interface PaymentState {
     payment: Payment;
     selectedCustomer: CustomerDetails | null;
     outstandingInvoices: any[];
+    selectedInvoices: any[];
     currentStep: number;
     saving: boolean;
     errors: Record<string, string>;
@@ -45,6 +46,7 @@ type PaymentAction =
     | { type: 'SET_PAYMENT_DATA'; data: Partial<Payment> }
     | { type: 'SET_CUSTOMER'; customer: CustomerDetails | null }
     | { type: 'SET_OUTSTANDING_INVOICES'; invoices: any[] }
+    | { type: 'SET_SELECTED_INVOICES'; invoices: any[] }
     | { type: 'SET_CURRENT_STEP'; step: number }
     | { type: 'SET_SAVING'; saving: boolean }
     | { type: 'SET_ERROR'; field: string; error: string }
@@ -60,6 +62,7 @@ interface PaymentContextValue extends PaymentState {
     setPaymentData: (data: Partial<Payment>) => void;
     setCustomer: (customer: CustomerDetails | null) => void;
     setOutstandingInvoices: (invoices: any[]) => void;
+    setSelectedInvoices: (invoices: any[]) => void;
     setCurrentStep: (step: number) => void;
     setSaving: (saving: boolean) => void;
     setError: (field: string, error: string) => void;
@@ -89,6 +92,7 @@ const initialState: PaymentState = {
     },
     selectedCustomer: null,
     outstandingInvoices: [],
+    selectedInvoices: [],
     currentStep: 1,
     saving: false,
     errors: {},
@@ -134,6 +138,12 @@ const paymentReducer = (state: PaymentState, action: PaymentAction): PaymentStat
             return {
                 ...state,
                 outstandingInvoices: action.invoices
+            };
+
+        case 'SET_SELECTED_INVOICES':
+            return {
+                ...state,
+                selectedInvoices: action.invoices
             };
 
         case 'SET_CURRENT_STEP':
@@ -226,6 +236,7 @@ export const PaymentProvider: React.FC<PaymentProviderProps> = ({ children }) =>
         setPaymentData: (data) => dispatch({ type: 'SET_PAYMENT_DATA', data }),
         setCustomer: (customer) => dispatch({ type: 'SET_CUSTOMER', customer }),
         setOutstandingInvoices: (invoices) => dispatch({ type: 'SET_OUTSTANDING_INVOICES', invoices }),
+        setSelectedInvoices: (invoices) => dispatch({ type: 'SET_SELECTED_INVOICES', invoices }),
         setCurrentStep: (step) => dispatch({ type: 'SET_CURRENT_STEP', step }),
         setSaving: (saving) => dispatch({ type: 'SET_SAVING', saving }),
         setError: (field, error) => dispatch({ type: 'SET_ERROR', field, error }),
