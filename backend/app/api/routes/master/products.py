@@ -418,6 +418,8 @@ async def get_all_products_with_batches(
         total_count = count_result.fetchone()[0]
         
         # Fetch products
+        # NOTE: Use p.total_quantity_available directly (pre-computed by trigger)
+        # instead of subquery - faster and consistent with other endpoints
         product_query = f"""
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.generic_name,
@@ -425,14 +427,9 @@ async def get_all_products_with_batches(
                 p.category_id, p.type_id, p.product_type,
                 p.is_active, p.requires_prescription, p.is_narcotic,
                 p.created_at, p.updated_at,
-                COALESCE(s.total_stock, 0) as total_stock
+                COALESCE(p.total_quantity_available, 0) as total_quantity_available,
+                COALESCE(p.total_quantity_available, 0) as total_stock
             FROM inventory.products p
-            LEFT JOIN (
-                SELECT product_id, SUM(quantity_available) as total_stock
-                FROM inventory.batches
-                WHERE org_id = :org_id AND quantity_available > 0
-                GROUP BY product_id
-            ) s ON p.product_id = s.product_id
             WHERE {where_sql}
             ORDER BY p.product_name
             LIMIT :limit OFFSET :offset
