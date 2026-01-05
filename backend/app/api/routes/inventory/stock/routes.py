@@ -10,16 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
 
-from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
-from ....core.auth.org_context import get_org_context, OrgContext
-from ....core.utils.api_utils import handle_error
-from ...schemas.inventory.inventory import (
+from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.utils.api_utils import handle_error
+from ....schemas.inventory.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
     CurrentStock, ExpiryAlert,
     StockValuation, InventoryDashboard
 )
-from ...services.inventory.inventory_service import InventoryService
+from ....services.inventory.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
 
