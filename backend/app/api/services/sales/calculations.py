@@ -308,14 +308,23 @@ class InvoiceCalculator:
             
             calculated_items.append({
                 'product_id': item.get('product_id'),
+                'batch_id': item.get('batch_id'),
                 'quantity': float(qty),
+                'free_quantity': float(free_qty),
                 'unit_price': float(unit_price),
-                'line_total': float(line_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'mrp': float(item.get('mrp', 0)),
+                'discount_percent': float(disc_pct),
                 'discount_amount': float(item_disc.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'gst_percent': float(gst_pct),
+                'cgst_percent': float(gst_pct / Decimal('2')) if not is_igst else 0,
+                'sgst_percent': float(gst_pct / Decimal('2')) if not is_igst else 0,
+                'igst_percent': float(gst_pct) if is_igst else 0,
+                'line_total': float(line_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'taxable_amount': float(taxable.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'cgst_amount': float(item_cgst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'sgst_amount': float(item_sgst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'igst_amount': float(item_igst.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'total_tax_amount': float((item_cgst + item_sgst + item_igst).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             })
         
         # Invoice-level (scheme) discount

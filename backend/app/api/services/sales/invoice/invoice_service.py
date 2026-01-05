@@ -89,10 +89,12 @@ class InvoiceService:
             )
             
             # 6. Calculate due date
+            # Note: Frontend may send payment_mode instead of payment_terms
+            payment_terms = getattr(invoice_data, 'payment_terms', None) or getattr(invoice_data, 'payment_mode', 'cash')
             due_date = InvoiceService._calculate_due_date(
                 invoice_data.invoice_date,
-                getattr(invoice_data, 'payment_terms', 'cash'),
-                getattr(invoice_data, 'due_days', None)
+                payment_terms,
+                getattr(invoice_data, 'due_days', None) or getattr(invoice_data, 'due_date', None)
             )
             
             # 7. Create invoice
@@ -108,7 +110,7 @@ class InvoiceService:
                 billing_address_id=context.get("billing_address_id"),
                 shipping_address_id=context.get("shipping_address_id"),
                 totals=totals,
-                payment_terms=getattr(invoice_data, 'payment_terms', 'cash'),
+                payment_terms=payment_terms,
                 due_date=due_date,
                 notes=getattr(invoice_data, 'notes', None),
                 created_by=actual_user_id
@@ -167,7 +169,8 @@ class InvoiceService:
         )
         
         # Get line calculations from totals
-        line_calculations = totals.get("line_calculations", [])
+        # NOTE: calculations.py returns 'calculated_items', not 'line_calculations'
+        line_calculations = totals.get("calculated_items", []) or totals.get("line_calculations", [])
         
         # Prepare items data
         invoice_items_data = []

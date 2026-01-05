@@ -365,4 +365,19 @@ class InvoiceRepository:
         
         db.execute(text(bulk_insert_sql), params)
         logger.info(f"✅ Bulk inserted {len(invoice_items_data)} invoice items")
-
+        
+        # Update items_count and total_quantity on the invoice
+        if invoice_items_data:
+            invoice_id = invoice_items_data[0].get("invoice_id")
+            if invoice_id:
+                db.execute(text("""
+                    UPDATE sales.invoices
+                    SET items_count = :items_count,
+                        total_quantity = :total_quantity
+                    WHERE invoice_id = :invoice_id
+                """), {
+                    "invoice_id": invoice_id,
+                    "items_count": len(invoice_items_data),
+                    "total_quantity": sum(item.get("quantity", 0) for item in invoice_items_data)
+                })
+                logger.info(f"✅ Updated invoice {invoice_id} with items_count={len(invoice_items_data)}")
