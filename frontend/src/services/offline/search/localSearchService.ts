@@ -151,10 +151,31 @@ class LocalSearchService {
                 return true;
             });
 
-            const results = uniqueMatches.slice(0, limit);
-            console.log(`[LocalSearch] ⚡ Found ${results.length} products`);
+            // Calculate USABLE stock (available - offline reservations)
+            // This prevents overselling when invoices are created locally but not yet synced
+            const resultsWithUsableStock = uniqueMatches.slice(0, limit).map((product: any) => {
+                // Calculate total offline reservations from all batches
+                const batches = product.batches || [];
+                const totalReservedOffline = batches.reduce(
+                    (sum: number, batch: any) => sum + (batch.quantity_reserved_offline || 0),
+                    0
+                );
 
-            return results;
+                // Usable stock = total - reserved
+                const totalStock = product.total_stock || 0;
+                const usableStock = Math.max(0, totalStock - totalReservedOffline);
+
+                return {
+                    ...product,
+                    total_stock: usableStock,  // Override with usable stock for display
+                    _raw_total_stock: totalStock,  // Keep original for debugging
+                    _total_reserved_offline: totalReservedOffline
+                };
+            });
+
+            console.log(`[LocalSearch] ⚡ Found ${resultsWithUsableStock.length} products`);
+
+            return resultsWithUsableStock;
         } catch (error) {
             console.error('[LocalSearch] Product search failed:', error);
             // Fallback to cloud on error
