@@ -182,15 +182,18 @@ class InvoiceRepository:
         Returns:
             Tuple of (products_lookup, batches_lookup, fifo_batches)
         """
-        # Fetch product names
+        # Fetch product names and HSN codes
         products_lookup = {}
         if product_ids:
             prod_result = db.execute(text("""
-                SELECT product_id, product_name
+                SELECT product_id, product_name, hsn_code
                 FROM inventory.products
                 WHERE product_id = ANY(:product_ids) AND org_id = :org_id
             """), {"product_ids": product_ids, "org_id": org_id})
-            products_lookup = {row[0]: row[1] for row in prod_result.fetchall()}
+            products_lookup = {
+                row[0]: {"product_name": row[1], "hsn_code": row[2]} 
+                for row in prod_result.fetchall()
+            }
         
         # Fetch batch details
         batches_lookup = {}
