@@ -18,8 +18,8 @@ from sqlalchemy import text
 import logging
 import uuid
 
-from ..document_number_service import DocumentNumberService
-from ....core.utils.constants import (
+from ...document_number_service import DocumentNumberService
+from .....core.utils.constants import (
     PartyType, CreditNoteReason, InvoicePaymentStatus
 )
 

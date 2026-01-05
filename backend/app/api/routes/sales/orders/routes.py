@@ -21,7 +21,7 @@ from ....schemas.sales.order import (
     InvoiceResponse, DeliveryUpdate, OrderUpdate
 )
 from ....services.sales.order import OrderService
-from ....services.master.customer_service import CustomerService
+from ....services.master.customer.service import CustomerService
 from ....services.sales.invoice_service import InvoiceService
 from ....services.settings.settings_service import SettingsService  # NEW: Settings enforcement
 

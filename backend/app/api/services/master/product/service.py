@@ -17,8 +17,8 @@ from uuid import UUID
 import logging
 import re
 
-from ..gst_service import GSTService
-from ..document_number_service import DocumentNumberService
+from ...gst_service import GSTService
+from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 

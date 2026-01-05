@@ -18,7 +18,7 @@ from sqlalchemy import text
 import logging
 from uuid import UUID
 
-from ....core.utils.constants import (
+from .....core.utils.constants import (
     PartyType, InvoicePaymentStatus, InvoiceStatus, PaymentRecordStatus
 )
 

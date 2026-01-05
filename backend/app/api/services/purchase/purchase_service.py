@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ..master.product_service import ProductService
+from ..master.product.service import ProductService
 from ..inventory.inventory_service import InventoryService
 from ..document_number_service import DocumentNumberService
 from ....core.utils.constants import (

@@ -19,7 +19,7 @@ from .....core.auth.jwt_auth import get_org_id_string
 from .....core.utils.constants import PartyType, ReturnStatus
 from .....core.utils.branch_utils import get_default_branch_id  # RBAC
 from ....services.document_number_service import DocumentNumberService
-from ....services.finance.credit_note_service import CreditNoteService
+from ....services.finance.credit_note.service import CreditNoteService
 
 logger = logging.getLogger(__name__)
 

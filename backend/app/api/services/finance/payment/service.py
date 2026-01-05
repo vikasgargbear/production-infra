@@ -12,8 +12,8 @@ from sqlalchemy import text
 import logging
 from uuid import UUID
 
-from ..document_number_service import DocumentNumberService
-from ....core.utils.constants import (
+from ...document_number_service import DocumentNumberService
+from .....core.utils.constants import (
     PaymentStatus, PaymentRecordStatus, PaymentMethod, PaymentType, PartyType
 )
 

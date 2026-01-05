@@ -19,7 +19,7 @@ from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_conte
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
-from ....services.finance.payment_service import PaymentService
+from ....services.finance.payment.service import PaymentService
 from ....services.document_number_service import DocumentNumberService
 from ....schemas.sales.billing import (
     GeneralPaymentCreate, InvoicePaymentCreate, 
