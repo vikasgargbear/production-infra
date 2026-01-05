@@ -179,7 +179,7 @@ class InvoiceRepository:
                 round_off_amount, final_amount, amount_in_words,
                 payment_terms, due_date, notes,
                 invoice_status, payment_status, paid_amount,
-                credit_amount, unallocated_amount,
+                credit_amount,
                 created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
@@ -191,7 +191,7 @@ class InvoiceRepository:
                 :round_off, :final, :amount_in_words,
                 :payment_terms, :due_date, :notes,
                 'posted', 'pending', 0,
-                :final, :final,
+                :final,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
