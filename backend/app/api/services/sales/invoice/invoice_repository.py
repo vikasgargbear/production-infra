@@ -13,6 +13,58 @@ from ..shared import SalesSharedRepository
 logger = logging.getLogger(__name__)
 
 
+def number_to_indian_words(num: float) -> str:
+    """
+    Convert number to Indian currency words format.
+    E.g., 12345.67 -> "Twelve Thousand Three Hundred Forty Five Rupees and Sixty Seven Paise Only"
+    """
+    if num == 0:
+        return "Zero Rupees Only"
+    
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+            "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+            "Seventeen", "Eighteen", "Nineteen"]
+    tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+    
+    def two_digit(n: int) -> str:
+        if n < 20:
+            return ones[n]
+        return tens[n // 10] + (" " + ones[n % 10] if n % 10 else "")
+    
+    def three_digit(n: int) -> str:
+        if n < 100:
+            return two_digit(n)
+        return ones[n // 100] + " Hundred" + (" " + two_digit(n % 100) if n % 100 else "")
+    
+    # Split into rupees and paise
+    rupees = int(num)
+    paise = round((num - rupees) * 100)
+    
+    if rupees == 0:
+        return f"{two_digit(paise)} Paise Only" if paise else "Zero Rupees Only"
+    
+    # Indian numbering: Crore, Lakh, Thousand, Hundred
+    parts = []
+    if rupees >= 10000000:  # Crore
+        parts.append(two_digit(rupees // 10000000) + " Crore")
+        rupees %= 10000000
+    if rupees >= 100000:  # Lakh
+        parts.append(two_digit(rupees // 100000) + " Lakh")
+        rupees %= 100000
+    if rupees >= 1000:  # Thousand
+        parts.append(two_digit(rupees // 1000) + " Thousand")
+        rupees %= 1000
+    if rupees > 0:
+        parts.append(three_digit(rupees))
+    
+    rupee_words = " ".join(parts) + " Rupees"
+    
+    if paise:
+        return f"{rupee_words} and {two_digit(paise)} Paise Only"
+    return f"{rupee_words} Only"
+
+
+
 class InvoiceRepository:
     """Pure data access layer for invoices - no business logic"""
     
@@ -113,6 +165,9 @@ class InvoiceRepository:
         Returns:
             invoice_id
         """
+        final_amount = totals["final_amount"]
+        amount_words = number_to_indian_words(float(final_amount))
+        
         result = db.execute(text("""
             INSERT INTO sales.invoices (
                 org_id, branch_id, invoice_number, invoice_date, invoice_type,
@@ -121,10 +176,11 @@ class InvoiceRepository:
                 subtotal_amount, discount_amount, scheme_discount, taxable_amount,
                 igst_amount, cgst_amount, sgst_amount, total_tax_amount,
                 freight_charges, insurance_charges, other_charges,
-                round_off_amount, final_amount,
+                round_off_amount, final_amount, amount_in_words,
                 payment_terms, due_date, notes,
-                invoice_status, payment_status,
-                created_by, created_at
+                invoice_status, payment_status, paid_amount,
+                credit_amount, unallocated_amount,
+                created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
                 :order_id, :customer_id, :customer_name,
@@ -132,10 +188,11 @@ class InvoiceRepository:
                 :subtotal, :item_discount, :scheme_discount, :taxable,
                 :igst, :cgst, :sgst, :tax,
                 :freight, :insurance, :other,
-                :round_off, :final,
+                :round_off, :final, :amount_in_words,
                 :payment_terms, :due_date, :notes,
-                'posted', 'pending',
-                :created_by, CURRENT_TIMESTAMP
+                'posted', 'pending', 0,
+                :final, :final,
+                :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
             "org_id": org_id,
@@ -159,7 +216,8 @@ class InvoiceRepository:
             "insurance": totals.get("insurance_charges", 0),
             "other": totals.get("other_charges", 0),
             "round_off": totals.get("round_off_amount", 0),
-            "final": totals["final_amount"],
+            "final": final_amount,
+            "amount_in_words": amount_words,
             "payment_terms": payment_terms,
             "due_date": due_date,
             "notes": notes,
@@ -329,7 +387,8 @@ class InvoiceRepository:
             # quantity, uom, pack_type, pack_size, base_quantity,
             # mrp, unit_price, discount_percent, discount_amount, taxable_amount,
             # igst_rate, igst_amount, cgst_rate, cgst_amount,
-            # sgst_rate, sgst_amount, total_tax_amount, line_total, free_quantity
+            # sgst_rate, sgst_amount, total_tax_amount, line_total, free_quantity,
+            # display_order, is_free_item
             # NOTE: org_id does NOT exist in sales.invoice_items!
             values_list.append(f"""(
                 :invoice_id_{i}, :product_id_{i}, :product_name_{i}, :hsn_code_{i},
@@ -338,12 +397,19 @@ class InvoiceRepository:
                 :mrp_{i}, :unit_price_{i}, :discount_percent_{i}, :discount_amount_{i}, :taxable_amount_{i},
                 :igst_rate_{i}, :igst_amount_{i}, :cgst_rate_{i}, :cgst_amount_{i},
                 :sgst_rate_{i}, :sgst_amount_{i}, :total_tax_amount_{i}, :line_total_{i},
-                :free_quantity_{i}
+                :free_quantity_{i}, :display_order_{i}, :is_free_item_{i}
             )""")
             
             # Ensure batch_id is in params (even if None)
             if 'batch_id' not in item_data:
                 item_data['batch_id'] = None
+            
+            # Add display_order and is_free_item
+            # is_free_item is true ONLY if base quantity is 0 but free_quantity > 0
+            item_data['display_order'] = i + 1
+            base_qty = float(item_data.get('base_quantity', 0) or item_data.get('quantity', 0))
+            free_qty = float(item_data.get('free_quantity', 0) or 0)
+            item_data['is_free_item'] = base_qty == 0 and free_qty > 0
             
             for key, value in item_data.items():
                 # Skip org_id - it doesn't exist in invoice_items table
@@ -359,7 +425,7 @@ class InvoiceRepository:
                 mrp, unit_price, discount_percent, discount_amount, taxable_amount,
                 igst_rate, igst_amount, cgst_rate, cgst_amount,
                 sgst_rate, sgst_amount, total_tax_amount, line_total,
-                free_quantity
+                free_quantity, display_order, is_free_item
             ) VALUES {", ".join(values_list)}
         """
         
