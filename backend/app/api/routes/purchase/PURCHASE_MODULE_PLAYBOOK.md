@@ -115,7 +115,7 @@ result = GRNService.create_grn(db, org_id, branch_id, grn_data, user_id)
 
 | Route File | Refactored? | Notes |
 |------------|-------------|-------|
-| `grn.py` | ⏳ Pending | Use GRNService |
+| `grn.py` | ✅ Done | Uses GRNService.create_grn, approve_grn |
 | `orders.py` | ⏳ Pending | Use PurchaseService |
 | `supplier_invoices.py` | ⏳ Pending | Use SupplierInvoiceService |
 | `upload.py` | ⏳ Pending | Use all services |
@@ -145,7 +145,8 @@ print(f'Invoice Total: {result[\"invoice_total\"]}')
 1. [x] Create calculations.py with PurchaseCalculator
 2. [x] Create grn_service.py
 3. [x] Create supplier_invoice_service.py
-4. [ ] Refactor grn.py routes to use GRNService
+4. [x] Refactor grn.py routes to use GRNService (create_grn, approve_grn)
 5. [ ] Refactor upload.py to use services
 6. [ ] Refactor orders.py to use PurchaseService
 7. [ ] Add unit tests for PurchaseCalculator
+
