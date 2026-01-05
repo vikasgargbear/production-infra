@@ -164,10 +164,10 @@ async def search_products(
                 SELECT 
                     p.product_id, p.product_code, p.product_name, p.generic_name,
                     p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                    p.total_quantity_available,
                     COALESCE(AVG(b.mrp_per_unit), 0) as mrp_per_unit,
                     COALESCE(AVG(b.sale_price_per_unit), 0) as sale_price_per_unit,
-                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit,
-                    COALESCE(SUM(b.quantity_available), 0) as quantity_available
+                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id
                     AND p.org_id = b.org_id
@@ -180,7 +180,8 @@ async def search_products(
                     OR p.product_code ILIKE :search)
                     AND p.is_active = true
                 GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id
+                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                         p.total_quantity_available
                 ORDER BY p.product_name
                 LIMIT :limit OFFSET :offset
             """), {
@@ -194,17 +195,18 @@ async def search_products(
                 SELECT 
                     p.product_id, p.product_code, p.product_name, p.generic_name,
                     p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                    p.total_quantity_available,
                     COALESCE(AVG(b.mrp_per_unit), 0) as mrp_per_unit,
                     COALESCE(AVG(b.sale_price_per_unit), 0) as sale_price_per_unit,
-                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit,
-                    COALESCE(SUM(b.quantity_available), 0) as quantity_available
+                    COALESCE(AVG(b.cost_per_unit), 0) as cost_per_unit
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id
                     AND b.batch_status = 'active'
                     AND b.quantity_available > 0
                 WHERE p.is_active = true
                 GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id
+                         p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                         p.total_quantity_available
                 ORDER BY p.product_name
                 LIMIT :limit OFFSET :offset
             """), {
