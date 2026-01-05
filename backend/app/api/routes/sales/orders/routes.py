@@ -447,26 +447,30 @@ async def validate_sales_order(
 ):
     """Validate sales order data without creating it"""
     try:
-        org_id = order_data.org_id if order_data.org_id else org_id
+        org_id = str(context.org_id)
         
         # Validate customer
         customer = db.execute(text("""
             SELECT customer_id FROM parties.customers 
-            WHERE customer_id = :id AND org_id = :org_id
-        """), {"id": order_data.customer_id, "org_id": str(context.org_id)}).fetchone()
+            WHERE customer_id = :id
+        """), {"id": order_data.customer_id}).fetchone()
         
         if not customer:
             return {"valid": False, "message": "Customer not found"}
         
-        # Validate products
-        for item in order_data.items:
-            product = db.execute(text("""
+        # BATCH OPTIMIZE: Get all product IDs and validate in one query
+        product_ids = [item.product_id for item in order_data.items]
+        if product_ids:
+            existing_products = db.execute(text("""
                 SELECT product_id FROM inventory.products 
-                WHERE product_id = :id AND org_id = :org_id
-            """), {"id": item.product_id, "org_id": str(context.org_id)}).fetchone()
+                WHERE product_id = ANY(:product_ids)
+            """), {"product_ids": product_ids}).fetchall()
             
-            if not product:
-                return {"valid": False, "message": f"Product {item.product_id} not found"}
+            existing_ids = {row.product_id for row in existing_products}
+            missing = set(product_ids) - existing_ids
+            
+            if missing:
+                return {"valid": False, "message": f"Products not found: {list(missing)}"}
         
         return {"valid": True, "message": "Sales order data is valid"}
         
