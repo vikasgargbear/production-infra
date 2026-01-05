@@ -72,9 +72,22 @@ export const invoicesApi = {
     },
 
     /** Create new invoice */
-    create: (data: InvoiceData) => {
+    create: async (data: InvoiceData) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.CREATE, cleanedData);
+        const response = await apiHelpers.post(ENDPOINTS.CREATE, cleanedData);
+
+        // Trigger delta sync after successful invoice creation
+        // Stock levels changed - update IndexedDB
+        if (response?.data?.success || response?.data?.invoice_id) {
+            try {
+                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
+                deltaSyncService.afterInvoiceCreated();
+            } catch (e) {
+                console.warn('[InvoiceAPI] Delta sync trigger failed:', e);
+            }
+        }
+
+        return response;
     },
 
     /** Update invoice (only for draft invoices) */
