@@ -257,8 +257,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       state: formData.address.state || null,
       pincode: formData.address.pincode || null,
       // Credit configuration - ALL fields saved to backend
-      credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
-      credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,
+      credit_limit: formData.credit_limit ? Number(formData.credit_limit) : 0,
+      credit_days: formData.credit_days ? Number(formData.credit_days) : 0,
       credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
       payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
       notes: `${customerType} customer`, // Remove business_type from notes

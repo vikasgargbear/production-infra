@@ -1332,7 +1332,7 @@ class ProductService:
                 p.product_id, p.product_code, p.product_name, p.generic_name,
                 p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
                 p.product_type, p.composition, p.strength,
-                p.is_active, p.is_saleable, p.requires_batch_tracking,
+                p.is_active, p.is_saleable, p.maintain_batch,
                 p.created_at, p.updated_at,
                 pc.category_name
             FROM inventory.products p
@@ -1367,13 +1367,13 @@ class ProductService:
                 org_id, product_code, product_name, generic_name,
                 brand, manufacturer, category_id, product_type,
                 hsn_code, gst_percent, composition, strength,
-                is_active, is_saleable, requires_batch_tracking,
+                is_active, is_saleable, maintain_batch,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :product_code, :product_name, :generic_name,
                 :brand, :manufacturer, :category_id, :product_type,
                 :hsn_code, :gst_percent, :composition::jsonb, :strength,
-                :is_active, :is_saleable, :requires_batch_tracking,
+                :is_active, :is_saleable, :maintain_batch,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id
         """), {
@@ -1391,7 +1391,7 @@ class ProductService:
             "strength": product_data.get("strength"),
             "is_active": product_data.get("is_active", True),
             "is_saleable": product_data.get("is_saleable", True),
-            "requires_batch_tracking": product_data.get("requires_batch_tracking", True)
+            "maintain_batch": product_data.get("maintain_batch", True)
         })
         return result.scalar()
     

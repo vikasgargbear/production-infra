@@ -4,7 +4,7 @@
 - Do not use SQL tables for schema, always use '/Users/vikasgarg/Documents/AASO/Infrastructure/production-infra/database/schema-docs'
 - never assume variable name, check schema docs or ask user
 - don't ask permission for curl command or sleep commands
-
+- Do Not create aliases of variables, always use original variable name as per database schema
 ## CRITICAL: NO HARDCODING RULE
 
 ### NEVER HARDCODE ANY VALUES

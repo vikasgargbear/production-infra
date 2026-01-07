@@ -363,7 +363,7 @@ class PurchaseOrderRepository:
         result = db.execute(text("""
             INSERT INTO inventory.products (
                 org_id, category_id, product_name, product_code,
-                hsn_code, is_active, requires_batch_tracking, created_at
+                hsn_code, is_active, maintain_batch, created_at
             ) VALUES (
                 :org_id, :category_id, :name, :code,
                 :hsn, TRUE, TRUE, CURRENT_TIMESTAMP

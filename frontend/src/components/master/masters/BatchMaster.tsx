@@ -224,15 +224,15 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     ...formData,
                     productName: selectedProduct?.name || formData.productName,
                     productCode: selectedProduct?.code || formData.productCode,
-                    availableQty: parseInt(formData.quantity as string),
-                    quantity: parseInt(formData.quantity as string),
-                    mrp: parseFloat(formData.mrp as string),
-                    purchasePrice: parseFloat(formData.purchasePrice as string),
-                    salePrice: parseFloat(formData.salePrice as string),
-                    status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity as string))
+                    availableQty: Number(formData.quantity),
+                    quantity: Number(formData.quantity),
+                    mrp: Number(formData.mrp),
+                    purchasePrice: Number(formData.purchasePrice),
+                    salePrice: Number(formData.salePrice),
+                    status: getBatchStatus(formData.expiryDate, Number(formData.quantity))
                 };
 
-                const response = await batchesApi.update(editingBatch.id, batchData);
+                const response = await batchesApi.update(Number(editingBatch.id), batchData);
                 if ((response as any)?.success) {
                     setBatches(prev => prev.map(b =>
                         b.id === editingBatch.id ? { ...b, ...batchData } as Batch : b
@@ -245,12 +245,12 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     ...formData,
                     productName: selectedProduct?.name || '',
                     productCode: selectedProduct?.code || '',
-                    availableQty: parseInt(formData.quantity as string),
-                    quantity: parseInt(formData.quantity as string),
-                    mrp: parseFloat(formData.mrp as string),
-                    purchasePrice: parseFloat(formData.purchasePrice as string),
-                    salePrice: parseFloat(formData.salePrice as string),
-                    status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity as string))
+                    availableQty: Number(formData.quantity),
+                    quantity: Number(formData.quantity),
+                    mrp: Number(formData.mrp),
+                    purchasePrice: Number(formData.purchasePrice),
+                    salePrice: Number(formData.salePrice),
+                    status: getBatchStatus(formData.expiryDate, Number(formData.quantity))
                 };
 
                 const response = await batchesApi.create(newBatch);
@@ -270,12 +270,12 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     ...formData,
                     productName: selectedProduct?.name || formData.productName || '',
                     productCode: selectedProduct?.code || formData.productCode || '',
-                    availableQty: parseInt(formData.quantity as string),
-                    quantity: parseInt(formData.quantity as string),
-                    mrp: parseFloat(formData.mrp as string),
-                    purchasePrice: parseFloat(formData.purchasePrice as string),
-                    salePrice: parseFloat(formData.salePrice as string),
-                    status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity as string))
+                    availableQty: Number(formData.quantity),
+                    quantity: Number(formData.quantity),
+                    mrp: Number(formData.mrp),
+                    purchasePrice: Number(formData.purchasePrice),
+                    salePrice: Number(formData.salePrice),
+                    status: getBatchStatus(formData.expiryDate, Number(formData.quantity))
                 };
                 setBatches(prev => prev.map(b =>
                     b.id === editingBatch.id ? { ...b, ...batchData } as Batch : b
@@ -287,12 +287,12 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     id: Date.now(),
                     productName: selectedProduct?.name || '',
                     productCode: selectedProduct?.code || '',
-                    availableQty: parseInt(formData.quantity as string),
-                    quantity: parseInt(formData.quantity as string),
-                    mrp: parseFloat(formData.mrp as string),
-                    purchasePrice: parseFloat(formData.purchasePrice as string),
-                    salePrice: parseFloat(formData.salePrice as string),
-                    status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity as string)),
+                    availableQty: Number(formData.quantity),
+                    quantity: Number(formData.quantity),
+                    mrp: Number(formData.mrp),
+                    purchasePrice: Number(formData.purchasePrice),
+                    salePrice: Number(formData.salePrice),
+                    status: getBatchStatus(formData.expiryDate, Number(formData.quantity)),
                     productId: formData.productId
                 };
                 setBatches(prev => [...prev, newBatch]);
@@ -672,7 +672,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                                                                 <span className="text-xs text-gray-500">MFG:</span> {formatDate(batch.manufacturingDate)}
                                                             </p>
                                                             <p className={`font-medium ${daysUntilExpiry < 0 ? 'text-red-600' :
-                                                                    daysUntilExpiry <= 90 ? 'text-amber-600' : 'text-gray-900'
+                                                                daysUntilExpiry <= 90 ? 'text-amber-600' : 'text-gray-900'
                                                                 }`}>
                                                                 <span className="text-xs text-gray-500">EXP:</span> {formatDate(batch.expiryDate)}
                                                             </p>

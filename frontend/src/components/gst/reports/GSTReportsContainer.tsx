@@ -238,14 +238,14 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                 {selectedPeriod === 'custom' && (
                     <div className="flex items-center space-x-2">
                         <DatePicker
-                            value={dateRange.from}
-                            onChange={(value) => setDateRange(prev => ({ ...prev, from: value }))}
+                            value={new Date(dateRange.from)}
+                            onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, from: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
                             placeholder="From"
                         />
                         <span className="text-gray-400">to</span>
                         <DatePicker
-                            value={dateRange.to}
-                            onChange={(value) => setDateRange(prev => ({ ...prev, to: value }))}
+                            value={new Date(dateRange.to)}
+                            onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, to: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
                             placeholder="To"
                         />
                     </div>

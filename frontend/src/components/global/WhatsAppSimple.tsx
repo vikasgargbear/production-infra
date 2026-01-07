@@ -181,7 +181,7 @@ const WhatsAppSimple: React.FC = () => {
                   value={businessPhone}
                   onChange={(e) => setBusinessPhone(e.target.value)}
                   className="w-full px-4 py-3 border rounded-lg text-center text-lg"
-                  maxLength="10"
+                  maxLength={10}
                 />
               </div>
 
@@ -237,8 +237,8 @@ const WhatsAppSimple: React.FC = () => {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex-1 flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === tab.id
-                        ? 'bg-green-600 text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
                       }`}
                   >
                     <tab.icon className="w-4 h-4 mr-2" />
