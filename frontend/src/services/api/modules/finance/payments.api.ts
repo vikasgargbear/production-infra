@@ -109,5 +109,10 @@ export const paymentsApi = {
     // Print receipt
     printReceipt: (paymentId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${paymentId}/print`, { responseType: 'blob' });
+    },
+
+    // Get outstanding invoices for a party
+    getOutstandingInvoices: (partyId: number, partyType: 'customer' | 'supplier' = 'customer'): Promise<AxiosResponse> => {
+        return apiHelpers.get('/invoices/outstanding', { params: { party_id: partyId, party_type: partyType } });
     }
 };

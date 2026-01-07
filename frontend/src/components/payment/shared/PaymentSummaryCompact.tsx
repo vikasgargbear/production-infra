@@ -1,6 +1,6 @@
 import React from 'react';
-import { 
-  Calendar, CreditCard, Hash, FileText, 
+import {
+  Calendar, CreditCard, Hash, FileText,
   User, Receipt, CheckCircle
 } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
@@ -15,7 +15,7 @@ interface SelectedInvoice {
 
 const PaymentSummaryCompact: React.FC = () => {
   const { payment, selectedCustomer, outstandingInvoices } = usePayment();
-  
+
   // Get allocations from payment data
   const selectedInvoices = payment.allocations || [];
 
@@ -48,12 +48,12 @@ const PaymentSummaryCompact: React.FC = () => {
     const amount = inv.allocated_amount || inv.allocatedAmount || 0;
     return sum + parseFloat(amount.toString());
   }, 0);
-  
+
   const totalPayment = parseFloat(payment.amount || '0');
   const unallocatedAmount = totalPayment - allocatedAmount;
-  const isAdvancePayment = payment.allocation_method === 'advance' || 
-                           (outstandingInvoices && outstandingInvoices.length === 0) ||
-                           unallocatedAmount > 0;
+  const isAdvancePayment = payment.allocation_method === 'advance' ||
+    (outstandingInvoices && outstandingInvoices.length === 0) ||
+    unallocatedAmount > 0;
 
   return (
     <div className="space-y-4">
@@ -101,11 +101,11 @@ const PaymentSummaryCompact: React.FC = () => {
         </div>
 
         {/* Split Payment Details */}
-        {payment.payment_mode === 'SPLIT' && payment.split_payments && (
+        {payment.payment_mode === 'SPLIT' && (payment as any).split_payments && (
           <div className="pt-3 space-y-2">
             <div className="text-sm font-medium text-gray-700">Split Payment Breakdown:</div>
             <div className="space-y-1 pl-4">
-              {JSON.parse(payment.split_payments).map((split: any, index: number) => (
+              {JSON.parse((payment as any).split_payments).map((split: any, index: number) => (
                 <div key={index} className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">
                     {paymentModes[split.type] || split.type}
@@ -117,7 +117,7 @@ const PaymentSummaryCompact: React.FC = () => {
             </div>
           </div>
         )}
-        
+
         {/* Payment Allocation Details */}
         <div className="pt-3 space-y-3">
           {/* Allocation Summary Header */}
@@ -134,7 +134,7 @@ const PaymentSummaryCompact: React.FC = () => {
               </span>
             </div>
           </div>
-          
+
           {/* Allocation Breakdown */}
           <div className="space-y-2">
             {/* Allocated to Invoices */}
@@ -165,7 +165,7 @@ const PaymentSummaryCompact: React.FC = () => {
                 )}
               </div>
             )}
-            
+
             {/* Advance Payment */}
             {unallocatedAmount > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -184,7 +184,7 @@ const PaymentSummaryCompact: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {/* No Outstanding - Full Advance */}
             {!allocatedAmount && totalPayment > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -207,10 +207,10 @@ const PaymentSummaryCompact: React.FC = () => {
         </div>
 
         {/* Notes if any */}
-        {payment.notes && (
+        {(payment as any).notes && (
           <div className="pt-3 border-t border-gray-200">
             <p className="text-xs text-gray-600">
-              <span className="font-medium">Notes:</span> {payment.notes}
+              <span className="font-medium">Notes:</span> {(payment as any).notes}
             </p>
           </div>
         )}

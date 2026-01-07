@@ -382,7 +382,7 @@ export interface Invoice {
     discount_percent?: number;
 
     // Sales info
-    sales_person_id?: number | null;
+    salesperson_id?: number | null;
     org_name?: string;
     company_name?: string;
 

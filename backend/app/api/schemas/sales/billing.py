@@ -215,8 +215,8 @@ class InvoiceCreateRequest(BaseModel):
     billing_address: Optional[str] = Field(None, max_length=500)
     shipping_address: Optional[str] = Field(None, max_length=500)
     
-    # Salesperson / M.R. - accept both naming conventions
-    salesperson_id: Optional[int] = Field(None, validation_alias=AliasChoices('salesperson_id', 'sales_person_id'))
+    # Salesperson / M.R. - canonical name matches DB column
+    salesperson_id: Optional[int] = Field(None, description="M.R. / Salesperson ID")
     
     # Other
     notes: Optional[str] = Field(None, max_length=1000)

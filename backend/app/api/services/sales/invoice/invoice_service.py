@@ -150,8 +150,8 @@ class InvoiceService:
             
             logger.info(f"💰 FINAL Payment tracking: paid={paid_amount}, credit={credit_amount}, status={payment_status}")
             
-            # Get salesperson_id if provided
-            salesperson_id = getattr(invoice_data, 'salesperson_id', None) or getattr(invoice_data, 'sales_person_id', None)
+            # Get salesperson_id - canonical name, no aliases
+            salesperson_id = getattr(invoice_data, 'salesperson_id', None)
             
             # 7. Create invoice
             invoice_id = InvoiceRepository.create_invoice(

@@ -90,5 +90,14 @@ export const companyApi = {
 
     updateCompanyInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {
         return apiHelpers.put(ENDPOINTS.INFO, data);
+    },
+
+    // Upload QR code for payments
+    uploadQRCode: (file: File): Promise<AxiosResponse> => {
+        const formData = new FormData();
+        formData.append('qr_code', file);
+        return apiHelpers.post('/company/qr-code', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
     }
 };

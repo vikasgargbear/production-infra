@@ -161,7 +161,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const cacheKey = getBatchCacheKey(productId);
 
         // LAYER 1: Memory cache (instant)
-        const cachedBatches = searchCache.get(cacheKey);
+        const cachedBatches = searchCache.get(cacheKey, {});
         if (cachedBatches && cachedBatches.length > 0) {
             console.log('[BatchSelector] Using memory cache (instant)');
             processBatches(cachedBatches);
@@ -173,7 +173,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             if (offlineBatches && offlineBatches.length > 0) {
                 console.log(`[BatchSelector] Loaded ${offlineBatches.length} batches from IndexedDB (instant)`);
                 processBatches(offlineBatches);
-                searchCache.set(cacheKey, offlineBatches); // Promote to memory cache
+                searchCache.set(cacheKey, {}, offlineBatches); // Promote to memory cache
                 // NOTE: No background API refresh needed - data is fresh from search-with-batches
                 return;
             }
@@ -202,11 +202,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     const fetchAndStoreBatches = async (productId: string | number, showLoadingSpinner: boolean = true): Promise<Batch[]> => {
         try {
-            const response = await batchesApi.getByProduct(productId);
+            const response = await batchesApi.getByProduct(Number(productId));
             const batchesData = response.data?.batches || response.data || [];
 
             // Update caches
-            searchCache.set(getBatchCacheKey(productId), batchesData);
+            searchCache.set(getBatchCacheKey(productId), {}, batchesData);
 
             try {
                 await offlineDB.storeBatches(batchesData);

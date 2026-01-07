@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Cog, ToggleLeft, ToggleRight, Info,
   Package, CreditCard, RotateCcw, FileText,
   AlertTriangle, Save, Truck, Shield,
@@ -10,7 +10,7 @@ import { settingsApi } from '../../../services/api';
 const FeatureSettings = ({ open, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [features, setFeatures] = useState({
     // Inventory Features
@@ -19,37 +19,37 @@ const FeatureSettings = ({ open, onClose }) => {
     batchWiseTracking: true,
     stockAdjustmentApproval: false,
     lowStockAlerts: true,
-    
+
     // Sales Features
     creditLimitForParties: true,
     creditLimitThreshold: 100000,
     salesReturnFlow: 'with-credit-note', // with-credit-note, direct-return
     salesApprovalRequired: false,
     discountLimit: 20, // percentage
-    
+
     // Purchase Features
     grnWorkflow: true,
     purchaseApprovalLimit: 50000,
     autoGeneratePurchaseOrder: false,
     vendorRatingSystem: false,
-    
+
     // E-Way Bill
     ewayBillEnabled: true,
     ewayBillThreshold: 50000,
     autoGenerateEwayBill: false,
-    
+
     // GST Features
     gstRoundOff: true,
     reverseChargeApplicable: false,
     compositionScheme: false,
     tcsApplicable: false,
-    
+
     // Payment Features
     allowPartialPayments: true,
     autoReconciliation: false,
     paymentReminders: true,
     reminderDays: [7, 15, 30],
-    
+
     // General Features
     multiCurrency: false,
     multiLocation: true,
@@ -57,13 +57,13 @@ const FeatureSettings = ({ open, onClose }) => {
     smsNotifications: false,
     emailNotifications: true,
     whatsappNotifications: false,
-    
+
     // Security Features
     twoFactorAuth: false,
     ipRestriction: false,
     sessionTimeout: 30, // minutes
     passwordComplexity: 'medium', // low, medium, high
-    
+
     // Workflow Features
     purchaseWorkflow: true,
     salesWorkflow: false,
@@ -81,10 +81,10 @@ const FeatureSettings = ({ open, onClose }) => {
       setIsLoading(true);
       setError(null);
       const response = await settingsApi.features.getAll();
-      
-      if (response.success && response.data) {
+
+      if (response.data?.success || response.data || response.status === 200) {
         // Extract features from the nested structure
-        setFeatures(response.data.features || response.data);
+        setFeatures(response.data?.features || response.data || features);
       }
     } catch (error) {
       setError('Failed to load feature settings. Please try again.');
@@ -111,11 +111,11 @@ const FeatureSettings = ({ open, onClose }) => {
     setIsSaving(true);
     setError(null);
     setSuccessMessage('');
-    
+
     try {
-      const response = await settingsApi.features.bulkUpdate(features);
-      
-      if (response.success) {
+      const response = await settingsApi.features.update(features);
+
+      if (response.data?.success || response.data || response.status === 200) {
         setSuccessMessage('Feature settings saved successfully!');
         setTimeout(() => {
           setSuccessMessage('');
@@ -141,14 +141,12 @@ const FeatureSettings = ({ open, onClose }) => {
       </div>
       <button
         onClick={() => handleToggle(enabled)}
-        className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
-          features[enabled] ? 'bg-blue-600' : 'bg-gray-200'
-        }`}
+        className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${features[enabled] ? 'bg-blue-600' : 'bg-gray-200'
+          }`}
       >
         <span
-          className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${
-            features[enabled] ? 'translate-x-6' : 'translate-x-1'
-          }`}
+          className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${features[enabled] ? 'translate-x-6' : 'translate-x-1'
+            }`}
         />
       </button>
     </div>
@@ -196,7 +194,7 @@ const FeatureSettings = ({ open, onClose }) => {
           <p className="text-green-800">{successMessage}</p>
         </div>
       )}
-      
+
       {error && (
         <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
           <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
@@ -207,14 +205,14 @@ const FeatureSettings = ({ open, onClose }) => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-5xl mx-auto space-y-6">
-          
+
           {/* Inventory Features */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <Package className="w-5 h-5 mr-2" />
               Inventory Features
             </h2>
-            
+
             <div className="space-y-1">
               <FeatureToggle
                 name="Allow Negative Stock Billing"
@@ -255,7 +253,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <FileText className="w-5 h-5 mr-2" />
               Sales Features
             </h2>
-            
+
             <div className="space-y-4">
               <FeatureToggle
                 name="Credit Limit for Parties"
@@ -263,7 +261,7 @@ const FeatureSettings = ({ open, onClose }) => {
                 description="Set and enforce credit limits for customers"
                 icon={CreditCard}
               />
-              
+
               {features.creditLimitForParties && (
                 <div className="ml-8 pb-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -277,7 +275,7 @@ const FeatureSettings = ({ open, onClose }) => {
                   />
                 </div>
               )}
-              
+
               <div className="py-3 border-b border-gray-100">
                 <div className="flex items-start space-x-3">
                   <RotateCcw className="w-5 h-5 text-gray-500 mt-0.5" />
@@ -311,7 +309,7 @@ const FeatureSettings = ({ open, onClose }) => {
                   </label>
                 </div>
               </div>
-              
+
               <div className="py-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-start space-x-3">
@@ -341,7 +339,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <Package className="w-5 h-5 mr-2" />
               Purchase Features
             </h2>
-            
+
             <div className="space-y-4">
               <FeatureToggle
                 name="GRN Workflow"
@@ -349,7 +347,7 @@ const FeatureSettings = ({ open, onClose }) => {
                 description="Enable Goods Receipt Note workflow for purchases"
                 icon={FileText}
               />
-              
+
               <div className="py-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-start space-x-3">
@@ -370,14 +368,14 @@ const FeatureSettings = ({ open, onClose }) => {
                   </div>
                 </div>
               </div>
-              
+
               <FeatureToggle
                 name="Auto Generate Purchase Order"
                 enabled="autoGeneratePurchaseOrder"
                 description="Automatically generate purchase orders based on reorder levels"
                 icon={Package}
               />
-              
+
               <FeatureToggle
                 name="Vendor Rating System"
                 enabled="vendorRatingSystem"
@@ -393,7 +391,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <Truck className="w-5 h-5 mr-2" />
               E-Way Bill Settings
             </h2>
-            
+
             <div className="space-y-4">
               <FeatureToggle
                 name="E-Way Bill Generation"
@@ -401,7 +399,7 @@ const FeatureSettings = ({ open, onClose }) => {
                 description="Enable E-Way bill generation for shipments"
                 icon={Truck}
               />
-              
+
               {features.ewayBillEnabled && (
                 <>
                   <div className="ml-8 pb-3">
@@ -415,7 +413,7 @@ const FeatureSettings = ({ open, onClose }) => {
                       className="w-32 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  
+
                   <div className="ml-8">
                     <FeatureToggle
                       name="Auto Generate E-Way Bill"
@@ -435,7 +433,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <FileText className="w-5 h-5 mr-2" />
               GST & Tax Features
             </h2>
-            
+
             <div className="space-y-1">
               <FeatureToggle
                 name="GST Round Off"
@@ -470,7 +468,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <CreditCard className="w-5 h-5 mr-2" />
               Payment Features
             </h2>
-            
+
             <div className="space-y-1">
               <FeatureToggle
                 name="Allow Partial Payments"
@@ -499,7 +497,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <Cog className="w-5 h-5 mr-2" />
               General Features
             </h2>
-            
+
             <div className="space-y-1">
               <FeatureToggle
                 name="Multi-Currency Support"
@@ -546,7 +544,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <Shield className="w-5 h-5 mr-2" />
               Security Features
             </h2>
-            
+
             <div className="space-y-4">
               <FeatureToggle
                 name="Two-Factor Authentication"
@@ -560,7 +558,7 @@ const FeatureSettings = ({ open, onClose }) => {
                 description="Restrict access to specific IP addresses"
                 icon={Shield}
               />
-              
+
               <div className="py-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-start space-x-3">
@@ -581,7 +579,7 @@ const FeatureSettings = ({ open, onClose }) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="py-3">
                 <div className="flex items-start space-x-3">
                   <Shield className="w-5 h-5 text-gray-500 mt-0.5" />
@@ -635,7 +633,7 @@ const FeatureSettings = ({ open, onClose }) => {
               <Shield className="w-5 h-5 mr-2" />
               Workflow & Approvals
             </h2>
-            
+
             <div className="space-y-1">
               <FeatureToggle
                 name="Purchase Workflow"
@@ -677,7 +675,7 @@ const FeatureSettings = ({ open, onClose }) => {
               </ul>
             </div>
           </div>
-          
+
         </div>
       </div>
     </div>

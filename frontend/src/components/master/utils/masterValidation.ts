@@ -89,7 +89,7 @@ export function quickValidateCustomer(customer: Partial<BaseCustomer>): {
     if (customer.pan_number && !isValidPAN(customer.pan_number)) {
         errors.push('Invalid PAN format');
     }
-    if (customer.phone && !isValidPhone(customer.phone)) {
+    if (customer.primary_phone && !isValidPhone(customer.primary_phone)) {
         errors.push('Invalid phone number');
     }
     if (customer.email && !isValidEmail(customer.email)) {
@@ -118,7 +118,7 @@ export function quickValidateSupplier(supplier: Partial<BaseSupplier>): {
     if (supplier.pan_number && !isValidPAN(supplier.pan_number)) {
         errors.push('Invalid PAN format');
     }
-    if (supplier.phone && !isValidPhone(supplier.phone)) {
+    if (supplier.primary_phone && !isValidPhone(supplier.primary_phone)) {
         errors.push('Invalid phone number');
     }
 

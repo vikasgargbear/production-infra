@@ -87,7 +87,7 @@ export interface Invoice {
     payment_status: 'pending' | 'partial' | 'paid';
     payments: Payment[];
     notes: string;
-    sales_person_id: number | string | null;
+    salesperson_id: number | string | null;
     e_invoice_applicable: boolean;
     e_invoice_number: string;
     irn: string;
@@ -206,7 +206,7 @@ export const useInvoiceLogic = (
             reference: ''
         }],
         notes: '',
-        sales_person_id: null,
+        salesperson_id: null,
         e_invoice_applicable: false,
         e_invoice_number: '',
         irn: '',

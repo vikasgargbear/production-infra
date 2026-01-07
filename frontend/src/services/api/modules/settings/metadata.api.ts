@@ -74,5 +74,15 @@ export const metadataApi = {
 
     getGSTSlabs: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.GST_SLABS);
+    },
+
+    // Credit ratings for customer/supplier
+    getCreditRatings: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/metadata/credit-ratings');
+    },
+
+    // Payment terms (e.g., Net 30, Net 60)
+    getPaymentTerms: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/metadata/payment-terms');
     }
 };

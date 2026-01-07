@@ -1337,7 +1337,8 @@ class ProductService:
                 pc.category_name
             FROM inventory.products p
             LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
-            WHERE 1=1
+                AND pc.org_id = p.org_id
+            WHERE p.org_id IS NOT NULL
         """
         params = {"limit": limit, "offset": offset}
         

@@ -192,7 +192,9 @@ const settingsApi = {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/integrations'),
         getById: (id: string): Promise<AxiosResponse> => apiHelpers.get(`/settings/integrations/${id}`),
         update: (id: string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/settings/integrations/${id}`, data),
-        test: (integrationId: string): Promise<AxiosResponse> => apiHelpers.post(`/settings/integrations/${integrationId}/test`)
+        test: (integrationId: string): Promise<AxiosResponse> => apiHelpers.post(`/settings/integrations/${integrationId}/test`),
+        // Alias for testConnection
+        testConnection: (integrationId: string): Promise<AxiosResponse> => apiHelpers.post(`/settings/integrations/${integrationId}/test`)
     }
 };
 
