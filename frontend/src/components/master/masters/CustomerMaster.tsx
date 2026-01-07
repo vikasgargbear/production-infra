@@ -214,8 +214,8 @@ const getColumns = (
           <button
             onClick={() => handleDelete(customer?.customer_id)}
             className={`${customer?.is_active !== false
-                ? 'text-warning-600 hover:text-warning-700'
-                : 'text-success-600 hover:text-success-700'
+              ? 'text-warning-600 hover:text-warning-700'
+              : 'text-success-600 hover:text-success-700'
               } p-1 rounded transition-colors`}
             disabled={!customer?.customer_id}
             title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
@@ -291,7 +291,7 @@ const CustomerMaster: React.FC = () => {
       {/* Filters and Search */}
       <ContentCard
         title="Search & Filter"
-        subtitle={null}
+        subtitle={undefined}
         actions={selectedIds.length > 0 ? (
           <Button variant="danger" size="sm" onClick={handleBulkDelete}>
             <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
@@ -324,7 +324,7 @@ const CustomerMaster: React.FC = () => {
 
       {/* Error Message */}
       {error && (
-        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
+        <ContentCard title="" subtitle={undefined} actions={undefined} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
           <div className="flex items-center space-x-3">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-800">{error}</span>
@@ -333,7 +333,7 @@ const CustomerMaster: React.FC = () => {
       )}
 
       {/* Customer List */}
-      <ContentCard title="Customer List" subtitle={null} actions={null} className="overflow-hidden" icon={Users}>
+      <ContentCard title="Customer List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Users}>
         {customers.length === 0 && !isLoading ? (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-app-400 mx-auto mb-4" />

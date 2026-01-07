@@ -118,6 +118,8 @@ class InvoiceService:
             payments = getattr(invoice_data, 'payments', []) or []
             paid_amount = Decimal("0")
             
+            logger.info(f"💰 Processing {len(payments)} payments: {payments}")
+            
             if payments:
                 for payment in payments:
                     payment_method = payment.get('method', 'cash')
@@ -126,9 +128,16 @@ class InvoiceService:
                     # 'credit' method means unpaid - don't count as paid_amount
                     if payment_method != 'credit' and payment_amt > 0:
                         paid_amount += payment_amt
+                        logger.info(f"💰 Adding {payment_method}: ₹{payment_amt}, running total: ₹{paid_amount}")
             
             # Determine payment_status based on paid_amount vs final_amount
             final_amount = Decimal(str(totals["final_amount"]))
+            
+            # CAP paid_amount at final_amount - can't pay more than invoice total
+            if paid_amount > final_amount:
+                logger.warning(f"⚠️ Payments ({paid_amount}) exceed invoice total ({final_amount}), capping at invoice total")
+                paid_amount = final_amount
+            
             if paid_amount >= final_amount:
                 payment_status = "paid"
             elif paid_amount > 0:
@@ -139,7 +148,10 @@ class InvoiceService:
             # Calculate credit_amount (amount not yet paid)
             credit_amount = final_amount - paid_amount
             
-            logger.info(f"💰 Payment tracking: paid={paid_amount}, credit={credit_amount}, status={payment_status}")
+            logger.info(f"💰 FINAL Payment tracking: paid={paid_amount}, credit={credit_amount}, status={payment_status}")
+            
+            # Get salesperson_id if provided
+            salesperson_id = getattr(invoice_data, 'salesperson_id', None) or getattr(invoice_data, 'sales_person_id', None)
             
             # 7. Create invoice
             invoice_id = InvoiceRepository.create_invoice(
@@ -160,7 +172,8 @@ class InvoiceService:
                 created_by=actual_user_id,
                 paid_amount=paid_amount,
                 payment_status=payment_status,
-                credit_amount=credit_amount
+                credit_amount=credit_amount,
+                salesperson_id=salesperson_id
             )
             
             # 8. Prepare invoice items data

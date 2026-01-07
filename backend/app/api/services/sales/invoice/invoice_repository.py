@@ -160,7 +160,8 @@ class InvoiceRepository:
         created_by: int,
         paid_amount: Decimal = Decimal("0"),
         payment_status: str = "pending",
-        credit_amount: Optional[Decimal] = None
+        credit_amount: Optional[Decimal] = None,
+        salesperson_id: Optional[int] = None
     ) -> int:
         """
         Create invoice record.
@@ -169,6 +170,7 @@ class InvoiceRepository:
             paid_amount: Amount already paid (from split payments)
             payment_status: 'pending', 'partial', or 'paid'
             credit_amount: Amount on credit (unpaid balance)
+            salesperson_id: M.R. / salesperson ID
         
         Returns:
             invoice_id
@@ -179,6 +181,8 @@ class InvoiceRepository:
         # Calculate credit_amount if not provided
         if credit_amount is None:
             credit_amount = Decimal(str(final_amount)) - paid_amount
+        
+        logger.info(f"📝 Creating invoice: paid_amount={paid_amount}, payment_status={payment_status}, salesperson_id={salesperson_id}")
         
         result = db.execute(text("""
             INSERT INTO sales.invoices (
@@ -192,6 +196,7 @@ class InvoiceRepository:
                 payment_terms, due_date, notes,
                 invoice_status, payment_status, paid_amount,
                 credit_amount, allocated_amount, unallocated_amount,
+                salesperson_id,
                 created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
@@ -204,6 +209,7 @@ class InvoiceRepository:
                 :payment_terms, :due_date, :notes,
                 'posted', :payment_status, :paid_amount,
                 :credit_amount, 0, :credit_amount,
+                :salesperson_id,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
@@ -236,6 +242,7 @@ class InvoiceRepository:
             "payment_status": payment_status,
             "paid_amount": paid_amount,
             "credit_amount": credit_amount,
+            "salesperson_id": salesperson_id,
             "created_by": created_by
         })
         

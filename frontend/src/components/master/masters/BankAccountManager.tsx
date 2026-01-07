@@ -60,8 +60,9 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         try {
             setIsLoading(true);
             setError(null);
-            const data = await bankAccountsApi.getBankAccounts();
-            setAccounts(data || []);
+            const response = await bankAccountsApi.getBankAccounts();
+            const accountsData = response?.data?.accounts || response?.data || [];
+            setAccounts(Array.isArray(accountsData) ? accountsData : []);
         } catch (error: any) {
             // Check if it's a 404 (API not deployed yet) vs actual error
             if (error.response?.status === 404) {
