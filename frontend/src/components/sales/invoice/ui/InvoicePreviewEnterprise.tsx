@@ -387,11 +387,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 // Calculate per-item amounts (display only - no business logic)
                 // CRITICAL: ALWAYS use item.quantity (not base_quantity)
                 const quantity = parseFloat(String(item.quantity || 0)); // Source of truth
-                const rate = parseFloat(String(item.unit_price || 0)); // CANONICAL: unit_price only
+                const unit_price = parseFloat(String(item.unit_price || 0)); // CANONICAL: unit_price only
                 const discount = parseFloat(String(item.discount_percent || 0)); // CANONICAL: discount_percent only
                 const gstPercent = parseFloat(String(item.gst_percent || item.tax_percent || 0));
 
-                const subtotal = quantity * rate;
+                const subtotal = quantity * unit_price;
                 const discountAmount = (subtotal * discount) / 100;
                 const taxableAmount = subtotal - discountAmount;
                 const gstAmount = (taxableAmount * gstPercent) / 100;
@@ -414,7 +414,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       }) : '-'}
                     </td>
                     <td className="py-2 px-3 text-xs text-right border-r border-gray-200">
-                      {formatCurrency(item.mrp || rate)}
+                      {formatCurrency(item.mrp || unit_price)}
                     </td>
                     <td className="py-2 px-3 text-sm text-center border-r border-gray-200 font-medium">
                       {item.quantity}
@@ -423,7 +423,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       )}
                     </td>
                     <td className="py-2 px-3 text-sm text-right border-r border-gray-200">
-                      {formatCurrency(rate)}
+                      {formatCurrency(unit_price)}
                     </td>
                     <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
                       {discount > 0 ? `${discount.toFixed(1)}%` : '-'}

@@ -18,10 +18,10 @@ export function calculateItemTotals(item: BasePurchaseItem): {
     totalAmount: number;
 } {
     const quantity = parseFloat(String(item.quantity)) || 0;
-    const rate = parseFloat(String(item.unit_price || item.unit_price)) || 0;
+    const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
     const discountPercent = parseFloat(String(item.discount_percent)) || 0;
 
-    const baseAmount = quantity * rate;
+    const baseAmount = quantity * unit_price;
     const discountAmount = (baseAmount * discountPercent) / 100;
     const taxableAmount = baseAmount - discountAmount;
 
@@ -81,10 +81,10 @@ export function calculateDocumentTotals(items: BasePurchaseItem[]): {
 
     items.forEach(item => {
         const qty = parseFloat(String(item.quantity)) || 0;
-        const rate = parseFloat(String(item.unit_price || item.unit_price)) || 0;
+        const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
         const discountPercent = parseFloat(String(item.discount_percent)) || 0;
 
-        const baseAmount = qty * rate;
+        const baseAmount = qty * unit_price;
         const discountAmount = (baseAmount * discountPercent) / 100;
         const taxableAmount = baseAmount - discountAmount;
 

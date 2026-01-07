@@ -21,7 +21,6 @@ export interface PurchaseItem {
     tax_percent: number;
     batch?: string;
     batch_number?: string;
-    batch_number?: string;
     pack_type?: string;
     pack_size?: number | string;
     packages_per_box?: number | string;
@@ -31,14 +30,11 @@ export interface PurchaseItem {
     expiry_date?: string;
     manufacturing_date?: string;
     free_quantity?: number;
-    unit_price?: number;
     mrp?: number;
     selling_price?: number;
     sale_price?: number;
     discount_percent?: number;
-    rate?: number;
-    tax?: number;
-    unit_price?: number;
+
     [key: string]: any;
 }
 
@@ -334,13 +330,13 @@ export function usePurchaseEntryLogic({
                 product_name: product.product_name || product.name || '',
                 product_code: product.product_code,
                 hsn_code: product.hsn_code || '',
-                batch_number: product.batch_number || product.batch_number || product.batch || '',
+                batch_number: product.batch_number || product.batch || '',
                 expiry_date: product.expiry_date || product.expiry || '',
-                manufacturing_date: product.manufacturing_date || product.manufacturing_date || '',
+                manufacturing_date: product.manufacturing_date || '',
                 quantity: parseFloat(product.quantity) || 1,
                 free_quantity: parseFloat(product.free_quantity || product.free) || 0,
                 mrp: parseFloat(product.mrp) || 0,
-                unit_price: parseFloat(product.unit_price || product.unit_price || product.unit_price) || (parseFloat(product.mrp) || 0) * 0.7,
+                unit_price: parseFloat(product.unit_price) || (parseFloat(product.mrp) || 0) * 0.7,
                 selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
                 discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
                 tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 0,
@@ -365,15 +361,13 @@ export function usePurchaseEntryLogic({
                 if (i === index) {
                     const updatedItem = { ...item, [field]: value };
                     // Sync related fields
-                    if (field === 'rate') updatedItem.unit_price = value;
+                    if (field === 'unit_price') updatedItem.unit_price = value;
                     else if (field === 'unit_price') {
-                        updatedItem.unit_price = value;
                         updatedItem.unit_price = value;
                     }
                     else if (field === 'tax') updatedItem.tax_percent = value;
                     else if (field === 'tax_percent') updatedItem.tax = value;
-                    else if (field === 'batch_number' || field === 'batch_number' || field === 'batch') {
-                        updatedItem.batch_number = value;
+                    else if (field === 'batch_number' || field === 'batch') {
                         updatedItem.batch_number = value;
                         updatedItem.batch = value;
                     }
@@ -545,15 +539,12 @@ export function usePurchaseEntryLogic({
             product_code: item.product_code,
             hsn_code: item.hsn_code,
             batch_number: item.batch_number,
-            batch_number: item.batch_number,
             batch: item.batch_number,
             expiry_date: item.expiry_date,
             manufacturing_date: item.manufacturing_date,
             quantity: parseFloat(item.quantity) || 0,
             free_quantity: parseFloat(item.free_quantity) || 0,
             mrp: parseFloat(item.mrp) || 0,
-            unit_price: parseFloat(item.unit_price) || 0,
-            rate: parseFloat(item.unit_price) || 0,
             unit_price: parseFloat(item.unit_price) || 0,
             selling_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
             sale_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
@@ -606,7 +597,6 @@ export function usePurchaseEntryLogic({
                 supplier_id: verifiedData.supplier_id,
                 supplier_name: verifiedData.supplier_name,
                 gst_number: verifiedData.supplier_gst || verifiedData.supplier_gst_number,
-                gst_number: verifiedData.supplier_gst_number || verifiedData.supplier_gst,
                 primary_phone: verifiedData.supplier_phone,
                 address: verifiedData.supplier_address
             });

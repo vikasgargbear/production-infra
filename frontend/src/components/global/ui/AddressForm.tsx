@@ -25,9 +25,8 @@ interface SavedAddress extends Partial<AddressData> {
     is_default?: boolean;
     address?: string;
     address2?: string;
-    state_name?: string;
-    pin_code?: string;
-    postal_code?: string;
+    state?: string;
+    pincode?: string;
     phone?: string;
 }
 
@@ -98,8 +97,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 address_line1: custAddress?.address_line1 || addressStr || addressData?.address_line1 || '',
                 address_line2: custAddress?.address_line2 || (customer as any).address2 || addressData?.address_line2 || '',
                 city: custAddress?.city || customer.city || addressData?.city || '',
-                state: custAddress?.state || customer.state || (customer as any).state_name || addressData?.state || '',
-                pincode: custAddress?.pincode || customer.pincode || (customer as any).pin_code || addressData?.pincode || '',
+                state: custAddress?.state || customer.state || (customer as any).state || addressData?.state || '',
+                pincode: custAddress?.pincode || customer.pincode || (customer as any).pincode || addressData?.pincode || '',
                 country: custAddress?.country || customer.country || addressData?.country || '',
                 mobile: mobileNumber,
                 landmark: (customer as any).landmark || addressData?.landmark || ''
@@ -169,8 +168,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 address_line1: (typeof customer?.address === 'string' ? customer.address : customer?.address?.address_line1) || (customer as any)?.address_line1 || '',
                 address_line2: (customer as any)?.address2 || (customer as any)?.address_line2 || '',
                 city: customer?.city || (customer as any)?.billing_city || '',
-                state: customer?.state || (customer as any)?.state_name || (customer as any)?.billing_state || '',
-                pincode: (customer as any)?.pincode || (customer as any)?.pin_code || (customer as any)?.billing_pincode || '',
+                state: customer?.state || (customer as any)?.state || (customer as any)?.billing_state || '',
+                pincode: (customer as any)?.pincode || (customer as any)?.pincode || (customer as any)?.billing_pincode || '',
                 mobile: (customer as any)?.mobile || (customer as any)?.phone || customer?.primary_phone || '',
                 country: ''
             };
@@ -191,8 +190,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
             address_line1: address.address_line1 || address.address || '',
             address_line2: address.address_line2 || address.address2 || '',
             city: address.city || '',
-            state: address.state || address.state_name || '',
-            pincode: address.pincode || address.pin_code || address.postal_code || '',
+            state: address.state || address.state || '',
+            pincode: address.pincode || address.pincode || address.pincode || '',
             country: address.country || '',
             mobile: mobileNumber,
             landmark: address.landmark || ''
@@ -306,7 +305,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 address_line2: (customer as any).address2 || '',
                 city: (customer as any).city || '',
                 state: (customer as any).state || '',
-                pincode: (customer as any).pincode || (customer as any).pin_code || '',
+                pincode: (customer as any).pincode || (customer as any).pincode || '',
                 country: (customer as any).country || '',
                 mobile: (customer as any).mobile || (customer as any).phone || '',
                 landmark: (customer as any).landmark || ''

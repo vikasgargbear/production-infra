@@ -1,25 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 
+interface StandardMonthYearPickerProps {
+  value?: string;
+  onChange?: (value: string) => void;
+  label?: string;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
+  error?: string | null;
+  className?: string;
+  tabIndex?: number;
+  min?: Date | string;
+  max?: Date | string;
+  size?: 'sm' | 'md' | 'lg';
+  format?: 'MM/YYYY' | 'MM/YY';
+  autoFocus?: boolean;
+}
+
+interface MonthYearOption {
+  value: string;
+  display: string;
+  label: string;
+}
+
 /**
  * StandardMonthYearPicker - Consistent month/year input component
  * Replaces all type="month" inputs and legacy MonthYearPicker across the application
- * 
- * @param {string} value - Date value in YYYY-MM format or YYYY-MM-DD format
- * @param {Function} onChange - Change handler receiving YYYY-MM-01 string (first day of month)
- * @param {string} label - Field label
- * @param {string} placeholder - Placeholder text (default: "MM/YYYY")
- * @param {boolean} required - Required field indicator
- * @param {boolean} disabled - Disabled state
- * @param {string} error - Error message
- * @param {string} className - Additional CSS classes
- * @param {number} tabIndex - Tab index for keyboard navigation
- * @param {Date|string} min - Minimum date
- * @param {Date|string} max - Maximum date
- * @param {string} size - Component size: sm, md, lg
- * @param {string} format - Display format: "MM/YYYY" or "MM/YY"
  */
-const StandardMonthYearPicker = ({
+const StandardMonthYearPicker: React.FC<StandardMonthYearPickerProps> = ({
   value = '',
   onChange,
   label,
@@ -32,12 +41,12 @@ const StandardMonthYearPicker = ({
   min,
   max,
   size = 'md',
-  format = 'MM/YYYY', // or 'MM/YY'
+  format = 'MM/YYYY',
   autoFocus = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [displayValue, setDisplayValue] = useState('');
-  const dropdownRef = useRef(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Default placeholder based on format
   const defaultPlaceholder = format === 'MM/YY' ? 'MM/YY' : 'MM/YYYY';
@@ -59,14 +68,14 @@ const StandardMonthYearPicker = ({
   // Format value for display
   const formatForDisplay = (dateValue) => {
     if (!dateValue) return '';
-    
+
     try {
       // Handle YYYY-MM or YYYY-MM-DD format
       const dateParts = dateValue.split('-');
       if (dateParts.length >= 2) {
         const year = dateParts[0];
         const month = dateParts[1];
-        
+
         if (format === 'MM/YY') {
           return `${month}/${year.slice(-2)}`;
         } else {
@@ -75,27 +84,27 @@ const StandardMonthYearPicker = ({
       }
     } catch (e) {
     }
-    
+
     return '';
   };
 
   // Convert display format back to YYYY-MM-01
   const parseDisplayValue = (displayVal) => {
     if (!displayVal) return '';
-    
+
     try {
       const parts = displayVal.split('/');
       if (parts.length === 2) {
         let month = parts[0].padStart(2, '0');
         let year = parts[1];
-        
+
         // Handle 2-digit year
         if (year.length === 2) {
           const currentYear = new Date().getFullYear();
           const currentCentury = Math.floor(currentYear / 100) * 100;
           year = String(currentCentury + parseInt(year));
         }
-        
+
         // Validate month
         const monthNum = parseInt(month);
         if (monthNum >= 1 && monthNum <= 12) {
@@ -104,7 +113,7 @@ const StandardMonthYearPicker = ({
       }
     } catch (e) {
     }
-    
+
     return '';
   };
 
@@ -126,28 +135,28 @@ const StandardMonthYearPicker = ({
   }, []);
 
   // Generate month/year options
-  const generateOptions = () => {
+  const generateOptions = (): MonthYearOption[] => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
-    const options = [];
-    
+    const options: MonthYearOption[] = [];
+
     // Generate 5 years back and 10 years forward
     for (let year = currentYear - 5; year <= currentYear + 10; year++) {
       for (let month = 1; month <= 12; month++) {
         const monthStr = month.toString().padStart(2, '0');
         const yearStr = year.toString();
         const optionValue = `${yearStr}-${monthStr}-01`;
-        
+
         // Check if within min/max range
         if (min || max) {
           const optionDate = new Date(optionValue);
           const minDate = min ? new Date(min) : null;
           const maxDate = max ? new Date(max) : null;
-          
+
           if (minDate && optionDate < minDate) continue;
           if (maxDate && optionDate > maxDate) continue;
         }
-        
+
         options.push({
           value: optionValue,
           display: formatForDisplay(optionValue),
@@ -155,14 +164,14 @@ const StandardMonthYearPicker = ({
         });
       }
     }
-    
+
     return options;
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDisplayValue = e.target.value;
     setDisplayValue(newDisplayValue);
-    
+
     // Try to parse and update if valid
     const parsedValue = parseDisplayValue(newDisplayValue);
     if (parsedValue) {
@@ -197,7 +206,7 @@ const StandardMonthYearPicker = ({
           {required && <span className="text-red-500 ml-1">*</span>}
         </label>
       )}
-      
+
       <div className="relative">
         <Calendar className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${iconSizes[size]} text-gray-400 pointer-events-none`} />
         <input
@@ -221,7 +230,7 @@ const StandardMonthYearPicker = ({
           autoFocus={autoFocus}
         />
         <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${iconSizes[size]} text-gray-400 pointer-events-none`} />
-        
+
         {/* Dropdown */}
         {isOpen && !disabled && (
           <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">

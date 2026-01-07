@@ -36,8 +36,8 @@ export interface NoteItem {
     product_id?: number;
     description?: string;
     quantity: number;
-    rate: number;
-    amount: number;
+    unit_price: number;
+    line_total: number;
     gst_percent?: number;
 }
 

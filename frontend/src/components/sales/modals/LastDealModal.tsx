@@ -6,7 +6,7 @@ import { invoicesApi } from '../../../services/api';
 interface Deal {
     invoice_date: string;
     customer_name: string;
-    rate?: number;
+    unit_price?: number;
     quantity?: number;
     discount_percent?: number;
     total_amount?: number;
@@ -116,7 +116,7 @@ const LastDealModal: React.FC<LastDealModalProps> = ({ isOpen, onClose, productI
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-lg font-bold text-gray-900">₹{deal.rate?.toFixed(2)}</div>
+                                                <div className="text-lg font-bold text-gray-900">₹{deal.unit_price?.toFixed(2)}</div>
                                                 <div className="text-sm text-gray-600">per unit</div>
                                             </div>
                                         </div>

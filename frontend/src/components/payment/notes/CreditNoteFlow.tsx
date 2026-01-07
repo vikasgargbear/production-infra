@@ -17,9 +17,9 @@ interface NoteItem {
   product_name: string;
   hsn_code: string;
   quantity: number;
-  rate: number;
+  unit_price: number;
   discount_percent: number;
-  total_amount: number;
+  line_total: number;
 }
 
 const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
@@ -155,11 +155,11 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       setLoadingInvoices(true);
       try {
         const data = await notesApi.getLinkedInvoices(
-          customerId,
-          'sales'
+          customerId
         );
 
-        let allInvoices = data.invoices?.map((invoice: any) => ({
+        const responseData = data.data || data;
+        let allInvoices = responseData.invoices?.map((invoice: any) => ({
           id: invoice.invoice_id || invoice.id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
@@ -249,9 +249,9 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           product_name: item.product_name || item.item_name,
           hsn_code: item.hsn_code || '',
           quantity: parseFloat(item.quantity || 0),
-          rate: parseFloat(item.unit_price || item.rate || 0),
+          unit_price: parseFloat(item.unit_price || item.unit_price || 0),
           discount_percent: parseFloat(item.discount_percent || 0),
-          total_amount: parseFloat(item.line_total || item.total_amount || (item.quantity * item.unit_price) || 0)
+          line_total: parseFloat(item.line_total || item.total_amount || (item.quantity * item.unit_price) || 0)
         }));
 
         setNoteItems(transformedItems);
@@ -263,9 +263,9 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
             product_name: item.product_name || item.item_name,
             hsn_code: item.hsn_code || '',
             quantity: parseFloat(item.quantity || 0),
-            rate: parseFloat(item.unit_price || item.rate || 0),
+            unit_price: parseFloat(item.unit_price || item.unit_price || 0),
             discount_percent: parseFloat(item.discount_percent || 0),
-            total_amount: parseFloat(item.line_total || item.total_amount || 0)
+            line_total: parseFloat(item.line_total || item.total_amount || 0)
           }));
           setNoteItems(transformedItems);
         } else {
@@ -286,7 +286,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         const updated = { ...item, [field]: value };
         // Recalculate total when quantity changes
         if (field === 'quantity') {
-          updated.total_amount = updated.quantity * updated.rate * (1 - updated.discount_percent / 100);
+          updated.line_total = updated.quantity * updated.unit_price * (1 - updated.discount_percent / 100);
         }
         return updated;
       }
@@ -295,7 +295,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   };
 
   const calculateTotals = () => {
-    const subtotal = noteItems.reduce((sum, item) => sum + item.total_amount, 0);
+    const subtotal = noteItems.reduce((sum, item) => sum + item.line_total, 0);
     const taxAmount = subtotal * 0.18; // Assuming 18% GST
     const grandTotal = subtotal + taxAmount;
 
@@ -315,7 +315,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       return basicFieldsValid &&
         noteItems.length > 0 &&
         noteItems[0].product_name.trim() !== '' &&
-        noteItems[0].total_amount > 0;
+        noteItems[0].line_total > 0;
     } else {
       // For invoice-linked credit notes, require items selection
       return basicFieldsValid && noteItems.length > 0;
@@ -347,16 +347,18 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         notes: noteData.customer_remarks,
         include_gst: includeGST,
         tax_amount: includeGST ? totals.taxAmount : 0,
+        note_type: 'credit' as const,
+        party_type: 'customer' as const,
         items: noteItems.map(item => ({
           product_name: item.product_name,
           hsn_code: item.hsn_code,
           quantity: item.quantity,
-          rate: item.rate,
-          total_amount: item.total_amount
+          unit_price: item.unit_price,
+          line_total: item.line_total
         }))
       };
 
-      await notesApi.createCreditNote(payload);
+      await notesApi.createCreditDebitNote(payload);
 
       // Success feedback
       if (onClose) onClose();
@@ -477,7 +479,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
               ? canSave()
               : canShowReview()
           }
-          onBack={showReviewPage ? () => setShowReviewPage(false) : null}
+          onBack={showReviewPage ? () => setShowReviewPage(false) : undefined}
           onProceed={showReviewPage ? handleSave : () => setShowReviewPage(true)}
           onReset={() => {
             setSelectedCustomer(null);

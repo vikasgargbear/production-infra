@@ -24,11 +24,7 @@ export interface CustomerDetails {
     address_line1?: string;
     city?: string;
     state?: string;
-    state_name?: string;
     pincode?: string;
-    pin_code?: string;
-    postal_code?: string;
-    gst_number?: string;
     gst_number?: string;
     phone?: string;
     primary_phone?: string;
@@ -48,7 +44,6 @@ export interface ChallanItem {
     hsn_code?: string;
     batch_id?: string | number;
     batch_number?: string;
-    batch_number?: string;
     expiry_date?: string;
     quantity: number;
     unit?: string;
@@ -56,7 +51,6 @@ export interface ChallanItem {
     uom_code?: string;
     mrp?: number;
     unit_price?: number;
-    rate?: number;
     sale_price?: number;
     gst_percent?: number;
     tax_percent?: number;

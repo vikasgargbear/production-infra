@@ -32,7 +32,7 @@ interface Tax {
     id: number | string;
     name: string;
     type: string;
-    rate: number;
+    unit_price: number;
     cgst: number;
     sgst: number;
     igst: number;
@@ -43,7 +43,7 @@ interface Tax {
 interface TaxFormData {
     name: string;
     type: string;
-    rate: string | number;
+    unit_price: string | number;
     cgst: string | number;
     sgst: string | number;
     igst: string | number;
@@ -72,7 +72,7 @@ const TAX_TYPES = [
 const INITIAL_FORM_DATA: TaxFormData = {
     name: '',
     type: 'GST',
-    rate: '',
+    unit_price: '',
     cgst: '',
     sgst: '',
     igst: '',
@@ -95,18 +95,18 @@ const INITIAL_GST_CONFIG: GSTConfig = {
  * Calculate GST components from total rate
  * In India: CGST = SGST = Rate/2, IGST = Rate
  */
-const calculateGSTFromRate = (rate: number): { cgst: number; sgst: number; igst: number } => ({
-    cgst: rate / 2,
-    sgst: rate / 2,
-    igst: rate
+const calculateGSTFromRate = (unit_price: number): { cgst: number; sgst: number; igst: number } => ({
+    cgst: unit_price / 2,
+    sgst: unit_price / 2,
+    igst: unit_price
 });
 
 /**
- * Calculate total rate from CGST + SGST
+ * Calculate total unit_price from CGST + SGST
  * In India: Total = CGST + SGST, IGST = CGST + SGST
  */
-const calculateRateFromComponents = (cgst: number, sgst: number): { rate: number; igst: number } => ({
-    rate: cgst + sgst,
+const calculateRateFromComponents = (cgst: number, sgst: number): { unit_price: number; igst: number } => ({
+    unit_price: cgst + sgst,
     igst: cgst + sgst
 });
 
@@ -163,7 +163,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
         entityToFormData: (tax) => ({
             name: tax.name,
             type: tax.type,
-            rate: tax.rate,
+            unit_price: tax.unit_price,
             cgst: tax.cgst,
             sgst: tax.sgst,
             igst: tax.igst,
@@ -172,7 +172,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
         }),
         formDataToEntity: (data) => ({
             ...data,
-            rate: parseFloat(String(data.rate)) || 0,
+            unit_price: parseFloat(String(data.unit_price)) || 0,
             cgst: parseFloat(String(data.cgst)) || 0,
             sgst: parseFloat(String(data.sgst)) || 0,
             igst: parseFloat(String(data.igst)) || 0
@@ -209,19 +209,19 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
 
             // Auto-calculate GST components following Indian GST rules
             if (prev.type === 'GST') {
-                if (field === 'rate') {
-                    // When rate changes: CGST = SGST = rate/2, IGST = rate
-                    const rate = parseFloat(String(value)) || 0;
-                    const { cgst, sgst, igst } = calculateGSTFromRate(rate);
+                if (field === 'unit_price') {
+                    // When unit_price changes: CGST = SGST = unit_price/2, IGST = rate
+                    const unit_price = parseFloat(String(value)) || 0;
+                    const { cgst, sgst, igst } = calculateGSTFromRate(unit_price);
                     updated.cgst = cgst;
                     updated.sgst = sgst;
                     updated.igst = igst;
                 } else if (field === 'cgst' || field === 'sgst') {
-                    // When CGST/SGST changes: recalculate total rate and IGST
+                    // When CGST/SGST changes: recalculate total unit_price and IGST
                     const cgst = field === 'cgst' ? parseFloat(String(value)) || 0 : parseFloat(String(updated.cgst)) || 0;
                     const sgst = field === 'sgst' ? parseFloat(String(value)) || 0 : parseFloat(String(updated.sgst)) || 0;
-                    const { rate, igst } = calculateRateFromComponents(cgst, sgst);
-                    updated.rate = rate;
+                    const { unit_price, igst } = calculateRateFromComponents(cgst, sgst);
+                    updated.unit_price = unit_price;
                     updated.igst = igst;
                 }
             }
@@ -234,7 +234,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
         setLocalFormData({
             name: tax.name,
             type: tax.type,
-            rate: tax.rate,
+            unit_price: tax.unit_price,
             cgst: tax.cgst,
             sgst: tax.sgst,
             igst: tax.igst,
@@ -255,7 +255,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
         try {
             const taxData = {
                 ...localFormData,
-                rate: parseFloat(String(localFormData.rate)) || 0,
+                unit_price: parseFloat(String(localFormData.unit_price)) || 0,
                 cgst: parseFloat(String(localFormData.cgst)) || 0,
                 sgst: parseFloat(String(localFormData.sgst)) || 0,
                 igst: parseFloat(String(localFormData.igst)) || 0
@@ -419,7 +419,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
-                                                        <span className="text-lg font-semibold text-gray-900">{tax.rate}%</span>
+                                                        <span className="text-lg font-semibold text-gray-900">{tax.unit_price}%</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
                                                         {tax.type === 'GST' ? (
@@ -493,7 +493,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                     >
                                         <option value="">Select Default Rate</option>
                                         {taxes.filter(tax => tax.type === 'GST' && tax.isActive).map(tax => (
-                                            <option key={tax.id} value={String(tax.id)}>{tax.name} - {tax.rate}%</option>
+                                            <option key={tax.id} value={String(tax.id)}>{tax.name} - {tax.unit_price}%</option>
                                         ))}
                                     </select>
                                 </div>
@@ -597,13 +597,13 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                         type="number"
                                         step="0.01"
                                         required
-                                        value={localFormData.rate}
-                                        onChange={(e) => handleInputChange('rate', e.target.value)}
+                                        value={localFormData.unit_price}
+                                        onChange={(e) => handleInputChange('unit_price', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                         placeholder="e.g., 18"
                                     />
                                     {localFormData.type === 'GST' && (
-                                        <p className="text-xs text-gray-500 mt-1">CGST & SGST will be auto-calculated as rate/2</p>
+                                        <p className="text-xs text-gray-500 mt-1">CGST & SGST will be auto-calculated as unit_price/2</p>
                                     )}
                                 </div>
 

@@ -1,8 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import { Switch } from '../../ui/switch';
-import { Button } from '../../ui/button';
-import { Alert, AlertDescription } from '../../ui/alert';
 import {
   Settings,
   Bell,
@@ -13,11 +9,66 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+// Simple Card components (inline implementation since UI components don't exist)
+const Card: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <div className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}>{children}</div>
+);
+const CardContent: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <div className={`p-6 ${className}`}>{children}</div>
+);
+const CardHeader: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="px-6 py-4 border-b border-gray-200">{children}</div>
+);
+const CardTitle: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <h3 className={`font-semibold text-gray-900 ${className}`}>{children}</h3>
+);
+
+const Switch: React.FC<{ checked: boolean; onCheckedChange: () => void; className?: string }> = ({ checked, onCheckedChange, className = '' }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onCheckedChange}
+    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-200'} ${className}`}
+  >
+    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+  </button>
+);
+
+const Button: React.FC<{ variant?: 'outline' | 'default'; onClick?: () => void; disabled?: boolean; children: React.ReactNode }> = ({ variant, onClick, disabled, children }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${variant === 'outline'
+        ? 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+        : 'bg-blue-600 text-white hover:bg-blue-700'
+      }`}
+  >
+    {children}
+  </button>
+);
+
+const Alert: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <div className={`rounded-lg border p-4 ${className}`}>{children}</div>
+);
+const AlertDescription: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <p className={`text-sm ${className}`}>{children}</p>
+);
+
+interface MessageState {
+  type: 'success' | 'error';
+  text: string;
+}
+
+interface FeaturesState {
+  [key: string]: boolean;
+}
+
 const MasterSettings = () => {
-  const [features, setFeatures] = useState({});
+  const [features, setFeatures] = useState<FeaturesState>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [message, setMessage] = useState<MessageState | null>(null);
 
   // Feature definitions with descriptions
   const featureDefinitions = {
@@ -168,7 +219,7 @@ const MasterSettings = () => {
   }, []);
 
   // Toggle a feature
-  const toggleFeature = (featureName) => {
+  const toggleFeature = (featureName: string) => {
     setFeatures(prev => ({
       ...prev,
       [featureName]: !prev[featureName]
@@ -224,11 +275,11 @@ const MasterSettings = () => {
   };
 
   // Group features by category
-  const featuresByCategory = Object.entries(featureDefinitions).reduce((acc, [key, def]) => {
+  const featuresByCategory: Record<string, Array<{ key: string; label: string; description: string; icon: any; category: string }>> = Object.entries(featureDefinitions).reduce((acc, [key, def]) => {
     if (!acc[def.category]) acc[def.category] = [];
     acc[def.category].push({ key, ...def });
     return acc;
-  }, {});
+  }, {} as Record<string, Array<{ key: string; label: string; description: string; icon: any; category: string }>>);
 
   if (loading) {
     return (

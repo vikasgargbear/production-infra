@@ -194,13 +194,13 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
       // Prepare payment data matching backend GeneralPaymentCreate schema
       const paymentData = {
-        customer_id: selectedCustomer.customer_id || selectedCustomer.id,
+        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
         payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
         payment_type: 'invoice_payment', // matches backend pattern
         amount: parseFloat(payment.amount || '0'),
         payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
         reference_number: payment.reference_number || null,
-        notes: payment.remarks || payment.notes || '',
+        notes: payment.remarks || '',
         // Store allocations separately - will handle after payment creation
         _allocations: payment.allocations ? payment.allocations.map((alloc: any) => ({
           invoice_id: alloc.invoice_id,
@@ -220,8 +220,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       try {
         // Use the customer payment endpoint with all required fields
         const customerPaymentData = {
-          customer_id: selectedCustomer.customer_id || selectedCustomer.id,
-          customer_name: selectedCustomer.customer_name || selectedCustomer.name,
+          customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
+          customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
           payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
           amount: parseFloat(payment.amount || '0'),
           payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
@@ -231,7 +231,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
         };
 
-        const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
+        const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
+        const response = await apiClient.post(`/customers/${customerId}/payment`, customerPaymentData);
 
         if (response.data) {
           // Backend returns payment details
@@ -258,7 +259,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
           const simulatedReceiptNo = `RCT-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
           setPaymentField('receipt_no', simulatedReceiptNo);
-          setMessage('Payment recorded locally (backend pending)', 'warning');
+          setMessage('Payment recorded locally (backend pending)', 'info');
           setCurrentStep(3);
 
           // Log for debugging
@@ -410,7 +411,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setIsLoading(true);
 
       // Import invoicesApi for fetching invoices
-      const { invoicesApi } = await import('../../services/api');
+      const { invoicesApi } = await import('../../../services/api');
       const response = await invoicesApi.getAll({
         customer_id: customerId,
         limit: 100,

@@ -6,8 +6,8 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { purchasesApi } from '../../services/api';
-import { formatCurrency as formatCurrencyUtil } from '../../utils/formatters';
+import { purchasesApi } from '../../../services/api';
+import { formatCurrency as formatCurrencyUtil } from '../../../utils/formatters';
 
 // ============================================
 // Type Definitions

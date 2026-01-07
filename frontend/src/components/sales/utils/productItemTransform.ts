@@ -15,9 +15,7 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_number?: string;
     expiry_date?: string;
-    manufacturing_date?: string;
     manufacturing_date?: string;
     sale_price_per_unit?: number;
     unit_price?: number;

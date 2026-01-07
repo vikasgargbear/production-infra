@@ -22,7 +22,6 @@ interface Customer {
     address2?: string;
     city?: string;
     state?: string;
-    state_name?: string;
     pincode?: string;
     phone?: string;
     primary_phone?: string;
@@ -56,7 +55,6 @@ interface Product {
     product_code?: string;
     hsn_code?: string;
     batch_id?: number | string;
-    batch_number?: string;
     batch_number?: string;
     quantity?: number;
     unit?: string;
@@ -387,9 +385,9 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
                     if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
                     if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
-                    if (preferredAddr.state || preferredAddr.state_name) fetchedParts.push(preferredAddr.state || preferredAddr.state_name);
-                    if (preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code) {
-                        fetchedParts.push(preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code);
+                    if (preferredAddr.state || preferredAddr.state) fetchedParts.push(preferredAddr.state || preferredAddr.state);
+                    if (preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode) {
+                        fetchedParts.push(preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode);
                     }
                     fullAddress = fetchedParts.filter(Boolean).join(', ');
 
@@ -397,8 +395,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                         address_line1: preferredAddr.address_line1 || '',
                         address_line2: preferredAddr.address_line2 || '',
                         city: preferredAddr.city || '',
-                        state: preferredAddr.state || preferredAddr.state_name || '',
-                        pincode: preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code || '',
+                        state: preferredAddr.state || preferredAddr.state || '',
+                        pincode: preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode || '',
                         country: preferredAddr.country || 'India'
                     };
 
@@ -407,8 +405,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                         address: preferredAddr.address_line1 || '',
                         address2: preferredAddr.address_line2 || '',
                         city: preferredAddr.city || '',
-                        state: preferredAddr.state || preferredAddr.state_name || '',
-                        pincode: preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code || ''
+                        state: preferredAddr.state || preferredAddr.state || '',
+                        pincode: preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode || ''
                     };
                     setSelectedCustomer(customer);
                 }
@@ -417,7 +415,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             }
         }
 
-        const customerState = addressData.state || customer.state || customer.state_name || '';
+        const customerState = addressData.state || customer.state || customer.state || '';
         const companyState = companyInfo.state || 'Gujarat';
         const cleanCustomerState = customerState.trim().toLowerCase();
         const cleanCompanyState = companyState.trim().toLowerCase();
@@ -511,7 +509,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 product_id: item.product_id,
                 product_name: item.product_name,
                 quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0,
+                unit_price: parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0,
                 discount_percent: parseFloat(String(item.discount_percent)) || 0,
                 gst_percent: parseFloat(String(item.gst_percent)) || 0,
                 total: 0

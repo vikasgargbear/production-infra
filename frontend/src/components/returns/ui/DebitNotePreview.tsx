@@ -2,7 +2,60 @@ import React from 'react';
 import { FileText, Calendar, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 
-const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
+interface ReturnItem {
+  id?: string | number;
+  selected?: boolean;
+  return_quantity: number;
+  product_name: string;
+  hsn_code?: string;
+  batch_number?: string;
+  expiry_date?: string;
+  expiry?: string;
+  unit_price: number;
+  discount_percent?: number;
+  tax_percent?: number;
+}
+
+interface Supplier {
+  supplier_name?: string;
+  gst_number?: string;
+  drug_license_number?: string;
+  phone?: string;
+  email?: string;
+}
+
+interface Purchase {
+  invoice_number?: string;
+  invoice_date?: string;
+}
+
+interface TransportDetails {
+  transport_mode?: string;
+  vehicle_no?: string;
+  transporter_name?: string;
+  lr_no?: string;
+}
+
+interface ReturnData {
+  debit_note_no?: string;
+  return_no?: string;
+  return_date: string;
+  return_reason: string;
+  return_reason_notes?: string;
+  items: ReturnItem[];
+  transport_details: TransportDetails;
+  subtotal_amount: number;
+  tax_amount: number;
+  total_amount: number;
+}
+
+interface DebitNotePreviewProps {
+  returnData: ReturnData;
+  supplier?: Supplier;
+  purchase?: Purchase;
+}
+
+const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplier = {}, purchase = {} }) => {
   // Add safety checks for required data
   if (!supplier || !purchase || !returnData) {
     return (
@@ -11,8 +64,9 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
       </div>
     );
   }
-  
-  const formatDate = (date) => {
+
+  const formatDate = (date: string | undefined) => {
+    if (!date) return '-';
     return new Date(date).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
@@ -21,37 +75,38 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
   };
 
   // Get only selected items with return quantity
-  const returnItems = returnData.items.filter(item => 
+  const returnItems = returnData.items.filter(item =>
     item.selected && item.return_quantity > 0
   );
 
   // Calculate GST breakup
   const calculateGSTBreakup = () => {
-    const gstBreakup = {};
-    
+    const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; totalTax: number }> = {};
+
     returnItems.forEach(item => {
-      const price = parseFloat(item.unit_price || item.rate || item.unit_price || 0);
-      const discountPercent = parseFloat(item.discount_percent || 0);
+      const price = parseFloat(String(item.unit_price || 0));
+      const discountPercent = parseFloat(String(item.discount_percent || 0));
       const returnAmount = item.return_quantity * price;
       const discountAmount = (returnAmount * discountPercent) / 100;
       const afterDiscount = returnAmount - discountAmount;
-      const taxAmount = (afterDiscount * (item.tax_percent || 0)) / 100;
-      
-      if (!gstBreakup[item.tax_percent]) {
-        gstBreakup[item.tax_percent] = {
+      const taxPercent = item.tax_percent || 0;
+      const taxAmount = (afterDiscount * taxPercent) / 100;
+
+      if (!gstBreakup[taxPercent]) {
+        gstBreakup[taxPercent] = {
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
           totalTax: 0
         };
       }
-      
-      gstBreakup[item.tax_percent].taxableAmount += afterDiscount;
-      gstBreakup[item.tax_percent].cgst += taxAmount / 2;
-      gstBreakup[item.tax_percent].sgst += taxAmount / 2;
-      gstBreakup[item.tax_percent].totalTax += taxAmount;
+
+      gstBreakup[taxPercent].taxableAmount += afterDiscount;
+      gstBreakup[taxPercent].cgst += taxAmount / 2;
+      gstBreakup[taxPercent].sgst += taxAmount / 2;
+      gstBreakup[taxPercent].totalTax += taxAmount;
     });
-    
+
     return gstBreakup;
   };
 
@@ -104,7 +159,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
                 </div>
               </div>
             </div>
-            
+
             <div className="text-right">
               <h1 className="text-2xl font-bold text-orange-600 mb-1">
                 {supplier?.gst_number ? 'DEBIT NOTE' : 'RETURN NOTE'}
@@ -142,7 +197,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
                 )}
               </div>
             </div>
-            
+
             {/* Contact Details */}
             <div>
               <h3 className="text-xs font-semibold text-gray-700 mb-1 uppercase">Contact</h3>
@@ -158,7 +213,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
                 )}
               </div>
             </div>
-            
+
             {/* Return Reason */}
             <div>
               <h3 className="text-xs font-semibold text-gray-700 mb-1 flex items-center uppercase">
@@ -229,7 +284,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const price = item.unit_price || item.rate || item.unit_price || 0;
+                  const price = item.unit_price || item.unit_price || item.unit_price || 0;
                   const returnAmount = item.return_quantity * price;
                   const discountAmount = (returnAmount * (item.discount_percent || 0)) / 100;
                   const afterDiscount = returnAmount - discountAmount;
@@ -272,9 +327,9 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(gstBreakup).map(([rate, values]) => (
-                    <tr key={rate} className="border-b border-gray-100">
-                      <td className="py-2">{rate}%</td>
+                  {Object.entries(gstBreakup).map(([unit_price, values]) => (
+                    <tr key={unit_price} className="border-b border-gray-100">
+                      <td className="py-2">{unit_price}%</td>
                       <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
                       <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
                       <td className="text-right py-2">{formatCurrency(values.sgst)}</td>

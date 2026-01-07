@@ -80,7 +80,7 @@ from .api.routes import sync as sync_router
 from .api.routes import metadata
 # from .api.routes import enterprise_calculations  # REMOVED: Moved to api/shared/calculations.py
 # from .api.routes import schemes_discounts  # REMOVED: Moved to api/shared/discounts.py
-from .api.routes import loyalty_points
+from .api.routes.loyalty import router as loyalty_router
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
 # from .api.routes import conversions  # REMOVED: File deleted
@@ -211,7 +211,7 @@ api.include_router(sync_router.router, tags=["Offline Sync"])
 api.include_router(documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 # api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])  # REMOVED: Moved to shared
-api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
+api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 # api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])  # REMOVED: Moved to shared
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema

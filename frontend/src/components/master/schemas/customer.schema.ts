@@ -26,7 +26,7 @@ export const contactInfoSchema = z.object({
     .min(10, 'Phone number must be at least 10 digits')
     .max(15, 'Phone number must not exceed 15 digits')
     .regex(PHONE_REGEX, 'Invalid Indian phone number'),
-  alternate_phone: z.string()
+  secondary_phone: z.string()
     .regex(PHONE_REGEX, 'Invalid Indian phone number')
     .optional()
     .nullable(),

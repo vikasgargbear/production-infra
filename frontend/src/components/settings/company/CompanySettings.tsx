@@ -24,10 +24,10 @@ const CompanySettings = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [logoFile, setLogoFile] = useState(null);
-  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // Fetch company profile on mount
   useEffect(() => {
@@ -42,19 +42,22 @@ const CompanySettings = () => {
       const response = await companyApi.getCompanyInfo();
 
       if (response) {
-        setCompanyInfo(response);
-        if (response.logo) {
-          setLogoPreview(response.logo);
+        const data = (response as any).data || response;
+        if (data) {
+          setCompanyInfo(prev => ({ ...prev, ...data }));
+          if (data.logo) {
+            setLogoPreview(data.logo);
+          }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       let errorMessage = 'Failed to load company profile';
       if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
           errorMessage = error.response.data.detail;
         } else if (Array.isArray(error.response.data.detail)) {
           errorMessage = error.response.data.detail
-            .map(err => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
+            .map((err: any) => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
             .join(', ');
         } else {
           errorMessage = JSON.stringify(error.response.data.detail);
@@ -105,7 +108,7 @@ const CompanySettings = () => {
       setLogoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result);
+        setLogoPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -126,7 +129,8 @@ const CompanySettings = () => {
       // Save company info using the correct API
       const response = await companyApi.updateCompanyInfo(dataToSave);
 
-      setCompanyInfo(response);
+      const data = (response as any).data || response;
+      setCompanyInfo(data);
       setSuccess(true);
       setIsEditing(false);
 
@@ -136,14 +140,15 @@ const CompanySettings = () => {
       // Hide success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
 
-    } catch (error) {
+
+    } catch (error: any) {
       let errorMessage = 'Failed to save company profile';
       if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
           errorMessage = error.response.data.detail;
         } else if (Array.isArray(error.response.data.detail)) {
           errorMessage = error.response.data.detail
-            .map(err => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
+            .map((err: any) => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
             .join(', ');
         } else {
           errorMessage = JSON.stringify(error.response.data.detail);
@@ -465,7 +470,7 @@ const CompanySettings = () => {
                       onChange={handleInputChange}
                       disabled={!isEditing}
                       pattern="[0-9]{6}"
-                      maxLength="6"
+                      maxLength={6}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 transition-colors"
                     />
                   </div>

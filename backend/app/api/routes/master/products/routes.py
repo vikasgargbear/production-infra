@@ -62,84 +62,16 @@ async def get_products(
     - Essential fields only for faster response
     """
     try:
-        # OPTIMIZED QUERY: 10x faster, single table scan, proper indexes
-        query = """
-            SELECT 
-                p.product_id, p.product_code, p.product_name, p.generic_name,
-                p.brand, p.manufacturer, p.category_id, p.product_type,
-                p.composition, p.strength, p.hsn_code,
-                p.gst_percent, p.is_active, p.is_saleable,
-                p.created_at, p.updated_at,
-                -- Essential stock data only
-                COALESCE(
-                    (SELECT SUM(quantity_available) 
-                     FROM inventory.batches b 
-                     WHERE b.product_id = p.product_id 
-                       AND b.batch_status = 'active'
-                       AND b.quality_status = 'approved'
-                     LIMIT 1), 0
-                ) as current_stock,
-                -- Get latest pricing from most recent batch
-                (SELECT mrp_per_unit 
-                 FROM inventory.batches b 
-                 WHERE b.product_id = p.product_id 
-                   AND b.mrp_per_unit IS NOT NULL
-                   AND b.batch_status = 'active'
-                 ORDER BY b.created_at DESC 
-                 LIMIT 1) as mrp_per_unit,
-                (SELECT sale_price_per_unit 
-                 FROM inventory.batches b 
-                 WHERE b.product_id = p.product_id 
-                   AND b.sale_price_per_unit IS NOT NULL
-                   AND b.batch_status = 'active'
-                 ORDER BY b.created_at DESC 
-                 LIMIT 1) as sale_price_per_unit,
-                -- Category name  
-                pc.category_name
-            FROM inventory.products p
-            LEFT JOIN inventory.product_categories pc 
-                ON p.category_id = pc.category_id
-            WHERE p.is_active = true
-        """
-
-        params = {}
-        
-        # Optimized search filter using indexes
-        if search:
-            query += """ AND (
-                p.product_name ILIKE :search OR
-                p.generic_name ILIKE :search OR
-                p.brand ILIKE :search OR
-                p.manufacturer ILIKE :search OR
-                p.product_code ILIKE :search
-            )"""
-            params["search"] = f"%{search}%"
-        
-        # Add product type filter
-        if product_type:
-            query += " AND product_type = :product_type"
-            params["product_type"] = product_type
-            
-        # Add manufacturer filter  
-        if manufacturer:
-            query += " AND p.manufacturer ILIKE :manufacturer"
-            params["manufacturer"] = f"%{manufacturer}%"
-        
-        query += """ 
-            ORDER BY p.created_at DESC 
-            LIMIT :limit OFFSET :skip"""
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        products = result.fetchall()
-        
-        # Convert to list of dicts
-        product_list = []
-        for product in products:
-            product_dict = dict(product._mapping)
-            product_list.append(product_dict)
-        
-        return product_list
+        # Use service layer for all database operations
+        return ProductService.list_products(
+            db=db,
+            skip=skip,
+            limit=limit,
+            search=search if search else None,
+            product_type=product_type if product_type else None,
+            manufacturer=manufacturer if manufacturer else None,
+            include_stock=True
+        )
         
     except Exception as e:
         raise handle_error(e, "list products")
@@ -189,78 +121,24 @@ async def search_products_with_batches(
     This eliminates the need for separate batch API calls in the frontend.
     """
     try:
-        # Step 1: Get matching products
-        product_query = """
-            SELECT 
-                p.product_id, p.product_code, p.product_name, p.generic_name,
-                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                p.is_active,
-                COALESCE(SUM(b.quantity_available), 0) as total_stock
-            FROM inventory.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                AND p.org_id = b.org_id
-                AND b.batch_status = 'active'
-            WHERE p.is_active = true
-        """
-        params = {"limit": limit, "offset": offset}
-        
-        if q:
-            product_query += """ AND (
-                p.product_name ILIKE :search 
-                OR p.brand ILIKE :search 
-                OR p.manufacturer ILIKE :search
-                OR p.hsn_code ILIKE :search
-                OR p.product_code ILIKE :search
-            )"""
-            params["search"] = f"%{q}%"
-        
-        product_query += """
-            GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                     p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
-                     p.is_active
-            ORDER BY p.product_name
-            LIMIT :limit OFFSET :offset
-        """
-        
-        products_result = db.execute(text(product_query), params)
-        products = [dict(row._mapping) for row in products_result]
+        # Step 1: Get matching products using service
+        products = ProductService.search_products_summary(
+            db=db,
+            search=q if q else None,
+            limit=limit,
+            offset=offset
+        )
         
         if not products:
             return {"products": [], "total": 0}
         
-        # Step 2: Get batches for all matching products in ONE query
+        # Step 2: Get batches for all matching products using service
         product_ids = [p["product_id"] for p in products]
-        
-        batch_query = """
-            SELECT 
-                b.batch_id,
-                b.product_id,
-                b.batch_number,
-                b.manufacturing_date,
-                b.expiry_date,
-                b.quantity_available,
-                b.mrp_per_unit,
-                b.sale_price_per_unit,
-                b.cost_per_unit,
-                b.units_per_pack,
-                b.packages_per_box,
-                b.pack_type,
-                b.batch_status,
-                b.quality_status,
-                (b.expiry_date - CURRENT_DATE) as days_to_expiry
-            FROM inventory.batches b
-            WHERE b.product_id = ANY(:product_ids)
-              AND b.batch_status = 'active'
-              AND b.quality_status = 'approved'
-        """
-        
-        if not include_expired:
-            batch_query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
-        
-        batch_query += " ORDER BY b.expiry_date ASC, b.batch_id"
-        
-        batches_result = db.execute(text(batch_query), {"product_ids": product_ids})
-        batches = [dict(row._mapping) for row in batches_result]
+        batches = ProductService.get_batches_for_products(
+            db=db,
+            product_ids=product_ids,
+            include_expired=include_expired
+        )
         
         # Step 3: Group batches by product_id
         batches_by_product = {}
@@ -337,55 +215,21 @@ async def get_all_products_with_batches(
     try:
         offset = (page - 1) * page_size
         
-        # Build base query with optional delta sync filter
-        where_clauses = ["p.org_id = :org_id"]
-        params = {"org_id": context.org_id, "limit": page_size, "offset": offset}
+        # Step 1: Count total products using service
+        total_count = ProductService.count_products(
+            db=db,
+            include_inactive=include_inactive,
+            since=since
+        )
         
-        if not include_inactive:
-            where_clauses.append("p.is_active = true")
-        
-        if since:
-            # Delta sync: Check product.updated_at
-            # NOTE: Database trigger (trg_batch_update_product_timestamp) automatically
-            # updates product.updated_at when any batch changes, so this catches:
-            # - Product metadata changes
-            # - Batch quantity changes (from sales, purchases, etc.)
-            # - Batch price changes
-            # See: migrations/add_batch_update_trigger.sql
-            where_clauses.append("p.updated_at > :since")
-            params["since"] = since
-        
-        where_sql = " AND ".join(where_clauses)
-        
-        # Count total products (for pagination info)
-        count_query = f"""
-            SELECT COUNT(*) as total 
-            FROM inventory.products p 
-            WHERE {where_sql}
-        """
-        count_result = db.execute(text(count_query), params)
-        total_count = count_result.fetchone()[0]
-        
-        # Fetch products
-        # NOTE: Use p.total_quantity_available directly (pre-computed by trigger)
-        # instead of subquery - faster and consistent with other endpoints
-        product_query = f"""
-            SELECT 
-                p.product_id, p.product_code, p.product_name, p.generic_name,
-                p.manufacturer, p.hsn_code, p.gst_percent,
-                p.category_id, p.type_id, p.product_type,
-                p.is_active, p.requires_prescription, p.is_narcotic,
-                p.created_at, p.updated_at,
-                COALESCE(p.total_quantity_available, 0) as total_quantity_available,
-                COALESCE(p.total_quantity_available, 0) as total_stock
-            FROM inventory.products p
-            WHERE {where_sql}
-            ORDER BY p.product_name
-            LIMIT :limit OFFSET :offset
-        """
-        
-        products_result = db.execute(text(product_query), params)
-        products = [dict(row._mapping) for row in products_result]
+        # Step 2: Fetch products page using service
+        products = ProductService.get_products_page(
+            db=db,
+            limit=page_size,
+            offset=offset,
+            include_inactive=include_inactive,
+            since=since
+        )
         
         if not products:
             return {
@@ -404,34 +248,13 @@ async def get_all_products_with_batches(
                 }
             }
         
-        # Get product IDs for batch query
+        # Step 3: Get batches for all products using service
         product_ids = [p["product_id"] for p in products]
-        
-        # Fetch all batches for these products
-        batch_query = """
-            SELECT 
-                sb.batch_id, sb.product_id, sb.batch_number,
-                sb.expiry_date, sb.manufacturing_date,
-                sb.mrp_per_unit, sb.sale_price_per_unit, sb.cost_per_unit,
-                sb.quantity_available, sb.quantity_reserved,
-                sb.pack_size, sb.pack_type, sb.pack_uom,
-                sb.units_per_pack, sb.packages_per_box,
-                sb.batch_status, sb.created_at, sb.updated_at,
-                CASE 
-                    WHEN sb.expiry_date IS NULL THEN NULL
-                    ELSE (sb.expiry_date - CURRENT_DATE)
-                END as days_to_expiry
-            FROM inventory.batches sb
-            WHERE sb.org_id = :org_id
-              AND sb.product_id = ANY(:product_ids)
-              AND sb.quantity_available > 0
-            ORDER BY sb.expiry_date ASC NULLS LAST
-        """
-        batches_result = db.execute(text(batch_query), {
-            "org_id": context.org_id,
-            "product_ids": product_ids
-        })
-        batches = [dict(row._mapping) for row in batches_result]
+        batches = ProductService.get_batches_for_products(
+            db=db,
+            product_ids=product_ids,
+            include_expired=False
+        )
         
         # Group batches by product_id
         batches_by_product = {}
@@ -444,7 +267,7 @@ async def get_all_products_with_batches(
             batch["sale_price_per_unit"] = float(batch["sale_price_per_unit"] or 0)
             batch["cost_per_unit"] = float(batch["cost_per_unit"] or 0)
             batch["expiry_date"] = str(batch["expiry_date"]) if batch["expiry_date"] else None
-            batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch["manufacturing_date"] else None
+            batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch.get("manufacturing_date") else None
             batches_by_product[pid].append(batch)
         
         # Embed batches into products
@@ -454,10 +277,10 @@ async def get_all_products_with_batches(
             product["batches"] = product_batches
             
             # Convert decimal fields that exist on products
-            product["gst_percent"] = float(product["gst_percent"] or 0)
-            product["total_stock"] = int(product["total_stock"] or 0)
-            product["created_at"] = str(product["created_at"]) if product["created_at"] else None
-            product["updated_at"] = str(product["updated_at"]) if product["updated_at"] else None
+            product["gst_percent"] = float(product.get("gst_percent") or 0)
+            product["total_stock"] = int(product.get("total_stock", 0) or 0)
+            product["created_at"] = str(product["created_at"]) if product.get("created_at") else None
+            product["updated_at"] = str(product["updated_at"]) if product.get("updated_at") else None
             
             # Get pricing from best batch (pricing is on batches, not products)
             if product_batches:
@@ -579,57 +402,27 @@ async def create_product(
         }
         
         # Check if product code already exists
-        exists = db.execute(text("""
-            SELECT 1 FROM inventory.products 
-            WHERE product_code = :product_code
-        """), {"product_code": product_data["product_code"]}).scalar()
+        code_check = ProductService.check_duplicate_product(
+            db, str(org_id),
+            product_code=product_data["product_code"]
+        )
         
-        if exists:
+        if code_check["has_duplicates"]:
             # Return existing product instead of error
-            result = db.execute(text("""
-                SELECT * FROM inventory.products
-                WHERE product_code = :product_code
-            """), {"product_code": product_data["product_code"]})
-            
-            existing = result.fetchone()
+            existing = code_check["duplicates"][0]
             return {
-                "product_id": existing.product_id,
-                "product_code": existing.product_code,
-                "product_name": existing.product_name,
+                "product_id": existing["product_id"],
+                "product_code": existing.get("product_code"),
+                "product_name": existing["product_name"],
                 "message": "Product already exists"
             }
         
-        # Create product
-        # Build INSERT with only non-NULL foreign keys
-        columns = ["org_id", "product_code", "product_name", "generic_name",
-                  "brand", "manufacturer", "composition", "hsn_code", 
-                  "gst_percent", "maintain_batch", 
-                  "maintain_expiry", "is_active", "created_at", "updated_at"]
-        values = [":org_id", ":product_code", ":product_name", ":generic_name",
-                 ":brand", ":manufacturer", "CAST(:composition AS jsonb)", ":hsn_code",
-                 ":gst_percent", ":maintain_batch",
-                 ":maintain_expiry", ":is_active", "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP"]
-        
-        # Only add foreign keys if they're not None
-        if product_data.get("category_id") is not None:
-            columns.insert(7, "category_id")
-            values.insert(7, ":category_id")
-        
-        if product_data.get("type_id") is not None:
-            columns.insert(-2, "type_id")
-            values.insert(-2, ":type_id")
-        
-        if product_data.get("base_uom_id") is not None:
-            columns.insert(-2, "base_uom_id")
-            values.insert(-2, ":base_uom_id")
-        
-        result = db.execute(text(f"""
-            INSERT INTO inventory.products ({', '.join(columns)})
-            VALUES ({', '.join(values)})
-            RETURNING product_id, product_code, product_name
-        """), product_data)
-        
-        created = result.fetchone()
+        # Create product using service method
+        created = ProductService.insert_product(
+            db=db,
+            org_id=str(org_id),
+            product_data=product_data
+        )
         
         # Create initial batch for products that maintain batches (simplified workflow for non-technical users)
         # Check if product should have batches - either maintain_batch is True OR explicit values provided
@@ -672,16 +465,13 @@ async def create_product(
             
             # Build batch data with database field names
             batch_data = {
-                "product_id": created.product_id,
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
                 "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
                 "expiry_date": expiry_date,
-                "initial_quantity": initial_quantity,
-                "quantity_available": initial_quantity,
+                "quantity": initial_quantity,
                 "cost_per_unit": cost_per_unit,
                 "sale_price_per_unit": sale_price_per_unit,
                 "mrp_per_unit": mrp_per_unit,
-                "source_type": "initial_stock",
                 "pack_type": pack_type,
                 "pack_size": pack_size,
                 "units_per_pack": units_per_pack,
@@ -690,51 +480,18 @@ async def create_product(
                 "base_uom": product.get("base_uom", "Unit")
             }
             
-            # Temporarily disable problematic triggers to allow batch creation
+            # Use service method with trigger handling
             try:
-                db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
-                logger.info("Disabled trigger_batch_expiry_status for batch creation")
-            except:
-                pass  # Ignore if trigger doesn't exist
-            
-            try:
-                batch_result = db.execute(text("""
-                    INSERT INTO inventory.batches (
-                        org_id, product_id, batch_number,
-                        manufacturing_date, expiry_date,
-                        initial_quantity, quantity_available,
-                        cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                        source_type, pack_type, pack_size, units_per_pack, 
-                        packages_per_box, pack_uom, base_uom,
-                        created_at, updated_at
-                    ) VALUES (
-                        :org_id, :product_id, :batch_number,
-                        :manufacturing_date, :expiry_date,
-                        :initial_quantity, :quantity_available,
-                        :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
-                        :source_type, :pack_type, :pack_size, :units_per_pack,
-                        :packages_per_box, :pack_uom, :base_uom,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                    ) RETURNING batch_id
-                """), batch_data)
-                
-                batch = batch_result.fetchone()
-                logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}, MRP: {mrp}, Selling: {sale_price}")
-                
-                # MRP is stored in batches table - no need to duplicate in products table
-                logger.info(f"Product MRP stored in batch: ₹{mrp}")
-                
-                # Re-enable trigger after batch creation
-                try:
-                    db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
-                    logger.info("Re-enabled trigger_batch_expiry_status")
-                except:
-                    pass
-                    
+                batch_id = ProductService.create_initial_batch(
+                    db=db,
+                    org_id=str(org_id),
+                    product_id=created.product_id,
+                    batch_data=batch_data
+                )
+                if batch_id:
+                    logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch_id}, MRP: {mrp_per_unit}")
             except Exception as batch_error:
-                # TODO: If batch creation still fails, we need to fix the database schema
                 logger.warning(f"Could not create initial batch: {str(batch_error)}")
-                # Don't fail product creation if batch fails
         
         db.commit()
         
@@ -905,19 +662,13 @@ async def update_product(
         if "category_name" in product:
             category_name = product.get("category_name")
             if category_name:
-                # Look up category_id from master categories table
-                category_lookup = db.execute(text("""
-                    SELECT category_id, category_name 
-                    FROM inventory.product_categories 
-                    WHERE LOWER(category_name) = LOWER(:category_name) 
-                      AND is_active = true
-                    LIMIT 1
-                """), {"category_name": category_name}).fetchone()
+                # Use service to look up category_id
+                category_id = ProductService.get_category_by_name(db, category_name)
                 
-                if category_lookup:
-                    batch_fields["category_name"] = category_lookup.category_name
-                    batch_fields["category_id"] = category_lookup.category_id
-                    logger.info(f"Found category '{category_lookup.category_name}' with ID {category_lookup.category_id}")
+                if category_id:
+                    batch_fields["category_name"] = category_name
+                    batch_fields["category_id"] = category_id
+                    logger.info(f"Found category '{category_name}' with ID {category_id}")
                 else:
                     batch_fields["category_name"] = category_name
                     batch_fields["category_id"] = None
@@ -933,17 +684,13 @@ async def update_product(
         # Update product table if we have product-level fields
         updated = None
         if update_fields:
-            update_fields.append("updated_at = CURRENT_TIMESTAMP")
-            
-            query = f"""
-                UPDATE inventory.products
-                SET {', '.join(update_fields)}
-                WHERE product_id = :product_id
-                RETURNING product_id, product_code, product_name
-            """
-            
-            result = db.execute(text(query), params)
-            updated = result.fetchone()
+            # Use service method for dynamic update
+            updated = ProductService.update_product_dynamic(
+                db=db,
+                product_id=product_id,
+                update_fields=update_fields,
+                params=params
+            )
             
             if not updated:
                 raise HTTPException(
@@ -952,12 +699,7 @@ async def update_product(
                 )
         else:
             # No product fields to update, but get product info for response
-            result = db.execute(text("""
-                SELECT product_id, product_code, product_name 
-                FROM inventory.products 
-                WHERE product_id = :product_id
-            """), {"product_id": product_id})
-            updated = result.fetchone()
+            updated = ProductService.get_product_basic(db, product_id)
             
             if not updated:
                 raise HTTPException(
@@ -967,21 +709,11 @@ async def update_product(
         
         # Update active batches if we have batch-level changes
         if batch_fields:
-            batch_update_fields = []
-            batch_params = {"product_id": product_id}
-            
-            for batch_field, value in batch_fields.items():
-                batch_update_fields.append(f"{batch_field} = :{batch_field}")
-                batch_params[batch_field] = value
-            
-            batch_query = f"""
-                UPDATE inventory.batches
-                SET {', '.join(batch_update_fields)}, updated_at = CURRENT_TIMESTAMP
-                WHERE product_id = :product_id
-                        AND batch_status = 'active'
-            """
-            
-            db.execute(text(batch_query), batch_params)
+            updated_count = ProductService.update_product_batches(
+                db=db,
+                product_id=product_id,
+                batch_updates=batch_fields
+            )
             logger.info(f"Updated {len(batch_fields)} batch fields for product {product_id}")
         
         db.commit()
@@ -1009,53 +741,13 @@ async def update_product_batches(
 ):
     """Update batch-level properties for all active batches of a product"""
     try:
-        # Build update query dynamically for batches
-        update_fields = []
-        params = {"product_id": product_id}
-        
-        batch_field_mapping = {
-            "category_name": "category_name",
-            "pack_type": "pack_type", 
-            "pack_size": "pack_size",
-            "units_per_pack": "units_per_pack",
-            "packages_per_box": "packages_per_box",  # Added packages_per_box
-            "tablets_per_strip": "tablets_per_strip",
-            "pack_uom": "pack_uom",
-            "base_uom": "base_uom",
-            "storage_condition": "storage_condition",
-            "quality_status": "quality_status"
-        }
-        
-        for frontend_field, db_field in batch_field_mapping.items():
-            if frontend_field in batch_data:
-                update_fields.append(f"{db_field} = :{db_field}")
-                params[db_field] = batch_data[frontend_field]
-        
-        if not update_fields:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No batch fields to update"
-            )
-        
-        update_fields.append("updated_at = CURRENT_TIMESTAMP")
-        
-        # Update all active batches for this product
-        query = f"""
-            UPDATE inventory.batches
-            SET {', '.join(update_fields)}
-            WHERE product_id = :product_id
-            AND batch_status = 'active'
-            AND quality_status = 'approved'
-            RETURNING batch_id, batch_number, category_name, pack_type, pack_size
-        """
-        
-        result = db.execute(text(query), params)
-        updated_batches = result.fetchall()
+        # Use ProductService for batch updates
+        updated_batches = ProductService.update_product_batches(db, product_id, batch_data)
         
         if not updated_batches:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No active batches found for product {product_id}"
+                detail=f"No active batches found for product {product_id} or no valid fields to update"
             )
         
         db.commit()
@@ -1063,7 +755,7 @@ async def update_product_batches(
         return {
             "product_id": product_id,
             "updated_batches": len(updated_batches),
-            "batch_details": [dict(batch._mapping) for batch in updated_batches],
+            "batch_details": updated_batches,
             "message": f"Updated {len(updated_batches)} batches successfully"
         }
         

@@ -11,7 +11,6 @@ export interface PrintUtilityDocumentItem {
     quantity?: number;
     free_quantity?: number;
     unit_price?: number;
-    rate?: number;
     selling_price?: number;
     discount_percent?: number;
     gst_percent?: number;
@@ -190,9 +189,9 @@ export const ThermalPrintTemplate = forwardRef<HTMLDivElement, ThermalPrintTempl
                                 {item.quantity}
                                 {(item.free_quantity ?? 0) > 0 && `+${item.free_quantity}F`}
                             </span>
-                            <span style={style15Right}>{parseFloat(String(item.unit_price || item.rate || item.selling_price || 0)).toFixed(2)}</span>
+                            <span style={style15Right}>{parseFloat(String(item.unit_price || item.unit_price || item.selling_price || 0)).toFixed(2)}</span>
                             <span style={style20Right}>
-                                {parseFloat(String(item.total || item.line_total || ((item.quantity || 0) * (item.unit_price || item.rate || item.selling_price || 0)))).toFixed(2)}
+                                {parseFloat(String(item.total || item.line_total || ((item.quantity || 0) * (item.unit_price || item.unit_price || item.selling_price || 0)))).toFixed(2)}
                             </span>
                         </div>
                         {((item.discount_percent ?? 0) > 0 || (item.gst_percent ?? 0) > 0) && (

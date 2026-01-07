@@ -28,7 +28,7 @@ from .settings.settings_service import SettingsService, SettingsServiceSync, inv
 # Core/shared services (remain at top level)
 from .document_number_service import DocumentNumberService
 from .dashboard_service import DashboardService
-from .gst_service import GSTService
+from .compliance.gst_service import GSTService  # Moved to compliance/
 
 __all__ = [
     # Sales

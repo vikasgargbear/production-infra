@@ -320,4 +320,453 @@ class PurchaseOrderRepository:
         
         result = db.execute(text(query), params)
         return [dict(row._mapping) for row in result]
-
+    
+    # ==================== PRODUCT/BATCH HELPERS ====================
+    
+    @staticmethod
+    def lookup_products_by_name(db: Session, org_id: str, product_names: List[str]) -> Dict[str, int]:
+        """Batch lookup products by name. Returns dict of name_key -> product_id."""
+        if not product_names:
+            return {}
+        result = db.execute(text("""
+            SELECT product_id, LOWER(TRIM(product_name)) as name_key
+            FROM inventory.products 
+            WHERE LOWER(TRIM(product_name)) = ANY(:names)
+            AND org_id = :org_id
+        """), {"names": [n.lower().strip() for n in product_names], "org_id": org_id})
+        return {row.name_key: row.product_id for row in result}
+    
+    @staticmethod
+    def get_default_category(db: Session, org_id: str) -> Optional[int]:
+        """Get default product category for org."""
+        result = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories 
+            WHERE org_id = :org_id
+            ORDER BY category_id LIMIT 1
+        """), {"org_id": org_id}).fetchone()
+        return result.category_id if result else None
+    
+    @staticmethod
+    def create_category(db: Session, org_id: str, category_name: str) -> int:
+        """Create a new product category. Returns category_id."""
+        result = db.execute(text("""
+            INSERT INTO inventory.product_categories (org_id, category_name, is_active)
+            VALUES (:org_id, :name, true) RETURNING category_id
+        """), {"org_id": org_id, "name": category_name})
+        return result.scalar()
+    
+    @staticmethod
+    def create_product(
+        db: Session, org_id: str, product_data: Dict[str, Any], category_id: int
+    ) -> int:
+        """Create a new product. Returns product_id."""
+        result = db.execute(text("""
+            INSERT INTO inventory.products (
+                org_id, category_id, product_name, product_code,
+                hsn_code, is_active, requires_batch_tracking, created_at
+            ) VALUES (
+                :org_id, :category_id, :name, :code,
+                :hsn, TRUE, TRUE, CURRENT_TIMESTAMP
+            ) RETURNING product_id
+        """), {
+            "org_id": org_id,
+            "category_id": category_id,
+            "name": product_data.get("product_name", ""),
+            "code": product_data.get("product_code", ""),
+            "hsn": product_data.get("hsn_code", "")
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_batch(
+        db: Session, org_id: str, batch_data: Dict[str, Any]
+    ) -> int:
+        """Create a new inventory batch. Returns batch_id."""
+        result = db.execute(text("""
+            INSERT INTO inventory.batches (
+                org_id, product_id, batch_number, manufacturing_date, expiry_date,
+                quantity_purchased, quantity_available,
+                purchase_price, mrp_per_unit, sale_price_per_unit,
+                created_at
+            ) VALUES (
+                :org_id, :product_id, :batch_number, :mfg_date, :exp_date,
+                :qty, :qty,
+                :purchase_price, :mrp, :sale_price,
+                CURRENT_TIMESTAMP
+            ) RETURNING batch_id
+        """), {
+            "org_id": org_id,
+            "product_id": batch_data.get("product_id"),
+            "batch_number": batch_data.get("batch_number", ""),
+            "mfg_date": batch_data.get("manufacturing_date"),
+            "exp_date": batch_data.get("expiry_date"),
+            "qty": batch_data.get("quantity", 0),
+            "purchase_price": batch_data.get("purchase_price", 0),
+            "mrp": batch_data.get("mrp", 0),
+            "sale_price": batch_data.get("sale_price", 0)
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def update_batch_quantity(db: Session, batch_id: int, qty_to_add: int) -> None:
+        """Add quantity to existing batch."""
+        db.execute(text("""
+            UPDATE inventory.batches 
+            SET quantity_available = quantity_available + :qty,
+                quantity_purchased = quantity_purchased + :qty
+            WHERE batch_id = :batch_id
+        """), {"qty": qty_to_add, "batch_id": batch_id})
+    
+    @staticmethod
+    def find_existing_batch(
+        db: Session, product_id: int, batch_number: str
+    ) -> Optional[int]:
+        """Find existing batch by product and batch number. Returns batch_id or None."""
+        result = db.execute(text("""
+            SELECT batch_id FROM inventory.batches 
+            WHERE product_id = :product_id AND batch_number = :batch_no
+            LIMIT 1
+        """), {"product_id": product_id, "batch_no": batch_number}).fetchone()
+        return result.batch_id if result else None
+    
+    @staticmethod
+    def create_direct_order_header(
+        db: Session, org_id: str, branch_id: int, order_data: Dict[str, Any]
+    ) -> int:
+        """Create a completed PO for direct purchase entry. Returns purchase_order_id."""
+        result = db.execute(text("""
+            INSERT INTO procurement.purchase_orders (
+                org_id, branch_id, po_number, po_date, po_type,
+                supplier_id, supplier_name,
+                subtotal_amount, tax_amount, total_amount,
+                po_status, receipt_status, created_at
+            ) VALUES (
+                :org_id, :branch_id, :po_number, :po_date, 'regular',
+                :supplier_id, :supplier_name,
+                :subtotal, :tax, :total,
+                'completed', 'received', CURRENT_TIMESTAMP
+            ) RETURNING purchase_order_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "po_number": order_data.get("po_number"),
+            "po_date": order_data.get("po_date", date.today()),
+            "supplier_id": order_data.get("supplier_id"),
+            "supplier_name": order_data.get("supplier_name", "Direct Purchase"),
+            "subtotal": order_data.get("subtotal_amount", 0),
+            "tax": order_data.get("tax_amount", 0),
+            "total": order_data.get("total_amount", 0)
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_direct_order_item(
+        db: Session, order_id: int, item: Dict[str, Any]
+    ) -> int:
+        """Create item for direct purchase. Returns po_item_id."""
+        result = db.execute(text("""
+            INSERT INTO procurement.purchase_order_items (
+                purchase_order_id, product_id, product_name, hsn_code,
+                quantity, uom, unit_price, mrp,
+                taxable_amount, tax_percent, tax_amount, line_total,
+                quantity_received, created_at
+            ) VALUES (
+                :order_id, :product_id, :product_name, :hsn_code,
+                :qty, :uom, :unit_price, :mrp,
+                :taxable, :tax_percent, :tax_amount, :line_total,
+                :qty, CURRENT_TIMESTAMP
+            ) RETURNING po_item_id
+        """), {
+            "order_id": order_id,
+            "product_id": item.get("product_id"),
+            "product_name": item.get("product_name", ""),
+            "hsn_code": item.get("hsn_code", ""),
+            "qty": item.get("quantity", 0),
+            "uom": item.get("uom", "PCS"),
+            "unit_price": item.get("unit_price", 0),
+            "mrp": item.get("mrp", 0),
+            "taxable": item.get("taxable_amount", 0),
+            "tax_percent": item.get("tax_percent", 0),
+            "tax_amount": item.get("tax_amount", 0),
+            "line_total": item.get("line_total", 0)
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_purchase_batch(
+        db: Session, org_id: str, batch_data: Dict[str, Any]
+    ) -> int:
+        """Create a batch for purchase with all fields. Returns batch_id."""
+        result = db.execute(text("""
+            INSERT INTO inventory.batches (
+                org_id, product_id,
+                batch_number, expiry_date,
+                initial_quantity, quantity_available,
+                cost_per_unit, mrp_per_unit, sale_price_per_unit,
+                source_type, 
+                pack_type, pack_size, pack_uom, base_uom, units_per_pack,
+                batch_status, expiry_status,
+                created_at
+            ) VALUES (
+                :org_id, :product_id,
+                :batch_number, :expiry_date,
+                :quantity, :quantity,
+                :cost_price, :mrp, :selling_price,
+                'purchase',
+                :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
+                'active', 'normal',
+                CURRENT_TIMESTAMP
+            ) RETURNING batch_id
+        """), {
+            "org_id": org_id,
+            "product_id": batch_data.get("product_id"),
+            "batch_number": batch_data.get("batch_number", ""),
+            "expiry_date": batch_data.get("expiry_date"),
+            "quantity": batch_data.get("quantity", 0),
+            "cost_price": batch_data.get("cost_price", 0),
+            "mrp": batch_data.get("mrp", 0),
+            "selling_price": batch_data.get("selling_price", 0),
+            "pack_type": batch_data.get("pack_type", "STRIP"),
+            "pack_size": batch_data.get("pack_size", 1),
+            "pack_uom": batch_data.get("pack_uom", "STRIP"),
+            "base_uom": batch_data.get("base_uom", "NOS"),
+            "units_per_pack": batch_data.get("units_per_pack", 1)
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_supplier_invoice_item(
+        db: Session, invoice_id: int, item: Dict[str, Any]
+    ) -> None:
+        """Create a supplier invoice item record."""
+        db.execute(text("""
+            INSERT INTO procurement.supplier_invoice_items (
+                supplier_invoice_id, product_id, batch_id,
+                batch_number, quantity, free_quantity,
+                unit_price, discount_percent, discount_amount,
+                taxable_amount, cgst_percent, sgst_percent, igst_percent,
+                cgst_amount, sgst_amount, igst_amount, total_amount,
+                hsn_code, unit, pack_type, pack_size
+            ) VALUES (
+                :invoice_id, :product_id, :batch_id,
+                :batch_number, :quantity, :free_quantity,
+                :unit_price, :disc_percent, :disc_amount,
+                :taxable_amount, :cgst_percent, :sgst_percent, :igst_percent,
+                :cgst_amount, :sgst_amount, :igst_amount, :total_amount,
+                :hsn_code, :unit, :pack_type, :pack_size
+            )
+        """), {
+            "invoice_id": invoice_id,
+            "product_id": item.get("product_id"),
+            "batch_id": item.get("batch_id"),
+            "batch_number": item.get("batch_number"),
+            "quantity": item.get("quantity", 0),
+            "free_quantity": item.get("free_quantity", 0),
+            "unit_price": item.get("unit_price", 0),
+            "disc_percent": item.get("discount_percent", 0),
+            "disc_amount": item.get("discount_amount", 0),
+            "taxable_amount": item.get("taxable_amount", 0),
+            "cgst_percent": item.get("cgst_percent", 0),
+            "sgst_percent": item.get("sgst_percent", 0),
+            "igst_percent": item.get("igst_percent", 0),
+            "cgst_amount": item.get("cgst_amount", 0),
+            "sgst_amount": item.get("sgst_amount", 0),
+            "igst_amount": item.get("igst_amount", 0),
+            "total_amount": item.get("total_amount", 0),
+            "hsn_code": item.get("hsn_code", "30049099"),
+            "unit": item.get("unit", "NOS"),
+            "pack_type": item.get("pack_type", "STRIP"),
+            "pack_size": item.get("pack_size", 1)
+        })
+    
+    @staticmethod
+    def create_po_header_simple(
+        db: Session, org_id: str, branch_id: int, order_data: Dict[str, Any], created_by: int
+    ) -> int:
+        """Create a simplified PO header. Returns purchase_order_id."""
+        result = db.execute(text("""
+            INSERT INTO procurement.purchase_orders (
+                org_id, po_number, po_date,
+                supplier_id, supplier_name,
+                subtotal_amount, discount_amount, tax_amount, 
+                other_charges, total_amount, po_status,
+                payment_terms, notes, created_by, branch_id
+            ) VALUES (
+                :org_id, :purchase_number, :po_date,
+                :supplier_id, :supplier_name,
+                :subtotal, :discount, :tax, :other_charges, :total,
+                :status, :payment_mode, :notes, :created_by, :branch_id
+            ) RETURNING purchase_order_id
+        """), {
+            "org_id": org_id,
+            "purchase_number": order_data.get("purchase_number"),
+            "po_date": order_data.get("po_date"),
+            "supplier_id": order_data.get("supplier_id"),
+            "supplier_name": order_data.get("supplier_name"),
+            "subtotal": order_data.get("subtotal", 0),
+            "discount": order_data.get("discount", 0),
+            "tax": order_data.get("tax", 0),
+            "other_charges": order_data.get("other_charges", 0),
+            "total": order_data.get("total", 0),
+            "status": order_data.get("status", "draft"),
+            "payment_mode": order_data.get("payment_mode", "cash"),
+            "notes": order_data.get("notes"),
+            "created_by": created_by,
+            "branch_id": branch_id
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_supplier_invoice_with_po(
+        db: Session, org_id: str, branch_id: int, 
+        invoice_data: Dict[str, Any], purchase_id: int, created_by: int
+    ) -> int:
+        """Create supplier invoice linked to a PO. Returns supplier_invoice_id."""
+        result = db.execute(text("""
+            INSERT INTO procurement.supplier_invoices (
+                org_id, branch_id, supplier_invoice_number, invoice_date,
+                supplier_id, purchase_order_ids,
+                subtotal_amount, discount_amount, taxable_amount,
+                cgst_amount, sgst_amount, igst_amount, tax_amount,
+                freight_charges, insurance_charges, other_charges,
+                round_off_amount, invoice_total,
+                payment_terms, due_date, payment_status,
+                invoice_status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :invoice_number, :invoice_date,
+                :supplier_id, ARRAY[:purchase_id]::integer[],
+                :subtotal, :discount, :taxable,
+                :cgst, :sgst, :igst, :tax,
+                :freight, :insurance, :other,
+                :round_off, :total,
+                :payment_terms, :due_date, :payment_status,
+                :invoice_status, :created_by
+            ) RETURNING supplier_invoice_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "invoice_number": invoice_data.get("invoice_number"),
+            "invoice_date": invoice_data.get("invoice_date"),
+            "supplier_id": invoice_data.get("supplier_id"),
+            "purchase_id": purchase_id,
+            "subtotal": invoice_data.get("subtotal", 0),
+            "discount": invoice_data.get("discount", 0),
+            "taxable": invoice_data.get("taxable", 0),
+            "cgst": invoice_data.get("cgst", 0),
+            "sgst": invoice_data.get("sgst", 0),
+            "igst": invoice_data.get("igst", 0),
+            "tax": invoice_data.get("tax", 0),
+            "freight": invoice_data.get("freight", 0),
+            "insurance": invoice_data.get("insurance", 0),
+            "other": invoice_data.get("other", 0),
+            "round_off": invoice_data.get("round_off", 0),
+            "total": invoice_data.get("total", 0),
+            "payment_terms": invoice_data.get("payment_terms", "immediate"),
+            "due_date": invoice_data.get("due_date"),
+            "payment_status": invoice_data.get("payment_status", "pending"),
+            "invoice_status": invoice_data.get("invoice_status", "draft"),
+            "created_by": created_by
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def create_po_item(
+        db: Session, item_data: Dict[str, Any]
+    ) -> int:
+        """Create a PO item record. Returns po_item_id."""
+        result = db.execute(text("""
+            INSERT INTO procurement.purchase_order_items (
+                purchase_order_id, product_id, product_name,
+                ordered_quantity, unit_price, free_quantity,
+                uom, pack_type,
+                discount_percent, discount_amount,
+                cgst_percent, sgst_percent, igst_percent,
+                cgst_amount, sgst_amount, igst_amount,
+                taxable_amount, tax_amount, line_total,
+                batch_number, expiry_date, manufacturing_date,
+                hsn_code
+            ) VALUES (
+                :purchase_order_id, :product_id, :product_name,
+                :ordered_quantity, :unit_price, :free_quantity,
+                :uom, :pack_type,
+                :discount_percent, :discount_amount,
+                :cgst_percent, :sgst_percent, :igst_percent,
+                :cgst_amount, :sgst_amount, :igst_amount,
+                :taxable_amount, :tax_amount, :line_total,
+                :batch_number, :expiry_date, :manufacturing_date,
+                :hsn_code
+            ) RETURNING po_item_id
+        """), item_data)
+        return result.scalar()
+    
+    @staticmethod
+    def generate_batch_number(db: Session) -> str:
+        """Generate a random batch number."""
+        from datetime import datetime
+        random_part = db.execute(text("SELECT floor(random() * 10000)::int")).scalar()
+        return f"BATCH{datetime.now().strftime('%y%m')}{str(random_part).zfill(4)}"
+    
+    @staticmethod
+    def check_po_item_exists(
+        db: Session, item_id: int, purchase_id: int
+    ) -> bool:
+        """Check if PO item exists for a purchase order."""
+        result = db.execute(text("""
+            SELECT po_item_id FROM procurement.purchase_order_items
+            WHERE po_item_id = :item_id AND purchase_order_id = :purchase_id
+        """), {"item_id": item_id, "purchase_id": purchase_id}).first()
+        return result is not None
+    
+    @staticmethod
+    def update_po_item_dynamic(
+        db: Session, item_id: int, org_id: str, updates: List[str], params: Dict[str, Any]
+    ) -> None:
+        """Update PO item with dynamic fields."""
+        if not updates:
+            return
+        query = f"""
+            UPDATE procurement.purchase_order_items
+            SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
+            WHERE po_item_id = :item_id AND org_id = :org_id
+        """
+        db.execute(text(query), {**params, "item_id": item_id, "org_id": org_id})
+    
+    @staticmethod
+    def get_purchase_for_receive(db: Session, purchase_id: int, org_id: str) -> Optional[Dict[str, Any]]:
+        """Get purchase order for receiving."""
+        result = db.execute(text("""
+            SELECT * FROM procurement.purchase_orders 
+            WHERE purchase_order_id = :id AND org_id = :org_id
+        """), {"id": purchase_id, "org_id": org_id}).first()
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def update_receive_item(
+        db: Session, item_id: int, purchase_id: int, params: Dict[str, Any], extra_fields: List[str]
+    ) -> None:
+        """Update PO item for receiving."""
+        update_fields = ["received_quantity = :received_quantity"] + extra_fields
+        query = f"""
+            UPDATE procurement.purchase_order_items 
+            SET {', '.join(update_fields)}, item_status = 'received'
+            WHERE po_item_id = :item_id AND po_id = :purchase_id
+        """
+        db.execute(text(query), {**params, "item_id": item_id, "purchase_id": purchase_id})
+    
+    @staticmethod
+    def mark_po_received(db: Session, purchase_id: int, grn_number: str) -> None:
+        """Mark purchase order as received with GRN."""
+        db.execute(text("""
+            UPDATE procurement.purchase_orders 
+            SET po_status = 'received', grn_number = :grn_number, grn_date = CURRENT_DATE
+            WHERE purchase_order_id = :purchase_id
+        """), {"grn_number": grn_number, "purchase_id": purchase_id})
+    
+    @staticmethod
+    def count_purchase_batches(db: Session, purchase_id: int, org_id: str) -> int:
+        """Count batches created for a purchase."""
+        result = db.execute(text("""
+            SELECT COUNT(*) FROM inventory.batches 
+            WHERE purchase_id = :id AND org_id = :org_id
+        """), {"id": purchase_id, "org_id": org_id})
+        return result.scalar() or 0

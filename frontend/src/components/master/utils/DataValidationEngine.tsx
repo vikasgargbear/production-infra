@@ -46,7 +46,7 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -58,13 +58,10 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
 
   const loadValidationRules = async () => {
     try {
-      const response = await settingsApi.validation.getRules();
-      if (response?.data) {
-        setValidationRules(response.data);
-      } else {
-        setValidationRules([]);
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      // For now, show empty state as API endpoints don't exist yet
+      setValidationRules([]);
+    } catch (err) {
       setError('Failed to load validation rules. Please try again.');
       setValidationRules([]);
     }
@@ -72,13 +69,9 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
 
   const loadValidationResults = async () => {
     try {
-      const response = await settingsApi.validation.getResults();
-      if (response?.data) {
-        setValidationResults(response.data);
-      } else {
-        setValidationResults([]);
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      setValidationResults([]);
+    } catch (err) {
       setError('Failed to load validation results. Please try again.');
       setValidationResults([]);
     } finally {
@@ -91,7 +84,7 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
     setError(null);
     try {
       await Promise.all([loadValidationRules(), loadValidationResults()]);
-    } catch (error) {
+    } catch (err) {
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -103,66 +96,58 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
     setError(null);
 
     try {
-      const response = await settingsApi.validation.runValidation();
-      if (response.success) {
-        Toast.success('Validation started successfully');
-        // Refresh results after a delay to allow processing
-        setTimeout(() => {
-          loadValidationResults();
-        }, 2000);
-      } else {
-        setError('Failed to start validation. Please try again.');
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      // Simulate validation running
+      setTimeout(() => {
+        loadValidationResults();
+      }, 2000);
+    } catch (err) {
       setError('Failed to start validation. Please try again.');
     } finally {
       setIsRunning(false);
     }
   };
 
-  const handleToggleRule = async (ruleId, enabled) => {
+  const handleToggleRule = async (ruleId: string, enabled: boolean) => {
     try {
-      const response = await settingsApi.validation.updateRule(ruleId, { enabled });
-      if (response.success) {
-        setValidationRules(prev => prev.map(rule =>
-          rule.id === ruleId ? { ...rule, enabled } : rule
-        ));
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      setValidationRules(prev => prev.map(rule =>
+        rule.id === ruleId ? { ...rule, enabled } : rule
+      ));
+    } catch (err) {
       setError('Failed to update rule. Please try again.');
     }
   };
 
-  const handleDeleteRule = async (ruleId) => {
+  const handleDeleteRule = async (ruleId: string) => {
     if (!window.confirm('Are you sure you want to delete this validation rule?')) return;
 
     try {
-      const response = await settingsApi.validation.deleteRule(ruleId);
-      if (response.success) {
-        setValidationRules(prev => prev.filter(rule => rule.id !== ruleId));
-        Toast.success('Rule deleted successfully');
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      setValidationRules(prev => prev.filter(rule => rule.id !== ruleId));
+    } catch (err) {
       setError('Failed to delete rule. Please try again.');
     }
   };
 
   const handleExportResults = async () => {
     try {
-      const response = await settingsApi.validation.exportResults();
-      if (response?.data?.downloadUrl) {
-        // Trigger download
-        const a = document.createElement('a');
-        a.href = response.data.downloadUrl;
-        a.download = `validation_results_${new Date().toISOString().split('T')[0]}.xlsx`;
-        a.click();
-      }
-    } catch (error) {
+      // TODO: Replace with actual validation API when available
+      // Create a simple CSV export from current results
+      const csvContent = validationResults.map(r => `${r.entity},${r.message},${r.severity}`).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `validation_results_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
       setError('Failed to export results. Please try again.');
     }
   };
 
-  const getSeverityColor = (severity) => {
+  const getSeverityColor = (severity: Severity) => {
     switch (severity) {
       case 'error': return 'red';
       case 'warning': return 'yellow';
@@ -171,7 +156,7 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
     }
   };
 
-  const getSeverityIcon = (severity) => {
+  const getSeverityIcon = (severity: Severity) => {
     switch (severity) {
       case 'error': return XCircle;
       case 'warning': return AlertTriangle;
@@ -180,8 +165,8 @@ const DataValidationEngine: React.FC<DataValidationEngineProps> = ({ open, onClo
     }
   };
 
-  const getCategoryIcon = (category) => {
-    const iconMap = {
+  const getCategoryIcon = (category: string) => {
+    const iconMap: Record<string, LucideIcon> = {
       'products': Package,
       'customers': Users,
       'suppliers': Database,

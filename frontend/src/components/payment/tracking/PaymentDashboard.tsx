@@ -24,7 +24,7 @@ import {
     Activity,
     Loader2
 } from 'lucide-react';
-import { usePaymentAnalytics, type DateRangeType } from './hooks';
+import { usePaymentAnalytics, type DateRangeType } from '../hooks/usePaymentAnalytics';
 
 // Payment mode config
 const paymentModeConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {

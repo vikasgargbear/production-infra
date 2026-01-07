@@ -53,35 +53,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     setError(null);
 
     try {
-      const response = await settingsApi.notifications.getAll();
-
-      if (response?.data && Array.isArray(response.data)) {
-        const notificationsData = response.data;
-        setNotifications(notificationsData);
-
-        // Store data offline for future use
-        await offlineStorage.storeOffline('notifications', notificationsData, {
-          critical: true,
-          persistent: true
-        });
+      // TODO: Replace with actual notifications API when available
+      // settingsApi.notifications.getAll() doesn't exist - using placeholder
+      const storedNotifications = await offlineStorage.getOffline('notifications', { critical: true });
+      if (storedNotifications && storedNotifications.data) {
+        setNotifications(storedNotifications.data);
       } else {
         setNotifications([]);
       }
-    } catch (error) {
-
-      // Try to load from offline storage instead of using mock data
-      const offlineData = await offlineStorage.getOffline('notifications', { critical: true });
-
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for notifications
-        setNotifications(offlineData.data);
-
-        // Show offline indicator
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load notifications. Please check your connection and try again.');
-        setNotifications([]);
-      }
+    } catch (err) {
+      // No data available - show empty state
+      setError('Unable to load notifications. Please check your connection and try again.');
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -102,17 +85,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Mark notification as read
-  const markAsRead = async (id) => {
+  const markAsRead = async (id: string | number) => {
     try {
       // Update locally first for immediate UI feedback
       setNotifications(prev =>
         prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
       );
 
-      // Try to update on server
-      await settingsApi.notifications.markAsRead(id);
-    } catch (error) {
-
+      // TODO: Queue for server sync when API is available
+    } catch (err) {
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_mark_read',
@@ -122,15 +103,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Delete notification
-  const deleteNotification = async (id) => {
+  const deleteNotification = async (id: string | number) => {
     try {
       // Remove locally first for immediate UI feedback
       setNotifications(prev => prev.filter(notif => notif.id !== id));
 
-      // Try to delete on server
-      await settingsApi.notifications.delete(id);
-    } catch (error) {
-
+      // TODO: Queue for server sync when API is available
+    } catch (err) {
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_delete',
@@ -147,10 +126,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         prev.map(notif => ({ ...notif, read: true }))
       );
 
-      // Try to update on server
-      await settingsApi.notifications.markAllAsRead();
-    } catch (error) {
-
+      // TODO: Queue for server sync when API is available
+    } catch (err) {
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
         type: 'notification_mark_all_read',
@@ -160,7 +137,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Get icon for notification type
-  const getIcon = (type) => {
+  const getIcon = (type: NotificationType) => {
     switch (type) {
       case 'stock_low': return Package;
       case 'expiry': return Calendar;
@@ -174,7 +151,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Get severity color
-  const getSeverityColor = (severity) => {
+  const getSeverityColor = (severity: SeverityType | undefined) => {
     switch (severity) {
       case 'critical': return 'bg-red-100 text-red-800 border-red-200';
       case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -185,7 +162,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Get icon color
-  const getIconColor = (severity) => {
+  const getIconColor = (severity: SeverityType | undefined) => {
     switch (severity) {
       case 'critical': return 'text-red-600';
       case 'warning': return 'text-yellow-600';
@@ -196,11 +173,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   };
 
   // Format timestamp
-  const formatTimestamp = (timestamp) => {
+  const formatTimestamp = (timestamp: string | undefined) => {
     if (!timestamp) return 'Unknown';
 
     const now = new Date();
-    const diff = now - new Date(timestamp);
+    const timestampDate = new Date(timestamp);
+    const diff = now.getTime() - timestampDate.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor(diff / (1000 * 60));
 
@@ -282,7 +260,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
             ].map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setFilter(tab.key)}
+                onClick={() => setFilter(tab.key as 'all' | 'unread' | 'critical')}
                 className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${filter === tab.key
                   ? 'bg-blue-100 text-blue-700'
                   : 'text-gray-600 hover:bg-gray-100'

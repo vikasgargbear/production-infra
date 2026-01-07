@@ -383,7 +383,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
             items={grn.items.map(item => ({
               ...item,
               quantity: item.received_qty || item.quantity,
-              rate: item.unit_price,
+              unit_price: item.unit_price,
               tax: item.tax_percent,
               discount_percent: item.discount_percent || 0,
               free_quantity: item.free_quantity || 0,
@@ -392,7 +392,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
               expiry_date: item.expiry_date || '',
             }))}
             onUpdateItem={(index, field, value) => {
-              const mappedField = field === 'rate' ? 'unit_price' :
+              const mappedField = field === 'unit_price' ? 'unit_price' :
                 field === 'tax' ? 'tax_percent' :
                   field === 'quantity' ? 'received_qty' :
                     field;

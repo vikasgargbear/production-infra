@@ -23,7 +23,6 @@ interface Product {
     generic_name?: string;
     manufacturer?: string;
     hsn_code?: string;
-    batch_number: string;
     batch_number?: string;
     expiry_date: string;
     quantity: number;

@@ -18,9 +18,9 @@ import {
 } from 'lucide-react';
 
 // Import global components
-import { CustomerSearch } from '../global';
-import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
-import { paymentsApi } from '../../services/api';
+import { CustomerSearch } from '../../global';
+import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
+import { paymentsApi } from '../../../services/api';
 
 
 interface EnterprisePaymentEntryProps {

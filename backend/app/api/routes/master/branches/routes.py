@@ -1,17 +1,19 @@
 """
 Branches API
 CRUD operations for master.org_branches table
+REFACTORED: All SQL moved to BranchService
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy import text
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 import logging
 import json
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+
+# Service layer
+from ....services.master.department_branch_service import BranchService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,73 +31,10 @@ async def list_branches(
 ):
     """List all branches"""
     try:
-        query = text("""
-            SELECT 
-                branch_id,
-                branch_code,
-                branch_name,
-                branch_type,
-                address,
-                branch_phone,
-                branch_email,
-                branch_gst_number,
-                branch_manager_id,
-                is_billing_location,
-                is_shipping_location,
-                is_default_location,
-                is_active,
-                created_at
-            FROM master.org_branches
-            WHERE org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(branch_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(branch_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR is_active = :is_active)
-            ORDER BY branch_name
-            LIMIT :limit OFFSET :offset
-        """)
-        
-        search_pattern = f"%{search}%" if search else None
-        
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active,
-            "limit": limit,
-            "offset": offset
-        })
-        
-        branches = []
-        for row in result:
-            branches.append(dict(row._mapping))
-        
-        # Get total count
-        count_query = text("""
-            SELECT COUNT(*) FROM master.org_branches
-            WHERE org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(branch_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(branch_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR is_active = :is_active)
-        """)
-        
-        count_result = db.execute(count_query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active
-        })
-        total = count_result.scalar()
-        
-        return {
-            "success": True,
-            "data": branches,
-            "total": total,
-            "limit": limit,
-            "offset": offset
-        }
-        
+        branches, total = BranchService.list_branches(
+            db, str(context.org_id), search, is_active, limit, offset
+        )
+        return {"success": True, "data": branches, "total": total, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Error listing branches: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -111,25 +50,10 @@ async def get_branch(
 ):
     """Get branch by ID"""
     try:
-        query = text("""
-            SELECT * FROM master.org_branches
-            WHERE branch_id = :branch_id AND org_id = :org_id
-        """)
-        
-        result = db.execute(query, {
-            "branch_id": branch_id,
-            "org_id": str(context.org_id)
-        })
-        branch = result.first()
-        
+        branch = BranchService.get_branch(db, str(context.org_id), branch_id)
         if not branch:
             raise HTTPException(status_code=404, detail="Branch not found")
-        
-        return {
-            "success": True,
-            "data": dict(branch._mapping)
-        }
-        
+        return {"success": True, "data": branch}
     except HTTPException:
         raise
     except Exception as e:
@@ -147,20 +71,17 @@ async def create_branch(
 ):
     """Create a new branch"""
     try:
-        # Generate branch code if not provided
+        org_id = str(context.org_id)
+        
+        # Generate code if not provided
         branch_code = branch_data.get("branch_code")
         if not branch_code:
-            count_query = text("""
-                SELECT COUNT(*) FROM master.org_branches WHERE org_id = :org_id
-            """)
-            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
-            count = count_result.scalar() + 1
-            branch_code = f"BR{count:03d}"
+            count = BranchService.count_branches(db, org_id)
+            branch_code = f"BR{count + 1:03d}"
         
         # Build address JSONB
         address_data = branch_data.get("address", {})
         if isinstance(address_data, str):
-            # If address is a string, convert to JSONB
             address_jsonb = {
                 "street": address_data,
                 "city": branch_data.get("city", ""),
@@ -172,20 +93,7 @@ async def create_branch(
         else:
             address_jsonb = {}
         
-        query = text("""
-            INSERT INTO master.org_branches (
-                org_id, branch_code, branch_name, branch_type,
-                address, branch_phone, branch_email, branch_gst_number,
-                branch_manager_id, is_active
-            ) VALUES (
-                :org_id, :branch_code, :branch_name, :branch_type,
-                :address, :branch_phone, :branch_email, :branch_gst_number,
-                :branch_manager_id, :is_active
-            ) RETURNING branch_id, branch_name, branch_code
-        """)
-        
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
+        data = {
             "branch_code": branch_code,
             "branch_name": branch_data.get("branch_name"),
             "branch_type": branch_data.get("branch_type", "office"),
@@ -195,21 +103,10 @@ async def create_branch(
             "branch_gst_number": branch_data.get("gstin") or branch_data.get("branch_gst_number"),
             "branch_manager_id": branch_data.get("manager_id") or branch_data.get("branch_manager_id"),
             "is_active": branch_data.get("is_active", True)
-        })
-        
-        # TenantAwareSession auto-commits
-        row = result.first()
-        
-        return {
-            "success": True,
-            "data": {
-                "branch_id": row[0],
-                "branch_name": row[1],
-                "branch_code": row[2]
-            },
-            "message": "Branch created successfully"
         }
         
+        result = BranchService.insert_branch(db, org_id, data)
+        return {"success": True, "data": result, "message": "Branch created successfully"}
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating branch: {str(e)}")
@@ -228,10 +125,7 @@ async def update_branch(
     """Update branch"""
     try:
         update_fields = []
-        params = {
-            "branch_id": branch_id,
-            "org_id": str(context.org_id)
-        }
+        params = {}
         
         # Handle address JSONB
         if "address" in branch_data:
@@ -271,29 +165,14 @@ async def update_branch(
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        query = text(f"""
-            UPDATE master.org_branches 
-            SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
-            WHERE branch_id = :branch_id AND org_id = :org_id
-            RETURNING branch_id, branch_name
-        """)
+        result = BranchService.update_branch_dynamic(
+            db, str(context.org_id), branch_id, update_fields, params
+        )
         
-        result = db.execute(query, params)
-        # TenantAwareSession auto-commits
-        
-        updated = result.first()
-        if not updated:
+        if not result:
             raise HTTPException(status_code=404, detail="Branch not found")
         
-        return {
-            "success": True,
-            "data": {
-                "branch_id": updated[0],
-                "branch_name": updated[1]
-            },
-            "message": "Branch updated successfully"
-        }
-        
+        return {"success": True, "data": result, "message": "Branch updated successfully"}
     except HTTPException:
         raise
     except Exception as e:
@@ -312,28 +191,10 @@ async def delete_branch(
 ):
     """Delete (soft delete) branch"""
     try:
-        query = text("""
-            UPDATE master.org_branches 
-            SET is_active = false, updated_at = CURRENT_TIMESTAMP
-            WHERE branch_id = :branch_id AND org_id = :org_id
-            RETURNING branch_id, branch_name
-        """)
-        
-        result = db.execute(query, {
-            "branch_id": branch_id,
-            "org_id": str(context.org_id)
-        })
-        # TenantAwareSession auto-commits
-        
-        deleted = result.first()
-        if not deleted:
+        result = BranchService.soft_delete_branch(db, str(context.org_id), branch_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Branch not found")
-        
-        return {
-            "success": True,
-            "message": f"Branch {deleted[1]} deactivated successfully"
-        }
-        
+        return {"success": True, "message": f"Branch {result['branch_name']} deactivated successfully"}
     except HTTPException:
         raise
     except Exception as e:

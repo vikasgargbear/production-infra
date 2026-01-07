@@ -3,6 +3,19 @@ import { User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, MessageCi
 import { customersApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
+interface CustomerCreationB2CProps {
+  onClose: () => void;
+  onCustomerCreated?: (customer: any) => void;
+}
+
+interface FormErrors {
+  customer_name?: string;
+  primary_phone?: string;
+  primary_email?: string;
+  whatsapp_number?: string;
+  [key: string]: string | undefined;
+}
+
 /**
  * B2C Customer Creation Component
  * 
@@ -19,7 +32,7 @@ import offlineStorage from '../../../services/offlineStorage';
  * - org.business_type === 'retail' or 'b2c'
  * - System is configured for walk-in/retail customers
  */
-const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
+const CustomerCreationB2C: React.FC<CustomerCreationB2CProps> = ({ onClose, onCustomerCreated }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
@@ -30,12 +43,12 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
     customer_name: '',
     customer_type: 'retail', // Always retail for B2C
     customer_category: 'walk-in', // walk-in, regular, vip
-    
+
     // Contact Information
     primary_phone: '',
     primary_email: '',
     whatsapp_number: '',
-    
+
     // Address Information (Optional for B2C)
     address: {
       address_line1: '',
@@ -44,50 +57,50 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
       state: '',
       pincode: ''
     },
-    
+
     // B2C Specific
     date_of_birth: '',
     anniversary_date: '',
-    
+
     // Status
     is_active: true
   });
 
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const validateForm = () => {
-    const newErrors = {};
-    
+    const newErrors: FormErrors = {};
+
     // Only name and phone are required for B2C
     if (!formData.customer_name.trim()) {
       newErrors.customer_name = 'Customer name is required';
     }
-    
+
     if (!formData.primary_phone.trim()) {
       newErrors.primary_phone = 'Phone number is required';
     }
-    
+
     // Phone validation (Indian format)
     const phoneRegex = /^[6-9]\d{9}$/;
     if (formData.primary_phone && !phoneRegex.test(formData.primary_phone.replace(/\D/g, ''))) {
       newErrors.primary_phone = 'Enter valid 10-digit phone number';
     }
-    
+
     if (formData.whatsapp_number && !phoneRegex.test(formData.whatsapp_number.replace(/\D/g, ''))) {
       newErrors.whatsapp_number = 'Enter valid 10-digit WhatsApp number';
     }
-    
+
     // Email validation (optional)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (formData.primary_email && !emailRegex.test(formData.primary_email)) {
       newErrors.primary_email = 'Enter valid email address';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: string, value: string) => {
     if (field.startsWith('address.')) {
       const addressField = field.replace('address.', '');
       setFormData(prev => ({
@@ -107,7 +120,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
         [field]: value
       }));
     }
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({
@@ -134,12 +147,12 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
       primary_phone: formData.primary_phone.replace(/\D/g, ''),
       email: formData.primary_email || null,
       secondary_phone: formData.whatsapp_number ? formData.whatsapp_number.replace(/\D/g, '') : null,
-      
+
       // B2C customers typically have immediate payment terms
       credit_limit: 0,
       credit_days: 0,
       credit_rating: 'A', // Good by default for B2C
-      
+
       // Address (optional - for future deliveries)
       ...(formData.address.address_line1 && {
         address_line1: formData.address.address_line1,
@@ -148,12 +161,12 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
         state: formData.address.state || null,
         pincode: formData.address.pincode || null
       }),
-      
+
       // Additional B2C fields
       date_of_birth: formData.date_of_birth || null,
       anniversary_date: formData.anniversary_date || null,
       customer_category: formData.customer_category,
-      
+
       notes: `B2C Customer - ${formData.customer_category}`,
       is_active: true
     };
@@ -175,12 +188,12 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
       }
 
       const response = await customersApi.create(customerData);
-      
+
       if (response.data) {
         const hasAddress = formData.address.address_line1;
         setMessage(`Customer created successfully!${hasAddress ? ' Address saved for future deliveries.' : ''}`);
         setMessageType('success');
-        
+
         // Call the callback with the created customer
         if (onCustomerCreated) {
           const createdCustomer = {
@@ -192,14 +205,14 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
           };
           onCustomerCreated(createdCustomer);
         }
-        
+
         // Close modal after 1.5 seconds
         setTimeout(() => {
           onClose();
         }, 1500);
       }
     } catch (error) {
-      
+
       // Queue on error as well
       offlineStorage.queueOfflineOperation({
         type: 'CREATE_CUSTOMER',
@@ -207,7 +220,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
         payload: customerData,
         priority: 'high'
       });
-      
+
       setMessage('Network issue: Saved locally and queued for sync.');
       setMessageType('error');
     } finally {
@@ -220,7 +233,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden transform transition-all animate-slide-up">
-        
+
         {/* Header - Simplified for B2C */}
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-5 border-b border-gray-100">
           <div className="flex items-center justify-between">
@@ -233,7 +246,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                 <p className="text-sm text-gray-600 mt-0.5">Quick customer registration</p>
               </div>
             </div>
-            
+
             <button
               onClick={onClose}
               className="p-2 hover:bg-white/80 rounded-xl transition-colors"
@@ -245,14 +258,14 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
 
         {/* Content - Simplified for B2C */}
         <div className="p-6 max-h-[65vh] overflow-y-auto">
-          
+
           {/* Message Display */}
           {message && (
             <div className={`
               mb-4 p-3 rounded-xl flex items-start text-sm animate-slide-down
-              ${messageType === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 
-                messageType === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 
-                'bg-blue-50 text-blue-700 border border-blue-200'
+              ${messageType === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+                messageType === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+                  'bg-blue-50 text-blue-700 border border-blue-200'
               }
             `}>
               {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
@@ -282,9 +295,8 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                       value={formData.customer_name}
                       onChange={(e) => handleInputChange('customer_name', e.target.value)}
                       placeholder="Enter customer name"
-                      className={`w-full pl-10 pr-3 py-2.5 border ${
-                        errors.customer_name ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
+                      className={`w-full pl-10 pr-3 py-2.5 border ${errors.customer_name ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
                     />
                     {errors.customer_name && (
                       <p className="mt-1 text-xs text-red-600">{errors.customer_name}</p>
@@ -322,9 +334,8 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                       value={formData.primary_phone}
                       onChange={(e) => handleInputChange('primary_phone', e.target.value)}
                       placeholder="10-digit number"
-                      className={`w-full pl-10 pr-3 py-2.5 border ${
-                        errors.primary_phone ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
+                      className={`w-full pl-10 pr-3 py-2.5 border ${errors.primary_phone ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
                     />
                     {errors.primary_phone && (
                       <p className="mt-1 text-xs text-red-600">{errors.primary_phone}</p>
@@ -343,9 +354,8 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                       value={formData.primary_email}
                       onChange={(e) => handleInputChange('primary_email', e.target.value)}
                       placeholder="email@example.com"
-                      className={`w-full pl-10 pr-3 py-2.5 border ${
-                        errors.primary_email ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
+                      className={`w-full pl-10 pr-3 py-2.5 border ${errors.primary_email ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
                     />
                     {errors.primary_email && (
                       <p className="mt-1 text-xs text-red-600">{errors.primary_email}</p>
@@ -364,9 +374,8 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                       value={formData.whatsapp_number}
                       onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
                       placeholder="WhatsApp number"
-                      className={`w-full pl-10 pr-3 py-2.5 border ${
-                        errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
-                      } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
+                      className={`w-full pl-10 pr-3 py-2.5 border ${errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
+                        } rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm`}
                     />
                     {errors.whatsapp_number && (
                       <p className="mt-1 text-xs text-red-600">{errors.whatsapp_number}</p>
@@ -428,70 +437,70 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                 <ChevronRight className="w-4 h-4 text-gray-500" />
               )}
             </button>
-            
+
             {showAddressSection && (
-            <>
-            <div className="space-y-3 mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.address.address_line1}
-                    onChange={(e) => handleInputChange('address.address_line1', e.target.value)}
-                    placeholder="Address Line 1"
-                    className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                  />
-                </div>
+              <>
+                <div className="space-y-3 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={formData.address.address_line1}
+                        onChange={(e) => handleInputChange('address.address_line1', e.target.value)}
+                        placeholder="Address Line 1"
+                        className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <input
-                    type="text"
-                    value={formData.address.address_line2}
-                    onChange={(e) => handleInputChange('address.address_line2', e.target.value)}
-                    placeholder="Address Line 2"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                  />
-                </div>
-              </div>
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.address.address_line2}
+                        onChange={(e) => handleInputChange('address.address_line2', e.target.value)}
+                        placeholder="Address Line 2"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div>
-                  <input
-                    type="text"
-                    value={formData.address.city}
-                    onChange={(e) => handleInputChange('address.city', e.target.value)}
-                    placeholder="City"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                  />
-                </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.address.city}
+                        onChange={(e) => handleInputChange('address.city', e.target.value)}
+                        placeholder="City"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <input
-                    type="text"
-                    value={formData.address.state}
-                    onChange={(e) => handleInputChange('address.state', e.target.value)}
-                    placeholder="State"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                  />
-                </div>
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.address.state}
+                        onChange={(e) => handleInputChange('address.state', e.target.value)}
+                        placeholder="State"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      />
+                    </div>
 
-                <div>
-                  <input
-                    type="text"
-                    value={formData.address.pincode}
-                    onChange={(e) => handleInputChange('address.pincode', e.target.value)}
-                    placeholder="Pincode"
-                    maxLength={6}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-                  />
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.address.pincode}
+                        onChange={(e) => handleInputChange('address.pincode', e.target.value)}
+                        placeholder="Pincode"
+                        maxLength={6}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              💡 Add address to enable home delivery for this customer in the future
-            </p>
-            </>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  💡 Add address to enable home delivery for this customer in the future
+                </p>
+              </>
             )}
           </div>
         </div>
@@ -502,7 +511,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
             <div className="text-xs text-gray-600">
               * Required fields
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}

@@ -58,6 +58,29 @@ class CreditNoteService:
     """
     
     @staticmethod
+    def get_organization_details(db: Session, org_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get organization details for printing/display purposes.
+        """
+        query = """
+            SELECT * FROM master.organizations 
+            WHERE org_id = :org_id
+        """
+        result = db.execute(text(query), {"org_id": org_id}).first()
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def invoice_exists(db: Session, invoice_id: str) -> bool:
+        """
+        Check if an invoice exists.
+        """
+        count = db.execute(
+            text("SELECT COUNT(*) FROM sales.invoices WHERE invoice_id = :invoice_id"),
+            {"invoice_id": invoice_id}
+        ).scalar()
+        return count > 0
+    
+    @staticmethod
     def get_notes(
         db: Session,
         org_id: str,
@@ -483,4 +506,134 @@ class CreditNoteService:
             "invoice_id": invoice_id,
             "items": items,
             "items_count": len(items)
+        }
+    
+    @staticmethod
+    def create_sales_credit_note(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        data: Dict[str, Any],
+        created_by: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Create a credit note in sales.credit_notes table.
+        Used by sales module for customer credit notes.
+        """
+        # Generate credit note number
+        credit_note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
+        
+        # Calculate total amount
+        total_amount = float(data.get('credit_amount', 0)) + float(data.get('tax_amount', 0))
+        
+        # Create credit note
+        result = db.execute(text("""
+            INSERT INTO sales.credit_notes (
+                org_id, branch_id, credit_note_number, credit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                credit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :credit_note_number, :credit_note_date,
+                :customer_id, :reference_type, :reference_id, :reference_number,
+                :credit_amount, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'draft', :created_by
+            ) RETURNING credit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "credit_note_number": credit_note_number,
+            "credit_note_date": data.get('credit_note_date'),
+            "customer_id": data.get('customer_id'),
+            "reference_type": data.get('reference_type'),
+            "reference_id": data.get('reference_id'),
+            "reference_number": data.get('reference_number'),
+            "credit_amount": data.get('credit_amount', 0),
+            "tax_amount": data.get('tax_amount', 0),
+            "total_amount": total_amount,
+            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason": data.get('reason', ''),
+            "notes": data.get('notes'),
+            "is_gst_applicable": data.get('is_gst_applicable', True),
+            "cgst_amount": data.get('cgst_amount', 0),
+            "sgst_amount": data.get('sgst_amount', 0),
+            "igst_amount": data.get('igst_amount', 0),
+            "created_by": created_by
+        })
+        
+        credit_note_id = result.scalar()
+        
+        return {
+            "success": True,
+            "credit_note_id": credit_note_id,
+            "credit_note_number": credit_note_number
+        }
+    
+    @staticmethod
+    def create_sales_debit_note(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        data: Dict[str, Any],
+        created_by: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Create a debit note in sales.debit_notes table.
+        Used by sales module for customer debit notes.
+        """
+        # Generate debit note number
+        debit_note_number = DocumentNumberService.generate_number(db, "debit_note", org_id)
+        
+        # Calculate total amount
+        total_amount = float(data.get('debit_amount', 0)) + float(data.get('tax_amount', 0))
+        
+        # Create debit note
+        result = db.execute(text("""
+            INSERT INTO sales.debit_notes (
+                org_id, branch_id, debit_note_number, debit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                debit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :debit_note_number, :debit_note_date,
+                :customer_id, :reference_type, :reference_id, :reference_number,
+                :debit_amount, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'draft', :created_by
+            ) RETURNING debit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "debit_note_number": debit_note_number,
+            "debit_note_date": data.get('debit_note_date'),
+            "customer_id": data.get('customer_id'),
+            "reference_type": data.get('reference_type'),
+            "reference_id": data.get('reference_id'),
+            "reference_number": data.get('reference_number'),
+            "debit_amount": data.get('debit_amount', 0),
+            "tax_amount": data.get('tax_amount', 0),
+            "total_amount": total_amount,
+            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason": data.get('reason', ''),
+            "notes": data.get('notes'),
+            "is_gst_applicable": data.get('is_gst_applicable', True),
+            "cgst_amount": data.get('cgst_amount', 0),
+            "sgst_amount": data.get('sgst_amount', 0),
+            "igst_amount": data.get('igst_amount', 0),
+            "created_by": created_by
+        })
+        
+        debit_note_id = result.scalar()
+        
+        return {
+            "success": True,
+            "debit_note_id": debit_note_id,
+            "debit_note_number": debit_note_number
         }

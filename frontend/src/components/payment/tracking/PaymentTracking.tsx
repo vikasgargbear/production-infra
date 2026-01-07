@@ -21,7 +21,7 @@ import {
     AlertCircle,
     XCircle
 } from 'lucide-react';
-import { usePaymentTracking } from './hooks';
+import { usePaymentTracking } from '../hooks/usePaymentTracking';
 
 const PaymentTracking: React.FC = () => {
     const {

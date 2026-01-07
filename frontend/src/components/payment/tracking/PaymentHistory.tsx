@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { History, Search, Filter, Download, X } from 'lucide-react';
-import { ModuleHeader } from '../global';
+import { ModuleHeader } from '../../global';
 
 interface PaymentHistoryProps {
   onClose?: () => void;
@@ -32,7 +32,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
           onClose={onClose}
           historyType="payment"
           showSaveDraft={false}
-          onSaveDraft={() => {}}
+          onSaveDraft={() => { }}
         />
 
         {/* Content */}

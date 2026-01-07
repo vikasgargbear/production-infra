@@ -5,7 +5,7 @@ import {
     Share2, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
 import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
-import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, salesOrdersApi, purchasesApi, returnsApi, stockApi } from '../../../services/api';
+import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, salesOrdersApi, returnsApi, stockApi } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 

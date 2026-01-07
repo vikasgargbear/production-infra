@@ -14,6 +14,9 @@ export type {
     BankAccount
 } from '../../../../types/models';
 
+// Import OrderItem for local use in this file
+import type { OrderItem as OrderItemModel } from '../../../../types/models';
+
 // Local types used in useSalesOrderLogic
 export interface Customer {
     customer_id?: number | string;
@@ -24,7 +27,6 @@ export interface Customer {
     address2?: string;
     city?: string;
     state?: string;
-    state_name?: string;
     pincode?: string;
     phone?: string;
     primary_phone?: string;
@@ -59,7 +61,6 @@ export interface Product {
     hsn_code?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_number?: string;
     quantity?: number;
     unit?: string;
     uom?: string;
@@ -78,7 +79,7 @@ export interface ImportData {
     customer_details?: Customer;
     billing_address?: string;
     shipping_address?: string;
-    items?: OrderItem[];
+    items?: OrderItemModel[];
     notes?: string;
 }
 

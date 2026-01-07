@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { productsApi as productsApi } from '../../services/api';
+import { productsApi as productsApi, batchesApi } from '../../services/api';
 import { useCallback } from 'react';
 import { Product, ProductCreateInput } from '../../types/models/product';
 
@@ -39,11 +39,13 @@ export function useProductSearch(
 ) {
   return useQuery<ApiResponse<Product[]>>(
     productKeys.search(query, params),
-    () => productsApi.search(query, {
-      limit: params?.limit || 50,
-      category: params?.category,
-      manufacturer: params?.manufacturer
-    }),
+    async () => {
+      const response = await productsApi.search(query, {
+        limit: params?.limit || 50,
+        category: params?.category
+      });
+      return (response as any).data || response;
+    },
     {
       enabled: query.length >= 2, // Only search with 2+ characters
       staleTime: 1 * 60 * 1000, // 1 minute
@@ -62,7 +64,10 @@ export function useProduct(
 ) {
   return useQuery<ApiResponse<Product>>(
     productKeys.detail(productId),
-    () => productsApi.getById(productId),
+    async () => {
+      const response = await productsApi.getById(productId);
+      return (response as any).data || response;
+    },
     {
       enabled: !!productId,
       staleTime: 5 * 60 * 1000,
@@ -80,7 +85,10 @@ export function useCreateProduct(
   const queryClient = useQueryClient();
 
   return useMutation(
-    (data: ProductCreateInput) => productsApi.create(data),
+    async (data: ProductCreateInput) => {
+      const response = await productsApi.create(data);
+      return (response as any).data || response;
+    },
     {
       onSuccess: (response) => {
         // Invalidate product queries
@@ -100,7 +108,10 @@ export function useProductBatches(
 ) {
   return useQuery(
     productKeys.batches(productId),
-    () => productsApi.getBatches(productId),
+    async () => {
+      const response = await batchesApi.getByProduct(parseInt(productId));
+      return (response as any).data || response;
+    },
     {
       enabled: !!productId,
       staleTime: 2 * 60 * 1000, // 2 minutes

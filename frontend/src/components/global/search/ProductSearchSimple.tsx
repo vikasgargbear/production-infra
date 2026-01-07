@@ -10,11 +10,10 @@ import { Product } from '../../../types/models/product';
 
 // ==================== TYPE DEFINITIONS ====================
 
-// ==================== TYPE DEFINITIONS ====================
+
 
 interface ProductWithBatch extends Product {
     batch_id?: number | string;
-    batch_number?: string;
     batch_number?: string;
     expiry_date?: string;
     quantity?: number;

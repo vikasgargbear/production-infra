@@ -192,3 +192,343 @@ class PurchaseOrderService:
             ORDER BY branch_id LIMIT 1
         """), {"org_id": org_id}).first()
         return result.branch_id if result else None
+    
+    @staticmethod
+    def create_direct_entry(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        purchase_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create direct purchase entry (bill entry) with items and batches.
+        
+        Args:
+            db: Database session
+            org_id: Organization ID
+            branch_id: Branch ID
+            purchase_data: Purchase data including items
+            
+        Returns:
+            Dict with po_id, po_number, items_created, batches_created
+        """
+        from ...document_number_service import DocumentNumberService
+        from datetime import datetime
+        
+        try:
+            # Generate invoice number
+            po_number = DocumentNumberService.generate_number(db, "supplier_invoice", org_id)
+            
+            # Prepare order data
+            order_data = {
+                "po_number": po_number,
+                "po_date": purchase_data.get("purchase_date", datetime.now().date()),
+                "supplier_id": purchase_data.get("supplier_id"),
+                "supplier_name": purchase_data.get("supplier_name", "Direct Purchase"),
+                "subtotal_amount": purchase_data.get("subtotal_amount", 0),
+                "tax_amount": purchase_data.get("tax_amount", 0),
+                "total_amount": purchase_data.get("total_amount", 0)
+            }
+            
+            # Create header
+            po_id = PurchaseOrderRepository.create_direct_order_header(
+                db, org_id, branch_id, order_data
+            )
+            
+            # Process items
+            items = purchase_data.get("items", [])
+            
+            # Batch lookup for products
+            product_names = [
+                item.get("product_name") for item in items 
+                if item.get("product_name") and not item.get("product_id")
+            ]
+            product_lookup = PurchaseOrderRepository.lookup_products_by_name(db, org_id, product_names)
+            
+            # Get default category
+            default_category_id = PurchaseOrderRepository.get_default_category(db, org_id)
+            if not default_category_id:
+                default_category_id = PurchaseOrderRepository.create_category(db, org_id, "General")
+            
+            items_created = 0
+            batches_created = 0
+            
+            for item in items:
+                # Get or create product
+                product_id = item.get("product_id")
+                if not product_id and item.get("product_name"):
+                    name_key = item["product_name"].lower().strip()
+                    product_id = product_lookup.get(name_key)
+                    
+                    if not product_id:
+                        product_id = PurchaseOrderRepository.create_product(
+                            db, org_id, item, default_category_id
+                        )
+                        product_lookup[name_key] = product_id
+                
+                item["product_id"] = product_id
+                
+                # Create order item
+                PurchaseOrderRepository.create_direct_order_item(db, po_id, item)
+                items_created += 1
+                
+                # Create batch for inventory
+                if product_id:
+                    batch_number = item.get("batch_number") or item.get("batch_no") or f"BATCH{po_number[-4:]}"
+                    
+                    # Check if batch exists
+                    existing_batch = PurchaseOrderRepository.find_existing_batch(db, product_id, batch_number)
+                    
+                    if existing_batch:
+                        PurchaseOrderRepository.update_batch_quantity(
+                            db, existing_batch, item.get("quantity", 0)
+                        )
+                    else:
+                        batch_data = {
+                            "product_id": product_id,
+                            "batch_number": batch_number,
+                            "manufacturing_date": item.get("manufacturing_date") or item.get("mfg_date"),
+                            "expiry_date": item.get("expiry_date") or item.get("exp_date"),
+                            "quantity": item.get("quantity", 0),
+                            "purchase_price": item.get("unit_price", 0),
+                            "mrp": item.get("mrp", 0),
+                            "sale_price": item.get("sale_price", 0) or item.get("mrp", 0)
+                        }
+                        PurchaseOrderRepository.create_batch(db, org_id, batch_data)
+                        batches_created += 1
+            
+            logger.info(f"Created direct entry {po_number}: {items_created} items, {batches_created} batches")
+            
+            return {
+                "purchase_order_id": po_id,
+                "po_number": po_number,
+                "items_created": items_created,
+                "batches_created": batches_created
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating direct entry: {str(e)}")
+            raise
+    
+    @staticmethod
+    def create_supplier_invoice(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        invoice_data: Dict[str, Any],
+        created_by: int
+    ) -> int:
+        """
+        Create a supplier invoice record.
+        Returns supplier_invoice_id.
+        """
+        from sqlalchemy import text
+        
+        result = db.execute(text("""
+            INSERT INTO procurement.supplier_invoices (
+                org_id, branch_id, supplier_invoice_number, invoice_date,
+                supplier_id, 
+                subtotal_amount, discount_amount, taxable_amount,
+                cgst_amount, sgst_amount, igst_amount, tax_amount,
+                freight_charges, insurance_charges, other_charges,
+                round_off_amount, invoice_total,
+                payment_terms, due_date, payment_status,
+                invoice_status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :invoice_number, :invoice_date,
+                :supplier_id,
+                :subtotal, :discount, :taxable,
+                :cgst, :sgst, :igst, :tax,
+                :freight, :insurance, :other,
+                :round_off, :total,
+                :payment_terms, :due_date, :payment_status,
+                :invoice_status, :created_by
+            ) RETURNING supplier_invoice_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "invoice_number": invoice_data.get("invoice_number"),
+            "invoice_date": invoice_data.get("invoice_date"),
+            "supplier_id": invoice_data.get("supplier_id"),
+            "subtotal": invoice_data.get("subtotal", 0),
+            "discount": invoice_data.get("discount", 0),
+            "taxable": invoice_data.get("taxable", 0),
+            "cgst": invoice_data.get("cgst", 0),
+            "sgst": invoice_data.get("sgst", 0),
+            "igst": invoice_data.get("igst", 0),
+            "tax": invoice_data.get("tax", 0),
+            "freight": invoice_data.get("freight", 0),
+            "insurance": invoice_data.get("insurance", 0),
+            "other": invoice_data.get("other", 0),
+            "round_off": invoice_data.get("round_off", 0),
+            "total": invoice_data.get("total", 0),
+            "payment_terms": invoice_data.get("payment_terms", "NET30"),
+            "due_date": invoice_data.get("due_date"),
+            "payment_status": invoice_data.get("payment_status", "pending"),
+            "invoice_status": invoice_data.get("invoice_status", "draft"),
+            "created_by": created_by
+        })
+        
+        return result.scalar()
+    
+    @staticmethod
+    def get_or_create_product(
+        db: Session,
+        org_id: str,
+        product_name: str,
+        category_name: Optional[str] = None
+    ) -> int:
+        """
+        Get existing product by name or create new one.
+        Returns product_id.
+        """
+        # Check if product exists
+        existing = PurchaseOrderRepository.lookup_products_by_name(
+            db, org_id, [product_name]
+        )
+        
+        if existing:
+            return list(existing.values())[0]
+        
+        # Get or create category
+        category_id = None
+        if category_name:
+            from sqlalchemy import text
+            cat_result = db.execute(text("""
+                SELECT category_id FROM inventory.product_categories
+                WHERE LOWER(TRIM(category_name)) = LOWER(TRIM(:name))
+                AND org_id = :org_id AND is_active = true
+                LIMIT 1
+            """), {"name": category_name, "org_id": org_id}).fetchone()
+            
+            if cat_result:
+                category_id = cat_result.category_id
+            else:
+                category_id = PurchaseOrderRepository.create_category(
+                    db, org_id, category_name
+                )
+        
+        if not category_id:
+            category_id = PurchaseOrderRepository.get_default_category(db, org_id)
+        
+        # Create product
+        product_data = {
+            "product_name": product_name,
+            "product_code": product_name[:20].upper().replace(" ", "_")
+        }
+        
+        return PurchaseOrderRepository.create_product(
+            db, org_id, product_data, category_id
+        )
+    
+    @staticmethod
+    def receive_purchase_items(
+        db: Session,
+        purchase_id: int,
+        items: List[Dict[str, Any]],
+        org_id: str
+    ) -> Dict[str, Any]:
+        """
+        Receive purchase order items (GRN creation).
+        Creates batches from received items.
+        
+        Returns:
+            Dict with batches_created count
+        """
+        batches_created = 0
+        
+        for item in items:
+            product_id = item.get("product_id")
+            batch_number = item.get("batch_number")
+            quantity = item.get("received_quantity", item.get("quantity", 0))
+            
+            if not product_id or not quantity:
+                continue
+            
+            # Check for existing batch
+            existing_batch = PurchaseOrderRepository.find_existing_batch(
+                db, product_id, batch_number
+            ) if batch_number else None
+            
+            if existing_batch:
+                PurchaseOrderRepository.update_batch_quantity(
+                    db, existing_batch, quantity
+                )
+            else:
+                batch_data = {
+                    "product_id": product_id,
+                    "batch_number": batch_number or f"BATCH{purchase_id}_{product_id}",
+                    "manufacturing_date": item.get("manufacturing_date") or item.get("mfg_date"),
+                    "expiry_date": item.get("expiry_date") or item.get("exp_date"),
+                    "quantity": quantity,
+                    "purchase_price": item.get("unit_price", 0),
+                    "mrp": item.get("mrp", 0),
+                    "sale_price": item.get("sale_price", 0) or item.get("mrp", 0)
+                }
+                PurchaseOrderRepository.create_batch(db, org_id, batch_data)
+                batches_created += 1
+        
+        return {"batches_created": batches_created}
+    
+    @staticmethod
+    def get_purchase_for_grn(
+        db: Session,
+        purchase_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get purchase order details for GRN processing.
+        TenantAwareSession auto-filters by org_id.
+        """
+        from sqlalchemy import text
+        
+        result = db.execute(text("""
+            SELECT 
+                purchase_order_id, po_number, supplier_id, po_status, receipt_status
+            FROM procurement.purchase_orders
+            WHERE purchase_order_id = :id
+        """), {"id": purchase_id}).fetchone()
+        
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def update_grn_status(
+        db: Session,
+        purchase_id: int,
+        po_status: str = "completed",
+        receipt_status: str = "received"
+    ) -> None:
+        """
+        Update purchase order status after GRN receipt.
+        """
+        from sqlalchemy import text
+        
+        db.execute(text("""
+            UPDATE procurement.purchase_orders
+            SET po_status = :po_status,
+                receipt_status = :receipt_status,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE purchase_order_id = :id
+        """), {
+            "id": purchase_id,
+            "po_status": po_status,
+            "receipt_status": receipt_status
+        })
+    
+    @staticmethod
+    def get_batch_count_for_purchase(
+        db: Session,
+        purchase_id: int
+    ) -> int:
+        """
+        Get count of batches for a purchase order.
+        """
+        from sqlalchemy import text
+        
+        result = db.execute(text("""
+            SELECT COUNT(*) FROM inventory.batches b
+            WHERE b.source_document_id = :purchase_id
+            AND b.source_document_type = 'purchase_order'
+        """), {"purchase_id": purchase_id})
+        
+        return result.scalar() or 0
+

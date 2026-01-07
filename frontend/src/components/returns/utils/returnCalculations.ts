@@ -51,11 +51,11 @@ export function calculateReturnTotals(
         itemCount++;
         totalQuantity += returnQty;
 
-        const rate = parseFloat(String(item.rate || item.unit_price)) || 0;
+        const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
         const discount = parseFloat(String(item.discount_amount)) || 0;
 
         // Calculate base amount
-        const baseAmount = returnQty * rate;
+        const baseAmount = returnQty * unit_price;
         const discountAmount = (discount / 100) * baseAmount;
         const taxableAmount = baseAmount - discountAmount;
 
@@ -156,10 +156,10 @@ export function calculateItemReturnAmount(
     includeGst: boolean = true
 ): number {
     const returnQty = parseFloat(String(item.return_quantity)) || 0;
-    const rate = parseFloat(String(item.rate || item.unit_price)) || 0;
+    const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
     const discount = parseFloat(String(item.discount_amount)) || 0;
 
-    const baseAmount = returnQty * rate;
+    const baseAmount = returnQty * unit_price;
     const discountAmount = (discount / 100) * baseAmount;
     const taxableAmount = baseAmount - discountAmount;
 

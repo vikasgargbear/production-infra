@@ -76,11 +76,11 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
     
     purchaseOrder.items.forEach(item => {
       const quantity = parseFloat(String(item.quantity)) || 0;
-      const rate = parseFloat(String(item.unit_price)) || 0;
+      const unit_price = parseFloat(String(item.unit_price)) || 0;
       const discountPercent = parseFloat(String(item.discount_percent)) || 0;
       const taxPercent = parseFloat(String(item.tax_percent)) || 0;
       
-      const itemTotal = quantity * rate;
+      const itemTotal = quantity * unit_price;
       const discountAmount = (itemTotal * discountPercent) / 100;
       const taxableAmount = itemTotal - discountAmount;
       const taxAmount = (taxableAmount * taxPercent) / 100;
@@ -254,9 +254,9 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               <tbody>
                 {purchaseOrder.items.map((item, index) => {
                   const quantity = parseFloat(String(item.quantity)) || 0;
-                  const rate = parseFloat(String(item.unit_price)) || 0;
+                  const unit_price = parseFloat(String(item.unit_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                  const itemTotal = quantity * rate;
+                  const itemTotal = quantity * unit_price;
                   const discountAmount = (itemTotal * discountPercent) / 100;
                   const taxableAmount = itemTotal - discountAmount;
                   const taxAmount = (taxableAmount * (parseFloat(String(item.tax_percent)) || 0)) / 100;
@@ -270,7 +270,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
                       <td className="py-3 px-2 text-sm">{item.pack_size || '-'}</td>
                       <td className="py-3 px-2 text-sm text-center">{quantity}</td>
                       <td className="py-3 px-2 text-sm text-center">{item.free_quantity || 0}</td>
-                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(rate)}</td>
+                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(unit_price)}</td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.mrp || 0)}</td>
                       <td className="py-3 px-2 text-sm text-center">{discountPercent}%</td>
                       <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>
@@ -298,9 +298,9 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(gstBreakup).map(([rate, values]) => (
-                    <tr key={rate} className="border-b border-gray-100">
-                      <td className="py-2">{rate}%</td>
+                  {Object.entries(gstBreakup).map(([unit_price, values]) => (
+                    <tr key={unit_price} className="border-b border-gray-100">
+                      <td className="py-2">{unit_price}%</td>
                       <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
                       <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
                       <td className="text-right py-2">{formatCurrency(values.sgst)}</td>

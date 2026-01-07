@@ -443,14 +443,14 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                             <td className="px-3 py-2 text-right">
                               <input
                                 type="number"
-                                value={item.rate || 0}
-                                onChange={(e) => updateNoteItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                                value={item.unit_price || 0}
+                                onChange={(e) => updateNoteItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
                                 min="0"
                                 className="w-20 px-1 py-0.5 text-right border border-gray-300 rounded"
                               />
                             </td>
                             <td className="px-3 py-2 text-right font-medium">
-                              ₹{((item.quantity || 0) * (item.rate || 0)).toFixed(2)}
+                              ₹{((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)}
                             </td>
                             <td className="px-3 py-2">
                               <button

@@ -9,13 +9,11 @@ interface DocumentItem {
   product_code?: string;
   batch_id?: string;
   batch_number?: string;
-  batch_number?: string;
   hsn_code?: string;
   expiry_date?: string;
   quantity: number;
   dispatched_quantity?: number;
   mrp?: number;
-  rate?: number;
   unit_price?: number;
   sale_price?: number;
   discount_percent?: number;
@@ -50,9 +48,9 @@ interface DocumentImportModalProps {
   title?: string;
 }
 
-const DocumentImportModal: React.FC<DocumentImportModalProps> = ({ 
-  isOpen, 
-  onClose, 
+const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
+  isOpen,
+  onClose,
   onImport,
   documentTypes = [],
   title = "Import from Document"
@@ -97,7 +95,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     }
 
     setImporting(true);
-    
+
     try {
       // Format items for import
       const formattedItems = (selectedDoc.items || []).map((item: any) => ({
@@ -110,7 +108,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
         expiry_date: item.expiry_date,
         quantity: parseFloat(item.quantity || item.dispatched_quantity || '0'),
         mrp: parseFloat(item.mrp || '0'),
-        rate: parseFloat(item.rate || item.unit_price || item.sale_price || '0'),
+        unit_price: parseFloat(item.unit_price || item.unit_price || item.sale_price || '0'),
         discount_percent: parseFloat(item.discount_percent || '0'),
         free_quantity: parseFloat(item.free_quantity || '0'),
         tax_rate: parseFloat(item.tax_rate || item.gst_percent || '0')
@@ -232,7 +230,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                   onClick={() => setSelectedDoc(doc)}
                   className={`
                     p-4 border rounded-lg cursor-pointer transition-all
-                    ${selectedDoc?.id === doc.id || 
+                    ${selectedDoc?.id === doc.id ||
                       selectedDoc?.invoice_id === doc.invoice_id ||
                       selectedDoc?.order_id === doc.order_id ||
                       selectedDoc?.challan_id === doc.challan_id
@@ -250,11 +248,11 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                         {doc.status && (
                           <span className={`
                             px-2 py-0.5 text-xs rounded-full
-                            ${doc.status === 'completed' || doc.status === 'paid' 
+                            ${doc.status === 'completed' || doc.status === 'paid'
                               ? 'bg-green-100 text-green-700'
-                              : doc.status === 'pending' 
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-gray-100 text-gray-700'
+                              : doc.status === 'pending'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-700'
                             }
                           `}>
                             {doc.status}

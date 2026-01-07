@@ -49,7 +49,7 @@ export interface Customer {
   legal_name?: string;
   type: 'b2b' | 'b2c';
   phone: string;
-  alternate_phone?: string;
+  secondary_phone?: string;
   email?: string;
   gst_number?: string;
   drug_license?: string;
@@ -218,8 +218,16 @@ export interface Payment {
   collector_name?: string;
   route?: string;
   remarks?: string;
+  notes?: string;
+  split_payments?: SplitPayment[];
   created_by: string;
   created_at: string;
+}
+
+export interface SplitPayment {
+  mode: string;
+  amount: number;
+  reference?: string;
 }
 
 export interface PaymentMode {

@@ -1,32 +1,49 @@
 import React, { useState } from 'react';
-import { Truck, Calendar, CreditCard, FileText, Package, ShoppingCart, RotateCcw } from 'lucide-react';
+import { Truck, Calendar, CreditCard, FileText, Package, ShoppingCart, RotateCcw, LucideIcon } from 'lucide-react';
+
+interface CustomField {
+  label: string;
+  key: string;
+  type?: 'text' | 'select' | 'number' | 'date';
+  placeholder?: string;
+  options?: Array<{ value: string; label: string }>;
+}
+
+interface DocumentSummaryTopProps {
+  document: Record<string, any>;
+  onDocumentUpdate: (updates: Record<string, any>) => void;
+  documentType?: 'invoice' | 'challan' | 'purchase' | 'sales-order' | 'purchase-order' | 'return';
+  showDelivery?: boolean;
+  showPayment?: boolean;
+  showReference?: boolean;
+  customFields?: CustomField[];
+}
+
+interface SectionState {
+  delivery: boolean;
+  payment: boolean;
+  reference: boolean;
+}
 
 /**
  * DocumentSummaryTop - Universal component for document delivery & payment details
- * Used across Invoice, Challan, Purchase, Sales Order, Returns
- * 
- * Replaces:
- * - InvoiceSummaryTop
- * - ChallanSummaryTop
- * - PurchaseSummaryTop
- * - OrderSummaryTop
  */
-const DocumentSummaryTop = ({ 
+const DocumentSummaryTop: React.FC<DocumentSummaryTopProps> = ({
   document,
   onDocumentUpdate,
-  documentType = 'invoice', // 'invoice', 'challan', 'purchase', 'sales-order', 'purchase-order', 'return'
+  documentType = 'invoice',
   showDelivery = true,
   showPayment = true,
   showReference = true,
-  customFields = [] // Additional document-specific fields
+  customFields = []
 }) => {
-  const [expandedSections, setExpandedSections] = useState({
+  const [expandedSections, setExpandedSections] = useState<SectionState>({
     delivery: true,
     payment: true,
     reference: false
   });
 
-  const toggleSection = (section) => {
+  const toggleSection = (section: keyof SectionState) => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -97,16 +114,16 @@ const DocumentSummaryTop = ({
                 {config.deliveryLabel}
               </span>
             </div>
-            <svg 
+            <svg
               className={`w-4 h-4 text-${config.color}-600 transition-transform ${expandedSections.delivery ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          
+
           {expandedSections.delivery && (
             <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -124,7 +141,7 @@ const DocumentSummaryTop = ({
                   <option value="TRANSPORT">Transport</option>
                 </select>
               </div>
-              
+
               {document.delivery_type === 'DELIVERY' && (
                 <>
                   <div>
@@ -139,7 +156,7 @@ const DocumentSummaryTop = ({
                       placeholder="0.00"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Priority
@@ -156,7 +173,7 @@ const DocumentSummaryTop = ({
                   </div>
                 </>
               )}
-              
+
               {(document.delivery_type === 'TRANSPORT' || documentType === 'challan') && (
                 <>
                   <div>
@@ -171,7 +188,7 @@ const DocumentSummaryTop = ({
                       placeholder="Enter transport company"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Vehicle Number
@@ -184,7 +201,7 @@ const DocumentSummaryTop = ({
                       placeholder="e.g., GJ01AB1234"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       LR Number
@@ -217,16 +234,16 @@ const DocumentSummaryTop = ({
                 {config.paymentLabel}
               </span>
             </div>
-            <svg 
+            <svg
               className={`w-4 h-4 text-${config.color}-600 transition-transform ${expandedSections.payment ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          
+
           {expandedSections.payment && (
             <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -247,7 +264,7 @@ const DocumentSummaryTop = ({
                   <option value="Card">Card</option>
                 </select>
               </div>
-              
+
               {document.payment_mode === 'Credit' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -262,7 +279,7 @@ const DocumentSummaryTop = ({
                   />
                 </div>
               )}
-              
+
               {document.payment_mode === 'Cheque' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -277,7 +294,7 @@ const DocumentSummaryTop = ({
                   />
                 </div>
               )}
-              
+
               {document.payment_mode === 'UPI' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -292,7 +309,7 @@ const DocumentSummaryTop = ({
                   />
                 </div>
               )}
-              
+
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Discount Amount
@@ -323,16 +340,16 @@ const DocumentSummaryTop = ({
                 {config.referenceLabel}
               </span>
             </div>
-            <svg 
+            <svg
               className={`w-4 h-4 text-gray-600 transition-transform ${expandedSections.reference ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          
+
           {expandedSections.reference && (
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -347,7 +364,7 @@ const DocumentSummaryTop = ({
                   placeholder={`Enter ${config.referenceLabel.toLowerCase()}`}
                 />
               </div>
-              
+
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   Reference Date

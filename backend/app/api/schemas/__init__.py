@@ -97,7 +97,7 @@ from .compliance.compliance import (
     ComplianceDocumentCreate, ComplianceDocumentResponse,
     ComplianceDashboard
 )
-from .compliance.loyalty import (
+from .loyalty.loyalty import (
     LoyaltyProgramCreate, CustomerTier,
     PointsTransaction, PointsRedemption,
     SchemeCreate, SchemeResponse, DiscountCalculation

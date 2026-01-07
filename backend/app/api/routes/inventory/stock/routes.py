@@ -1,13 +1,10 @@
 """
-Inventory management endpoints for enterprise pharma system
-Handles batch tracking, stock movements, and expiry management
-
-PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
+Inventory management endpoints
+REFACTORED: Uses InventoryService for database operations
 """
 from typing import Optional, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
 import logging
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
@@ -22,8 +19,8 @@ from ....schemas.inventory.inventory import (
 from ....services.inventory.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["inventory"])
+
 
 @router.get("/")
 @with_tenant_context
@@ -33,23 +30,15 @@ async def get_inventory_overview(
 ):
     """Get inventory overview"""
     try:
-        # Simple inventory overview
-        result = db.execute(text("""
-            SELECT
-                COUNT(*) as total_products,
-                SUM(CASE WHEN quantity_available > 0 THEN 1 ELSE 0 END) as products_in_stock,
-                SUM(quantity_available) as total_quantity
-            FROM inventory.batches
-            WHERE batch_status = 'active'
-        """), {}).fetchone()
-        
+        result = InventoryService.get_inventory_overview(db)
         return {
-            "total_products": result.total_products if result else 0,
-            "products_in_stock": result.products_in_stock if result else 0,
-            "total_quantity": result.total_quantity if result else 0
+            "total_products": result.get("total_products", 0),
+            "products_in_stock": result.get("products_in_stock", 0),
+            "total_quantity": result.get("total_quantity", 0)
         }
     except Exception as e:
         raise handle_error(e, "get inventory overview")
+
 
 @router.post("/batches", response_model=BatchResponse)
 @with_tenant_context
@@ -58,20 +47,14 @@ async def create_batch(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Create a new batch for a product
-    
-    - Validates product exists
-    - Checks for duplicate batch numbers
-    - Records initial stock movement
-    - Tracks expiry dates
-    """
+    """Create a new batch"""
     try:
         return InventoryService.create_batch(db, batch)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise handle_error(e, "create batch")
+
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
 @with_tenant_context
@@ -80,7 +63,7 @@ async def get_batch(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """Get batch details with stock calculations"""
+    """Get batch details"""
     try:
         return InventoryService.get_batch(db, batch_id)
     except ValueError as e:
@@ -88,8 +71,9 @@ async def get_batch(
     except Exception as e:
         raise handle_error(e, "get batch", batch_id)
 
+
 @router.get("/batches")
-@router.get("/batches/")  # Handle trailing slash
+@router.get("/batches/")
 @with_tenant_context
 async def list_batches(
     product_id: Optional[int] = None,
@@ -101,63 +85,20 @@ async def list_batches(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    List batches with filters
-    
-    - Filter by product, location, expiry
-    - Option to include/exclude expired batches
-    - Shows stock levels and values
-    """
+    """List batches with filters"""
     try:
-        query = """
-            SELECT b.*, p.product_name, p.product_code,
-                   b.expiry_date - CURRENT_DATE as days_to_expiry,
-                   b.quantity_available * b.cost_per_unit as stock_value
-            FROM inventory.batches b
-            JOIN inventory.products p ON b.product_id = p.product_id AND b.org_id = p.org_id
-            WHERE 1=1
-        """
-        params = {}
+        batches, total = InventoryService.list_batches(
+            db, product_id, location, include_expired, expiring_in_days, limit, skip
+        )
         
-        if product_id:
-            query += " AND b.product_id = :product_id"
-            params["product_id"] = product_id
-        
-        if location:
-            query += " AND b.location_code ILIKE :location"
-            params["location"] = f"%{location}%"
-        
-        if not include_expired:
-            query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
-        
-        if expiring_in_days:
-            query += " AND b.expiry_date <= CURRENT_DATE + INTERVAL ':days days'"
-            params["days"] = expiring_in_days
-        
-        # Get count
-        count_query = f"SELECT COUNT(*) FROM ({query}) t"
-        total = db.execute(text(count_query), params).scalar()
-        
-        # Get batches
-        query += " ORDER BY b.expiry_date, b.batch_id LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        
-        batches = []
-        for row in result:
-            batch = dict(row._mapping)
-            batch["is_expired"] = batch.get("days_to_expiry", 0) <= 0
+        for batch in batches:
+            batch["is_expired"] = batch.get("days_to_expiry", 0) <= 0 if batch.get("days_to_expiry") is not None else False
             batch["is_near_expiry"] = 0 < batch.get("days_to_expiry", 999) <= 90
-            batches.append(batch)
         
-        return {
-            "total": total,
-            "batches": batches
-        }
-        
+        return {"total": total, "batches": batches}
     except Exception as e:
         raise handle_error(e, "list batches")
+
 
 @router.get("/stock/current/{product_id}", response_model=CurrentStock)
 @with_tenant_context
@@ -166,13 +107,14 @@ async def get_current_stock(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """Get current stock summary for a product"""
+    """Get current stock for a product"""
     try:
         return InventoryService.get_current_stock(db, product_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise handle_error(e, "get current stock", product_id)
+
 
 @router.get("/stock/current")
 @with_tenant_context
@@ -184,82 +126,20 @@ async def list_current_stock(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    List current stock levels for all products
-    
-    - Shows total, available, and allocated quantities
-    - Highlights low stock items
-    - Includes stock valuation
-    """
+    """List current stock levels"""
     try:
-        query = """
-            SELECT 
-                p.product_id, p.product_code, p.product_name, p.category_id,
-                c.category_name as category,
-                p.product_type, p.product_class,
-                p.manufacturer, p.brand, p.generic_name,
-                p.hsn_code,
-                p.reorder_level,
-                COALESCE(b.total_quantity, 0) as total_quantity,
-                COALESCE(b.available_quantity, 0) as available_quantity,
-                COALESCE(b.allocated_quantity, 0) as allocated_quantity,
-                COALESCE(b.total_batches, 0) as total_batches,
-                COALESCE(b.expired_batches, 0) as expired_batches,
-                COALESCE(b.near_expiry_batches, 0) as near_expiry_batches,
-                COALESCE(b.total_value, 0) as total_value,
-                COALESCE(b.average_cost, 0) as average_cost
-            FROM inventory.products p
-            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id AND p.org_id = c.org_id
-            LEFT JOIN (
-                SELECT 
-                    product_id,
-                    COUNT(*) as total_batches,
-                    SUM(quantity_available) as total_quantity,
-                    SUM(quantity_available) as available_quantity,
-                    SUM(COALESCE(quantity_reserved, 0)) as allocated_quantity,
-                    SUM(quantity_available * cost_per_unit) as total_value,
-                    AVG(cost_per_unit) as average_cost,
-                    COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
-                    COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
-                FROM inventory.batches
-                WHERE 1=1
-                GROUP BY product_id
-            ) b ON p.product_id = b.product_id
-            WHERE 1=1
-        """
-        params = {}
+        stocks, total = InventoryService.list_current_stock(db, category, low_stock_only, limit, skip)
         
-        if category:
-            query += " AND p.category_id = :category"
-            params["category"] = category
+        result = []
+        for stock in stocks:
+            stock["is_below_minimum"] = stock["total_quantity"] < 10
+            stock["is_below_reorder"] = stock["total_quantity"] <= 20
+            result.append(CurrentStock(**stock))
         
-        if low_stock_only:
-            query += " AND COALESCE(b.total_quantity, 0) <= 10"  # Low stock threshold
-        
-        # Get count
-        count_query = f"SELECT COUNT(*) FROM ({query}) t"
-        total = db.execute(text(count_query), params).scalar()
-        
-        # Get products
-        query += " ORDER BY p.product_name LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        
-        stocks = []
-        for row in result:
-            stock = dict(row._mapping)
-            stock["is_below_minimum"] = stock["total_quantity"] < 10  # Default threshold
-            stock["is_below_reorder"] = stock["total_quantity"] <= 20  # Default threshold
-            stocks.append(CurrentStock(**stock))
-        
-        return {
-            "total": total,
-            "stocks": stocks
-        }
-        
+        return {"total": total, "stocks": result}
     except Exception as e:
         raise handle_error(e, "list current stock")
+
 
 @router.post("/movements", response_model=StockMovementResponse)
 @with_tenant_context
@@ -268,19 +148,14 @@ async def record_stock_movement(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Record a stock movement
-    
-    - Validates stock availability for outward movements
-    - Updates batch quantities
-    - Maintains movement history
-    """
+    """Record a stock movement"""
     try:
         return InventoryService.record_stock_movement(db, movement)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise handle_error(e, "record stock movement")
+
 
 @router.get("/movements")
 @with_tenant_context
@@ -294,90 +169,21 @@ async def list_stock_movements(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """List stock movements with filters"""
+    """List stock movements"""
     try:
-        # Build movement query from transaction tables since inventory_movements was dropped
-        query = """
-            WITH movements AS (
-                -- Sales movements (outbound)
-                SELECT 
-                    ii.invoice_item_id as movement_id,
-                    'sale' as movement_type,
-                    ii.product_id,
-                    ii.batch_id,
-                    0 as quantity_in,
-                    ii.quantity as quantity_out,
-                    i.invoice_date as movement_date,
-                    i.invoice_number as reference_number,
-                    i.org_id,
-                    p.product_name,
-                    p.product_code,
-                    b.batch_number
-                FROM sales.invoice_items ii
-                JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
-                JOIN inventory.products p ON ii.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
-                WHERE 1=1
-                
-                UNION ALL
-                
-                -- Purchase movements (inbound)
-                SELECT 
-                    gi.grn_item_id as movement_id,
-                    'purchase' as movement_type,
-                    gi.product_id,
-                    NULL as batch_id,  -- grn_items uses batch_number, not batch_id
-                    gi.received_quantity as quantity_in,
-                    0 as quantity_out,
-                    g.received_at::date as movement_date,
-                    g.grn_number as reference_number,
-                    g.org_id,
-                    p.product_name,
-                    p.product_code,
-                    gi.batch_number
-                FROM procurement.grn_items gi
-                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
-                JOIN inventory.products p ON gi.product_id = p.product_id
-                WHERE 1=1
-            )
-            SELECT * FROM movements WHERE 1=1
-        """
-        params = {}
-        
-        if product_id:
-            query += " AND product_id = :product_id"
-            params["product_id"] = product_id
-        
-        if movement_type:
-            query += " AND movement_type = :movement_type"
-            params["movement_type"] = movement_type
-        
-        if from_date:
-            query += " AND movement_date >= :from_date"
-            params["from_date"] = from_date
-        
-        if to_date:
-            query += " AND movement_date <= :to_date"
-            params["to_date"] = to_date
-        
-        # Get count
-        count_query = f"SELECT COUNT(*) FROM ({query}) t"
-        total = db.execute(text(count_query), params).scalar()
-        
-        # Get movements
-        query += " ORDER BY movement_date DESC LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        movements = [dict(row._mapping) for row in result]
-        
-        return {
-            "total": total,
-            "movements": movements
-        }
-        
+        movements = InventoryService.list_inventory_movements(
+            db, str(context.org_id), movement_type, product_id, None,
+            None, str(from_date) if from_date else None, str(to_date) if to_date else None,
+            "movement_date", "desc", limit, skip
+        )
+        total = InventoryService.count_inventory_movements(
+            db, str(context.org_id), movement_type, product_id, None,
+            str(from_date) if from_date else None, str(to_date) if to_date else None
+        )
+        return {"total": total, "movements": movements}
     except Exception as e:
         raise handle_error(e, "list stock movements")
+
 
 @router.post("/stock/adjustment", response_model=StockMovementResponse)
 @with_tenant_context
@@ -386,19 +192,14 @@ async def adjust_stock(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Adjust stock for damage, expiry, counting, etc.
-    
-    - Records adjustment reason
-    - Updates stock levels
-    - Maintains audit trail
-    """
+    """Adjust stock"""
     try:
         return InventoryService.process_stock_adjustment(db, adjustment, context.org_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise handle_error(e, "adjust stock")
+
 
 @router.get("/expiry/alerts", response_model=List[ExpiryAlert])
 @with_tenant_context
@@ -408,23 +209,15 @@ async def get_expiry_alerts(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Get expiry alerts for products
-    
-    - Shows products expiring within specified days
-    - Categorizes by alert level (critical, warning, info)
-    - Includes stock value at risk
-    """
+    """Get expiry alerts"""
     try:
         alerts = InventoryService.get_expiry_alerts(db, context.org_id, days_ahead)
-        
         if alert_level:
             alerts = [a for a in alerts if a.alert_level == alert_level]
-        
         return alerts
-        
     except Exception as e:
         raise handle_error(e, "get expiry alerts")
+
 
 @router.get("/valuation", response_model=StockValuation)
 @with_tenant_context
@@ -433,18 +226,12 @@ async def get_stock_valuation(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Get stock valuation report
-    
-    - Total stock value
-    - Expired stock value
-    - Near-expiry stock value
-    - Category-wise breakdown
-    """
+    """Get stock valuation"""
     try:
         return InventoryService.get_stock_valuation(db, context.org_id, as_of_date)
     except Exception as e:
         raise handle_error(e, "get stock valuation")
+
 
 @router.get("/dashboard", response_model=InventoryDashboard)
 @with_tenant_context
@@ -452,14 +239,7 @@ async def get_inventory_dashboard(
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
-    """
-    Get inventory dashboard summary
-    
-    - Stock overview
-    - Alert counts
-    - Fast/slow moving products
-    - Expiry alerts
-    """
+    """Get inventory dashboard"""
     try:
         return InventoryService.get_inventory_dashboard(db, context.org_id)
     except Exception as e:

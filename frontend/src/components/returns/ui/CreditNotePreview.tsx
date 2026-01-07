@@ -27,18 +27,25 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
   };
 
   // Get only selected items with return quantity
-  const returnItems = returnData.items.filter(item => 
+  const returnItems = returnData.items.filter(item =>
     item.selected && item.return_quantity > 0
   );
 
   // Calculate GST breakup
+  interface GSTBreakup {
+    taxableAmount: number;
+    cgst: number;
+    sgst: number;
+    totalTax: number;
+  }
+
   const calculateGSTBreakup = () => {
-    const gstBreakup = {};
-    
+    const gstBreakup: Record<string, GSTBreakup> = {};
+
     // Calculate GST for all customers (they all paid it)
     // Only skip if GST customer explicitly excludes it
     if (customer.gst_number && !includeGst) return gstBreakup;
-    
+
     returnItems.forEach(item => {
       // Only calculate for paid quantities
       const totalQty = parseFloat(item.quantity || 0);
@@ -46,17 +53,17 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
       const paidQty = parseFloat(item.paid_quantity || totalQty - freeQty);
       const returnQty = parseFloat(item.return_quantity || 0);
       const paidReturnQty = Math.min(returnQty, paidQty);
-      
+
       // Apply discount to base amount - handle both percent and amount
-      const baseAmount = paidReturnQty * item.rate;
+      const baseAmount = paidReturnQty * item.unit_price;
       const discountPercent = parseFloat(item.discount_percent || item.discount || 0);
       const discountAmt = parseFloat(item.discount_amount || 0);
       // Use discount amount if available, otherwise calculate from percent
       const discountAmount = discountAmt > 0 ? (discountAmt * paidReturnQty) : (baseAmount * discountPercent) / 100;
       const returnAmount = baseAmount - discountAmount;
-      
+
       const taxAmount = (returnAmount * item.tax_percent) / 100;
-      
+
       if (!gstBreakup[item.tax_percent]) {
         gstBreakup[item.tax_percent] = {
           taxableAmount: 0,
@@ -65,13 +72,13 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
           totalTax: 0
         };
       }
-      
+
       gstBreakup[item.tax_percent].taxableAmount += returnAmount;
       gstBreakup[item.tax_percent].cgst += taxAmount / 2;
       gstBreakup[item.tax_percent].sgst += taxAmount / 2;
       gstBreakup[item.tax_percent].totalTax += taxAmount;
     });
-    
+
     return gstBreakup;
   };
 
@@ -123,7 +130,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 </div>
               </div>
             </div>
-            
+
             <div className="text-right">
               <h1 className="text-3xl font-bold text-red-600 mb-2">
                 {customer.gst_number ? 'GST CREDIT NOTE' : 'RETURN NOTE'}
@@ -145,9 +152,9 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 {invoice && <p className="text-gray-600">Invoice Date: {formatDate(invoice.invoice_date)}</p>}
                 <p className="text-gray-600">
                   Return Method: <span className="font-semibold">
-                    {returnMethod === 'credit_note' ? 'Store Credit' : 
-                     returnMethod === 'replacement' ? 'Product Replacement' : 
-                     'Refund to Original Payment'}
+                    {returnMethod === 'credit_note' ? 'Store Credit' :
+                      returnMethod === 'replacement' ? 'Product Replacement' :
+                        'Refund to Original Payment'}
                   </span>
                 </p>
               </div>
@@ -203,7 +210,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 {customer.email && (
                   <p><Mail className="w-3 h-3 inline mr-1" /> {customer.email}</p>
                 )}
-                {customer.contact_person_name && (
+                {customer.contact_person && (
                   <p><User className="w-3 h-3 inline mr-1" /> {customer.contact_person}</p>
                 )}
               </div>
@@ -257,15 +264,15 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   const returnQty = parseFloat(item.return_quantity || 0);
                   const paidReturnQty = Math.min(returnQty, paidQty);
                   const freeReturnQty = returnQty > paidQty ? returnQty - paidQty : 0;
-                  
+
                   // Apply discount to base amount - handle both percent and amount
-                  const baseAmount = paidReturnQty * item.rate;
+                  const baseAmount = paidReturnQty * item.unit_price;
                   const discountPercent = parseFloat(item.discount_percent || item.discount || 0);
                   const discountAmt = parseFloat(item.discount_amount || 0);
                   // Use discount amount if available, otherwise calculate from percent
                   const discountAmount = discountAmt > 0 ? (discountAmt * paidReturnQty) : (baseAmount * discountPercent) / 100;
                   const returnAmount = baseAmount - discountAmount;
-                  
+
                   // Calculate tax for all customers (they all paid it)
                   const taxAmount = (!customer.gst_number || includeGst) ? (returnAmount * item.tax_percent) / 100 : 0;
                   const totalAmount = returnAmount + taxAmount;
@@ -287,7 +294,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.rate)}</td>
+                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.unit_price)}</td>
                       <td className="py-3 px-2 text-sm text-right">
                         {discountAmount > 0 && (
                           <span className="text-green-600">
@@ -326,9 +333,9 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(gstBreakup).map(([rate, values]) => (
-                        <tr key={rate} className="border-b border-gray-100">
-                          <td className="py-2">{rate}%</td>
+                      {Object.entries(gstBreakup).map(([taxRate, values]) => (
+                        <tr key={taxRate} className="border-b border-gray-100">
+                          <td className="py-2">{taxRate}%</td>
                           <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
                           <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
                           <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
@@ -384,12 +391,12 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   </span>
                 </div>
               </div>
-              
+
               {/* Credit Adjustment Information */}
               {customerDues > 0 && returnData.credit_adjustment_type && (
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Credit Adjustment:</strong> 
+                    <strong>Credit Adjustment:</strong>
                     {returnData.credit_adjustment_type === 'existing_dues' ? (
                       <> This amount will be adjusted against existing dues of ₹{customerDues.toFixed(2)}</>
                     ) : (

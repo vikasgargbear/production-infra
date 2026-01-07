@@ -9,24 +9,31 @@ import {
   MODULES,
   MODULE_INFO,
   ROLE_INFO,
-  getRoleDefaults
+  getRoleDefaults,
+  UserRole
 } from '../../../config/userRoles.config';
+import { User } from '../../../types/models/user';
 
-const UserManagement = ({ open, onClose }) => {
+interface UserManagementProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
   // User data
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   // Load users on component mount
   useEffect(() => {
@@ -105,7 +112,7 @@ const UserManagement = ({ open, onClose }) => {
       const response = await usersApi.getAll();
 
       // Handle different response formats
-      let userData = [];
+      let userData: any[] = [];
 
       // The API returns response.data which contains another data field
       if (response?.data?.data) {
@@ -136,17 +143,11 @@ const UserManagement = ({ open, onClose }) => {
           ? new Date(user.created_at || user.createdAt).toLocaleDateString()
           : 'Unknown',
         modules: user.permissions?.modules || user.modules || [],
-        permissions: user.permissions || {},
-        // Additional org_users fields
-        department: user.department,
-        canViewReports: user.can_view_reports,
-        canModifyPrices: user.can_modify_prices,
-        canApproveDiscounts: user.can_approve_discounts,
-        discountLimit: user.discount_limit_percent
+        permissions: user.permissions || {}
       }));
 
       setUsers(transformedUsers);
-    } catch (error) {
+    } catch (error: any) {
 
       // Detailed error handling
       if (error.response) {
@@ -183,7 +184,7 @@ const UserManagement = ({ open, onClose }) => {
   };
 
   const roles = [
-    { value: 'all', label: 'All Roles' },
+    { value: 'all', label: 'All Roles', color: 'gray' },
     ...Object.entries(ROLE_INFO).map(([value, info]) => ({
       value,
       label: info.label,
@@ -206,27 +207,28 @@ const UserManagement = ({ open, onClose }) => {
     confirmPassword: '',
     role: 'billing',
     status: 'active',
-    modules: [],
-    permissions: {},
-    sendInviteEmail: true  // Default to sending invite
+    modules: [] as string[],
+    permissions: {} as Record<string, any>,
+    sendInviteEmail: true,
+    phone: '' // Added missing field
   });
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredUsers = users.filter((user: User) => {
+    const matchesSearch = (user.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = filterRole === 'all' || user.role === filterRole;
     return matchesSearch && matchesRole;
   });
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  const handleModuleToggle = (moduleId) => {
+  const handleModuleToggle = (moduleId: string) => {
     setFormData(prev => {
       const newModules = prev.modules.includes(moduleId)
         ? prev.modules.filter(m => m !== moduleId)
@@ -248,7 +250,7 @@ const UserManagement = ({ open, onClose }) => {
     });
   };
 
-  const handlePermissionChange = (moduleId, permission, value) => {
+  const handlePermissionChange = (moduleId: string, permission: string, value: boolean) => {
     setFormData(prev => ({
       ...prev,
       permissions: {
@@ -261,18 +263,18 @@ const UserManagement = ({ open, onClose }) => {
     }));
   };
 
-  const handleRoleChange = (role) => {
-    const roleDefaults = getRoleDefaults(role);
+  const handleRoleChange = (role: string) => {
+    const roleDefaults = getRoleDefaults(role as UserRole);
 
     setFormData(prev => ({
       ...prev,
-      role,
+      role: role as any,
       modules: roleDefaults.modules || [],
       permissions: roleDefaults.permissions || {}
     }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Only validate password match if password is provided
@@ -287,7 +289,7 @@ const UserManagement = ({ open, onClose }) => {
 
     try {
       // Prepare data for both table structures
-      const userData = {
+      const userData: Partial<User> & { password?: string; send_invite_email?: boolean } = {
         // Common fields
         email: formData.email,
         role: formData.role,
@@ -295,8 +297,6 @@ const UserManagement = ({ open, onClose }) => {
         // org_users fields
         full_name: formData.fullName,
         is_active: formData.status === 'active',
-        // Don't send permissions for now - let backend use defaults
-        // permissions: formData.permissions,
 
         // Basic user fields
         username: formData.username,
@@ -314,7 +314,7 @@ const UserManagement = ({ open, onClose }) => {
         userData.send_invite_email = formData.sendInviteEmail;
       }
 
-      if (editingUser) {
+      if (editingUser && editingUser.id) {
         // Update existing user
         await usersApi.update(editingUser.id, userData);
         setSuccessMessage('User updated successfully!');
@@ -331,30 +331,33 @@ const UserManagement = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
 
       handleCloseModal();
-    } catch (error) {
+    } catch (error: any) {
       setError(error.response?.data?.message || 'Failed to save user. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleEdit = (user) => {
+  const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({
-      username: user.username,
-      fullName: user.fullName,
-      email: user.email,
+      username: user.username || '',
+      fullName: user.fullName || '',
+      email: user.email || '',
       password: '',
       confirmPassword: '',
       role: user.role,
-      status: user.status,
-      modules: user.modules,
-      permissions: user.permissions
+      status: user.status || 'active',
+      modules: user.modules || [],
+      permissions: (user.permissions || {}) as Record<string, any>,
+      phone: user.phone || '',
+      sendInviteEmail: false
     });
     setShowAddModal(true);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number | string | undefined) => {
+    if (!id) return;
     if (window.confirm('Are you sure you want to delete this user?')) {
       setIsSaving(true);
       setError(null);
@@ -372,16 +375,18 @@ const UserManagement = ({ open, onClose }) => {
     }
   };
 
-  const handleStatusToggle = async (userId) => {
+  const handleStatusToggle = async (userId: string | number | undefined) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
 
     setIsSaving(true);
     setError(null);
     try {
-      await usersApi.update(userId, {
+      const updatePayload: any = {
         is_active: user.status === 'inactive'
-      });
+      };
+      if (userId === undefined) return;
+      await usersApi.update(userId, updatePayload);
 
       await loadUsers();
       setSuccessMessage('User status updated successfully!');
@@ -394,15 +399,22 @@ const UserManagement = ({ open, onClose }) => {
     }
   };
 
-  const handleResetPassword = async (userId) => {
-    if (window.confirm('Are you sure you want to reset password for this user?')) {
+  const handleResetPassword = async (user: User) => {
+    if (!user || user.status === 'inactive') return;
+
+    if (window.confirm(`Are you sure you want to reset password for ${user.fullName || user.username}?`)) {
       setIsSaving(true);
       setError(null);
       try {
-        await usersApi.resetPassword(userId);
-        setSuccessMessage('Password reset link sent to user email!');
-        setTimeout(() => setSuccessMessage(''), 5000);
-      } catch (error) {
+        // API expects email for reset password
+        if (user.email) {
+          await usersApi.resetPassword(user.email);
+          setSuccessMessage('Password reset link sent to user email!');
+          setTimeout(() => setSuccessMessage(''), 5000);
+        } else {
+          setError('User does not have an email address.');
+        }
+      } catch (error: any) {
         setError('Failed to reset password.');
         setTimeout(() => setError(null), 5000);
       } finally {
@@ -422,14 +434,15 @@ const UserManagement = ({ open, onClose }) => {
       confirmPassword: '',
       role: 'billing',
       status: 'active',
-      modules: [],
-      permissions: {},
-      sendInviteEmail: true
+      modules: [] as string[],
+      permissions: {} as Record<string, any>,
+      sendInviteEmail: true,
+      phone: ''
     });
     setShowPassword(false);
   };
 
-  const getRoleColor = (role) => {
+  const getRoleColor = (role: string) => {
     const roleConfig = roles.find(r => r.value === role);
     return roleConfig?.color || 'gray';
   };
@@ -593,7 +606,7 @@ const UserManagement = ({ open, onClose }) => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
-                            {user.modules.slice(0, 3).map(moduleId => {
+                            {(user.modules || []).slice(0, 3).map(moduleId => {
                               const module = modules.find(m => m.id === moduleId);
                               return module ? (
                                 <span key={moduleId} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
@@ -601,9 +614,9 @@ const UserManagement = ({ open, onClose }) => {
                                 </span>
                               ) : null;
                             })}
-                            {user.modules.length > 3 && (
+                            {(user.modules || []).length > 3 && (
                               <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                                +{user.modules.length - 3} more
+                                +{(user.modules || []).length - 3} more
                               </span>
                             )}
                           </div>
@@ -624,7 +637,7 @@ const UserManagement = ({ open, onClose }) => {
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleResetPassword(user.id)}
+                              onClick={() => handleResetPassword(user)}
                               className="p-1 text-amber-600 hover:bg-amber-50 rounded"
                               title="Reset Password"
                             >
@@ -690,7 +703,7 @@ const UserManagement = ({ open, onClose }) => {
                         required
                         value={formData.username}
                         onChange={(e) => handleInputChange('username', e.target.value)}
-                        disabled={editingUser}
+                        disabled={!!editingUser}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       />
                     </div>
@@ -806,9 +819,9 @@ const UserManagement = ({ open, onClose }) => {
                   </div>
 
                   {(() => {
-                    const roleDefaults = getRoleDefaults(formData.role);
+                    const roleDefaults = getRoleDefaults(formData.role as any);
                     const roleModules = roleDefaults?.modules || [];
-                    const rolePermissions = roleDefaults?.permissions || {};
+                    const rolePermissions = (roleDefaults?.permissions || {}) as Record<string, any>;
 
                     return (
                       <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 overflow-hidden">
@@ -827,7 +840,7 @@ const UserManagement = ({ open, onClose }) => {
                             {roleModules.map(moduleId => {
                               const module = modules.find(m => m.id === moduleId);
                               if (!module) return null;
-                              const perms = rolePermissions[moduleId] || {};
+                              const perms = (rolePermissions[moduleId] || {}) as any;
 
                               return (
                                 <tr key={moduleId} className="hover:bg-blue-50/30">

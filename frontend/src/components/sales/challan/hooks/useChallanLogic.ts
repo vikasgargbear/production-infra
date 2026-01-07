@@ -117,8 +117,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         // Challan-specific: handle delivery address based on sameAsBilling
         const address = customer.address || customer.address_line1 || '';
         const city = customer.city || '';
-        const state = customer.state || customer.state_name || '';
-        const pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
+        const state = customer.state || customer.state || '';
+        const pincode = customer.pincode || customer.pincode || customer.pincode || '';
         const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
 
         setChallan(prev => ({
@@ -156,7 +156,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 ...item,
                 id: item.id || `imported-${Date.now()}-${index}`,
                 quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0
+                unit_price: parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0
             }));
 
             setChallan(prev => ({
@@ -204,7 +204,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 expiry_date: item.expiry_date || null,
                 ordered_quantity: null,
                 dispatched_quantity: item.quantity,
-                unit_price: item.unit_price || item.rate || item.sale_price || 0,
+                unit_price: item.unit_price || item.unit_price || item.sale_price || 0,
                 gst_percent: item.gst_percent || 0,
                 cgst_percent: (item.gst_percent || 0) / 2,
                 sgst_percent: (item.gst_percent || 0) / 2,
@@ -355,7 +355,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         <div class="bold">Items:</div>
         ${challan.items.map((item, idx) => `
           <div class="item-row"><span>${idx + 1}. ${item.product_name || 'N/A'}</span></div>
-          <div class="item-row"><span>  Qty: ${item.quantity} ${item.unit || ''}</span><span>₹${(item.rate || item.unit_price || 0).toFixed(2)}</span></div>
+          <div class="item-row"><span>  Qty: ${item.quantity} ${item.unit || ''}</span><span>₹${(item.unit_price || item.unit_price || 0).toFixed(2)}</span></div>
         `).join('')}
         <div class="total-section">
           <div class="item-row"><span class="bold">Total Items:</span><span>${challan.items.length}</span></div>

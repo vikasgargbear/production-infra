@@ -34,6 +34,8 @@ export interface Payment {
     transactionId?: string;
     status: 'completed' | 'pending' | 'bounced' | 'failed';
     remarks?: string;
+    notes?: string;
+    split_payments?: { mode: string; amount: number; reference?: string }[];
     attachments?: string[];
 }
 

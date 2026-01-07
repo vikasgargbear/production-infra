@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
-import { productsApi, productsApi } from '../../../services/api';
+import { productsApi } from '../../../services/api';
 import PackTypeSelector from '../selector/PackTypeSelector';
 import MonthYearPicker from '../ui/forms/MonthYearPicker';
 import { APP_CONFIG } from '../../../config/app.config';

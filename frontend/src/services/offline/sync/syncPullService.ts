@@ -418,7 +418,7 @@ class SyncPullService {
             address_line1: billingAddr.address_line1 || '',
             address_line2: billingAddr.address_line2 || '',
             city: billingAddr.city || '',
-            state: billingAddr.state_name || billingAddr.state_code || '',
+            state: billingAddr.state || billingAddr.state_code || '',
             state_code: billingAddr.state_code || '',
             pincode: billingAddr.pincode || ''
         } : {
@@ -434,7 +434,7 @@ class SyncPullService {
             address_line1: shippingAddr.address_line1 || '',
             address_line2: shippingAddr.address_line2 || '',
             city: shippingAddr.city || '',
-            state: shippingAddr.state_name || shippingAddr.state_code || '',
+            state: shippingAddr.state || shippingAddr.state_code || '',
             state_code: shippingAddr.state_code || '',
             pincode: shippingAddr.pincode || ''
         } : null;

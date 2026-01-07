@@ -31,7 +31,6 @@ interface Supplier {
   primary_email?: string;
   whatsapp_number?: string;
   gst_number?: string;
-  gst_number?: string;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string;
@@ -209,8 +208,8 @@ const getColumns = (
           <button
             onClick={() => handleDelete(supplier?.supplier_id)}
             className={`${supplier?.is_active !== false
-                ? 'text-warning-600 hover:text-warning-700'
-                : 'text-success-600 hover:text-success-700'
+              ? 'text-warning-600 hover:text-warning-700'
+              : 'text-success-600 hover:text-success-700'
               } p-1 rounded transition-colors`}
             disabled={!supplier?.supplier_id}
             title={supplier?.is_active !== false ? 'Deactivate Supplier' : 'Reactivate Supplier'}
@@ -290,12 +289,12 @@ const SupplierMaster: React.FC = () => {
       {/* Filters and Search */}
       <ContentCard
         title="Search & Filter"
-        subtitle={null}
+        subtitle={undefined}
         actions={selectedIds.length > 0 ? (
           <Button variant="danger" size="sm" onClick={handleBulkDelete}>
             <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
           </Button>
-        ) : null}
+        ) : undefined}
         icon={Search}
       >
         <div className="flex items-center space-x-6">
@@ -323,7 +322,7 @@ const SupplierMaster: React.FC = () => {
 
       {/* Error Message */}
       {error && (
-        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
+        <ContentCard title="" subtitle={undefined} actions={undefined} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
           <div className="flex items-center space-x-3">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-800">{error}</span>
@@ -332,7 +331,7 @@ const SupplierMaster: React.FC = () => {
       )}
 
       {/* Supplier List */}
-      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden" icon={Truck}>
+      <ContentCard title="Supplier List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Truck}>
         {suppliers.length === 0 && !isLoading ? (
           <div className="text-center py-12">
             <Truck className="w-12 h-12 text-app-400 mx-auto mb-4" />
@@ -366,11 +365,14 @@ const SupplierMaster: React.FC = () => {
       {(showAddModal || editingEntity) && (
         <SupplierEditModal
           isOpen={true}
+          onSave={(updatedSupplier) => {
+            handleSaved();
+            setEditingEntity(null);
+          }}
           onClose={() => {
             setShowAddModal(false);
             setEditingEntity(null);
           }}
-          onSave={handleSaved}
           supplier={editingEntity}
         />
       )}

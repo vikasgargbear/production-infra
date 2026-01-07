@@ -72,8 +72,6 @@ export interface Customer {
 
     // GST/Business
     gst_number?: string;
-    gst_number?: string;
-    drug_license_number?: string;
     drug_license_number?: string;
     pan_number?: string;
 
@@ -89,14 +87,13 @@ export interface Customer {
     city?: string;
     state?: string;
     pincode?: string;
-    postal_code?: string;
     zip?: string;
     country?: string;
 
     // Legacy/Backend fields supported for compatibility
     contact_info?: {
         primary_phone: string;
-        alternate_phone?: string;
+        secondary_phone?: string;
         email?: string;
         website?: string;
     };
@@ -196,7 +193,6 @@ export interface InvoiceItem {
 
     // Batch info
     batch_number?: string;
-    batch_number?: string;
     batch_id?: number | string;
     expiry_date?: string;
     manufacturing_date?: string;
@@ -209,8 +205,6 @@ export interface InvoiceItem {
 
     // Pricing - CANONICAL ONLY
     unit_price?: number;  // CANONICAL: selling price per unit
-    mrp?: number;
-    unit_price?: number;
     cost_per_unit?: number;
 
     // Discounts - CANONICAL ONLY
@@ -486,7 +480,6 @@ export interface ProductInput {
     name?: string;
     product_code?: string;
     batch_id?: number | string | null;
-    batch_number?: string;
     batch_number?: string;  // Alias used by some search results
     expiry_date?: string;
     manufacturing_date?: string;

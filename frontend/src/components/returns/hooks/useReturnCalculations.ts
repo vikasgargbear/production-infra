@@ -12,7 +12,6 @@ import { useMemo } from 'react';
 export interface ReturnItem {
     selected?: boolean;
     return_quantity?: number | string;
-    rate?: number | string;
     unit_price?: number | string;
     discount_amount?: number | string;
     cgst_rate?: number | string;
@@ -84,11 +83,11 @@ export function useReturnCalculations(
             itemCount++;
             totalQuantity += returnQty;
 
-            const rate = parseFloat(String(item.rate)) || parseFloat(String(item.unit_price)) || 0;
+            const unit_price = parseFloat(String(item.unit_price)) || 0;
             const discount = parseFloat(String(item.discount_amount)) || 0;
 
             // Calculate base amount
-            const baseAmount = returnQty * rate;
+            const baseAmount = returnQty * unit_price;
             const discountAmount = (discount / 100) * baseAmount;
             const taxableAmount = baseAmount - discountAmount;
 

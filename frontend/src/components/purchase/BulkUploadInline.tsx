@@ -29,11 +29,9 @@ interface UploadedProduct {
   schedule_type?: string;
   storage_condition?: string;
   batch_number?: string;
-  batch_number?: string;
   tax_percent?: number;
   tax_amount?: number;
   selling_price?: number;
-  unit_price?: number;
   pack_size?: number;
   id?: number;
   product_id?: number | null;

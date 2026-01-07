@@ -1,18 +1,15 @@
 """
 Supplier Invoice API Router
-Handles supplier invoices and related operations
+REFACTORED: Uses SupplierInvoiceService for database operations
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
 import logging
-from datetime import datetime
-from decimal import Decimal
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+from ....services.purchase.supplier_invoice.service import SupplierInvoiceService
 
 logger = logging.getLogger(__name__)
 
@@ -21,77 +18,22 @@ router = APIRouter(tags=["supplier-invoices"])
 @router.get("/")
 @with_tenant_context
 async def get_supplier_invoices(
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
+    from_date: Optional[str] = None, to_date: Optional[str] = None,
     supplier_id: Optional[int] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=5000),
+    skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=5000),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get all supplier invoices with GST details for input credit calculation
-    """
+    """Get all supplier invoices with GST details"""
     try:
-        query = """
-            SELECT
-                si.supplier_invoice_id,
-                si.supplier_invoice_number,
-                si.invoice_date,
-                si.supplier_id,
-                s.supplier_name,
-                s.gst_number as supplier_gstin,
-                si.subtotal_amount,
-                si.discount_amount,
-                si.taxable_amount,
-                si.cgst_amount,
-                si.sgst_amount,
-                si.igst_amount,
-                si.cess_amount,
-                si.tax_amount,
-                si.invoice_total,
-                si.payment_status,
-                si.itc_eligible,
-                si.gstr2a_matched,
-                si.invoice_status
-            FROM procurement.supplier_invoices si
-            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
-            WHERE si.org_id = :org_id
-            AND si.invoice_status != 'cancelled'
-            AND si.itc_eligible = true
-        """
-
-        params = {"org_id": str(context.org_id), "skip": skip, "limit": limit}
-
-        if from_date:
-            query += " AND si.invoice_date >= :from_date"
-            params["from_date"] = from_date
-
-        if to_date:
-            query += " AND si.invoice_date <= :to_date"
-            params["to_date"] = to_date
-
-        if supplier_id:
-            query += " AND si.supplier_id = :supplier_id"
-            params["supplier_id"] = supplier_id
-
-        query += " ORDER BY si.invoice_date DESC LIMIT :limit OFFSET :skip"
-
-        invoices = db.execute(text(query), params).fetchall()
-
+        invoices = SupplierInvoiceService.list_supplier_invoices(db, str(context.org_id), from_date, to_date, supplier_id, limit, skip)
         result = []
         for invoice in invoices:
-            invoice_dict = dict(invoice._mapping)
-            # Convert Decimal to float for JSON serialization
-            for key in ['subtotal_amount', 'discount_amount', 'taxable_amount',
-                       'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount',
-                       'tax_amount', 'invoice_total']:
-                if key in invoice_dict and invoice_dict[key] is not None:
-                    invoice_dict[key] = float(invoice_dict[key])
-            result.append(invoice_dict)
-
+            for key in ['subtotal_amount', 'discount_amount', 'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount', 'tax_amount', 'invoice_total']:
+                if key in invoice and invoice[key] is not None:
+                    invoice[key] = float(invoice[key])
+            result.append(invoice)
         return result
-
     except Exception as e:
         logger.error(f"Error fetching supplier invoices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -99,80 +41,20 @@ async def get_supplier_invoices(
 @router.get("/returnable/")
 @with_tenant_context
 async def get_returnable_invoices(
-    supplier_id: Optional[int] = None,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    supplier_id: Optional[int] = None, from_date: Optional[str] = None, to_date: Optional[str] = None,
+    skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get supplier invoices that have returnable items
-    """
+    """Get supplier invoices that have returnable items"""
     try:
-        query = """
-            SELECT 
-                si.supplier_invoice_id,
-                si.supplier_invoice_number,
-                si.invoice_date,
-                si.supplier_id,
-                s.supplier_name,
-                s.gst_number as supplier_gst,
-                si.invoice_total as invoice_amount,
-                si.grn_ids,
-                -- Count items from supplier_invoice_items or GRN items
-                COALESCE(
-                    (SELECT COUNT(*) FROM procurement.supplier_invoice_items 
-                     WHERE supplier_invoice_id = si.supplier_invoice_id),
-                    (SELECT COUNT(*) FROM procurement.grn_items gi
-                     JOIN procurement.goods_receipt_notes grn ON gi.grn_id = grn.grn_id
-                     WHERE grn.grn_id = ANY(si.grn_ids))
-                ) as total_items,
-                -- Check if has returns
-                EXISTS (
-                    SELECT 1 FROM procurement.purchase_returns pr
-                    WHERE pr.supplier_invoice_id = si.supplier_invoice_id
-                ) as has_returns,
-                true as can_return
-            FROM procurement.supplier_invoices si
-            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
-            WHERE 1=1
-        """
-        
-        params = {"skip": skip, "limit": limit}
-        
-        if supplier_id:
-            query += " AND si.supplier_id = :supplier_id"
-            params["supplier_id"] = supplier_id
-            
-        if from_date:
-            query += " AND si.invoice_date >= :from_date"
-            params["from_date"] = from_date
-            
-        if to_date:
-            query += " AND si.invoice_date <= :to_date"
-            params["to_date"] = to_date
-            
-        query += " ORDER BY si.invoice_date DESC LIMIT :limit OFFSET :skip"
-        
-        invoices = db.execute(text(query), params).fetchall()
-        
+        invoices = SupplierInvoiceService.list_returnable_invoices(db, supplier_id, from_date, to_date, limit, skip)
         result = []
         for invoice in invoices:
-            invoice_dict = dict(invoice._mapping)
-            # Add additional info
-            invoice_dict["invoice_type"] = "supplier"
-            invoice_dict["has_grn"] = bool(invoice.grn_ids and len(invoice.grn_ids) > 0)
-            result.append(invoice_dict)
-            
-        return {
-            "invoices": result,
-            "total": len(result),
-            "skip": skip,
-            "limit": limit
-        }
-        
+            invoice["invoice_type"] = "supplier"
+            invoice["has_grn"] = bool(invoice.get("grn_ids") and len(invoice["grn_ids"]) > 0)
+            result.append(invoice)
+        return {"invoices": result, "total": len(result), "skip": skip, "limit": limit}
     except Exception as e:
         logger.error(f"Error fetching returnable invoices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -185,29 +67,12 @@ async def get_invoice_details(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get detailed information about a supplier invoice
-    """
+    """Get detailed information about a supplier invoice"""
     try:
-        invoice = db.execute(
-            text("""
-                SELECT 
-                    si.*,
-                    s.supplier_name,
-                    s.gst_number as supplier_gst,
-                    s.primary_phone as supplier_phone
-                FROM procurement.supplier_invoices si
-                LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
-                WHERE si.supplier_invoice_id = :invoice_id
-            """),
-            {"invoice_id": invoice_id}
-        ).fetchone()
-        
+        invoice = SupplierInvoiceService.get_invoice_details(db, invoice_id)
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
-            
-        return dict(invoice._mapping)
-        
+        return invoice
     except HTTPException:
         raise
     except Exception as e:
@@ -222,59 +87,12 @@ async def get_invoice_items(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get items for a supplier invoice
-    """
+    """Get items for a supplier invoice"""
     try:
-        # First try supplier_invoice_items table
-        items = db.execute(
-            text("""
-                SELECT 
-                    sii.*,
-                    p.product_name,
-                    p.hsn_code,
-                    b.batch_number,
-                    b.expiry_date
-                FROM procurement.supplier_invoice_items sii
-                JOIN inventory.products p ON sii.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id
-                WHERE sii.supplier_invoice_id = :invoice_id
-                ORDER BY sii.invoice_item_id
-            """),
-            {"invoice_id": invoice_id}
-        ).fetchall()
-        
-        # If no items in supplier_invoice_items, try GRN items
+        items = SupplierInvoiceService.get_invoice_items(db, invoice_id)
         if not items:
-            items = db.execute(
-                text("""
-                    SELECT 
-                        gi.grn_item_id as invoice_item_id,
-                        gi.product_id,
-                        p.product_name,
-                        gi.batch_number,
-                        gi.received_quantity as quantity,
-                        gi.unit_price,
-                        0 as discount_percent,
-                        0 as tax_percent,
-                        gi.received_quantity * gi.unit_price as total_amount,
-                        gi.uom as unit,
-                        gi.expiry_date
-                    FROM procurement.supplier_invoices si
-                    JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
-                    JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
-                    JOIN inventory.products p ON gi.product_id = p.product_id
-                    WHERE si.supplier_invoice_id = :invoice_id
-                    ORDER BY gi.grn_item_id
-                """),
-                {"invoice_id": invoice_id}
-            ).fetchall()
-        
-        return {
-            "items": [dict(item._mapping) for item in items],
-            "total": len(items)
-        }
-        
+            items = SupplierInvoiceService.get_invoice_items_from_grn(db, invoice_id)
+        return {"items": items, "total": len(items)}
     except Exception as e:
         logger.error(f"Error fetching invoice items: {e}")
         raise HTTPException(status_code=500, detail=str(e))

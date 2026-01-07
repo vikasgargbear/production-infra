@@ -26,7 +26,7 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
       batch_id: null,
       batch_number: '',
       return_quantity: 1,
-      rate: 0,
+      unit_price: 0,
       tax_percent: 0,
       disposition: 'QUARANTINE', // Default to quarantine for manual returns
       reason: '',
@@ -48,7 +48,7 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
         batches: [],
         batch_id: null,
         batch_number: '',
-        rate: 0,
+        unit_price: 0,
         tax_percent: 0
       };
       setManualItems(newItems);
@@ -68,7 +68,7 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
         batches: batches,
         batch_id: batches.length === 1 ? batches[0].batch_id : null,
         batch_number: batches.length === 1 ? batches[0].batch_number : '',
-        rate: product.mrp || product.sale_price || 0,
+        unit_price: product.mrp || product.sale_price || 0,
         tax_percent: product.gst_rate || 0
       };
       setManualItems(newItems);
@@ -79,7 +79,7 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
         product_id: product.product_id,
         product_name: product.product_name,
         batches: [],
-        rate: product.mrp || product.sale_price || 0,
+        unit_price: product.mrp || product.sale_price || 0,
         tax_percent: product.gst_rate || 0
       };
       setManualItems(newItems);

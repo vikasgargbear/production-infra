@@ -82,7 +82,7 @@ const SupplierCreationForm = ({
     contact_person_email: '',
     phone: '',
     whatsapp_number: '',
-    alternate_phone: '',
+    secondary_phone: '',
     email: '',
     website: '',
 

@@ -110,11 +110,8 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
     const itemsWithProfit: ItemWithProfit[] = useMemo(() => {
         return itemsWithCost.map(item => {
             // Handle multiple field name variations
-            const quantity = parseFloat(String(item.quantity || item.qty || item.base_quantity)) || 0;
+            const quantity = parseFloat(String(item.quantity || item.base_quantity)) || 0;
             const sellingRate = parseFloat(String(
-                item.rate ||
-                item.sale_price ||
-                item.selling_price ||
                 item.unit_price ||
                 item.sale_price_per_unit
             )) || 0;
@@ -227,7 +224,7 @@ const ItemProfitModal: React.FC<ItemProfitModalProps> = ({ isOpen, onClose, item
                                                 </td>
                                                 <td className="px-3 py-2 text-center">{item.quantity}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.costRate.toFixed(2)}</td>
-                                                <td className="px-3 py-2 text-right">₹{(item.rate || 0).toFixed(2)}</td>
+                                                <td className="px-3 py-2 text-right">₹{(item.unit_price || 0).toFixed(2)}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.totalCost.toFixed(2)}</td>
                                                 <td className="px-3 py-2 text-right">₹{item.totalSelling.toFixed(2)}</td>
                                                 <td className={`px-3 py-2 text-right font-semibold ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>

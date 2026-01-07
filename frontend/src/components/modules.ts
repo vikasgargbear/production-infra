@@ -4,18 +4,18 @@
  */
 
 // Import all modules
-import SalesModule from './sales';
-import PurchaseModule from './purchase';
-import ReturnsModule from './returns';
-import PaymentModule from './payment';
-import LedgerModule from './ledger';
-import NotesModule from './returns/notes';  // Fixed: moved from ./notes
-import InventoryModule from './inventory';
+import * as SalesModule from './sales';
+import * as PurchaseModule from './purchase';
+import * as ReturnsModule from './returns';
+import * as PaymentModule from './payment';
+import * as LedgerModule from './ledger';
+import * as NotesModule from './returns/notes';  // Fixed: moved from ./notes
+import * as InventoryModule from './inventory';
 
 // Import other important modules
-import ChallanModule from './sales/challan';
-import ReportsModule from './reports';
-import DashboardModule from './dashboard';
+import * as ChallanModule from './sales/challan';
+import * as ReportsModule from './reports';
+import * as DashboardModule from './Dashboard';
 
 // Types
 interface ModuleConfig {

@@ -1,22 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
-import { purchasesApi } from '../services/api';
+import { purchasesApi } from '../../../services/api';
 
-const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
-  const [file, setFile] = useState(null);
+interface PDFUploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onDataExtracted: (data: ExtractedData) => void;
+}
+
+interface ExtractedItem {
+  product_name: string;
+  hsn_code?: string;
+  batch_number?: string;
+  expiry_date?: string;
+  quantity: number;
+  free_quantity?: number;
+  mrp?: number;
+  unit_price: number;
+  selling_price?: number;
+  discount_percent?: number;
+  tax_percent?: number;
+  pack_size?: number;
+  pack_type?: string;
+  total_units?: number;
+  amount?: number;
+  cost_per_unit?: number;
+  // Alias properties for PDF extraction compatibility
+  product_id?: string | number | null;
+  name?: string;  // alias for product_name
+  manufacturing_date?: string;
+  sale_price?: number;  // alias for selling_price
+  gst_percent?: number;  // alias for tax_percent
+}
+
+interface ExtractedData {
+  supplier_name?: string;
+  supplier_gst_number?: string;
+  supplier_address?: string;
+  drug_license?: string;
+  phone?: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  supplier_exists?: boolean;
+  items?: ExtractedItem[];
+  subtotal?: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  total_amount?: number;
+  // Vendor aliases (for PDF extraction compatibility)
+  supplier_id?: string | number | null;
+  vendor_name?: string;
+  vendor_gst_number?: string;
+  vendor_address?: string;
+  gross_amount?: number;
+}
+
+const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onDataExtracted }) => {
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [extractedData, setExtractedData] = useState(null);
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState('');
-  const [editedData, setEditedData] = useState(null);
+  const [editedData, setEditedData] = useState<ExtractedData | null>(null);
   const [forceRender, setForceRender] = useState(0);
-  
+
   // Debug state changes
   useEffect(() => {
   }, [extractedData]);
-  
+
   useEffect(() => {
   }, [editedData]);
-  
+
   // Reset state only when modal is opened fresh (not when closing)
   useEffect(() => {
     if (isOpen) {
@@ -27,8 +80,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
     }
   }, [isOpen]);
 
-  const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0];
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
     if (selectedFile && selectedFile.type === 'application/pdf') {
       setFile(selectedFile);
       setError('');
@@ -47,50 +100,50 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
     try {
       const response = await purchasesApi.parseInvoice(formData);
-      
+
       // Always show the extracted data, even if it's just a template
       if (response && response.data && response.data.extracted_data) {
-        
+
         // Get the extracted data
         const extractedInfo = response.data.extracted_data;
-        
+
         // Directly proceed to verification flow without showing the review UI
         if (response.data.success) {
-          
+
           // Immediately call onDataExtracted to proceed to verification flow
           onDataExtracted(extractedInfo);
           onClose();
-          
+
           // Reset state
           setFile(null);
           setExtractedData(null);
           setEditedData(null);
         } else {
           // If extraction wasn't fully successful, show the review UI
-          
+
           setExtractedData(prevData => {
             return extractedInfo;
           });
-          
+
           setEditedData(prevData => {
-            const newData = {...extractedInfo};
+            const newData = { ...extractedInfo };
             return newData;
           });
-          
+
           if (response.data.message) {
           }
         }
       } else {
         setError('Failed to extract data from PDF - no data returned');
       }
-    } catch (error) {
-      setError(error.response?.data?.detail || 'Failed to upload PDF');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to upload PDF');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleItemEdit = (index, field, value) => {
+  const handleItemEdit = (index: number, field: string, value: any) => {
     if (!editedData || !editedData.items) return;
     const newItems = [...editedData.items];
     newItems[index] = {
@@ -100,13 +153,14 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
     setEditedData({ ...editedData, items: newItems });
   };
 
-  const handleItemDelete = (index) => {
+  const handleItemDelete = (index: number) => {
     if (!editedData || !editedData.items) return;
     const newItems = editedData.items.filter((_, i) => i !== index);
     setEditedData({ ...editedData, items: newItems });
   };
 
   const handleConfirm = () => {
+    if (!editedData) return;
     onDataExtracted(editedData);
     onClose();
     // Reset state
@@ -115,7 +169,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
     setEditedData(null);
     setError('');
   };
-  
+
   const handleClose = () => {
     // Don't reset extracted data when closing - keep it for review
     // Only reset if user hasn't extracted data yet
@@ -140,7 +194,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             <FileText className="w-5 h-5 text-blue-600" />
             Upload Purchase Invoice
           </h3>
-          <button 
+          <button
             onClick={handleClose}
             className="p-1 hover:bg-gray-100 rounded"
           >
@@ -159,7 +213,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
         <div className="mb-2 p-2 bg-yellow-50 text-xs border border-yellow-300">
           <div>Debug: extractedData is {extractedData ? 'SET' : 'NULL'}, items: {extractedData?.items?.length || 0}</div>
           <div>Force render count: {forceRender}</div>
-          <button 
+          <button
             onClick={() => {
               setForceRender(prev => prev + 1);
             }}
@@ -167,12 +221,12 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
           >
             Force Re-render
           </button>
-          <button 
+          <button
             onClick={() => {
-              const testData = {
+              const testData: ExtractedData = {
                 supplier_name: 'TEST SUPPLIER',
                 invoice_number: 'TEST-001',
-                items: [{product_name: 'Test Product', quantity: 1, unit_price: 100}]
+                items: [{ product_name: 'Test Product', quantity: 1, unit_price: 100 }]
               };
               setExtractedData(testData);
               setEditedData(testData);
@@ -182,7 +236,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             Set Test Data
           </button>
         </div>
-        
+
         {!extractedData ? (
           <div className="space-y-4">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
@@ -251,12 +305,12 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                 Reset to Original
               </button>
             </div>
-            
+
             {/* Supplier Info */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <h5 className="font-medium mb-3">
                 Supplier Information
-                {editedData.supplier_exists && (
+                {editedData?.supplier_exists && (
                   <span className="ml-2 text-sm text-green-600">
                     ✓ Existing Supplier Found
                   </span>
@@ -267,48 +321,48 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                   <label className="text-sm text-gray-600">Supplier Name</label>
                   <input
                     type="text"
-                    value={editedData.supplier_name || ''}
-                    onChange={(e) => setEditedData({...editedData, supplier_name: e.target.value})}
+                    value={editedData?.supplier_name || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, supplier_name: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
-                    disabled={editedData.supplier_exists}
+                    disabled={editedData?.supplier_exists}
                   />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">GSTIN</label>
                   <input
                     type="text"
-                    value={editedData.supplier_gst_number || ''}
-                    onChange={(e) => setEditedData({...editedData, supplier_gst_number: e.target.value})}
+                    value={editedData?.supplier_gst_number || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, supplier_gst_number: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
-                    disabled={editedData.supplier_exists}
+                    disabled={editedData?.supplier_exists}
                   />
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm text-gray-600">Address</label>
                   <input
                     type="text"
-                    value={editedData.supplier_address || ''}
-                    onChange={(e) => setEditedData({...editedData, supplier_address: e.target.value})}
+                    value={editedData?.supplier_address || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, supplier_address: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
-                    disabled={editedData.supplier_exists}
+                    disabled={editedData?.supplier_exists}
                   />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Drug License</label>
                   <input
                     type="text"
-                    value={editedData.drug_license || ''}
-                    onChange={(e) => setEditedData({...editedData, drug_license: e.target.value})}
+                    value={editedData?.drug_license || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, drug_license: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
-                    disabled={editedData.supplier_exists}
+                    disabled={editedData?.supplier_exists}
                   />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Phone</label>
                   <input
                     type="text"
-                    value={editedData.phone || ''}
-                    onChange={(e) => setEditedData({...editedData, phone: e.target.value})}
+                    value={editedData?.phone || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, phone: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
                     placeholder="Optional"
                   />
@@ -317,8 +371,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                   <label className="text-sm text-gray-600">Invoice Number</label>
                   <input
                     type="text"
-                    value={editedData.invoice_number || ''}
-                    onChange={(e) => setEditedData({...editedData, invoice_number: e.target.value})}
+                    value={editedData?.invoice_number || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, invoice_number: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
                   />
                 </div>
@@ -326,8 +380,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                   <label className="text-sm text-gray-600">Invoice Date</label>
                   <input
                     type="date"
-                    value={editedData.invoice_date || ''}
-                    onChange={(e) => setEditedData({...editedData, invoice_date: e.target.value})}
+                    value={editedData?.invoice_date || ''}
+                    onChange={(e) => editedData && setEditedData({ ...editedData, invoice_date: e.target.value })}
                     className="w-full mt-1 p-2 border rounded"
                   />
                 </div>
@@ -337,7 +391,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             {/* Items */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <div className="flex justify-between items-center mb-3">
-                <h5 className="font-medium">Items ({editedData.items?.length || 0})</h5>
+                <h5 className="font-medium">Items ({editedData?.items?.length || 0})</h5>
                 <button
                   onClick={() => {
                     const newItem = {
@@ -353,7 +407,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                       discount_percent: 0,
                       tax_percent: 12
                     };
-                    setEditedData({
+                    editedData && setEditedData({
                       ...editedData,
                       items: [...(editedData.items || []), newItem]
                     });
@@ -364,7 +418,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                 </button>
               </div>
               <div className="space-y-2">
-                {editedData.items && editedData.items.map((item, index) => {
+                {editedData?.items && editedData.items.map((item, index) => {
                   // Ensure item exists and has all required properties
                   const safeItem = {
                     product_name: '',
@@ -379,169 +433,168 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     pack_type: 'STRIP',
                     total_units: 0,
                     mrp: 0,
-                    unit_price: 0,
-                    rate: 0,
+                    cost_per_unit: 0,
                     tax_percent: 12,
                     amount: 0,
                     ...item
                   };
                   return (
-                  <div key={index} className="bg-white p-2 rounded border border-gray-200">
-                    {/* Compact Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">#{index + 1}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-green-600 font-medium">₹{safeItem.amount || 0}</span>
-                        <button
-                          onClick={() => handleItemDelete(index)}
-                          className="text-red-600 hover:text-white hover:bg-red-600 p-1.5 border border-red-600 rounded transition-all"
-                          title="Delete item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                    <div key={index} className="bg-white p-2 rounded border border-gray-200">
+                      {/* Compact Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-700">#{index + 1}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-green-600 font-medium">₹{safeItem.amount || 0}</span>
+                          <button
+                            onClick={() => handleItemDelete(index)}
+                            className="text-red-600 hover:text-white hover:bg-red-600 p-1.5 border border-red-600 rounded transition-all"
+                            title="Delete item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Product Name - Compact */}
-                    <div className="mb-2">
-                      <input
-                        type="text"
-                        value={safeItem.product_name}
-                        onChange={(e) => handleItemEdit(index, 'product_name', e.target.value)}
-                        className="w-full p-1.5 border rounded text-sm"
-                        placeholder="Product name"
-                      />
-                    </div>
-                    
-                    {/* Compact multi-column layout */}
-                    <div className="grid grid-cols-7 gap-2 text-xs">
-                      {/* Row 1 */}
-                      <div>
-                        <label className="text-gray-500 text-xs">HSN</label>
+
+                      {/* Product Name - Compact */}
+                      <div className="mb-2">
                         <input
                           type="text"
-                          value={safeItem.hsn_code || ''}
-                          onChange={(e) => handleItemEdit(index, 'hsn_code', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
+                          value={safeItem.product_name}
+                          onChange={(e) => handleItemEdit(index, 'product_name', e.target.value)}
+                          className="w-full p-1.5 border rounded text-sm"
+                          placeholder="Product name"
                         />
                       </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Batch</label>
-                        <input
-                          type="text"
-                          value={safeItem.batch_number || ''}
-                          onChange={(e) => handleItemEdit(index, 'batch_number', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          placeholder="Auto"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Expiry</label>
-                        <input
-                          type="date"
-                          value={safeItem.expiry_date || ''}
-                          onChange={(e) => handleItemEdit(index, 'expiry_date', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Qty</label>
-                        <input
-                          type="number"
-                          value={safeItem.quantity || ''}
-                          onChange={(e) => handleItemEdit(index, 'quantity', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Free</label>
-                        <input
-                          type="number"
-                          value={safeItem.free_quantity || ''}
-                          onChange={(e) => handleItemEdit(index, 'free_quantity', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Pack</label>
-                        <select
-                          value={safeItem.pack_type || 'STRIP'}
-                          onChange={(e) => handleItemEdit(index, 'pack_type', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                        >
-                          <option value="STRIP">Strip</option>
-                          <option value="BOX">Box</option>
-                          <option value="BOTTLE">Bottle</option>
-                          <option value="VIAL">Vial</option>
-                          <option value="TUBE">Tube</option>
-                        </select>
-                      </div>
-                      
-                      {/* Row 2 */}
-                      <div>
-                        <label className="text-gray-500 text-xs">Pack Size</label>
-                        <input
-                          type="number"
-                          value={safeItem.pack_size || ''}
-                          onChange={(e) => handleItemEdit(index, 'pack_size', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          placeholder="1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Total Units</label>
-                        <input
-                          type="number"
-                          value={safeItem.total_units || ''}
-                          onChange={(e) => handleItemEdit(index, 'total_units', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          readOnly
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Cost</label>
-                        <input
-                          type="number"
-                          value={safeItem.unit_price || safeItem.unit_price || safeItem.unit_price || 0}
-                          onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          step="0.01"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Selling</label>
-                        <input
-                          type="number"
-                          value={safeItem.selling_price || ''}
-                          onChange={(e) => handleItemEdit(index, 'selling_price', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          step="0.01"
-                          placeholder="SP"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">MRP</label>
-                        <input
-                          type="number"
-                          value={safeItem.mrp || ''}
-                          onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          step="0.01"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Tax %</label>
-                        <input
-                          type="number"
-                          value={safeItem.tax_percent || 12}
-                          onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
-                          className="w-full p-1 border rounded text-xs"
-                          step="0.01"
-                        />
+
+                      {/* Compact multi-column layout */}
+                      <div className="grid grid-cols-7 gap-2 text-xs">
+                        {/* Row 1 */}
+                        <div>
+                          <label className="text-gray-500 text-xs">HSN</label>
+                          <input
+                            type="text"
+                            value={safeItem.hsn_code || ''}
+                            onChange={(e) => handleItemEdit(index, 'hsn_code', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Batch</label>
+                          <input
+                            type="text"
+                            value={safeItem.batch_number || ''}
+                            onChange={(e) => handleItemEdit(index, 'batch_number', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            placeholder="Auto"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Expiry</label>
+                          <input
+                            type="date"
+                            value={safeItem.expiry_date || ''}
+                            onChange={(e) => handleItemEdit(index, 'expiry_date', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Qty</label>
+                          <input
+                            type="number"
+                            value={safeItem.quantity || ''}
+                            onChange={(e) => handleItemEdit(index, 'quantity', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Free</label>
+                          <input
+                            type="number"
+                            value={safeItem.free_quantity || ''}
+                            onChange={(e) => handleItemEdit(index, 'free_quantity', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Pack</label>
+                          <select
+                            value={safeItem.pack_type || 'STRIP'}
+                            onChange={(e) => handleItemEdit(index, 'pack_type', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                          >
+                            <option value="STRIP">Strip</option>
+                            <option value="BOX">Box</option>
+                            <option value="BOTTLE">Bottle</option>
+                            <option value="VIAL">Vial</option>
+                            <option value="TUBE">Tube</option>
+                          </select>
+                        </div>
+
+                        {/* Row 2 */}
+                        <div>
+                          <label className="text-gray-500 text-xs">Pack Size</label>
+                          <input
+                            type="number"
+                            value={safeItem.pack_size || ''}
+                            onChange={(e) => handleItemEdit(index, 'pack_size', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            placeholder="1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Total Units</label>
+                          <input
+                            type="number"
+                            value={safeItem.total_units || ''}
+                            onChange={(e) => handleItemEdit(index, 'total_units', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Cost</label>
+                          <input
+                            type="number"
+                            value={safeItem.unit_price || safeItem.cost_per_unit || safeItem.unit_price || 0}
+                            onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            step="0.01"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Selling</label>
+                          <input
+                            type="number"
+                            value={safeItem.selling_price || ''}
+                            onChange={(e) => handleItemEdit(index, 'selling_price', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            step="0.01"
+                            placeholder="SP"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">MRP</label>
+                          <input
+                            type="number"
+                            value={safeItem.mrp || ''}
+                            onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            step="0.01"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-500 text-xs">Tax %</label>
+                          <input
+                            type="number"
+                            value={safeItem.tax_percent || 12}
+                            onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
+                            className="w-full p-1 border rounded text-xs"
+                            step="0.01"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
                   );
                 })}
               </div>

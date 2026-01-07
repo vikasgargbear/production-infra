@@ -20,7 +20,6 @@ interface ExtractedItem {
   discount_percent?: number | string;
   expiry_date?: string;
   batch_number?: string;
-  batch_number?: string;
   hsn_code?: string;
   free_quantity?: number | string;
   product_id?: string | number | null;
@@ -34,7 +33,6 @@ interface ExtractedData {
   invoice_number?: string;
   invoice_date?: string;
   items?: ExtractedItem[];
-  total_amount?: number | string;
   total_amount?: number | string;
   supplier_gst_number?: string;
   supplier_address?: string;
@@ -51,7 +49,6 @@ interface VerifiedProduct extends ExtractedItem {
 interface VerifiedSupplier {
   supplier_id?: string;
   supplier_name?: string;
-  gst_number?: string;
   gst_number?: string;
   primary_phone?: string;
   phone?: string;

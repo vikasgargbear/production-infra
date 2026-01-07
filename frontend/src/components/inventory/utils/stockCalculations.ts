@@ -13,14 +13,14 @@ import {
 } from '../types/inventorySharedTypes';
 
 /**
- * Calculate stock value (quantity × rate)
+ * Calculate stock value (quantity × unit_price)
  * 
  * @param quantity - Stock quantity
- * @param rate - Cost/selling rate per unit
+ * @param unit_price - Cost/selling unit_price per unit
  * @returns Total value
  */
-export const calculateStockValue = (quantity: number, rate: number): number => {
-    return parseFloat(String(quantity || 0)) * parseFloat(String(rate || 0));
+export const calculateStockValue = (quantity: number, unit_price: number): number => {
+    return parseFloat(String(quantity || 0)) * parseFloat(String(unit_price || 0));
 };
 
 /**

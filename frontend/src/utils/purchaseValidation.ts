@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PURCHASE_CONFIG } from '../config/purchase.config';
 
 /**
@@ -57,16 +57,16 @@ export const validateInvoiceNumber = (value: string | null | undefined): Validat
 
     const trimmedValue = value.trim();
 
-    if (trimmedValue.length < config.minLength) {
+    if (config.minLength !== undefined && trimmedValue.length < config.minLength) {
         result.addError('invoiceNumber', `Invoice number must be at least ${config.minLength} characters`);
     }
 
-    if (trimmedValue.length > config.maxLength) {
+    if (config.maxLength !== undefined && trimmedValue.length > config.maxLength) {
         result.addError('invoiceNumber', `Invoice number must not exceed ${config.maxLength} characters`);
     }
 
-    if (!config.pattern.test(trimmedValue)) {
-        result.addError('invoiceNumber', config.message);
+    if (config.pattern && !config.pattern.test(trimmedValue)) {
+        result.addError('invoiceNumber', config.message || 'Invalid format');
     }
 
     return result;
@@ -107,16 +107,24 @@ export const validateItem = (item: PurchaseItem): ValidationResult => {
     const quantityConfig = PURCHASE_CONFIG.VALIDATION.QUANTITY;
     if (!item.quantity || item.quantity <= 0) {
         result.addError('quantity', 'Quantity is required and must be greater than 0');
-    } else if (item.quantity < quantityConfig.min || item.quantity > quantityConfig.max) {
-        result.addError('quantity', quantityConfig.message);
+    } else if (
+        quantityConfig?.min !== undefined &&
+        quantityConfig?.max !== undefined &&
+        (item.quantity < quantityConfig.min || item.quantity > quantityConfig.max)
+    ) {
+        result.addError('quantity', quantityConfig.message || 'Invalid quantity');
     }
 
     // Price validation
     const priceConfig = PURCHASE_CONFIG.VALIDATION.PRICE;
     if (!item.unit_price || item.unit_price <= 0) {
         result.addError('unit_price', 'Purchase price is required and must be greater than 0');
-    } else if (item.unit_price < priceConfig.min || item.unit_price > priceConfig.max) {
-        result.addError('unit_price', priceConfig.message);
+    } else if (
+        priceConfig?.min !== undefined &&
+        priceConfig?.max !== undefined &&
+        (item.unit_price < priceConfig.min || item.unit_price > priceConfig.max)
+    ) {
+        result.addError('unit_price', priceConfig.message || 'Invalid price');
     }
 
     // Batch number validation (if provided)
@@ -124,12 +132,16 @@ export const validateItem = (item: PurchaseItem): ValidationResult => {
         const batchConfig = PURCHASE_CONFIG.VALIDATION.BATCH_NUMBER;
         const trimmedBatch = item.batch_number.trim();
 
-        if (trimmedBatch.length < batchConfig.minLength || trimmedBatch.length > batchConfig.maxLength) {
+        if (
+            batchConfig?.minLength !== undefined &&
+            batchConfig?.maxLength !== undefined &&
+            (trimmedBatch.length < batchConfig.minLength || trimmedBatch.length > batchConfig.maxLength)
+        ) {
             result.addError('batch_number', `Batch number must be between ${batchConfig.minLength} and ${batchConfig.maxLength} characters`);
         }
 
-        if (!batchConfig.pattern.test(trimmedBatch)) {
-            result.addError('batch_number', batchConfig.message);
+        if (batchConfig?.pattern && !batchConfig.pattern.test(trimmedBatch)) {
+            result.addError('batch_number', batchConfig.message || 'Invalid batch format');
         }
     }
 

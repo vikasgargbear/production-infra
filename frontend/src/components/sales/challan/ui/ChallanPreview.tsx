@@ -9,7 +9,6 @@ interface ChallanItem {
     base_uom?: string;
     mrp?: number;
     unit_price?: number;
-    rate?: number;
     sale_price?: number;
     gst_percent?: number;
     tax_percent?: number;
@@ -76,14 +75,14 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
     // Calculate totals
     const calculateTaxableAmount = () => {
         return challan.items.reduce((sum, item) => {
-            const price = item.unit_price || item.rate || item.sale_price || 0;
+            const price = item.unit_price || item.unit_price || item.sale_price || 0;
             return sum + ((parseFloat(String(item.quantity)) || 0) * price);
         }, 0);
     };
 
     const calculateTotalGst = () => {
         return challan.items.reduce((sum, item) => {
-            const price = item.unit_price || item.rate || item.sale_price || 0;
+            const price = item.unit_price || item.unit_price || item.sale_price || 0;
             const taxableAmount = (parseFloat(String(item.quantity)) || 0) * price;
             const gstPercent = item.gst_percent || item.tax_percent || 0;
             return sum + ((taxableAmount * gstPercent) / 100);
@@ -284,7 +283,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                         </thead>
                         <tbody>
                             {challan.items.map((item, index) => {
-                                const price = item.unit_price || item.rate || item.sale_price || 0;
+                                const price = item.unit_price || item.unit_price || item.sale_price || 0;
                                 const taxableAmount = (parseFloat(String(item.quantity)) || 0) * price;
                                 const gstPercent = item.gst_percent || item.tax_percent || 0;
                                 const gstAmount = (taxableAmount * gstPercent) / 100;

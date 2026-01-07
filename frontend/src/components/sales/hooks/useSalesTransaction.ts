@@ -125,7 +125,7 @@ export function useSalesTransaction<
                 return {
                     address: preferredAddr.address_line1 || '',
                     city: preferredAddr.city || '',
-                    state: preferredAddr.state_name || preferredAddr.state || '',
+                    state: preferredAddr.state || preferredAddr.state || '',
                     pincode: preferredAddr.pincode || ''
                 };
             }
@@ -141,7 +141,7 @@ export function useSalesTransaction<
         const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0);
         const totalAmount = items.reduce((sum, item) => {
             const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price || item.rate || item.sale_price)) || 0;
+            const unitPrice = parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0;
             return sum + (quantity * unitPrice);
         }, 0);
 
@@ -163,8 +163,8 @@ export function useSalesTransaction<
 
         let address = customer.address || customer.address_line1 || '';
         let city = customer.city || '';
-        let state = customer.state || customer.state_name || '';
-        let pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
+        let state = customer.state || customer.state || '';
+        let pincode = customer.pincode || customer.pincode || customer.pincode || '';
 
         // Fetch address if not available locally
         if (!address && !city && customer.customer_id) {
@@ -238,7 +238,7 @@ export function useSalesTransaction<
                 const updatedItem = { ...item, [field]: value };
 
                 // Recalculate line total if quantity or price changes
-                if (field === 'quantity' || field === 'unit_price' || field === 'rate') {
+                if (field === 'quantity' || field === 'unit_price' || field === 'unit_price') {
                     const quantity = parseFloat(field === 'quantity' ? String(value) : String(item.quantity)) || 0;
                     const unitPrice = parseFloat(field === 'unit_price' ? String(value) : String(item.unit_price)) || 0;
                     updatedItem.unit_price = unitPrice;

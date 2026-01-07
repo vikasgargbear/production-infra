@@ -9,13 +9,67 @@ import {
   ProceedToReviewComponent, StandardDatePicker, InvoiceSelector, ItemsTable
 } from '../global';
 import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
-import { returnsApi, customersApi, customersApi, settingsApi, metadataApi } from '../../services/api';
+import { returnsApi, customersApi, settingsApi, metadataApi } from '../../services/api';
 import { invoicesApi } from '../../services/api';
+import { Invoice, Customer } from '../../types/api.types';
 import CreditNotePreview from './ui/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 import { getApiBaseUrl } from '../../config/apiBase';
 
 const API_BASE_URL = getApiBaseUrl();
+
+interface ReturnFormItem {
+  id?: string | number;
+  product_id: number;
+  product_name: string;
+  batch_id?: number | string; // Changed from null to match ItemsTableItem
+  batch_number: string;
+  manufacturing_date?: string;
+  expiry_date?: string;
+  quantity: number;
+  paid_quantity: number;
+  free_quantity: number;
+  return_quantity: number;
+  max_returnable_qty: number;
+  unit_price: number;
+  discount_percent: number;
+  tax_percent: number;
+  selected: boolean;
+  hsn_code?: string;
+  unit?: string;
+  uom?: string;
+  manufacturer?: string;
+  is_manual?: boolean;
+  available_stock?: number;
+  return_reason?: string;
+  disposition?: string;
+  invoice_item_id?: number;
+  requires_approval?: boolean;
+  verification_status?: string;
+  [key: string]: any; // Allow for other fields during migration
+}
+
+interface ReturnFormData {
+  return_no: string;
+  return_date: string;
+  customer_id: string | number;
+  customer_details: Customer | null;
+  invoice_id: string | number;
+  invoice_no: string;
+  invoice_date: string;
+  original_invoice: Invoice | null;
+  items: ReturnFormItem[];
+  return_reason: string;
+  return_reason_notes: string;
+  return_method: string;
+  subtotal_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  credit_note_no: string;
+  status: string;
+  include_gst: boolean;
+  credit_adjustment_type: 'future' | 'existing_dues';
+}
 
 const SalesReturnFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -25,12 +79,12 @@ const SalesReturnFlow = ({ onClose }) => {
   const toast = useToast();
 
   // Refs for keyboard navigation
-  const customerSearchRef = useRef(null);
-  const invoiceSearchRef = useRef(null);
-  const firstInputRef = useRef(null);
+  const customerSearchRef = useRef<any>(null);
+  const invoiceSearchRef = useRef<any>(null);
+  const firstInputRef = useRef<any>(null);
 
   // Return data state
-  const [returnData, setReturnData] = useState({
+  const [returnData, setReturnData] = useState<ReturnFormData>({
     return_no: '',
     return_date: new Date().toISOString().split('T')[0],
     customer_id: '',
@@ -52,10 +106,10 @@ const SalesReturnFlow = ({ onClose }) => {
     credit_adjustment_type: 'future' // 'future' or 'existing_dues'
   });
 
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [customerDues, setCustomerDues] = useState(0);
-  const [returnReasons, setReturnReasons] = useState([]);
+  const [returnReasons, setReturnReasons] = useState<any[]>([]);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
@@ -213,14 +267,13 @@ const SalesReturnFlow = ({ onClose }) => {
                 paid_quantity: paidQty,
                 free_quantity: freeQty,
                 quantity: totalQty,
-                rate: item.unit_price || item.rate || 0,
+                unit_price: item.unit_price || item.unit_price || 0,
                 discount_percent: item.discount_percent || 0,
                 tax_percent: gstPercent,
                 max_returnable_qty: totalQty,
                 // Preserve batch data
                 batch_id: item.batch_id,
                 batch_number: item.batch_number,
-                batch_number: item.batch_number || item.batch_number,
                 manufacturing_date: item.manufacturing_date,
                 expiry_date: item.expiry_date,
                 // Preserve invoice item ID for linking
@@ -254,14 +307,13 @@ const SalesReturnFlow = ({ onClose }) => {
             paid_quantity: paidQty,
             free_quantity: freeQty,
             quantity: totalQty,
-            rate: item.unit_price || item.rate || 0,
+            unit_price: item.unit_price || item.unit_price || 0,
             discount_percent: item.discount_percent || 0,
             tax_percent: gstPercent,
             max_returnable_qty: totalQty,
             // Preserve batch data
             batch_id: item.batch_id,
             batch_number: item.batch_number,
-            batch_number: item.batch_number || item.batch_number,
             manufacturing_date: item.manufacturing_date,
             expiry_date: item.expiry_date,
             // Preserve invoice item ID for linking
@@ -301,7 +353,7 @@ const SalesReturnFlow = ({ onClose }) => {
       address: customer.address || customer.billing_address || customer.street_address || '',
       city: customer.city || customer.billing_city || '',
       state: customer.state || customer.billing_state || '',
-      pincode: customer.pincode || customer.postal_code || customer.zip || '',
+      pincode: customer.pincode || customer.pincode || customer.zip || '',
       phone: customer.phone || customer.mobile || customer.contact_phone || '',
       mobile: customer.mobile || customer.phone || '',
       email: customer.email || customer.contact_email || '',
@@ -312,7 +364,8 @@ const SalesReturnFlow = ({ onClose }) => {
       credit_days: customer.credit_days || 0
     };
 
-    setSelectedCustomer(fullCustomer);
+    // Cast necessary for UI component compatibility if mismatched
+    setSelectedCustomer(fullCustomer as any);
     setSelectedInvoice(null); // Reset invoice selection
     setShowInvoiceSection(true); // Show invoice section for new customer
     setShowManualEntry(false); // Reset manual entry
@@ -370,7 +423,7 @@ const SalesReturnFlow = ({ onClose }) => {
         `${API_BASE_URL}/api/inventory/batches/product/${productId}`,
         {
           headers: {
-            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
+            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id') || ''
           }
         }
       );
@@ -395,8 +448,8 @@ const SalesReturnFlow = ({ onClose }) => {
     }
 
     // Get the selling price from product data
-    const sellingPrice = parseFloat(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0);
-    const gstPercent = parseFloat(product.gst_percent || product.tax_rate || 0);
+    const sellingPrice = parseFloat(String(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0));
+    const gstPercent = parseFloat(String(product.gst_percent || product.tax_rate || 0));
 
     const newItem = {
       id: `manual-${manualItemCounter}`,
@@ -404,14 +457,14 @@ const SalesReturnFlow = ({ onClose }) => {
       product_name: product.product_name || product.name,
       // Batch data - properly handle from product search
       batch_id: product.batch_id || product.selectedBatch?.batch_id || null,
-      batch_number: product.batch_number || product.batch_number || product.selectedBatch?.batch_number || '',
-      batch_number: product.batch_number || product.batch_number || product.selectedBatch?.batch_number || '',
-      manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || null,
-      expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || null,
-      rate: sellingPrice, // Use actual selling price from backend
+      batch_number: product.batch_number || product.selectedBatch?.batch_number || '',
+      // Ensure we pass undefined, not null
+      manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || undefined,
+      expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || undefined,
+      unit_price: sellingPrice, // Use actual selling price from backend
       tax_percent: gstPercent, // Use actual GST from product
-      quantity: 1, // Default quantity for manual entry
-      paid_quantity: 1, // For manual items, assume all are paid
+      quantity: parseFloat(String(product.quantity || product.stock || 0)), // Ensure string conversion
+      paid_quantity: parseFloat(String(product.quantity || product.stock || 0)), // For manual items, assume all are paid
       free_quantity: 0,
       return_quantity: 1, // Default return 1 item
       max_returnable_qty: 999999, // No limit for manual items
@@ -422,7 +475,7 @@ const SalesReturnFlow = ({ onClose }) => {
       manufacturer: product.manufacturer || '',
       // Additional fields for manual entry
       is_manual: true,
-      available_stock: product.total_quantity_available || product.stock || 0,
+      available_stock: parseFloat(String(product.total_quantity_available || product.stock || 0)),
       discount_percent: 0, // Default no discount for manual items
       // Enterprise fields for manual returns
       requires_approval: true,
@@ -482,8 +535,8 @@ const SalesReturnFlow = ({ onClose }) => {
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         // Get quantities, ensuring no negative values
-        const returnQty = parseFloat(item.return_quantity) || 0;
-        const paidQty = Math.max(0, parseFloat(item.paid_quantity || 0));
+        const returnQty = parseFloat(String(item.return_quantity || 0));
+        const paidQty = Math.max(0, parseFloat(String(item.paid_quantity || 0)));
 
         // Only paid items being returned have value
         const paidReturnQty = Math.min(returnQty, paidQty);
@@ -493,17 +546,17 @@ const SalesReturnFlow = ({ onClose }) => {
           return; // Continue to next item
         }
 
-        const rate = parseFloat(item.rate) || 0;
-        const discountPercent = parseFloat(item.discount_percent) || 0;
+        const unit_price = parseFloat(String(item.unit_price || 0));
+        const discountPercent = parseFloat(String(item.discount_percent || 0));
 
-        const baseAmount = paidReturnQty * rate;
+        const baseAmount = paidReturnQty * unit_price;
         const discountAmount = (baseAmount * discountPercent) / 100;
         const afterDiscount = baseAmount - discountAmount;
 
         // Always calculate tax for return amount (both GST and non-GST customers paid it)
         // Only exclude if GST customer explicitly chooses to exclude
         const taxPercent = (!selectedCustomer?.gst_number || returnData.include_gst)
-          ? (parseFloat(item.tax_percent) || 0)
+          ? (parseFloat(String(item.tax_percent || 0)))
           : 0;
         const itemTax = (afterDiscount * taxPercent) / 100;
 
@@ -574,8 +627,8 @@ const SalesReturnFlow = ({ onClose }) => {
           return false;
         }
 
-        if (item.is_manual && item.rate <= 0) {
-          toast.error(`Please enter a valid rate for ${item.product_name}`);
+        if (item.is_manual && item.unit_price <= 0) {
+          toast.error(`Please enter a valid unit_price for ${item.product_name}`);
           return false;
         }
 
@@ -628,7 +681,7 @@ const SalesReturnFlow = ({ onClose }) => {
       setTimeout(() => {
         onClose();
       }, 2500);
-    } catch (error) {
+    } catch (error: any) {
       // Handle error message properly - could be string or array
       const errorMessage = Array.isArray(error.message)
         ? error.message[0]?.msg || error.message[0] || 'Failed to create return'
@@ -691,8 +744,12 @@ const SalesReturnFlow = ({ onClose }) => {
                   {/* Left side - Return Date */}
                   <div className="w-64">
                     <DatePicker
-                      value={returnData.return_date}
-                      onChange={(date) => setReturnData(prev => ({ ...prev, return_date: date }))}
+                      value={typeof returnData.return_date === 'string' ? new Date(returnData.return_date) : returnData.return_date}
+                      onChange={(date) => {
+                        // Ensure we store string YYYY-MM-DD format
+                        const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : date;
+                        setReturnData(prev => ({ ...prev, return_date: dateStr }));
+                      }}
                       label="Return Date"
                       size="lg"
                       className="w-full"
@@ -707,8 +764,8 @@ const SalesReturnFlow = ({ onClose }) => {
                           Return Reason <span className="text-red-500">*</span>
                         </label>
                         <Select
-                          value={returnData.return_reason}
-                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
+                          value={returnData.return_reason || ''}
+                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: String(value || '') }))}
                           options={returnReasons}
                           placeholder="Select return reason..."
                           size="lg"
@@ -743,7 +800,7 @@ const SalesReturnFlow = ({ onClose }) => {
                     CUSTOMER
                   </h3>
                   <CustomerSearch
-                    value={selectedCustomer || null}
+                    value={selectedCustomer as any}
                     onChange={handleCustomerSelect}
                     onCreateNew={() => setShowCustomerModal(true)}
                     displayMode="inline"
@@ -790,13 +847,13 @@ const SalesReturnFlow = ({ onClose }) => {
                       <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
                         <div>
                           <h4 className="font-semibold text-gray-900">
-                            Invoice #{selectedInvoice.invoice_number || selectedInvoice.invoice_no}
+                            Invoice #{selectedInvoice.invoice_number}
                           </h4>
                           <p className="text-sm text-gray-600">
                             Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Amount: ₹{selectedInvoice.final_amount || selectedInvoice.total_amount || selectedInvoice.total_amount}
+                            Amount: ₹{selectedInvoice.totals?.total_amount || 0}
                           </p>
                         </div>
                         <button
@@ -818,14 +875,10 @@ const SalesReturnFlow = ({ onClose }) => {
                     {/* Invoice Selector Component */}
                     {!selectedInvoice && (
                       <InvoiceSelector
-                        customerId={selectedCustomer?.customer_id || selectedCustomer?.id}
+                        customerId={String(selectedCustomer?.customer_id || '')}
                         onSelect={handleInvoiceSelect}
-                        mode="single"
-                        showReturnStatus={true}
-                        showPaymentStatus={true}
-                        showItems={false}
-                        title=""
-                        pageSize={5}
+                        onClose={handleSkipInvoiceSelection}
+                        title="Select Invoice"
                       />
                     )}
                   </div>
@@ -900,7 +953,7 @@ const SalesReturnFlow = ({ onClose }) => {
                               type="checkbox"
                               checked={returnData.include_gst}
                               onChange={(e) => setReturnData(prev => ({ ...prev, include_gst: e.target.checked }))}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                             />
                             <span className="text-sm font-medium text-gray-700">
                               Include GST in return amount
@@ -920,7 +973,7 @@ const SalesReturnFlow = ({ onClose }) => {
                                 checked={returnData.credit_adjustment_type === 'existing_dues'}
                                 onChange={(e) => setReturnData(prev => ({
                                   ...prev,
-                                  credit_adjustment_type: e.target.value
+                                  credit_adjustment_type: e.target.value as 'future' | 'existing_dues'
                                 }))}
                                 className="mr-1.5 text-blue-600"
                               />
@@ -934,7 +987,7 @@ const SalesReturnFlow = ({ onClose }) => {
                                 checked={returnData.credit_adjustment_type === 'future'}
                                 onChange={(e) => setReturnData(prev => ({
                                   ...prev,
-                                  credit_adjustment_type: e.target.value
+                                  credit_adjustment_type: e.target.value as 'future' | 'existing_dues'
                                 }))}
                                 className="mr-1.5 text-blue-600"
                               />
@@ -1011,12 +1064,8 @@ const SalesReturnFlow = ({ onClose }) => {
                   {returnData.items.length > 0 ? (
                     <ItemsTable
                       items={returnData.items}
-                      onUpdateItem={updateReturnItem}
-                      onRemoveItem={showManualEntry ? removeManualItem : undefined}
-                      includeGst={returnData.include_gst}
-                      showManualEntry={showManualEntry}
-                      availableBatches={availableBatches}
-                      returnReason={returnData.return_reason}
+                      onUpdateItem={(indexOrId, field, value) => updateReturnItem(indexOrId, field, value)}
+                      onRemoveItem={showManualEntry ? (index) => removeManualItem(returnData.items[index]?.id) : undefined}
                     />
                   ) : (
                     <div className="text-center py-8 text-gray-500">
@@ -1037,8 +1086,8 @@ const SalesReturnFlow = ({ onClose }) => {
           {/* Footer - Using Global Component */}
           <ProceedToReviewComponent
             currentStep={1}
-            canProceed={selectedCustomer && (selectedInvoice || showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0)}
-            onBack={null}
+            canProceed={Boolean(selectedCustomer && (selectedInvoice || showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0))}
+            onBack={undefined}
             onProceed={handleProceedToReview}
             onReset={() => {
               setSelectedCustomer(null);
@@ -1069,21 +1118,13 @@ const SalesReturnFlow = ({ onClose }) => {
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
-          title="Review Sales Return"
-          subtitle="Confirm and generate credit note"
-          onClose={onClose}
-          actions={[
-            {
-              label: 'Back',
-              icon: ArrowLeft,
-              onClick: () => setCurrentStep(1)
-            },
-            {
-              label: 'Print',
-              icon: Printer,
-              onClick: handlePrint,
-              shortcut: 'Ctrl+P'
-            }
+          title="Sales Return"
+          documentNumber={returnData.return_no}
+          onClose={() => onClose()}
+          additionalActions={[
+            { label: 'Cancel', onClick: onClose },
+            { label: 'Save Draft', icon: Save, onClick: handleSaveReturn },
+            { label: 'Print', icon: Printer, onClick: handlePrint }
           ]}
         />
 
@@ -1094,7 +1135,6 @@ const SalesReturnFlow = ({ onClose }) => {
               returnData={returnData}
               customer={selectedCustomer}
               invoice={selectedInvoice}
-              includeGst={returnData.include_gst}
               customerDues={customerDues}
               returnMethod={returnData.return_method}
             />
@@ -1103,13 +1143,9 @@ const SalesReturnFlow = ({ onClose }) => {
             <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <NotesSection
                 value={returnData.return_reason_notes}
-                onChange={(value) => setReturnData(prev => ({
-                  ...prev,
-                  return_reason_notes: value
-                }))}
-                placeholder="Add any additional notes about this return..."
-                title="Return Notes"
-                rows={4}
+                onChange={(value) => setReturnData(prev => ({ ...prev, return_reason_notes: value }))}
+                placeholder="Add notes..."
+                rows={3}
               />
             </div>
           </div>
@@ -1121,7 +1157,7 @@ const SalesReturnFlow = ({ onClose }) => {
           canProceed={true}
           onBack={() => setCurrentStep(1)}
           onProceed={handleSaveReturn}
-          onReset={null}
+          onReset={undefined}
           totalItems={returnData.items.filter(item => item.selected).length}
           totalAmount={returnData.total_amount}
           proceedText="Generate Credit Note"

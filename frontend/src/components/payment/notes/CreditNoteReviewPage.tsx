@@ -94,7 +94,7 @@ const CreditNoteReviewPage: React.FC<CreditNoteReviewPageProps> = ({
                   <tr key={item.id}>
                     <td className="px-4 py-3 text-sm text-gray-900">{item.product_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-center">{item.quantity}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">₹{item.rate.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">₹{item.unit_price.toFixed(2)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-right">₹{item.total_amount.toFixed(2)}</td>
                   </tr>
                 ))}

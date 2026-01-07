@@ -144,7 +144,6 @@ interface AddressObject {
     city?: string;
     state?: string;
     pincode?: string;
-    postal_code?: string;
     country?: string;
 }
 
@@ -161,7 +160,7 @@ export const formatAddress = (address: AddressObject | null | undefined): string
     if (address.address_line2) parts.push(address.address_line2);
     if (address.city) parts.push(address.city);
     if (address.state) parts.push(address.state);
-    if (address.pincode || address.postal_code) parts.push(address.pincode || address.postal_code || '');
+    if (address.pincode) parts.push(address.pincode);
     if (address.country) parts.push(address.country);
 
     return parts.join(', ');

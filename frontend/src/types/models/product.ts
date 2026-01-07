@@ -20,10 +20,6 @@ export interface Product {
   // Pricing
   mrp: number;
   sale_price: number;
-  cost_per_unit: number;
-  // Canonical Pricing
-  mrp_per_unit?: number;
-  sale_price_per_unit?: number;
   cost_per_unit?: number;
 
   gst_percent: number;

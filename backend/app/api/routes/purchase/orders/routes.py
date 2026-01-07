@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 from ....services.document_number_service import DocumentNumberService
-from ....services.gst_service import GSTService
+from ....services.compliance.gst_service import GSTService
 from ....services.purchase.order.order_service import PurchaseOrderService
+from ....services.purchase.order.order_repository import PurchaseOrderRepository
 from datetime import datetime
 from decimal import Decimal
 
@@ -111,203 +112,27 @@ async def create_direct_purchase_entry(
     This creates supplier invoice and adds stock to inventory via batches
     For users who don't need separate PO workflow
     """
-    import random
-    
     try:
-        # For Purchase Entry, we create a completed PO (since there's no separate supplier_invoice table)
-        # This represents goods already received with bill
-        po_number = DocumentNumberService.generate_number(db, "supplier_invoice", str(context.org_id))
-        
-        # Create purchase order marked as completed (represents bill entry)
-        po_result = db.execute(text("""
-            INSERT INTO procurement.purchase_orders (
-                org_id, branch_id, po_number, po_date, po_type,
-                supplier_id, supplier_name,
-                subtotal_amount, tax_amount, total_amount,
-                po_status, receipt_status,
-                created_at
-            ) VALUES (
-                :org_id, :branch_id, :po_number, :po_date, 'regular',
-                :supplier_id, :supplier_name,
-                :subtotal, :tax, :total,
-                'completed', 'received',
-                CURRENT_TIMESTAMP
-            ) RETURNING purchase_order_id
-        """), {
-            "org_id": context.org_id,
-            "branch_id": context.branch_id,  # SECURITY: No fallback - branch must be set
-            "po_number": po_number,
-            "po_date": purchase_data.get("purchase_date", datetime.now().date()),
-            "supplier_id": purchase_data.get("supplier_id"),
-            "supplier_name": purchase_data.get("supplier_name", "Direct Purchase"),
-            "subtotal": purchase_data.get("subtotal_amount", 0),
-            "tax": purchase_data.get("tax_amount", 0),
-            "total": purchase_data.get("total_amount", 0)
-        })
-        
-        po_row = po_result.fetchone()
-        po_id = po_row.purchase_order_id
-        
-        # Process items and create batches
-        items = purchase_data.get("items", [])
-        
-        # OPTIMIZATION: Batch fetch all existing products BEFORE the loop
-        product_names = [item.get("product_name") for item in items if item.get("product_name") and not item.get("product_id")]
-        product_lookup = {}
-        if product_names:
-            existing_products = db.execute(text("""
-                SELECT product_id, LOWER(TRIM(product_name)) as name_key
-                FROM inventory.products 
-                WHERE LOWER(TRIM(product_name)) = ANY(:names)
-                AND org_id = :org_id
-            """), {"names": [n.lower().strip() for n in product_names], "org_id": context.org_id})
-            for row in existing_products:
-                product_lookup[row.name_key] = row.product_id
-        
-        # OPTIMIZATION: Get default category ONCE before loop
-        default_category_id = None
-        category_result = db.execute(text("""
-            SELECT category_id FROM inventory.product_categories 
-            WHERE org_id = :org_id
-            ORDER BY category_id
-            LIMIT 1
-        """), {"org_id": context.org_id}).fetchone()
-        if category_result:
-            default_category_id = category_result.category_id
-        
-        for item in items:
-            # Get or create product_id if not provided
-            product_id = item.get("product_id")
-            product_name = item.get("product_name")
-            
-            if not product_id and product_name:
-                # OPTIMIZED: Use pre-fetched lookup instead of per-item query
-                # For pharma, we use exact name matching (different dosages are different products)
-                name_key = product_name.lower().strip()
-                if name_key in product_lookup:
-                    product_id = product_lookup[name_key]
-                    logger.info(f"Found existing product: {product_name} (ID: {product_id})")
-                else:
-                    # OPTIMIZED: Use pre-fetched category instead of per-item query
-                    category_id = default_category_id
-                    if not category_id:
-                        # Create a default category only if needed (first time)
-                        new_category = db.execute(text("""
-                            INSERT INTO inventory.product_categories (
-                                org_id, category_name, category_code, is_active
-                            ) VALUES (
-                                :org_id, 'General', 'GEN', true
-                            ) RETURNING category_id
-                        """), {"org_id": context.org_id}).fetchone()
-                        category_id = new_category.category_id if new_category else None
-                        default_category_id = category_id  # Cache for next items
-                    
-                    # Create new product with minimal required fields
-                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
-                    
-                    new_product = db.execute(text("""
-                        INSERT INTO inventory.products (
-                            org_id, product_name, product_code,
-                            category_id, hsn_code, is_active, created_at
-                        ) VALUES (
-                            :org_id, :product_name, :product_code,
-                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
-                        ) RETURNING product_id
-                    """), {
-                        "org_id": context.org_id,
-                        "product_name": product_name,
-                        "product_code": product_code,
-                        "category_id": category_id,
-                        "hsn_code": hsn_code
-                    }).fetchone()
-                    product_id = new_product.product_id if new_product else None
-                    # Add to lookup so we don't create again if same name appears
-                    product_lookup[name_key] = product_id
-                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
-            
-            # Create PO item (with required UOM and pack_type fields)
-            item_result = db.execute(text("""
-                INSERT INTO procurement.purchase_order_items (
-                    purchase_order_id, product_id, product_name,
-                    ordered_quantity, unit_price, 
-                    uom, pack_type,
-                    discount_percent, discount_amount,
-                    tax_percent, tax_amount, line_total
-                ) VALUES (
-                    :purchase_order_id, :product_id, :product_name,
-                    :quantity, :unit_price,
-                    :uom, :pack_type,
-                    :disc_percent, :disc_amount,
-                    :tax_percent, :tax_amount, :line_total
-                ) RETURNING po_item_id
-            """), {
-                "purchase_order_id": po_id,
-                "product_id": product_id,  # Use the resolved product_id
-                "product_name": product_name,
-                "quantity": item.get("quantity", 0),
-                "unit_price": item.get("unit_price", 0),
-                "uom": item.get("uom", "NOS"),  # Default to NOS (numbers/pieces)
-                "pack_type": item.get("pack_type", "STRIP"),  # Default to STRIP for pharma
-                "disc_percent": item.get("discount_percent", 0),
-                "disc_amount": item.get("discount_amount", 0),
-                "tax_percent": item.get("tax_percent", 0),  # Don't hardcode tax - let it be specified
-                "tax_amount": item.get("tax_amount", 0),
-                "line_total": item.get("total_amount", 0)  # This is the final total with tax
-            })
-            
-            # Create batch automatically
-            if item.get("batch_number") and item.get("expiry_date"):
-                batch_result = db.execute(text("""
-                    INSERT INTO inventory.batches (
-                        org_id, product_id,
-                        batch_number, expiry_date,
-                        initial_quantity, quantity_available,
-                        cost_per_unit, mrp_per_unit,
-                        source_type,
-                        pack_type, pack_size, pack_uom, base_uom, units_per_pack,
-                        batch_status, expiry_status,
-                        created_at
-                    ) VALUES (
-                        :org_id, :product_id,
-                        :batch_number, :expiry_date,
-                        :quantity, :quantity,
-                        :cost_price, :mrp,
-                        'purchase',
-                        :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
-                        'active', 'normal',
-                        CURRENT_TIMESTAMP
-                    ) RETURNING batch_id
-                """), {
-                    "org_id": context.org_id,
-                    "product_id": item.get("product_id"),
-                    "batch_number": item.get("batch_number"),
-                    "expiry_date": item.get("expiry_date"),
-                    "quantity": item.get("quantity", 0),
-                    "cost_price": item.get("unit_price", 0),
-                    "mrp": item.get("mrp", 0),
-                    "pack_type": item.get("pack_type", "STRIP"),
-                    "pack_size": item.get("pack_size", 1),
-                    "pack_uom": item.get("pack_type", "STRIP"),
-                    "base_uom": item.get("uom", "NOS"),
-                    "units_per_pack": item.get("pack_size", 1)
-                })
-                
-                batch = batch_result.fetchone()
-                logger.info(f"Batch {batch.batch_id} created for product {item.get('product_id')}")
+        # Use service layer for all database operations
+        result = PurchaseOrderService.create_direct_entry(
+            db=db,
+            org_id=str(context.org_id),
+            branch_id=context.branch_id,
+            purchase_data=purchase_data
+        )
         
         db.commit()
         
         return {
             "success": True,
-            "po_id": po_id,
-            "po_number": po_number,
-            "message": f"Purchase {po_number} created with {len(items)} items and batches"
+            "po_id": result["purchase_order_id"],
+            "po_number": result["po_number"],
+            "message": f"Purchase {result['po_number']} created with {result['items_created']} items and {result['batches_created']} batches"
         }
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Error in simple purchase: {str(e)}")
+        logger.error(f"Error in direct purchase entry: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/purchase-entry")
@@ -357,56 +182,36 @@ async def create_purchase_entry(
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         
-        # Create supplier invoice directly (not purchase order)
-        invoice_result = db.execute(
-            text("""
-                INSERT INTO procurement.supplier_invoices (
-                    org_id, branch_id, supplier_invoice_number, invoice_date,
-                    supplier_id, 
-                    subtotal_amount, discount_amount, taxable_amount,
-                    cgst_amount, sgst_amount, igst_amount, tax_amount,
-                    freight_charges, insurance_charges, other_charges,
-                    round_off_amount, invoice_total,
-                    payment_terms, due_date, payment_status,
-                    invoice_status, created_by
-                ) VALUES (
-                    :org_id, :branch_id, :invoice_number, :invoice_date,
-                    :supplier_id,
-                    :subtotal, :discount, :taxable,
-                    :cgst, :sgst, :igst, :tax,
-                    :freight, :insurance, :other,
-                    :round_off, :total,
-                    :payment_terms, :due_date, :payment_status,
-                    :invoice_status, :created_by
-                ) RETURNING supplier_invoice_id
-            """),
-            {
-                "org_id": context.org_id,
-                "branch_id": branch_id,
-                "invoice_number": invoice_number,
-                "invoice_date": invoice_date,
-                "supplier_id": purchase_data.get("supplier_id"),
-                "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
-                "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
-                "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
-                "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-                "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-                "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
-                "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
-                "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
-                "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
-                "other": Decimal(str(purchase_data.get("other_charges", 0))),
-                "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
-                "total": Decimal(str(purchase_data.get("final_amount", 0))),
-                "payment_terms": purchase_data.get("payment_terms", "immediate"),
-                "due_date": purchase_data.get("due_date", invoice_date),
-                "payment_status": purchase_data.get("payment_status", "pending"),
-                "invoice_status": "posted",  # Purchase entry is already posted
-                "created_by": created_by
-            }
-        )
+        # Create supplier invoice using service
+        invoice_data = {
+            "invoice_number": invoice_number,
+            "invoice_date": invoice_date,
+            "supplier_id": purchase_data.get("supplier_id"),
+            "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
+            "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
+            "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
+            "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+            "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+            "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
+            "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
+            "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
+            "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
+            "other": Decimal(str(purchase_data.get("other_charges", 0))),
+            "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
+            "total": Decimal(str(purchase_data.get("final_amount", 0))),
+            "payment_terms": purchase_data.get("payment_terms", "immediate"),
+            "due_date": purchase_data.get("due_date", invoice_date),
+            "payment_status": purchase_data.get("payment_status", "pending"),
+            "invoice_status": "posted"
+        }
         
-        supplier_invoice_id = invoice_result.scalar()
+        supplier_invoice_id = PurchaseOrderService.create_supplier_invoice(
+            db=db,
+            org_id=str(context.org_id),
+            branch_id=branch_id,
+            invoice_data=invoice_data,
+            created_by=created_by
+        )
         
         # Create supplier invoice items
         items = purchase_data.get("items", [])
@@ -415,29 +220,16 @@ async def create_purchase_entry(
         # Log the received data for debugging
         logger.info(f"Processing {len(items)} items for purchase entry")
         
-        # OPTIMIZATION: Batch fetch all existing products BEFORE the loop
+        # OPTIMIZATION: Batch fetch all existing products BEFORE the loop using repository
         product_names = [item.get("product_name") for item in items if item.get("product_name") and not item.get("product_id")]
         product_lookup = {}
         if product_names:
-            existing_products = db.execute(text("""
-                SELECT product_id, LOWER(TRIM(product_name)) as name_key
-                FROM inventory.products 
-                WHERE LOWER(TRIM(product_name)) = ANY(:names)
-                AND org_id = :org_id
-            """), {"names": [n.lower().strip() for n in product_names], "org_id": context.org_id})
-            for row in existing_products:
-                product_lookup[row.name_key] = row.product_id
+            product_lookup = PurchaseOrderRepository.lookup_products_by_name(
+                db, str(context.org_id), product_names
+            )
         
-        # OPTIMIZATION: Get default category ONCE before loop
-        default_category_id = None
-        category_result = db.execute(text("""
-            SELECT category_id FROM inventory.product_categories 
-            WHERE org_id = :org_id
-            ORDER BY category_id
-            LIMIT 1
-        """), {"org_id": context.org_id}).fetchone()
-        if category_result:
-            default_category_id = category_result.category_id
+        # OPTIMIZATION: Get default category ONCE before loop using repository
+        default_category_id = PurchaseOrderRepository.get_default_category(db, str(context.org_id))
         
         for idx, item in enumerate(items):
             logger.info(f"Item {idx + 1}: {item}")
@@ -455,37 +247,24 @@ async def create_purchase_entry(
                     # OPTIMIZED: Use pre-fetched category instead of per-item query
                     category_id = default_category_id
                     if not category_id:
-                        # Create a default category only if needed (first time)
-                        new_category = db.execute(text("""
-                            INSERT INTO inventory.product_categories (
-                                org_id, category_name, category_code, is_active
-                            ) VALUES (
-                                :org_id, 'General', 'GEN', true
-                            ) RETURNING category_id
-                        """), {"org_id": context.org_id}).fetchone()
-                        category_id = new_category.category_id if new_category else None
+                        # Create a default category only if needed using repository
+                        category_id = PurchaseOrderRepository.create_category(
+                            db, str(context.org_id), "General"
+                        )
                         default_category_id = category_id  # Cache for next items
                     
-                    # Create new product with minimal required fields
+                    # Create new product with minimal required fields using repository
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
                     
-                    new_product = db.execute(text("""
-                        INSERT INTO inventory.products (
-                            org_id, product_name, product_code,
-                            category_id, hsn_code, is_active, created_at
-                        ) VALUES (
-                            :org_id, :product_name, :product_code,
-                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
-                        ) RETURNING product_id
-                    """), {
-                        "org_id": context.org_id,
+                    product_data = {
                         "product_name": product_name,
                         "product_code": product_code,
-                        "category_id": category_id,
                         "hsn_code": hsn_code
-                    }).fetchone()
-                    product_id = new_product.product_id if new_product else None
+                    }
+                    product_id = PurchaseOrderRepository.create_product(
+                        db, str(context.org_id), product_data, category_id
+                    )
                     # Add to lookup so we don't create again if same name appears
                     product_lookup[name_key] = product_id
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
@@ -537,29 +316,8 @@ async def create_purchase_entry(
                 from datetime import timedelta
                 expiry_date = (datetime.now() + timedelta(days=730)).date()  # 2 years default
             
-            # Always create batch for proper inventory tracking
-            batch_result = db.execute(text("""
-                INSERT INTO inventory.batches (
-                    org_id, product_id,
-                    batch_number, expiry_date,
-                    initial_quantity, quantity_available,
-                    cost_per_unit, mrp_per_unit, sale_price_per_unit,
-                    source_type, 
-                    pack_type, pack_size, pack_uom, base_uom, units_per_pack,
-                    batch_status, expiry_status,
-                    created_at
-                ) VALUES (
-                    :org_id, :product_id,
-                    :batch_number, :expiry_date,
-                    :quantity, :quantity,
-                    :cost_price, :mrp, :selling_price,
-                    'purchase',
-                    :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
-                    'active', 'normal',
-                    CURRENT_TIMESTAMP
-                ) RETURNING batch_id
-            """), {
-                "org_id": context.org_id,
+            # Create batch using repository
+            batch_data = {
                 "product_id": product_id,
                 "batch_number": batch_number,
                 "expiry_date": expiry_date,
@@ -572,57 +330,40 @@ async def create_purchase_entry(
                 "pack_uom": item.get("pack_type", "STRIP"),
                 "base_uom": item.get("uom", "NOS"),
                 "units_per_pack": item.get("pack_size", 1)
-            })
-            
-            batch = batch_result.fetchone()
-            batch_id = batch.batch_id if batch else None
+            }
+            batch_id = PurchaseOrderRepository.create_purchase_batch(
+                db, str(context.org_id), batch_data
+            )
             logger.info(f"Batch {batch_id} created for product {product_id}")
             
             # Note: Pricing is stored at batch level, not product level
             # Each batch can have different MRP and cost prices
             
-            # Create supplier invoice item with batch reference
-            db.execute(
-                text("""
-                    INSERT INTO procurement.supplier_invoice_items (
-                        supplier_invoice_id, product_id, batch_id,
-                        batch_number, quantity, free_quantity,
-                        unit_price, discount_percent, discount_amount,
-                        taxable_amount, cgst_percent, sgst_percent, igst_percent,
-                        cgst_amount, sgst_amount, igst_amount, total_amount,
-                        hsn_code, unit, pack_type, pack_size
-                    ) VALUES (
-                        :invoice_id, :product_id, :batch_id,
-                        :batch_number, :quantity, :free_quantity,
-                        :unit_price, :disc_percent, :disc_amount,
-                        :taxable_amount, :cgst_percent, :sgst_percent, :igst_percent,
-                        :cgst_amount, :sgst_amount, :igst_amount, :total_amount,
-                        :hsn_code, :unit, :pack_type, :pack_size
-                    )
-                """),
-                {
-                    "invoice_id": supplier_invoice_id,
-                    "product_id": product_id,
-                    "batch_id": batch_id,
-                    "batch_number": batch_number,
-                    "quantity": quantity,
-                    "free_quantity": item.get("free_quantity", 0),
-                    "unit_price": cost_price,
-                    "disc_percent": discount_percent,
-                    "disc_amount": discount_amount,
-                    "taxable_amount": taxable_amount,
-                    "cgst_percent": cgst_percent,
-                    "sgst_percent": sgst_percent,
-                    "igst_percent": igst_percent,
-                    "cgst_amount": cgst_amount,
-                    "sgst_amount": sgst_amount,
-                    "igst_amount": igst_amount,
-                    "total_amount": total_price,
-                    "hsn_code": item.get("hsn_code", "30049099"),
-                    "unit": item.get("uom", "NOS"),
-                    "pack_type": item.get("pack_type", "STRIP"),
-                    "pack_size": item.get("pack_size", 1)
-                }
+            # Create supplier invoice item using repository
+            invoice_item = {
+                "product_id": product_id,
+                "batch_id": batch_id,
+                "batch_number": batch_number,
+                "quantity": quantity,
+                "free_quantity": item.get("free_quantity", 0),
+                "unit_price": cost_price,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+                "taxable_amount": taxable_amount,
+                "cgst_percent": cgst_percent,
+                "sgst_percent": sgst_percent,
+                "igst_percent": igst_percent,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount,
+                "igst_amount": igst_amount,
+                "total_amount": total_price,
+                "hsn_code": item.get("hsn_code", "30049099"),
+                "unit": item.get("uom", "NOS"),
+                "pack_type": item.get("pack_type", "STRIP"),
+                "pack_size": item.get("pack_size", 1)
+            }
+            PurchaseOrderRepository.create_supplier_invoice_item(
+                db, supplier_invoice_id, invoice_item
             )
             
             items_created += 1
@@ -683,99 +424,53 @@ async def create_purchase_with_items(
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
         logger.info(f"Using branch_id {branch_id} for user {context.user_id}")
         
-        # Create purchase header
-        result = db.execute(
-            text("""
-                INSERT INTO procurement.purchase_orders (
-                    org_id, po_number, po_date,
-                    supplier_id, supplier_name,
-                    subtotal_amount, discount_amount, tax_amount, 
-                    other_charges, total_amount, po_status,
-                    payment_terms, notes, created_by, branch_id
-                ) VALUES (
-                    :org_id, -- Default org
-                    :purchase_number, :po_date,
-                    :supplier_id, :supplier_name,
-                    :subtotal, :discount, :tax, :other_charges, :total,
-                    :status, :payment_mode, :notes, :created_by, :branch_id
-                ) RETURNING purchase_order_id
-            """),
-            {
-                "org_id": context.org_id,
-                "purchase_number": purchase_number,
-                "po_date": purchase_data.get("purchase_date", datetime.now().date()),
-                "supplier_id": purchase_data.get("supplier_id"),
-                "supplier_name": supplier_name,
-                "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
-                "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
-                "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
-                "other_charges": Decimal(str(purchase_data.get("other_charges", 0))),
-                "total": Decimal(str(purchase_data.get("final_amount", 0))),
-                "status": purchase_data.get("purchase_status", "draft"),
-                "payment_mode": purchase_data.get("payment_mode", "cash"),
-                "notes": purchase_data.get("notes"),
-                "created_by": created_by,
-                "branch_id": branch_id  # Use the dynamically fetched branch_id
-            }
+        # Create purchase header using repository
+        order_data = {
+            "purchase_number": purchase_number,
+            "po_date": purchase_data.get("purchase_date", datetime.now().date()),
+            "supplier_id": purchase_data.get("supplier_id"),
+            "supplier_name": supplier_name,
+            "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
+            "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
+            "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
+            "other_charges": Decimal(str(purchase_data.get("other_charges", 0))),
+            "total": Decimal(str(purchase_data.get("final_amount", 0))),
+            "status": purchase_data.get("purchase_status", "draft"),
+            "payment_mode": purchase_data.get("payment_mode", "cash"),
+            "notes": purchase_data.get("notes")
+        }
+        purchase_id = PurchaseOrderRepository.create_po_header_simple(
+            db, str(context.org_id), branch_id, order_data, created_by
         )
         
-        purchase_id = result.scalar()
-        
-        # Create supplier invoice
+        # Create supplier invoice using repository
         invoice_number = purchase_data.get("invoice_number", purchase_number)
         invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
         
-        # Create supplier invoice
-        invoice_result = db.execute(
-            text("""
-                INSERT INTO procurement.supplier_invoices (
-                    org_id, branch_id, supplier_invoice_number, invoice_date,
-                    supplier_id, purchase_order_ids,
-                    subtotal_amount, discount_amount, taxable_amount,
-                    cgst_amount, sgst_amount, igst_amount, tax_amount,
-                    freight_charges, insurance_charges, other_charges,
-                    round_off_amount, invoice_total,
-                    payment_terms, due_date, payment_status,
-                    invoice_status, created_by
-                ) VALUES (
-                    :org_id, :branch_id, :invoice_number, :invoice_date,
-                    :supplier_id, ARRAY[:purchase_id]::integer[],
-                    :subtotal, :discount, :taxable,
-                    :cgst, :sgst, :igst, :tax,
-                    :freight, :insurance, :other,
-                    :round_off, :total,
-                    :payment_terms, :due_date, :payment_status,
-                    :invoice_status, :created_by
-                ) RETURNING supplier_invoice_id
-            """),
-            {
-                "org_id": context.org_id,
-                "branch_id": branch_id,
-                "invoice_number": invoice_number,
-                "invoice_date": invoice_date,
-                "supplier_id": purchase_data.get("supplier_id"),
-                "purchase_id": purchase_id,
-                "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
-                "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
-                "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
-                "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-                "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-                "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
-                "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
-                "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
-                "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
-                "other": Decimal(str(purchase_data.get("other_charges", 0))),
-                "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
-                "total": Decimal(str(purchase_data.get("final_amount", 0))),
-                "payment_terms": purchase_data.get("payment_terms", "immediate"),
-                "due_date": purchase_data.get("due_date", invoice_date),
-                "payment_status": purchase_data.get("payment_status", "pending"),
-                "invoice_status": purchase_data.get("invoice_status", "draft"),
-                "created_by": created_by
-            }
+        invoice_data = {
+            "invoice_number": invoice_number,
+            "invoice_date": invoice_date,
+            "supplier_id": purchase_data.get("supplier_id"),
+            "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
+            "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
+            "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
+            "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+            "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+            "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
+            "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
+            "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
+            "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
+            "other": Decimal(str(purchase_data.get("other_charges", 0))),
+            "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
+            "total": Decimal(str(purchase_data.get("final_amount", 0))),
+            "payment_terms": purchase_data.get("payment_terms", "immediate"),
+            "due_date": purchase_data.get("due_date", invoice_date),
+            "payment_status": purchase_data.get("payment_status", "pending"),
+            "invoice_status": purchase_data.get("invoice_status", "draft")
+        }
+        supplier_invoice_id = PurchaseOrderRepository.create_supplier_invoice_with_po(
+            db, str(context.org_id), branch_id, invoice_data, purchase_id, created_by
         )
-        
-        supplier_invoice_id = invoice_result.scalar()
         
         # Create purchase items if provided
         items = purchase_data.get("items", [])
@@ -787,68 +482,35 @@ async def create_purchase_with_items(
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # In pharma, products must match very closely (95%+)
-                # Different dosages/strengths are different products
-                # First try exact match (case-insensitive, trimmed)
-                existing_product = db.execute(text("""
-                    SELECT product_id FROM inventory.products 
-                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
-                    AND org_id = :org_id
-                    LIMIT 1
-                """), {"product_name": product_name, "org_id": context.org_id}).fetchone()
+                # Use repository for product lookup by name
+                product_lookup = PurchaseOrderRepository.lookup_products_by_name(
+                    db, str(context.org_id), [product_name]
+                )
+                name_key = product_name.lower().strip()
                 
-                # For pharma, we DON'T do partial matching
-                # PARACETAMOL 500MG and PARACETAMOL 650MG are different products
-                # Only exact name matches are acceptable
-                
-                if existing_product:
-                    product_id = existing_product.product_id
+                if name_key in product_lookup:
+                    product_id = product_lookup[name_key]
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
-                    # Get or create a default category first
-                    category_result = db.execute(text("""
-                        SELECT category_id FROM inventory.product_categories 
-                        WHERE org_id = :org_id
-                        ORDER BY category_id
-                        LIMIT 1
-                    """), {"org_id": context.org_id}).fetchone()
+                    # Get or create category using repository
+                    category_id = PurchaseOrderRepository.get_default_category(db, str(context.org_id))
+                    if not category_id:
+                        category_id = PurchaseOrderRepository.create_category(
+                            db, str(context.org_id), "General"
+                        )
                     
-                    if category_result:
-                        category_id = category_result.category_id
-                    else:
-                        # Create a default category
-                        new_category = db.execute(text("""
-                            INSERT INTO inventory.product_categories (
-                                org_id, category_name, category_code, is_active
-                            ) VALUES (
-                                :org_id, 'General', 'GEN', true
-                            ) RETURNING category_id
-                        """), {"org_id": context.org_id}).fetchone()
-                        category_id = new_category.category_id if new_category else None
-                    
-                    # Create new product with minimal required fields
-                    # Generate a meaningful product code
+                    # Create new product using repository
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    hsn_code = item.get("hsn_code", "30049099")
                     
-                    # Extract HSN from item data or use default
-                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
-                    
-                    new_product = db.execute(text("""
-                        INSERT INTO inventory.products (
-                            org_id, product_name, product_code,
-                            category_id, hsn_code, is_active, created_at
-                        ) VALUES (
-                            :org_id, :product_name, :product_code,
-                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
-                        ) RETURNING product_id
-                    """), {
-                        "org_id": context.org_id,
+                    product_data = {
                         "product_name": product_name,
                         "product_code": product_code,
-                        "category_id": category_id,
                         "hsn_code": hsn_code
-                    }).fetchone()
-                    product_id = new_product.product_id if new_product else None
+                    }
+                    product_id = PurchaseOrderRepository.create_product(
+                        db, str(context.org_id), product_data, category_id
+                    )
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
             # Calculate item totals if not provided
@@ -864,44 +526,38 @@ async def create_purchase_with_items(
             tax_amount = taxable_amount * tax_percent / 100
             total_price = taxable_amount + tax_amount
             
-            # Generate batch number if not provided
+            # Generate batch number if not provided using repository
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
-                # Generate batch number: BATCH + YYMM + Random 4 digits
-                batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(db.execute(text('SELECT floor(random() * 10000)::int')).scalar()).zfill(4)}"
+                batch_number = PurchaseOrderRepository.generate_batch_number(db)
             
-            db.execute(
-                text("""
-                    INSERT INTO procurement.purchase_order_items (
-                        purchase_order_id, product_id, product_name,
-                        ordered_quantity, unit_price, free_quantity,
-                        uom, pack_type,
-                        discount_percent, discount_amount,
-                        tax_percent, tax_amount, line_total
-                    ) VALUES (
-                        :purchase_order_id, :product_id, :product_name,
-                        :ordered_qty, :unit_price, :free_qty,
-                        :uom, :pack_type,
-                        :disc_percent, :disc_amount,
-                        :tax_percent, :tax_amount, :line_total
-                    )
-                """),
-                {
-                    "purchase_order_id": purchase_id,
-                    "product_id": product_id,  # Use the resolved product_id
-                    "product_name": product_name,
-                    "ordered_qty": quantity,
-                    "unit_price": cost_price,
-                    "free_qty": item.get("free_quantity", 0),
-                    "uom": item.get("uom", "NOS"),  # Default to NOS
-                    "pack_type": item.get("pack_type", "STRIP"),  # Default to STRIP
-                    "disc_percent": discount_percent,
-                    "disc_amount": discount_amount,
-                    "tax_percent": tax_percent,
-                    "tax_amount": tax_amount,
-                    "line_total": total_price  # This is the final amount with tax
-                }
-            )
+            # Create PO item using repository
+            po_item_data = {
+                "purchase_order_id": purchase_id,
+                "product_id": product_id,
+                "product_name": product_name,
+                "ordered_quantity": quantity,
+                "unit_price": cost_price,
+                "free_quantity": item.get("free_quantity", 0),
+                "uom": item.get("uom", "NOS"),
+                "pack_type": item.get("pack_type", "STRIP"),
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+                "cgst_percent": 0,
+                "sgst_percent": 0,
+                "igst_percent": 0,
+                "cgst_amount": 0,
+                "sgst_amount": 0,
+                "igst_amount": 0,
+                "taxable_amount": taxable_amount,
+                "tax_amount": tax_amount,
+                "line_total": total_price,
+                "batch_number": batch_number,
+                "expiry_date": item.get("expiry_date"),
+                "manufacturing_date": item.get("manufacturing_date"),
+                "hsn_code": item.get("hsn_code", "30049099")
+            }
+            PurchaseOrderRepository.create_po_item(db, po_item_data)
             
             # Also create supplier invoice item
             # Use GSTService for consistent GST split
@@ -913,47 +569,29 @@ async def create_purchase_with_items(
             sgst_amount = gst["sgst_amount"]
             igst_amount = gst["igst_amount"]
             
-            db.execute(
-                text("""
-                    INSERT INTO procurement.supplier_invoice_items (
-                        supplier_invoice_id, product_id, 
-                        batch_number, quantity, free_quantity,
-                        unit_price, discount_percent, discount_amount,
-                        taxable_amount, cgst_percent, sgst_percent, igst_percent,
-                        cgst_amount, sgst_amount, igst_amount, total_amount,
-                        hsn_code, unit, pack_type, pack_size
-                    ) VALUES (
-                        :invoice_id, :product_id,
-                        :batch_number, :quantity, :free_quantity,
-                        :unit_price, :disc_percent, :disc_amount,
-                        :taxable_amount, :cgst_percent, :sgst_percent, :igst_percent,
-                        :cgst_amount, :sgst_amount, :igst_amount, :total_amount,
-                        :hsn_code, :unit, :pack_type, :pack_size
-                    )
-                """),
-                {
-                    "invoice_id": supplier_invoice_id,
-                    "product_id": product_id,
-                    "batch_number": batch_number,
-                    "quantity": quantity,
-                    "free_quantity": item.get("free_quantity", 0),
-                    "unit_price": cost_price,
-                    "disc_percent": discount_percent,
-                    "disc_amount": discount_amount,
-                    "taxable_amount": taxable_amount,
-                    "cgst_percent": cgst_percent,
-                    "sgst_percent": sgst_percent,
-                    "igst_percent": igst_percent,
-                    "cgst_amount": cgst_amount,
-                    "sgst_amount": sgst_amount,
-                    "igst_amount": igst_amount,
-                    "total_amount": total_price,
-                    "hsn_code": item.get("hsn_code", "30049099"),
-                    "unit": item.get("uom", "NOS"),
-                    "pack_type": item.get("pack_type", "STRIP"),
-                    "pack_size": item.get("pack_size", 1)
-                }
-            )
+            # Create supplier invoice item using repository
+            invoice_item = {
+                "product_id": product_id,
+                "batch_number": batch_number,
+                "quantity": quantity,
+                "free_quantity": item.get("free_quantity", 0),
+                "unit_price": cost_price,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+                "taxable_amount": taxable_amount,
+                "cgst_percent": cgst_percent,
+                "sgst_percent": sgst_percent,
+                "igst_percent": igst_percent,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount,
+                "igst_amount": igst_amount,
+                "total_amount": total_price,
+                "hsn_code": item.get("hsn_code", "30049099"),
+                "unit": item.get("uom", "NOS"),
+                "pack_type": item.get("pack_type", "STRIP"),
+                "pack_size": item.get("pack_size", 1)
+            }
+            PurchaseOrderRepository.create_supplier_invoice_item(db, supplier_invoice_id, invoice_item)
             
             items_created += 1
         
@@ -1001,18 +639,8 @@ def update_purchase_item(
     """Update a purchase item"""
     try:
         org_id = context.org_id
-        # Verify item belongs to purchase
-        check = db.execute(
-            text("""
-                SELECT po_item_id
-                FROM procurement.purchase_order_items
-                WHERE po_item_id = :item_id
-                AND purchase_order_id = :purchase_id
-            """),
-            {"item_id": item_id, "purchase_id": purchase_id, "org_id": org_id}
-        ).first()
-        
-        if not check:
+        # Verify item belongs to purchase using repository
+        if not PurchaseOrderRepository.check_po_item_exists(db, item_id, purchase_id):
             raise HTTPException(status_code=404, detail="Purchase item not found")
         
         # Update item
@@ -1031,13 +659,8 @@ def update_purchase_item(
                 params[field] = item_data[field]
         
         if updates:
-            db.execute(
-                text(f"""
-                    UPDATE procurement.purchase_order_items
-                    SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
-                    WHERE po_item_id = :item_id AND org_id = :org_id
-                """),
-                {**params, "org_id": org_id}
+            PurchaseOrderRepository.update_po_item_dynamic(
+                db, item_id, str(org_id), updates, params
             )
             db.commit()
         
@@ -1067,16 +690,15 @@ async def receive_purchase_items(
     Only updates purchase items and status, lets trigger create batches
     """
     try:
-        # Get purchase
-        purchase = db.execute(
-            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id AND org_id = :org_id"),
-            {"id": purchase_id, "org_id": context.org_id}
-        ).first()
+        # Get purchase using repository
+        purchase = PurchaseOrderRepository.get_purchase_for_receive(
+            db, purchase_id, str(context.org_id)
+        )
         
         if not purchase:
             raise HTTPException(status_code=404, detail="Purchase not found")
         
-        if purchase.po_status == "received":
+        if purchase["po_status"] == "received":
             raise HTTPException(status_code=400, detail="Purchase already received")
         
         # Update purchase items
@@ -1087,54 +709,33 @@ async def receive_purchase_items(
             if received_qty <= 0:
                 continue
             
-            # Update item
-            update_fields = ["received_quantity = :received_quantity"]
-            params = {
-                "item_id": item_id,
-                "purchase_id": purchase_id,
-                "received_quantity": received_qty
-            }
+            # Build extra fields for receive update
+            extra_fields = []
+            params = {"received_quantity": received_qty}
             
             if item.get("batch_number"):
-                update_fields.append("batch_number = :batch_number")
+                extra_fields.append("batch_number = :batch_number")
                 params["batch_number"] = item["batch_number"]
             
             if item.get("expiry_date"):
-                update_fields.append("expiry_date = :expiry_date")
+                extra_fields.append("expiry_date = :expiry_date")
                 params["expiry_date"] = item["expiry_date"]
             
-            db.execute(
-                text(f"""
-                    UPDATE procurement.purchase_order_items 
-                    SET {', '.join(update_fields)},
-                        item_status = 'received'
-                    WHERE po_item_id = :item_id 
-                    AND po_id = :purchase_id
-                """),
-                params
+            # Update item using repository
+            PurchaseOrderRepository.update_receive_item(
+                db, item_id, purchase_id, params, extra_fields
             )
         
-        # Update purchase status - trigger will create batches
-        grn_number = f"GRN-{purchase.po_number}"
-        
-        db.execute(
-            text("""
-                UPDATE procurement.purchase_orders 
-                SET po_status = 'received',
-                    grn_number = :grn_number,
-                    grn_date = CURRENT_DATE
-                WHERE purchase_order_id = :purchase_id
-            """),
-            {"grn_number": grn_number, "purchase_id": purchase_id}
-        )
+        # Update purchase status using repository
+        grn_number = f"GRN-{purchase['po_number']}"
+        PurchaseOrderRepository.mark_po_received(db, purchase_id, grn_number)
         
         db.commit()
         
-        # Count created batches
-        batch_count = db.execute(
-            text("SELECT COUNT(*) FROM inventory.batches WHERE purchase_id = :id AND org_id = :org_id"),
-            {"id": purchase_id, "org_id": context.org_id}
-        ).scalar()
+        # Count created batches using repository
+        batch_count = PurchaseOrderRepository.count_purchase_batches(
+            db, purchase_id, str(context.org_id)
+        )
         
         return {
             "message": "Purchase received successfully",

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   TrendingUp, FileText, BarChart3, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { ModuleHeader } from '../global';
-import { reportsApi, ledgerApi } from '../../services/api';
-import offlineStorage from '../../services/offlineStorage';
+import { ModuleHeader } from '../../global';
+import { reportsApi, ledgerApi } from '../../../services/api';
+import offlineStorage from '../../../services/offlineStorage';
 
 interface FinancialReportsSimpleProps {
   onClose?: () => void;
@@ -28,7 +28,7 @@ interface ReportData {
 const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose }) => {
   const [selectedPeriod, setSelectedPeriod] = useState('this_month');
   const [selectedReport, setSelectedReport] = useState('');
-  
+
   // API data states
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
-    
+
     try {
       // For now, nothing to refresh globally; keep UX consistent
     } catch (error) {
@@ -81,11 +81,11 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
     setSelectedReport(reportId);
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      
+
       let reportResponse;
-      
+
       // Call the actual API to generate the report based on type
       switch (reportId) {
         case 'trial_balance':
@@ -100,7 +100,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
         default:
           throw new Error(`Unknown report type: ${reportId}`);
       }
-      
+
       if (reportResponse?.data) {
         const newReportData: ReportData = {
           reportId,
@@ -109,27 +109,27 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
           data: reportResponse.data,
           summary: reportResponse.data.summary
         };
-        
+
         setReportData(newReportData);
-        
+
         // Store report data offline for future use
         const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
-        await offlineStorage.storeOffline(storageKey, newReportData, { 
-          critical: true, 
-          persistent: true 
+        await offlineStorage.storeOffline(storageKey, newReportData, {
+          critical: true,
+          persistent: true
         });
-        
+
         setError(null);
       } else {
         throw new Error('Invalid report data received');
       }
-      
+
     } catch (error) {
-      
+
       // Try to load from offline storage instead of using mock data
       const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
       const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
-      
+
       if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for report data
         setReportData(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
@@ -163,7 +163,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="reports"
-          onSaveDraft={() => {}}
+          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: "Refresh",
@@ -188,7 +188,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-            
+
             {/* Loading State */}
             {isLoading && (
               <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
@@ -215,7 +215,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                 </div>
               </div>
             )}
-            
+
             {/* Period Selection */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Report Period</h3>
@@ -229,11 +229,10 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                   <button
                     key={period.value}
                     onClick={() => setSelectedPeriod(period.value)}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                      selectedPeriod === period.value
+                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${selectedPeriod === period.value
                         ? 'bg-purple-50 border-purple-200 text-purple-700'
                         : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {period.label}
                   </button>
@@ -250,9 +249,8 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                   return (
                     <div
                       key={report.id}
-                      className={`p-6 rounded-lg border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors cursor-pointer ${
-                        selectedReport === report.id ? 'border-purple-400 bg-purple-50' : 'bg-white'
-                      }`}
+                      className={`p-6 rounded-lg border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors cursor-pointer ${selectedReport === report.id ? 'border-purple-400 bg-purple-50' : 'bg-white'
+                        }`}
                       onClick={() => generateReport(report.id)}
                     >
                       <div className="text-center">
@@ -262,11 +260,10 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                         <h4 className="text-lg font-semibold text-gray-900 mb-2">{report.name}</h4>
                         <p className="text-sm text-gray-600 mb-4">{report.description}</p>
                         <button
-                          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                            selectedReport === report.id
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedReport === report.id
                               ? 'bg-purple-600 text-white'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                            }`}
                         >
                           {selectedReport === report.id ? 'Selected' : 'Generate'}
                         </button>
@@ -288,7 +285,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                     Generated: {new Date(reportData.generatedAt).toLocaleString()}
                   </div>
                 </div>
-                
+
                 {reportData.summary && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     {reportData.summary.totalAssets !== undefined && (
@@ -331,7 +328,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                     )}
                   </div>
                 )}
-                
+
                 <div className="bg-gray-50 rounded-lg p-4">
                   <pre className="text-sm text-gray-700 whitespace-pre-wrap">
                     {JSON.stringify(reportData.data, null, 2)}

@@ -4,22 +4,49 @@ import { toast } from 'react-toastify';
 import { employeesApi, apiClient } from '../../../services/api';
 import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS } from '../../../constants/pharmaEmployeeOptions';
 
+
+interface EmployeeFormData {
+  employee_name: string;
+  employee_code: string;
+  gender: string;
+  date_of_birth: string;
+  mobile: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  designation: string;
+  department_id: number | null;
+  branch_id: number | null;
+  date_of_joining: string;
+  aadhar_number: string;
+  pan_number: string;
+  bank_name: string;
+  bank_account_number: string;
+  bank_ifsc_code: string;
+  emergency_contact_name: string;
+  emergency_contact_relationship: string;
+  emergency_contact_phone: string;
+  is_active: boolean;
+}
+
 const EmployeeManagementEnhanced = () => {
-  const [employees, setEmployees] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [branches, setBranches] = useState([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [designationFilter, setDesignationFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState(null);
-  const [formData, setFormData] = useState({
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [formData, setFormData] = useState<EmployeeFormData>({
     // Basic Info
     employee_name: '',
     employee_code: '', // Auto-generated
     gender: '',
     date_of_birth: '',
-    
+
     // Contact
     mobile: '',
     email: '',
@@ -27,34 +54,34 @@ const EmployeeManagementEnhanced = () => {
     city: '',
     state: '',
     pincode: '',
-    
+
     // Employment
     designation: '',
     department_id: null,
     branch_id: null,
     date_of_joining: new Date().toISOString().split('T')[0],
-    
+
     // Identification
     aadhar_number: '',
     pan_number: '',
-    
+
     // Bank Details
     bank_name: '',
     bank_account_number: '',
     bank_ifsc_code: '',
-    
+
     // Emergency Contact
     emergency_contact_name: '',
     emergency_contact_relationship: '',
     emergency_contact_phone: '',
-    
+
     is_active: true
   });
-  
+
   // File uploads
-  const [aadharFile, setAadharFile] = useState(null);
-  const [panFile, setPanFile] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
+  const [aadharFile, setAadharFile] = useState<File | null>(null);
+  const [panFile, setPanFile] = useState<File | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   useEffect(() => {
     loadEmployees();
@@ -66,8 +93,9 @@ const EmployeeManagementEnhanced = () => {
     setLoading(true);
     try {
       const response = await employeesApi.getAll({ limit: 100 });
-      if (response.success) {
-        setEmployees(response.data || []);
+      const data = (response as any).data || response;
+      if (data && (data.success || Array.isArray(data))) {
+        setEmployees(data.data || data || []);
       } else {
         toast.error('Failed to load employees');
       }
@@ -83,7 +111,7 @@ const EmployeeManagementEnhanced = () => {
     try {
       const response = await apiClient.get('/departments/', { timeout: 5000 });
       if (response.data) {
-        setDepartments(response.data.data || response.data || []);
+        setDepartments((response.data as any).data || response.data || []);
       }
     } catch (error) {
       console.error('Error loading departments:', error);
@@ -95,7 +123,7 @@ const EmployeeManagementEnhanced = () => {
     try {
       const response = await apiClient.get('/branches/', { timeout: 5000 });
       if (response.data) {
-        setBranches(response.data.data || response.data || []);
+        setBranches((response.data as any).data || response.data || []);
       }
     } catch (error) {
       console.error('Error loading branches:', error);
@@ -134,15 +162,15 @@ const EmployeeManagementEnhanced = () => {
     setPhotoFile(null);
   };
 
-  const handleOpenModal = (employee = null) => {
+  const handleOpenModal = (employee: any = null) => {
     if (employee) {
       setEditingEmployee(employee);
-      
+
       // Parse JSONB fields
       const emergencyContact = employee.emergency_contact || {};
       const bankDetails = employee.bank_account_details || {};
       const personalDetails = employee.personal_details || {};
-      
+
       setFormData({
         employee_name: employee.employee_name || '',
         employee_code: employee.employee_code || '',
@@ -188,14 +216,14 @@ const EmployeeManagementEnhanced = () => {
         toast.error('File size should be less than 5MB');
         return;
       }
-      
+
       const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
       if (!allowedTypes.includes(file.type)) {
         toast.error('Only JPEG, PNG, and PDF files are allowed');
         return;
       }
-      
-      switch(fileType) {
+
+      switch (fileType) {
         case 'aadhar':
           setAadharFile(file);
           break;
@@ -217,12 +245,12 @@ const EmployeeManagementEnhanced = () => {
       toast.error('Employee name is required');
       return;
     }
-    
+
     if (!formData.designation || !formData.designation.trim()) {
       toast.error('Designation is required');
       return;
     }
-    
+
     if (!formData.mobile || formData.mobile.length !== 10) {
       toast.error('Valid 10-digit mobile number is required');
       return;
@@ -250,28 +278,28 @@ const EmployeeManagementEnhanced = () => {
         employee_name: formData.employee_name,
         employee_code: formData.employee_code || undefined, // Let backend auto-generate
         designation: formData.designation,
-        department_id: formData.department_id,
-        branch_id: formData.branch_id,
+        department_id: formData.department_id || undefined,
+        branch_id: formData.branch_id || undefined,
         date_of_joining: formData.date_of_joining,
         is_active: formData.is_active,
-        
+
         // Mobile at top level (required field in database)
         mobile: formData.mobile,
-        
+
         // Store in emergency_contact JSONB
         emergency_contact: {
           name: formData.emergency_contact_name,
           relationship: formData.emergency_contact_relationship,
           phone: formData.emergency_contact_phone
         },
-        
+
         // Store in bank_account_details JSONB
         bank_account_details: {
           bank_name: formData.bank_name,
           account_number: formData.bank_account_number,
           ifsc_code: formData.bank_ifsc_code
         },
-        
+
         // Personal details for backend to store properly
         personal_details: {
           gender: formData.gender,
@@ -294,17 +322,19 @@ const EmployeeManagementEnhanced = () => {
         response = await employeesApi.create(employeeData);
       }
 
-      if (response.success) {
+      const data = (response as any).data || response;
+
+      if (data && (data.success || data.employee_id)) {
         // Upload documents if any
-        if ((aadharFile || panFile || photoFile) && response.data?.employee_id) {
-          await uploadDocuments(response.data.employee_id);
+        if ((aadharFile || panFile || photoFile) && (data.data?.employee_id || data.employee_id)) {
+          await uploadDocuments(data.data?.employee_id || data.employee_id);
         }
-        
+
         toast.success(editingEmployee ? 'Employee updated successfully' : 'Employee created successfully');
         handleCloseModal();
         loadEmployees();
       } else {
-        toast.error(response.error || 'Failed to save employee');
+        toast.error((data && data.error) || 'Failed to save employee');
       }
     } catch (error) {
       console.error('Error saving employee:', error);
@@ -316,7 +346,7 @@ const EmployeeManagementEnhanced = () => {
 
   const uploadDocuments = async (employeeId) => {
     const formData = new FormData();
-    
+
     if (aadharFile) {
       formData.append('aadhar', aadharFile);
     }
@@ -326,7 +356,7 @@ const EmployeeManagementEnhanced = () => {
     if (photoFile) {
       formData.append('photo', photoFile);
     }
-    
+
     try {
       await apiClient.post(`/employees/${employeeId}/documents`, formData, {
         headers: {
@@ -348,11 +378,12 @@ const EmployeeManagementEnhanced = () => {
     setLoading(true);
     try {
       const response = await employeesApi.delete(employee.employee_id);
-      if (response.success) {
+      const data = (response as any).data || response;
+      if (data && data.success) {
         toast.success('Employee deactivated successfully');
         loadEmployees();
       } else {
-        toast.error(response.error || 'Failed to deactivate employee');
+        toast.error((data && data.error) || 'Failed to deactivate employee');
       }
     } catch (error) {
       console.error('Error deleting employee:', error);
@@ -366,10 +397,10 @@ const EmployeeManagementEnhanced = () => {
     const matchesSearch = employee.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.employee_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.designation?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDesignation = !designationFilter || 
+
+    const matchesDesignation = !designationFilter ||
       employee.designation?.toLowerCase().includes(designationFilter.toLowerCase());
-    
+
     return matchesSearch && matchesDesignation;
   });
 
@@ -449,13 +480,13 @@ const EmployeeManagementEnhanced = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading && employees.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   Loading employees...
                 </td>
               </tr>
             ) : filteredEmployees.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   {searchTerm ? 'No employees found matching your search' : 'No employees found'}
                 </td>
               </tr>
@@ -478,9 +509,8 @@ const EmployeeManagementEnhanced = () => {
                     {employee.date_of_joining ? new Date(employee.date_of_joining).toLocaleDateString('en-IN') : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      employee.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${employee.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
                       {employee.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -525,7 +555,7 @@ const EmployeeManagementEnhanced = () => {
             {/* Form Body - Scrollable */}
             <div className="px-6 py-4 overflow-y-auto flex-1">
               <div className="space-y-6">
-                
+
                 {/* Basic Information */}
                 <div>
                   <h4 className="text-md font-semibold text-gray-700 mb-3 pb-2 border-b">Basic Information</h4>
@@ -601,7 +631,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="10-digit mobile number"
-                        maxLength="10"
+                        maxLength={10}
                       />
                     </div>
 
@@ -627,7 +657,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Enter complete address"
-                        rows="2"
+                        rows={2}
                       />
                     </div>
 
@@ -667,7 +697,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="6-digit pincode"
-                        maxLength="6"
+                        maxLength={6}
                       />
                     </div>
                   </div>
@@ -759,7 +789,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, aadhar_number: e.target.value.replace(/\D/g, '').slice(0, 12) })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="12-digit Aadhar number"
-                        maxLength="12"
+                        maxLength={12}
                       />
                     </div>
 
@@ -803,7 +833,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, pan_number: e.target.value.toUpperCase().slice(0, 10) })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="ABCDE1234F"
-                        maxLength="10"
+                        maxLength={10}
                       />
                     </div>
 
@@ -909,7 +939,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="IFSC Code"
-                        maxLength="11"
+                        maxLength={11}
                       />
                     </div>
                   </div>
@@ -955,7 +985,7 @@ const EmployeeManagementEnhanced = () => {
                         onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="10-digit mobile"
-                        maxLength="10"
+                        maxLength={10}
                       />
                     </div>
                   </div>

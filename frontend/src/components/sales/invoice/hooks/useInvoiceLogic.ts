@@ -484,10 +484,10 @@ export const useInvoiceLogic = (
 
                         // CRITICAL: Update pricing from batch
                         const mrp = Number(bestBatch.mrp_per_unit || 0);
-                        const rate = Number(bestBatch.sale_price_per_unit || 0);
+                        const unit_price = Number(bestBatch.sale_price_per_unit || 0);
 
                         invoiceItem.mrp = mrp;
-                        invoiceItem.unit_price = rate;
+                        invoiceItem.unit_price = unit_price;
                         // CANONICAL: unit_price is single source of truth
                         invoiceItem.available_quantity = Number(bestBatch.quantity_available || 0);
 
@@ -496,7 +496,7 @@ export const useInvoiceLogic = (
                         invoiceItem.packages_per_box = Number(bestBatch.packages_per_box || 1);
 
                         // Recalculate tax if needed
-                        // (Usually tax % is from product, but tax amount depends on rate)
+                        // (Usually tax % is from product, but tax amount depends on unit_price)
 
                         toast.info(`Offline: Auto-selected batch ${bestBatch.batch_number} (Qty: ${bestBatch.quantity_available})`);
                     }

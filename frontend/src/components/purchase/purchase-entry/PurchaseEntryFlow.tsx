@@ -11,7 +11,9 @@ import {
   ContentCard,
   StandardFormInput,
   StandardDatePicker,
-  SplitPayment
+  SplitPayment,
+  NumberInput,
+  useToast
 } from '../../global';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
 import PDFUploadModal from '../../global/modals/PDFUploadModal';
@@ -40,6 +42,7 @@ interface PurchaseEntryFlowProps {
 
 const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefilledData = null }) => {
   const productSearchRef = useRef(null);
+  const toast = useToast();
 
   // Use the extracted hook for all state and handlers
   const {
@@ -696,7 +699,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             handleSupplierSelect(supplier);
             setShowSupplierModal(false);
             toast.success('Supplier created successfully');
-            searchCache.clear();
           }}
         />
       )}
@@ -708,7 +710,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
           onProductCreated={(product) => {
             setShowProductModal(false);
             toast.success('Product created successfully');
-            searchCache.clear();
             // Optionally auto-add the product
             if (product) {
               handleAddItem(product);
@@ -738,13 +739,13 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 batch_number: item.batch_number || item.batch_number || '',
                 expiry_date: item.expiry_date || '',
                 manufacturing_date: item.manufacturing_date || '',
-                quantity: parseFloat(item.quantity) || 0,
-                free_quantity: parseFloat(item.free_quantity) || 0,
-                unit_price: parseFloat(item.unit_price || item.unit_price || item.unit_price) || 0,
-                mrp: parseFloat(item.mrp) || 0,
-                selling_price: parseFloat(item.selling_price || item.sale_price) || parseFloat(item.mrp) || 0,
-                discount_percent: parseFloat(item.discount_percent) || 0,
-                tax_percent: parseFloat(item.tax_percent || item.gst_percent) || 0,
+                quantity: Number(item.quantity) || 0,
+                free_quantity: Number(item.free_quantity) || 0,
+                unit_price: Number(item.unit_price) || 0,
+                mrp: Number(item.mrp) || 0,
+                selling_price: Number(item.selling_price || item.sale_price || item.mrp) || 0,
+                discount_percent: Number(item.discount_percent) || 0,
+                tax_percent: Number(item.tax_percent || item.gst_percent) || 0,
                 pack_type: item.pack_type || 'STRIP',
                 pack_size: item.pack_size || 10
               })),

@@ -13,7 +13,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ModularChallanCreatorV5 } from './sales/challan'; // New improved version - alias for ChallanFlow
 // import { AddSalePage } from './Home';
 import InvoiceFlow from './sales/invoice/InvoiceFlow'; // Modern TypeScript version
-import { dashboardApi, ordersApi, invoicesApi, invoicesApi, purchasesApi, productsApi, customersApi } from '../services/api';
+import { dashboardApi, ordersApi, invoicesApi, purchasesApi, productsApi, customersApi } from '../services/api';
 import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
 // Type definitions

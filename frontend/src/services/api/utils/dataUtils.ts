@@ -23,7 +23,7 @@ const INTEGER_FIELDS: string[] = [
 
 // Fields that should remain as strings even if numeric
 const STRING_FIELDS: string[] = [
-  'phone', 'mobile', 'alternate_phone', 'pincode', 'gst_number', 'gst_number', 'pan', 'pan_number',
+  'phone', 'mobile', 'secondary_phone', 'pincode', 'gst_number', 'gst_number', 'pan', 'pan_number',
   'drug_license_no', 'drug_license_number', 'fssai_license_no',
   'invoice_number', 'order_number', 'challan_number', 'batch_number',
   'supplier_code', 'customer_code', 'product_code',

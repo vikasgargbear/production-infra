@@ -9,14 +9,10 @@ interface EditedItem {
   product_name?: string;
   hsn_code?: string;
   batch_number?: string;
-  batch_number?: string;
-  manufacturing_date?: string;
   manufacturing_date?: string;
   expiry_date?: string;
   mrp?: number | string;
   unit_price?: number | string;
-  unit_price?: number | string;
-  rate?: number | string;
   selling_price?: number | string;
   sale_price?: number | string;
   quantity?: number | string;

@@ -104,7 +104,6 @@ export interface OfflineCustomer {
     state?: string;
     pincode?: string;
     gst_number?: string;
-    gst_number?: string;
     customer_type?: string;
     credit_limit?: number;
     current_balance?: number;

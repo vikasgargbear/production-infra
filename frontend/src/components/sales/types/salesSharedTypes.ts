@@ -49,7 +49,7 @@ export interface BaseCustomer {
     gst_number?: string;
     pan_number?: string;
 
-    // Address (flat structure) - backend uses pincode, not pin_code
+    // Address (flat structure) - backend uses pincode, not pincode
     address?: string;
     address_line1?: string;
     address_line2?: string;

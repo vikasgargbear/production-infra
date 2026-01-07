@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Bell, Search, Plus, Edit2, Trash2, Check, X,
   AlertCircle, Package, Clock, CreditCard, Calendar,
   Users, TrendingUp, ShoppingCart, Filter, Save,
@@ -7,16 +7,65 @@ import {
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
 
-const NotificationsAlerts = ({ open, onClose }) => {
+interface NotificationsAlertsProps {
+  open: boolean;
+  onClose?: () => void;
+}
+
+interface AlertRule {
+  id: string | number;
+  name: string;
+  type: string;
+  condition?: string;
+  enabled: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
+  color?: string;
+}
+
+interface Notification {
+  id: string | number;
+  title: string;
+  message: string;
+  severity?: string;
+  type?: string;
+  timestamp: Date;
+  read: boolean;
+  created_at?: string;
+}
+
+interface NotificationPreferences {
+  channels: {
+    in_app: boolean;
+    email: boolean;
+    sms: boolean;
+    whatsapp: boolean;
+    [key: string]: boolean;
+  };
+  quietHours: {
+    enabled: boolean;
+    start: string;
+    end: string;
+  };
+  grouping: {
+    enabled: boolean;
+    interval: number;
+  };
+  sound: {
+    enabled: boolean;
+    volume: number;
+  };
+}
+
+const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('rules');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingRule, setEditingRule] = useState(null);
+  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Load data on component mount
   useEffect(() => {
     if (open) {
@@ -27,42 +76,15 @@ const NotificationsAlerts = ({ open, onClose }) => {
   const loadNotificationData = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      // Load alert rules, notifications, and preferences in parallel
-      const [rulesResponse, notificationsResponse, preferencesResponse] = await Promise.all([
-        settingsApi.notifications.rules.getAll().catch(() => null),
-        settingsApi.notifications.getAll().catch(() => null),
-        settingsApi.notifications.preferences.get().catch(() => null)
-      ]);
+      // TODO: Replace with actual notifications API when available
+      // settingsApi.notifications doesn't exist yet - using local defaults
+      setAlertRules([]);
+      setNotifications([]);
+      // Preferences stay at defaults
 
-      // Set alert rules
-      if (rulesResponse?.data && Array.isArray(rulesResponse.data)) {
-        setAlertRules(rulesResponse.data.map(rule => ({
-          ...rule,
-          icon: getIconForType(rule.type),
-          color: getColorForType(rule.type)
-        })));
-      } else {
-        setAlertRules([]);
-      }
-
-      // Set notifications
-      if (notificationsResponse?.data && Array.isArray(notificationsResponse.data)) {
-        setNotifications(notificationsResponse.data.map(notif => ({
-          ...notif,
-          timestamp: new Date(notif.timestamp || notif.created_at)
-        })));
-      } else {
-        setNotifications([]);
-      }
-
-      // Set preferences
-      if (preferencesResponse?.data) {
-        setPreferences(preferencesResponse.data);
-      }
-
-    } catch (error) {
+    } catch (err) {
       setError('Failed to load notification settings. Please try again.');
       setAlertRules([]);
       setNotifications([]);
@@ -85,11 +107,11 @@ const NotificationsAlerts = ({ open, onClose }) => {
   };
 
   // Alert Rules and Notifications state
-  const [alertRules, setAlertRules] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // Notification Preferences
-  const [preferences, setPreferences] = useState({
+  const [preferences, setPreferences] = useState<NotificationPreferences>({
     channels: {
       in_app: true,
       email: false,
@@ -168,7 +190,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
 
   const formatTimestamp = (timestamp) => {
     const now = new Date();
-    const diff = now - timestamp;
+    const diff = now.getTime() - timestamp.getTime();
     const minutes = Math.floor(diff / (1000 * 60));
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -182,55 +204,56 @@ const NotificationsAlerts = ({ open, onClose }) => {
 
   const handleSavePreferences = async () => {
     try {
-      await settingsApi.notifications.preferences.update(preferences);
+      // TODO: Replace with actual API when available
+      // await settingsApi.notifications.preferences.update(preferences);
       setHasChanges(false);
       // Show success message
-    } catch (error) {
+    } catch (err) {
       setError('Failed to save preferences. Please try again.');
     }
   };
 
-  const handleToggleRule = async (ruleId) => {
+  const handleToggleRule = async (ruleId: string | number) => {
     try {
       const rule = alertRules.find(r => r.id === ruleId);
-      const updatedRule = { ...rule, enabled: !rule.enabled };
-      await settingsApi.notifications.rules.update(ruleId, updatedRule);
-      
-      setAlertRules(prev => prev.map(r => 
+      if (!rule) return;
+      // Update locally - TODO: sync with API when available
+      setAlertRules(prev => prev.map(r =>
         r.id === ruleId ? { ...r, enabled: !r.enabled } : r
       ));
-    } catch (error) {
+    } catch (err) {
       setError('Failed to update rule. Please try again.');
     }
   };
 
-  const handleDeleteRule = async (ruleId) => {
+  const handleDeleteRule = async (ruleId: string | number) => {
     if (window.confirm('Are you sure you want to delete this alert rule?')) {
       try {
-        await settingsApi.notifications.rules.delete(ruleId);
+        // TODO: sync with API when available
         setAlertRules(prev => prev.filter(r => r.id !== ruleId));
-      } catch (error) {
+      } catch (err) {
         setError('Failed to delete rule. Please try again.');
       }
     }
   };
 
-  const handleMarkAsRead = async (notificationId) => {
+  const handleMarkAsRead = async (notificationId: string | number) => {
     try {
-      await settingsApi.notifications.markAsRead(notificationId);
-      setNotifications(prev => prev.map(n => 
+      // TODO: sync with API when available
+      setNotifications(prev => prev.map(n =>
         n.id === notificationId ? { ...n, read: true } : n
       ));
-    } catch (error) {
+    } catch (err) {
+      // Silent fail
     }
   };
 
   const handleClearAll = async () => {
     if (window.confirm('Are you sure you want to clear all notifications?')) {
       try {
-        await settingsApi.notifications.clearAll();
+        // TODO: sync with API when available
         setNotifications([]);
-      } catch (error) {
+      } catch (err) {
         setError('Failed to clear notifications. Please try again.');
       }
     }
@@ -240,7 +263,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
     if (activeTab === 'rules') return true;
     if (searchTerm) {
       return notification.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             notification.message?.toLowerCase().includes(searchTerm.toLowerCase());
+        notification.message?.toLowerCase().includes(searchTerm.toLowerCase());
     }
     return true;
   });
@@ -248,7 +271,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
   const filteredRules = alertRules.filter(rule => {
     if (searchTerm) {
       return rule.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             rule.type?.toLowerCase().includes(searchTerm.toLowerCase());
+        rule.type?.toLowerCase().includes(searchTerm.toLowerCase());
     }
     return true;
   });
@@ -294,11 +317,10 @@ const NotificationsAlerts = ({ open, onClose }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               {tab.label}
               {tab.count > 0 && (
@@ -383,16 +405,15 @@ const NotificationsAlerts = ({ open, onClose }) => {
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleToggleRule(rule.id)}
-                        className={`px-3 py-1 text-xs rounded-full ${
-                          rule.enabled
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
+                        className={`px-3 py-1 text-xs rounded-full ${rule.enabled
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-600'
+                          }`}
                       >
                         {rule.enabled ? 'Enabled' : 'Disabled'}
                       </button>
                       <button
-                        onClick={() => {/* Edit rule */}}
+                        onClick={() => {/* Edit rule */ }}
                         className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -418,9 +439,8 @@ const NotificationsAlerts = ({ open, onClose }) => {
               </div>
             ) : (
               filteredNotifications.map(notification => (
-                <div key={notification.id} className={`bg-white rounded-lg border border-gray-200 p-4 ${
-                  !notification.read ? 'border-l-4 border-l-blue-500' : ''
-                }`}>
+                <div key={notification.id} className={`bg-white rounded-lg border border-gray-200 p-4 ${!notification.read ? 'border-l-4 border-l-blue-500' : ''
+                  }`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
@@ -467,7 +487,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
             Save Preferences
           </button>
         </div>
-        
+
         <div className="mt-4 grid grid-cols-2 gap-6">
           <div>
             <h4 className="font-medium text-gray-700 mb-3">Channels</h4>
@@ -495,7 +515,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
               ))}
             </div>
           </div>
-          
+
           <div>
             <h4 className="font-medium text-gray-700 mb-3">Quiet Hours</h4>
             <div className="space-y-3">
@@ -514,7 +534,7 @@ const NotificationsAlerts = ({ open, onClose }) => {
                 />
                 <span className="text-sm text-gray-700">Enable quiet hours</span>
               </label>
-              
+
               {preferences.quietHours.enabled && (
                 <div className="flex items-center space-x-2">
                   <input

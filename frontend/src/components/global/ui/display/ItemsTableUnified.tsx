@@ -10,10 +10,8 @@ export interface ItemsTableItem {
     name?: string;
     batch_id?: number | string;
     batch_number?: string;
-    batch_number?: string;
     quantity?: number;
     unit_price?: number;
-    rate?: number;
     mrp?: number;
     discount?: number;
     discount_percent?: number;
@@ -76,7 +74,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const enableKeyboardNav = enableKeyboardNavProp !== undefined ? enableKeyboardNavProp : mode === 'entry';
 
     const fieldRefs = useRef<Record<string, EditableCellRef | null>>({});
-    const EDITABLE_FIELDS = ['quantity', 'rate', 'discount_percent', 'free', 'tax'];
+    const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free', 'tax'];
 
     useImperativeHandle(ref, () => ({
         focusField: (rowIndex: number, fieldName: string) => {
@@ -148,11 +146,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
     const calculateItemTotal = (item: ItemsTableItem): number => {
         const baseQuantity = parseFloat(String(item.quantity)) || 0;
-        const rate = parseFloat(String(item.unit_price || item.rate)) || 0;
+        const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
         const discount = parseFloat(String(item.discount_percent || item.discount || 0)) || 0;
         const gstPercent = parseFloat(String(item.gst_percent || item.tax_rate || 0)) || 0;
 
-        const subtotal = baseQuantity * rate;
+        const subtotal = baseQuantity * unit_price;
         const discountAmount = (subtotal * discount) / 100;
         const taxableAmount = subtotal - discountAmount;
         const gstAmount = (taxableAmount * gstPercent) / 100;
@@ -251,21 +249,21 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                     <EditableCell
-                                        ref={(el) => setFieldRef(index, 'rate', el)}
-                                        value={item.unit_price || item.rate || 0}
+                                        ref={(el) => setFieldRef(index, 'unit_price', el)}
+                                        value={item.unit_price || item.unit_price || 0}
                                         type="number"
                                         min={0}
                                         decimalPlaces={2}
                                         prefix={currencySymbol}
                                         onChange={(val) => {
                                             onUpdateItem?.(index, 'unit_price', val);
-                                            onUpdateItem?.(index, 'rate', val);
+                                            onUpdateItem?.(index, 'unit_price', val);
                                         }}
                                         onSave={(val) => {
                                             onUpdateItem?.(index, 'unit_price', val);
-                                            onUpdateItem?.(index, 'rate', val);
+                                            onUpdateItem?.(index, 'unit_price', val);
                                         }}
-                                        onNavigate={(dir) => handleNavigate(index, 'rate', dir as NavigationDirection)}
+                                        onNavigate={(dir) => handleNavigate(index, 'unit_price', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
                                         className="w-24"

@@ -15,7 +15,7 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from .....core.utils.constants import OrderStatus, PaymentStatus
 from ....services.document_number_service import DocumentNumberService
-from ....services.gst_service import GSTService
+from ....services.compliance.gst_service import GSTService
 from ....schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
@@ -184,45 +184,24 @@ async def update_sales_order(
 ):
     """Update sales order details (only for pending orders)"""
     try:
-        # Check if order exists and is editable
-        existing = db.execute(text("""
-            SELECT order_status FROM sales.orders 
-            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
+        # Check if order exists and is editable using service method
+        existing = OrderService.get_order_for_edit(db, order_id, str(context.org_id), "sales")
         
         if not existing:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if existing.order_status not in [OrderStatus.PENDING.value, OrderStatus.DRAFT.value]:
+        if existing["order_status"] not in [OrderStatus.PENDING.value, OrderStatus.DRAFT.value]:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Cannot edit order with status: {existing.order_status}"
+                detail=f"Cannot edit order with status: {existing['order_status']}"
             )
         
-        # Build update query
-        update_fields = []
-        params = {"order_id": order_id, "org_id": str(context.org_id)}
-        
+        # Build update query using service method with field validation
         update_data = order_data.dict(exclude_unset=True)
-        for field, value in update_data.items():
-            if value is not None:
-                update_fields.append(f"{field} = :{field}")
-                params[field] = value
         
-        if not update_fields:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
-        # Add updated timestamp
-        update_fields.append("updated_at = CURRENT_TIMESTAMP")
-        
-        # Execute update
-        update_query = f"""
-            UPDATE sales.orders 
-            SET {', '.join(update_fields)}
-            WHERE order_id = :order_id AND org_id = :org_id
-        """
-        
-        db.execute(text(update_query), params)
+        # Use service method for safe dynamic update with field validation
+        if not OrderService.update_order_dynamic(db, order_id, str(context.org_id), update_data):
+            raise HTTPException(status_code=400, detail="No valid fields to update")
         # TenantAwareSession auto-commits
         
         # Use service method to fetch updated order (consolidates 2 SQL)
@@ -252,29 +231,20 @@ async def approve_sales_order(
     This is when inventory gets reserved
     """
     try:
-        # Check order exists and is pending
-        order = db.execute(text("""
-            SELECT order_status, customer_id FROM sales.orders 
-            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
+        # Check order exists and is pending using service method
+        order = OrderService.get_order_for_edit(db, order_id, str(context.org_id), "sales")
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if order.order_status != OrderStatus.PENDING.value:
+        if order["order_status"] != OrderStatus.PENDING.value:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Order cannot be approved. Current status: {order.order_status}"
+                detail=f"Order cannot be approved. Current status: {order['order_status']}"
             )
         
-        # Get order items for inventory validation
-        items = db.execute(text("""
-            SELECT product_id, batch_id, quantity, unit_price
-            FROM sales.order_items 
-            WHERE order_id = :order_id
-        """), {"order_id": order_id, "org_id": str(context.org_id)}).fetchall()
-        
-        items_dict = [dict(item._mapping) for item in items]
+        # Get order items for inventory validation using service method
+        items_dict = OrderService.get_order_items_raw(db, order_id)
         
         # SETTINGS-AWARE: Check if negative stock is allowed
         billing_settings = await SettingsService.get_billing_settings(db, str(context.org_id))
@@ -282,7 +252,7 @@ async def approve_sales_order(
         
         # Only validate inventory if negative stock NOT allowed
         if not allow_negative_stock:
-            inventory_check = OrderService.validate_inventory(db, items_dict, org_id)
+            inventory_check = OrderService.validate_inventory(db, items_dict, str(context.org_id))
             
             if not inventory_check["valid"]:
                 failed_items = [
@@ -295,29 +265,21 @@ async def approve_sales_order(
                     detail=f"Inventory validation failed: {'; '.join(failed_items)}"
                 )
         
-        # Check customer credit limit
-        total_amount = db.execute(text("""
-            SELECT final_amount FROM sales.orders WHERE order_id = :id
-        """), {"id": order_id}).scalar()
+        # Check customer credit limit using service method
+        total_amount = OrderService.get_order_final_amount(db, order_id)
         
         credit_check = CustomerService.validate_credit_limit(
-            db, order.customer_id, total_amount, org_id
+            db, order["customer_id"], total_amount, str(context.org_id)
         )
         
         if not credit_check["valid"]:
             raise HTTPException(status_code=400, detail=credit_check["message"])
         
-        # Update order status to approved
-        db.execute(text("""
-            UPDATE sales.orders
-            SET order_status = 'approved',
-                confirmed_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": str(context.org_id)})
+        # Update order status to approved using service method
+        OrderService.approve_order(db, order_id, str(context.org_id))
         
         # NOW allocate inventory
-        OrderService.allocate_inventory(db, order_id, items_dict, org_id)
+        OrderService.allocate_inventory(db, order_id, items_dict, str(context.org_id))
         
         # TenantAwareSession auto-commits
         
@@ -345,19 +307,16 @@ async def convert_to_invoice(
 ):
     """Convert approved sales order to invoice"""
     try:
-        # Check order exists and is approved
-        order = db.execute(text("""
-            SELECT order_status, order_number FROM sales.orders 
-            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
+        # Check order exists and is approved using service method
+        order = OrderService.get_order_for_edit(db, order_id, str(context.org_id), "sales")
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if order.order_status not in ["approved", "confirmed"]:
+        if order["order_status"] not in ["approved", "confirmed"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot convert to invoice. Order status: {order.order_status}"
+                detail=f"Cannot convert to invoice. Order status: {order['order_status']}"
             )
         
         # Generate invoice
@@ -365,16 +324,11 @@ async def convert_to_invoice(
             db, 
             order_id, 
             invoice_request.invoice_date,
-            org_id
+            str(context.org_id)
         )
         
-        # Update order status
-        db.execute(text("""
-            UPDATE sales.orders
-            SET order_status = 'invoiced',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE order_id = :id
-        """), {"id": order_id})
+        # Update order status using service method
+        OrderService.update_order_status(db, order_id, "invoiced")
         
         # TenantAwareSession auto-commits
         
@@ -398,29 +352,21 @@ async def convert_to_challan(
 ):
     """Convert approved sales order to delivery challan"""
     try:
-        # Check order exists and is approved
-        order = db.execute(text("""
-            SELECT order_status FROM sales.orders 
-            WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": str(context.org_id)}).fetchone()
+        # Check order exists and is approved using service method
+        order = OrderService.get_order_for_edit(db, order_id, str(context.org_id), "sales")
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
         
-        if order.order_status not in ["approved", "confirmed"]:
+        if order["order_status"] not in ["approved", "confirmed"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot convert to challan. Order status: {order.order_status}"
+                detail=f"Cannot convert to challan. Order status: {order['order_status']}"
             )
         
         # TODO: Implement challan generation service
-        # For now, just update status
-        db.execute(text("""
-            UPDATE sales.orders
-            SET order_status = 'shipped',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE order_id = :id
-        """), {"id": order_id})
+        # For now, just update status using service method
+        OrderService.update_order_status(db, order_id, "shipped")
         
         # TenantAwareSession auto-commits
         
@@ -449,28 +395,18 @@ async def validate_sales_order(
     try:
         org_id = str(context.org_id)
         
-        # Validate customer
-        customer = db.execute(text("""
-            SELECT customer_id FROM parties.customers 
-            WHERE customer_id = :id
-        """), {"id": order_data.customer_id}).fetchone()
-        
-        if not customer:
+        # Validate customer using service method
+        if not CustomerService.customer_exists(db, order_data.customer_id):
             return {"valid": False, "message": "Customer not found"}
         
-        # BATCH OPTIMIZE: Get all product IDs and validate in one query
+        # BATCH OPTIMIZE: Validate all product IDs using service method
         product_ids = [item.product_id for item in order_data.items]
         if product_ids:
-            existing_products = db.execute(text("""
-                SELECT product_id FROM inventory.products 
-                WHERE product_id = ANY(:product_ids)
-            """), {"product_ids": product_ids}).fetchall()
+            from ....services.master.product.service import ProductService
+            validation = ProductService.validate_products_exist(db, product_ids)
             
-            existing_ids = {row.product_id for row in existing_products}
-            missing = set(product_ids) - existing_ids
-            
-            if missing:
-                return {"valid": False, "message": f"Products not found: {list(missing)}"}
+            if not validation["valid"]:
+                return {"valid": False, "message": f"Products not found: {validation['missing']}"}
         
         return {"valid": True, "message": "Sales order data is valid"}
         
@@ -496,59 +432,14 @@ async def get_sales_order_dashboard(
 def _get_or_create_address(db: TenantAwareSession, org_id: str, customer_id: int, 
                            address_text: str, address_type: str) -> Optional[int]:
     """
-    Helper function to get existing address or create new one
-    Follows customer creation pattern for address management
+    Helper function to get existing address or create new one.
+    Uses CustomerService for address management (fixes context bug).
     """
-    if not address_text:
-        return None
-    
-    try:
-        # First check if similar address exists for this customer
-        existing = db.execute(text("""
-            SELECT address_id FROM master.addresses
-            WHERE entity_type = 'customer'
-            AND entity_id = :customer_id
-            AND address_type = :address_type
-            AND is_active = true
-            LIMIT 1
-        """), {
-            "customer_id": customer_id,
-            "address_type": address_type
-        }).fetchone()
-        
-        if existing:
-            return existing[0]
-        
-        # Parse address text (simple parsing - could be enhanced)
-        # Expected format: "Line1, Line2, City, State, Pincode"
-        parts = [p.strip() for p in address_text.split(',')]
-        
-        # Create new address
-        result = db.execute(text("""
-            INSERT INTO master.addresses (
-                org_id, entity_type, entity_id, address_type,
-                address_line1, address_line2, city, state_name, pincode,
-                country, is_default, is_active,
-                created_at, updated_at
-            ) VALUES (
-                :org_id, 'customer', :customer_id, :address_type,
-                :line1, :line2, :city, :state, :pincode,
-                'India', false, true,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            ) RETURNING address_id
-        """), {
-            "org_id": str(context.org_id),
-            "customer_id": customer_id,
-            "address_type": address_type,
-            "line1": parts[0] if len(parts) > 0 else address_text,
-            "line2": parts[1] if len(parts) > 1 else None,
-            "city": parts[-3] if len(parts) >= 3 else None,
-            "state": parts[-2] if len(parts) >= 2 else None,
-            "pincode": parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
-        })
-        
-        return result.scalar()
-        
-    except Exception as e:
-        logger.warning(f"Could not create address: {str(e)}")
-        return None
+    # Delegate to CustomerService which has the proper implementation
+    return CustomerService.get_or_create_address(
+        db=db,
+        org_id=org_id,
+        customer_id=customer_id,
+        address_text=address_text,
+        address_type=address_type
+    )

@@ -17,7 +17,7 @@ from uuid import UUID
 import logging
 import re
 
-from ...gst_service import GSTService
+from ...compliance.gst_service import GSTService
 from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -657,6 +657,28 @@ class ProductService:
         }
     
     @staticmethod
+    def validate_products_exist(db: Session, product_ids: List[int]) -> Dict[str, Any]:
+        """
+        Validate that all product IDs exist.
+        Returns dict with valid flag and list of missing IDs.
+        """
+        if not product_ids:
+            return {"valid": True, "missing": []}
+        
+        result = db.execute(text("""
+            SELECT product_id FROM inventory.products 
+            WHERE product_id = ANY(:product_ids)
+        """), {"product_ids": product_ids})
+        
+        existing_ids = {row.product_id for row in result}
+        missing = set(product_ids) - existing_ids
+        
+        return {
+            "valid": len(missing) == 0,
+            "missing": list(missing)
+        }
+    
+    @staticmethod
     def get_classes(db: Session) -> List[Dict[str, Any]]:
         """
         Get all distinct product classes.
@@ -678,21 +700,57 @@ class ProductService:
         limit: int = 50,
         category_id: Optional[int] = None,
         search: Optional[str] = None,
-        manufacturer: Optional[str] = None
+        manufacturer: Optional[str] = None,
+        product_type: Optional[str] = None,
+        include_stock: bool = True
     ) -> List[Dict[str, Any]]:
         """
         List products with filters and pagination.
         TenantAwareSession auto-filters by org_id.
+        
+        Args:
+            include_stock: If True, includes stock/pricing subqueries (slower but complete)
         """
-        query = """
-            SELECT 
-                p.product_id, p.product_code, p.product_name, p.generic_name,
-                p.brand, p.manufacturer, p.hsn_code, p.gst_percent,
-                p.category_id, p.total_quantity_available,
-                c.category_name
+        # Base fields
+        base_fields = """
+            p.product_id, p.product_code, p.product_name, p.generic_name,
+            p.brand, p.manufacturer, p.category_id, p.product_type,
+            p.composition, p.strength, p.hsn_code,
+            p.gst_percent, p.is_active, p.is_saleable,
+            p.created_at, p.updated_at,
+            pc.category_name
+        """
+        
+        # Stock and pricing subqueries (optional for performance)
+        stock_fields = ""
+        if include_stock:
+            stock_fields = """,
+                COALESCE(
+                    (SELECT SUM(quantity_available) 
+                     FROM inventory.batches b 
+                     WHERE b.product_id = p.product_id 
+                       AND b.batch_status = 'active'
+                       AND b.quality_status = 'approved'), 0
+                ) as current_stock,
+                (SELECT mrp_per_unit 
+                 FROM inventory.batches b 
+                 WHERE b.product_id = p.product_id 
+                   AND b.mrp_per_unit IS NOT NULL
+                   AND b.batch_status = 'active'
+                 ORDER BY b.created_at DESC LIMIT 1) as mrp_per_unit,
+                (SELECT sale_price_per_unit 
+                 FROM inventory.batches b 
+                 WHERE b.product_id = p.product_id 
+                   AND b.sale_price_per_unit IS NOT NULL
+                   AND b.batch_status = 'active'
+                 ORDER BY b.created_at DESC LIMIT 1) as sale_price_per_unit
+            """
+        
+        query = f"""
+            SELECT {base_fields}{stock_fields}
             FROM inventory.products p
-            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id
-            WHERE 1=1
+            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
+            WHERE p.is_active = true
         """
         params: Dict[str, Any] = {}
         
@@ -701,12 +759,22 @@ class ProductService:
             params["category_id"] = category_id
         
         if search:
-            query += " AND (p.product_name ILIKE :search OR p.product_code ILIKE :search OR p.brand ILIKE :search)"
+            query += """ AND (
+                p.product_name ILIKE :search OR
+                p.generic_name ILIKE :search OR
+                p.brand ILIKE :search OR
+                p.manufacturer ILIKE :search OR
+                p.product_code ILIKE :search
+            )"""
             params["search"] = f"%{search}%"
         
         if manufacturer:
             query += " AND p.manufacturer ILIKE :manufacturer"
             params["manufacturer"] = f"%{manufacturer}%"
+        
+        if product_type:
+            query += " AND p.product_type = :product_type"
+            params["product_type"] = product_type
         
         query += " ORDER BY p.created_at DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
@@ -939,3 +1007,640 @@ class ProductService:
             "type_code": created.type_code,
             "default_base_uom": created.default_base_uom
         }
+
+    @staticmethod
+    def create_product(
+        db: Session,
+        org_id: str,
+        product_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a new product with optional initial batch.
+        Handles checking duplicates and trigger management for batch creation.
+        """
+        # Check if product code already exists
+        exists = db.execute(text("""
+            SELECT 1 FROM inventory.products 
+            WHERE product_code = :product_code
+            AND org_id = :org_id
+        """), {
+            "product_code": product_data["product_code"],
+            "org_id": org_id
+        }).scalar()
+        
+        if exists:
+            # Return existing product instead of error
+            result = db.execute(text("""
+                SELECT * FROM inventory.products
+                WHERE product_code = :product_code
+                AND org_id = :org_id
+            """), {
+                "product_code": product_data["product_code"],
+                "org_id": org_id
+            })
+            
+            existing = result.fetchone()
+            return {
+                "product_id": existing.product_id,
+                "product_code": existing.product_code,
+                "product_name": existing.product_name,
+                "message": "Product already exists",
+                "exists": True
+            }
+            
+        # Create product
+        # Build INSERT with only non-NULL foreign keys
+        columns = ["org_id", "product_code", "product_name", "generic_name",
+                  "brand", "manufacturer", "composition", "hsn_code", 
+                  "gst_percent", "maintain_batch", 
+                  "maintain_expiry", "is_active", "created_at", "updated_at"]
+        values = [":org_id", ":product_code", ":product_name", ":generic_name",
+                 ":brand", ":manufacturer", "CAST(:composition AS jsonb)", ":hsn_code",
+                 ":gst_percent", ":maintain_batch",
+                 ":maintain_expiry", ":is_active", "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP"]
+        
+        # Only add foreign keys if they're not None
+        if product_data.get("category_id") is not None:
+            columns.insert(7, "category_id")
+            values.insert(7, ":category_id")
+        
+        if product_data.get("type_id") is not None:
+            columns.insert(-2, "type_id")
+            values.insert(-2, ":type_id")
+        
+        if product_data.get("base_uom_id") is not None:
+            columns.insert(-2, "base_uom_id")
+            values.insert(-2, ":base_uom_id")
+            
+        # Prepare params
+        insert_params = product_data.copy()
+        insert_params["org_id"] = org_id
+        insert_params["maintain_batch"] = product_data.get("maintain_batch", True)
+        insert_params["maintain_expiry"] = product_data.get("maintain_expiry", True)
+        insert_params["is_active"] = product_data.get("is_active", True)
+        
+        # Ensure jsonb fields are strings if they need to be
+        if "composition" not in insert_params or insert_params["composition"] is None:
+             insert_params["composition"] = "[]"
+        
+        result = db.execute(text(f"""
+            INSERT INTO inventory.products ({', '.join(columns)})
+            VALUES ({', '.join(values)})
+            RETURNING product_id, product_code, product_name
+        """), insert_params)
+        
+        created = result.fetchone()
+        product_id = created.product_id
+        
+        # Create initial batch logic
+        should_create_batch = (
+            insert_params.get("maintain_batch") or
+            (product_data.get("quantity_available") and float(product_data.get("quantity_available", 0)) > 0) or 
+            (product_data.get("mrp") and float(product_data.get("mrp", 0)) > 0)
+        )
+        
+        if should_create_batch:
+            mrp_per_unit = float(product_data.get("mrp_per_unit", 100))
+            sale_price_per_unit = float(product_data.get("sale_price_per_unit") or (mrp_per_unit * 0.8))
+            cost_per_unit = float(product_data.get("cost_per_unit") or (sale_price_per_unit * 0.6))
+            initial_quantity = float(product_data.get("initial_quantity", 100))
+            
+            # Calculate expiry date
+            from datetime import timedelta
+            expiry_date = None
+            if product_data.get("expiry_date"):
+                if isinstance(product_data["expiry_date"], str):
+                    expiry_date = datetime.strptime(product_data["expiry_date"], "%Y-%m-%d").date()
+                else:
+                    expiry_date = product_data["expiry_date"]
+            else:
+                expiry_date = (datetime.now() + timedelta(days=365)).date()
+                
+            batch_number = f"BAT-{datetime.now().strftime('%Y%m%d')}"
+            
+            # Parse pack configuration
+            pack_type = product_data.get("pack_type", "Strip")
+            pack_size = float(product_data.get("pack_size", 1))
+            units_per_pack = float(product_data.get("units_per_pack", 10))
+            packages_per_box = float(product_data.get("packages_per_box", 1))
+            
+            # Parse pack_input if provided (format: "packages*units" e.g., "1*10")
+            pack_input = product_data.get("pack_input", "")
+            if pack_input and "*" in pack_input:
+                try:
+                    parts = pack_input.split("*")
+                    if len(parts) == 2:
+                        packages_per_box = float(parts[0].strip())
+                        units_match = re.match(r'^(\d+)', parts[1].strip())
+                        if units_match:
+                            units_per_pack = float(units_match.group(1))
+                except Exception as parse_err:
+                    logger.warning(f"Could not parse pack_input '{pack_input}': {parse_err}")
+
+            # Import random for batch number generation if needed
+            import random
+            
+            # Ensure batch number
+            batch_num = product_data.get("batch_number")
+            if not batch_num:
+                 batch_num = f"BAT-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+            
+            # Important: Temporarily disable trigger for initial batch
+            try:
+                db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
+                
+                db.execute(text("""
+                    INSERT INTO inventory.batches (
+                        org_id, product_id, batch_number,
+                        expiry_date, manufacturing_date,
+                        quantity_available, quantity_reserved,
+                        mrp_per_unit, sale_price_per_unit, cost_per_unit,
+                        batch_status, quality_status,
+                        pack_type, pack_size, units_per_pack, 
+                        packages_per_box, pack_uom, base_uom,
+                        created_at, updated_at
+                    ) VALUES (
+                        :org_id, :product_id, :batch_number,
+                        :expiry_date, CURRENT_DATE,
+                        :quantity, 0,
+                        :mrp, :sale_price, :cost,
+                        'active', 'approved',
+                        :pack_type, :pack_size, :units_per_pack,
+                        :packages_per_box, :pack_uom, :base_uom,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                """), {
+                    "org_id": org_id,
+                    "product_id": product_id,
+                    "batch_number": batch_num,
+                    "expiry_date": expiry_date,
+                    "quantity": initial_quantity,
+                    "mrp": mrp_per_unit,
+                    "sale_price": sale_price_per_unit,
+                    "cost": cost_per_unit,
+                    "pack_type": pack_type,
+                    "pack_size": pack_size,
+                    "units_per_pack": units_per_pack,
+                    "packages_per_box": packages_per_box,
+                    "pack_uom": product_data.get("pack_uom", pack_type),
+                    "base_uom": product_data.get("base_uom", "Unit")
+                })
+            finally:
+                # Always re-enable trigger
+                db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
+        
+        return {
+            "product_id": created.product_id,
+            "product_code": created.product_code,
+            "product_name": created.product_name,
+            "message": "Product created successfully",
+            "exists": False
+        }
+    
+    # ==================== SEARCH WITH BATCHES ====================
+    
+    @staticmethod
+    def search_products_summary(
+        db: Session,
+        search: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Search products with stock summary (for search_products_with_batches).
+        TenantAwareSession auto-filters by org_id.
+        """
+        query = """
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.is_active,
+                COALESCE(SUM(b.quantity_available), 0) as total_stock
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                AND p.org_id = b.org_id
+                AND b.batch_status = 'active'
+            WHERE p.is_active = true
+        """
+        params = {"limit": limit, "offset": offset}
+        
+        if search:
+            query += """ AND (
+                p.product_name ILIKE :search 
+                OR p.brand ILIKE :search 
+                OR p.manufacturer ILIKE :search
+                OR p.hsn_code ILIKE :search
+                OR p.product_code ILIKE :search
+            )"""
+            params["search"] = f"%{search}%"
+        
+        query += """
+            GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
+                     p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                     p.is_active
+            ORDER BY p.product_name
+            LIMIT :limit OFFSET :offset
+        """
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_batches_for_products(
+        db: Session,
+        product_ids: List[int],
+        include_expired: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all batches for a list of product IDs.
+        TenantAwareSession auto-filters by org_id.
+        
+        Returns:
+            List of batch dictionaries with days_to_expiry calculated
+        """
+        if not product_ids:
+            return []
+        
+        query = """
+            SELECT 
+                b.batch_id,
+                b.product_id,
+                b.batch_number,
+                b.manufacturing_date,
+                b.expiry_date,
+                b.quantity_available,
+                b.mrp_per_unit,
+                b.sale_price_per_unit,
+                b.cost_per_unit,
+                b.units_per_pack,
+                b.packages_per_box,
+                b.pack_type,
+                b.batch_status,
+                b.quality_status,
+                (b.expiry_date - CURRENT_DATE) as days_to_expiry
+            FROM inventory.batches b
+            WHERE b.product_id = ANY(:product_ids)
+              AND b.batch_status = 'active'
+              AND b.quality_status = 'approved'
+        """
+        
+        if not include_expired:
+            query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
+        
+        query += " ORDER BY b.expiry_date ASC, b.batch_id"
+        
+        result = db.execute(text(query), {"product_ids": product_ids})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def count_products(
+        db: Session,
+        include_inactive: bool = False,
+        since: Optional[str] = None
+    ) -> int:
+        """
+        Count products with optional filters.
+        TenantAwareSession auto-filters by org_id.
+        """
+        query = "SELECT COUNT(*) FROM inventory.products p WHERE 1=1"
+        params = {}
+        
+        if not include_inactive:
+            query += " AND p.is_active = true"
+        
+        if since:
+            query += " AND p.updated_at > :since"
+            params["since"] = since
+        
+        result = db.execute(text(query), params)
+        return result.scalar() or 0
+    
+    @staticmethod
+    def get_products_page(
+        db: Session,
+        limit: int = 100,
+        offset: int = 0,
+        include_inactive: bool = False,
+        since: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get paginated products for bulk sync.
+        TenantAwareSession auto-filters by org_id.
+        """
+        query = """
+            SELECT 
+                p.product_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.hsn_code, p.gst_percent, p.category_id,
+                p.product_type, p.composition, p.strength,
+                p.is_active, p.is_saleable, p.requires_batch_tracking,
+                p.created_at, p.updated_at,
+                pc.category_name
+            FROM inventory.products p
+            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
+            WHERE 1=1
+        """
+        params = {"limit": limit, "offset": offset}
+        
+        if not include_inactive:
+            query += " AND p.is_active = true"
+        
+        if since:
+            query += " AND p.updated_at > :since"
+            params["since"] = since
+        
+        query += " ORDER BY p.product_name LIMIT :limit OFFSET :offset"
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def insert_product(
+        db: Session,
+        org_id: str,
+        product_data: Dict[str, Any]
+    ) -> int:
+        """
+        Insert a new product record. Returns product_id.
+        """
+        result = db.execute(text("""
+            INSERT INTO inventory.products (
+                org_id, product_code, product_name, generic_name,
+                brand, manufacturer, category_id, product_type,
+                hsn_code, gst_percent, composition, strength,
+                is_active, is_saleable, requires_batch_tracking,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :product_code, :product_name, :generic_name,
+                :brand, :manufacturer, :category_id, :product_type,
+                :hsn_code, :gst_percent, :composition::jsonb, :strength,
+                :is_active, :is_saleable, :requires_batch_tracking,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING product_id
+        """), {
+            "org_id": org_id,
+            "product_code": product_data.get("product_code", ""),
+            "product_name": product_data.get("product_name", ""),
+            "generic_name": product_data.get("generic_name"),
+            "brand": product_data.get("brand"),
+            "manufacturer": product_data.get("manufacturer"),
+            "category_id": product_data.get("category_id"),
+            "product_type": product_data.get("product_type", "medication"),
+            "hsn_code": product_data.get("hsn_code", "30049099"),
+            "gst_percent": product_data.get("gst_percent", 12),
+            "composition": product_data.get("composition", "{}"),
+            "strength": product_data.get("strength"),
+            "is_active": product_data.get("is_active", True),
+            "is_saleable": product_data.get("is_saleable", True),
+            "requires_batch_tracking": product_data.get("requires_batch_tracking", True)
+        })
+        return result.scalar()
+    
+    @staticmethod
+    def update_product_fields(
+        db: Session,
+        product_id: int,
+        updates: Dict[str, Any]
+    ) -> None:
+        """
+        Update product fields dynamically.
+        TenantAwareSession auto-filters by org_id.
+        """
+        if not updates:
+            return
+        
+        # Build dynamic UPDATE query
+        set_clauses = []
+        params = {"product_id": product_id}
+        
+        for field, value in updates.items():
+            if value is not None:
+                set_clauses.append(f"{field} = :{field}")
+                params[field] = value
+        
+        if set_clauses:
+            set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+            query = f"""
+                UPDATE inventory.products 
+                SET {', '.join(set_clauses)}
+                WHERE product_id = :product_id
+            """
+            db.execute(text(query), params)
+    
+    @staticmethod
+    def get_category_by_name(
+        db: Session,
+        category_name: str
+    ) -> Optional[int]:
+        """
+        Look up category_id by name.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories
+            WHERE LOWER(TRIM(category_name)) = LOWER(TRIM(:name))
+            AND is_active = true
+            LIMIT 1
+        """), {"name": category_name}).fetchone()
+        return result.category_id if result else None
+    
+    @staticmethod
+    def update_product_batches(
+        db: Session,
+        product_id: int,
+        batch_updates: Dict[str, Any]
+    ) -> int:
+        """
+        Update all active batches for a product.
+        TenantAwareSession auto-filters by org_id.
+        
+        Returns:
+            Number of batches updated
+        """
+        if not batch_updates:
+            return 0
+        
+        # Build dynamic UPDATE query for batches
+        set_clauses = []
+        params = {"product_id": product_id}
+        
+        for field, value in batch_updates.items():
+            if value is not None:
+                set_clauses.append(f"{field} = :{field}")
+                params[field] = value
+        
+        if not set_clauses:
+            return 0
+        
+        set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+        query = f"""
+            UPDATE inventory.batches 
+            SET {', '.join(set_clauses)}
+            WHERE product_id = :product_id
+              AND batch_status = 'active'
+        """
+        
+        result = db.execute(text(query), params)
+        return result.rowcount
+    
+    @staticmethod
+    def create_initial_batch(
+        db: Session,
+        org_id: str,
+        product_id: int,
+        batch_data: Dict[str, Any]
+    ) -> Optional[int]:
+        """
+        Create initial batch for a product with trigger handling.
+        Disables expiry trigger during insert to avoid errors.
+        
+        Returns:
+            batch_id or None if no batch created
+        """
+        batch_number = batch_data.get("batch_number")
+        if not batch_number:
+            return None
+        
+        try:
+            # Disable trigger
+            db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
+            
+            result = db.execute(text("""
+                INSERT INTO inventory.batches (
+                    org_id, product_id, batch_number,
+                    expiry_date, manufacturing_date,
+                    quantity_available, quantity_reserved,
+                    mrp_per_unit, sale_price_per_unit, cost_per_unit,
+                    batch_status, quality_status,
+                    pack_type, pack_size, units_per_pack,
+                    packages_per_box, pack_uom, base_uom,
+                    created_at, updated_at
+                ) VALUES (
+                    :org_id, :product_id, :batch_number,
+                    :expiry_date, :mfg_date,
+                    :quantity, 0,
+                    :mrp, :sale_price, :cost,
+                    'active', 'approved',
+                    :pack_type, :pack_size, :units_per_pack,
+                    :packages_per_box, :pack_uom, :base_uom,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                ) RETURNING batch_id
+            """), {
+                "org_id": org_id,
+                "product_id": product_id,
+                "batch_number": batch_number,
+                "expiry_date": batch_data.get("expiry_date"),
+                "mfg_date": batch_data.get("manufacturing_date"),
+                "quantity": batch_data.get("quantity", 0),
+                "mrp": batch_data.get("mrp_per_unit", 0),
+                "sale_price": batch_data.get("sale_price_per_unit", 0),
+                "cost": batch_data.get("cost_per_unit", 0),
+                "pack_type": batch_data.get("pack_type", "UNIT"),
+                "pack_size": batch_data.get("pack_size", 1),
+                "units_per_pack": batch_data.get("units_per_pack", 1),
+                "packages_per_box": batch_data.get("packages_per_box", 1),
+                "pack_uom": batch_data.get("pack_uom", "UNIT"),
+                "base_uom": batch_data.get("base_uom", "Unit")
+            })
+            
+            return result.scalar()
+        finally:
+            # Always re-enable trigger
+            db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
+    
+    @staticmethod
+    def update_product_dynamic(
+        db: Session,
+        product_id: int,
+        update_fields: List[str],
+        params: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update product with dynamic field list and return product info.
+        """
+        if not update_fields:
+            return None
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        query = f"""
+            UPDATE inventory.products
+            SET {', '.join(update_fields)}
+            WHERE product_id = :product_id
+            RETURNING product_id, product_code, product_name
+        """
+        
+        result = db.execute(text(query), params).fetchone()
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def get_product_basic(
+        db: Session,
+        product_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get basic product info (id, code, name).
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT product_id, product_code, product_name 
+            FROM inventory.products 
+            WHERE product_id = :product_id
+        """), {"product_id": product_id}).fetchone()
+        
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def update_product_batches(
+        db: Session,
+        product_id: int,
+        batch_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Update batch-level properties for all active batches of a product.
+        
+        Args:
+            db: Database session
+            product_id: Product ID
+            batch_data: Dictionary of batch fields to update
+            
+        Returns:
+            List of updated batch details
+        """
+        batch_field_mapping = {
+            "category_name": "category_name",
+            "pack_type": "pack_type",
+            "pack_size": "pack_size",
+            "units_per_pack": "units_per_pack",
+            "packages_per_box": "packages_per_box",
+            "tablets_per_strip": "tablets_per_strip",
+            "pack_uom": "pack_uom",
+            "base_uom": "base_uom",
+            "storage_condition": "storage_condition",
+            "quality_status": "quality_status"
+        }
+        
+        update_fields = []
+        params = {"product_id": product_id}
+        
+        for frontend_field, db_field in batch_field_mapping.items():
+            if frontend_field in batch_data:
+                update_fields.append(f"{db_field} = :{db_field}")
+                params[db_field] = batch_data[frontend_field]
+        
+        if not update_fields:
+            return []
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        query = f"""
+            UPDATE inventory.batches
+            SET {', '.join(update_fields)}
+            WHERE product_id = :product_id
+            AND batch_status = 'active'
+            AND quality_status = 'approved'
+            RETURNING batch_id, batch_number, category_name, pack_type, pack_size
+        """
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result.fetchall()]
+

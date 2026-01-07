@@ -82,10 +82,11 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
         try {
             let results: Document[] = [];
             if (searchType === 'invoice') {
-                const response = await invoicesApi.search('', { limit: 10 });
-                results = Array.isArray(response) ? response :
-                    (response?.data && Array.isArray(response.data)) ? response.data :
-                        (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
+                const response = await invoicesApi.search({ search: '', limit: 10 });
+                const responseData = response?.data || response;
+                results = Array.isArray(responseData) ? responseData :
+                    (responseData?.data && Array.isArray(responseData.data)) ? responseData.data :
+                        (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
             } else {
                 const response = await salesOrdersApi.search('', { limit: 10 });
                 results = response?.data || [];
@@ -110,10 +111,11 @@ const ImportFromInvoiceModal: React.FC<ImportFromInvoiceModalProps> = ({ isOpen,
         try {
             let results: Document[] = [];
             if (searchType === 'invoice') {
-                const response = await invoicesApi.search(searchQuery);
-                results = Array.isArray(response) ? response :
-                    (response?.data && Array.isArray(response.data)) ? response.data :
-                        (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
+                const response = await invoicesApi.search({ search: searchQuery });
+                const responseData = response?.data || response;
+                results = Array.isArray(responseData) ? responseData :
+                    (responseData?.data && Array.isArray(responseData.data)) ? responseData.data :
+                        (responseData?.invoices && Array.isArray(responseData.invoices)) ? responseData.invoices : [];
             } else {
                 const response = await salesOrdersApi.search(searchQuery);
                 results = response?.data || [];

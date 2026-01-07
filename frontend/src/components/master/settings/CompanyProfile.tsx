@@ -167,7 +167,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             const response = await companyApi.getCompanyInfo();
 
             if (response) {
-                const data = response;
+                const data = (response as any).data || response;
 
                 // Map API response to component state (matching backend company.py response)
                 setCompanyData({

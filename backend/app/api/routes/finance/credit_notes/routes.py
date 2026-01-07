@@ -208,19 +208,15 @@ async def get_note_print_data(
     Get note data formatted for printing
     """
     try:
-        # Get organization details
-        org_query = """
-            SELECT * FROM master.organizations 
-            WHERE org_id = :org_id
-        """
-        organization = db.execute(text(org_query), {"org_id": context.org_id}).first()
+        # Get organization details using service method
+        organization = CreditNoteService.get_organization_details(db, str(context.org_id))
         
         # Get note with all details
         note_data = await get_note_detail(note_id, db)
         
         # Format for printing
         print_data = {
-            "organization": dict(organization._mapping) if organization else {},
+            "organization": organization if organization else {},
             "note": note_data,
             "print_date": datetime.now().isoformat(),
             "document_type": "CREDIT NOTE" if note_data["note_type"] == "credit" else "DEBIT NOTE"
@@ -351,13 +347,8 @@ async def get_invoice_items_for_notes(
         result = CreditNoteService.get_invoice_items(db, invoice_id)
         
         if not result["items"]:
-            # Check if invoice exists
-            invoice_check = db.execute(
-                text("SELECT COUNT(*) FROM sales.invoices WHERE invoice_id = :invoice_id"),
-                {"invoice_id": invoice_id}
-            ).scalar()
-            
-            if invoice_check == 0:
+            # Check if invoice exists using service method
+            if not CreditNoteService.invoice_exists(db, invoice_id):
                 raise HTTPException(status_code=404, detail="Invoice not found")
             else:
                 logger.info(f"Invoice {invoice_id} exists but has no items")
@@ -434,55 +425,25 @@ async def create_sales_credit_note(
         # Get default branch
         branch_id = get_default_branch_id(db, str(context.org_id))
         
-        # Generate credit note number
-        # Use DocumentNumberService for consistent number generation
-        credit_note_number = DocumentNumberService.generate_number(db.session, "credit_note", str(context.org_id))
+        # Prepare data for service method
+        note_data = {
+            **data,
+            'credit_note_date': data.get('credit_note_date', datetime.now().date()),
+            'reason_code': mapped_reason_code
+        }
         
-        # Calculate total amount
-        total_amount = float(data.get('credit_amount', 0)) + float(data.get('tax_amount', 0))
+        # Use service method for credit note creation
+        result = CreditNoteService.create_sales_credit_note(
+            db=db.session,
+            org_id=str(context.org_id),
+            branch_id=branch_id,
+            data=note_data,
+            created_by=1
+        )
         
-        # Create credit note
-        result = db.execute(text("""
-            INSERT INTO sales.credit_notes (
-                org_id, branch_id, credit_note_number, credit_note_date,
-                customer_id, reference_type, reference_id, reference_number,
-                credit_amount, tax_amount, total_amount,
-                reason_code, reason, notes,
-                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
-                status, created_by
-            ) VALUES (
-                :org_id, :branch_id, :credit_note_number, :credit_note_date,
-                :customer_id, :reference_type, :reference_id, :reference_number,
-                :credit_amount, :tax_amount, :total_amount,
-                :reason_code, :reason, :notes,
-                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
-                'draft', 1
-            ) RETURNING credit_note_id
-        """), {
-            "org_id": str(context.org_id),
-            "branch_id": branch_id,
-            "credit_note_number": credit_note_number,
-            "credit_note_date": data.get('credit_note_date', datetime.now().date()),
-            "customer_id": data.get('customer_id'),
-            "reference_type": data.get('reference_type'),
-            "reference_id": data.get('reference_id'),
-            "reference_number": data.get('reference_number'),
-            "credit_amount": data.get('credit_amount', 0),
-            "tax_amount": data.get('tax_amount', 0),
-            "total_amount": total_amount,
-            "reason_code": mapped_reason_code,
-            "reason": data.get('reason', ''),
-            "notes": data.get('notes'),
-            "is_gst_applicable": data.get('is_gst_applicable', True),
-            "cgst_amount": data.get('cgst_amount', 0),
-            "sgst_amount": data.get('sgst_amount', 0),
-            "igst_amount": data.get('igst_amount', 0)
-        })
-        
-        credit_note_id = result.scalar()
         # TenantAwareSession auto-commits
         
-        return {"success": True, "credit_note_id": credit_note_id, "credit_note_number": credit_note_number}
+        return result
         
     except Exception as e:
         db.rollback()
@@ -518,55 +479,25 @@ async def create_sales_debit_note(
         # Get default branch
         branch_id = get_default_branch_id(db, str(context.org_id))
         
-        # Generate debit note number
-        # Use DocumentNumberService for consistent number generation
-        debit_note_number = DocumentNumberService.generate_number(db.session, "debit_note", str(context.org_id))
+        # Prepare data for service method
+        note_data = {
+            **data,
+            'debit_note_date': data.get('debit_note_date', datetime.now().date()),
+            'reason_code': mapped_reason_code
+        }
         
-        # Calculate total amount
-        total_amount = float(data.get('debit_amount', 0)) + float(data.get('tax_amount', 0))
+        # Use service method for debit note creation
+        result = CreditNoteService.create_sales_debit_note(
+            db=db.session,
+            org_id=str(context.org_id),
+            branch_id=branch_id,
+            data=note_data,
+            created_by=1
+        )
         
-        # Create debit note
-        result = db.execute(text("""
-            INSERT INTO sales.debit_notes (
-                org_id, branch_id, debit_note_number, debit_note_date,
-                customer_id, reference_type, reference_id, reference_number,
-                debit_amount, tax_amount, total_amount,
-                reason_code, reason, notes,
-                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
-                status, created_by
-            ) VALUES (
-                :org_id, :branch_id, :debit_note_number, :debit_note_date,
-                :customer_id, :reference_type, :reference_id, :reference_number,
-                :debit_amount, :tax_amount, :total_amount,
-                :reason_code, :reason, :notes,
-                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
-                'draft', 1
-            ) RETURNING debit_note_id
-        """), {
-            "org_id": str(context.org_id),
-            "branch_id": branch_id,
-            "debit_note_number": debit_note_number,
-            "debit_note_date": data.get('debit_note_date', datetime.now().date()),
-            "customer_id": data.get('customer_id'),
-            "reference_type": data.get('reference_type'),
-            "reference_id": data.get('reference_id'),
-            "reference_number": data.get('reference_number'),
-            "debit_amount": data.get('debit_amount', 0),
-            "tax_amount": data.get('tax_amount', 0),
-            "total_amount": total_amount,
-            "reason_code": mapped_reason_code,
-            "reason": data.get('reason', ''),
-            "notes": data.get('notes'),
-            "is_gst_applicable": data.get('is_gst_applicable', True),
-            "cgst_amount": data.get('cgst_amount', 0),
-            "sgst_amount": data.get('sgst_amount', 0),
-            "igst_amount": data.get('igst_amount', 0)
-        })
-        
-        debit_note_id = result.scalar()
         # TenantAwareSession auto-commits
         
-        return {"success": True, "debit_note_id": debit_note_id, "debit_note_number": debit_note_number}
+        return result
         
     except Exception as e:
         db.rollback()

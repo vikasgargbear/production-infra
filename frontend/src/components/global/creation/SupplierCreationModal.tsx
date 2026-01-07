@@ -91,7 +91,7 @@ interface SupplierFormData {
     contact_person_email: string;
     phone: string;
     whatsapp_number: string;
-    alternate_phone: string;
+    secondary_phone: string;
     email: string;
     website: string;
     address_line1: string;
@@ -153,7 +153,7 @@ const SupplierCreationModal: React.FC<SupplierCreationModalProps> = ({
         contact_person_email: '',
         phone: '',
         whatsapp_number: '',
-        alternate_phone: '',
+        secondary_phone: '',
         email: '',
         website: '',
         address_line1: '',

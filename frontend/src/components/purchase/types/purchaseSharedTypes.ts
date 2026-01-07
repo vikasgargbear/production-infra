@@ -18,7 +18,7 @@ export interface BasePurchaseItem {
     free_quantity?: number;
 
     // Pricing
-    rate: number;
+    unit_price: number;
     discount_percent?: number;
     discount_amount?: number;
 
@@ -31,7 +31,7 @@ export interface BasePurchaseItem {
     // Calculated
     taxable_amount?: number;
     tax_amount?: number;
-    total_amount?: number;
+    line_total?: number; // Backend/Sales standard: line_total
 }
 
 /** Purchase Order Item - for ordering goods */
@@ -41,6 +41,7 @@ export interface PurchaseOrderItem extends BasePurchaseItem {
 }
 
 /** Purchase Entry Item - for recording received invoices */
+/** Purchase Entry Item - for recording received invoices */
 export interface PurchaseEntryItem extends BasePurchaseItem {
     batch_number?: string;
     expiry_date?: string;
@@ -48,9 +49,9 @@ export interface PurchaseEntryItem extends BasePurchaseItem {
     mrp_per_unit?: number;
     sale_price_per_unit?: number;
     cost_per_unit?: number;
-    unit_price?: number; // Alias for cost_per_unit (legacy)
-    mrp?: number; // Alias for mrp_per_unit (legacy)
-    selling_price?: number; // Alias for sale_price_per_unit (legacy)
+    // unit_price is inherited from BasePurchaseItem (number)
+    mrp?: number;
+    selling_price?: number;
 }
 
 /** GRN Item - for goods receipt note */
@@ -155,7 +156,7 @@ export interface PurchaseCalculation {
     total_items: number;
     total_quantity: number;
     gst_breakdown: {
-        [rate: string]: {
+        [unit_price: string]: {
             taxable: number;
             cgst: number;
             sgst: number;

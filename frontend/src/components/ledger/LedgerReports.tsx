@@ -87,7 +87,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   });
 
   const [selectedReport, setSelectedReport] = useState('overview');
-  
+
   // API data states
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +100,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
       date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       party_type: filters.partyType !== 'all' ? filters.partyType : undefined
-    }),
+    } as any),
     {
       refetchInterval: 300000 // Refresh every 5 minutes
     }
@@ -115,10 +115,10 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Here you would load any initial ledger report data
       // For now, we'll just set a default state
-      
+
     } catch (error) {
       setError('Failed to load initial ledger report data');
     } finally {
@@ -138,17 +138,17 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     () => {
       switch (selectedReport) {
         case 'aging':
-          return ledgerApi.getAgingReport(filters);
+          return ledgerApi.getAgingReport(filters as any);
         case 'cashflow':
-          return ledgerApi.getCashFlowReport(filters);
+          return ledgerApi.getCashFlowReport(filters as any);
         case 'party_performance':
-          return ledgerApi.getPartyPerformanceReport(filters);
+          return ledgerApi.getPartyPerformanceReport(filters as any);
         case 'collection':
-          return ledgerApi.getCollectionReport(filters);
+          return ledgerApi.getCollectionReport(filters as any);
         case 'trend':
-          return ledgerApi.getTrendAnalysis(filters);
+          return ledgerApi.getTrendAnalysis(filters as any);
         default:
-          return ledgerApi.getOverviewReport(filters);
+          return ledgerApi.getOverviewReport(filters as any);
       }
     }
   );
@@ -173,8 +173,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
         report_type: selectedReport,
         filters,
         format: exportFormat
-      });
-      
+      } as any);
+
       const blob = new Blob([response.data], {
         type: exportFormat === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
       });
@@ -303,7 +303,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderAgingAnalysis = () => {
     const data = reportData as any;
-    
+
     return (
       <div className="space-y-6">
         {/* Aging Buckets Chart */}
@@ -342,9 +342,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                   <tr key={index} className="border-b">
                     <td className="py-2">{party.name}</td>
                     <td className="py-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        party.type === 'customer' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs ${party.type === 'customer' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                        }`}>
                         {party.type}
                       </span>
                     </td>
@@ -352,11 +351,10 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <td className="text-right py-2 text-red-600">{formatCurrency(party.overdue_amount)}</td>
                     <td className="text-right py-2">{party.days_overdue} days</td>
                     <td className="py-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        party.risk_level === 'high' ? 'bg-red-100 text-red-800' :
-                        party.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs ${party.risk_level === 'high' ? 'bg-red-100 text-red-800' :
+                          party.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                        }`}>
                         {party.risk_level}
                       </span>
                     </td>
@@ -372,7 +370,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderCashFlowReport = () => {
     const data = reportData as any;
-    
+
     return (
       <div className="space-y-6">
         {/* Cash Flow Chart */}
@@ -385,26 +383,26 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
               <YAxis />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               <Legend />
-              <Area 
-                type="monotone" 
-                dataKey="inflow" 
-                stackId="1" 
-                stroke="#10B981" 
-                fill="#10B981" 
+              <Area
+                type="monotone"
+                dataKey="inflow"
+                stackId="1"
+                stroke="#10B981"
+                fill="#10B981"
                 name="Cash Inflow"
               />
-              <Area 
-                type="monotone" 
-                dataKey="outflow" 
-                stackId="2" 
-                stroke="#EF4444" 
-                fill="#EF4444" 
+              <Area
+                type="monotone"
+                dataKey="outflow"
+                stackId="2"
+                stroke="#EF4444"
+                fill="#EF4444"
                 name="Cash Outflow"
               />
-              <Line 
-                type="monotone" 
-                dataKey="net_flow" 
-                stroke="#3B82F6" 
+              <Line
+                type="monotone"
+                dataKey="net_flow"
+                stroke="#3B82F6"
                 strokeWidth={2}
                 name="Net Cash Flow"
               />
@@ -434,9 +432,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
             <h4 className="font-semibold mb-2">Net Position</h4>
-            <p className={`text-2xl font-bold ${
-              data.summary.net_position >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <p className={`text-2xl font-bold ${data.summary.net_position >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
               {formatCurrency(Math.abs(data.summary.net_position))}
             </p>
             <p className="text-sm text-gray-500 mt-1">
@@ -450,7 +447,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderPartyPerformance = () => {
     const data = reportData as any;
-    
+
     return (
       <div className="space-y-6">
         {/* Top Performing Parties */}
@@ -521,7 +518,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderCollectionAnalysis = () => {
     const data = reportData as any;
-    
+
     return (
       <div className="space-y-6">
         {/* Collection Funnel */}
@@ -568,7 +565,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderTrendAnalysis = () => {
     const data = reportData as any;
-    
+
     return (
       <div className="space-y-6">
         {/* Multi-metric Trend */}
@@ -582,25 +579,25 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
               <YAxis yAxisId="right" orientation="right" />
               <Tooltip />
               <Legend />
-              <Line 
+              <Line
                 yAxisId="left"
-                type="monotone" 
-                dataKey="receivables" 
-                stroke="#3B82F6" 
+                type="monotone"
+                dataKey="receivables"
+                stroke="#3B82F6"
                 name="Receivables"
               />
-              <Line 
+              <Line
                 yAxisId="left"
-                type="monotone" 
-                dataKey="payables" 
-                stroke="#EF4444" 
+                type="monotone"
+                dataKey="payables"
+                stroke="#EF4444"
                 name="Payables"
               />
-              <Line 
+              <Line
                 yAxisId="right"
-                type="monotone" 
-                dataKey="collection_rate" 
-                stroke="#10B981" 
+                type="monotone"
+                dataKey="collection_rate"
+                stroke="#10B981"
                 name="Collection Rate %"
               />
             </LineChart>
@@ -617,19 +614,19 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
               <YAxis />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               <Legend />
-              <Area 
-                type="monotone" 
-                dataKey="this_year" 
-                stroke="#3B82F6" 
-                fill="#3B82F6" 
+              <Area
+                type="monotone"
+                dataKey="this_year"
+                stroke="#3B82F6"
+                fill="#3B82F6"
                 fillOpacity={0.6}
                 name="This Year"
               />
-              <Area 
-                type="monotone" 
-                dataKey="last_year" 
-                stroke="#94A3B8" 
-                fill="#94A3B8" 
+              <Area
+                type="monotone"
+                dataKey="last_year"
+                stroke="#94A3B8"
+                fill="#94A3B8"
                 fillOpacity={0.3}
                 name="Last Year"
               />
@@ -652,7 +649,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
             iconColor="text-purple-600"
             onClose={onClose}
             historyType="ledger"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: "Export PDF",
@@ -680,214 +677,212 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
-            
-            {/* Loading State */}
-            {isLoading && (
-              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
-                <div className="text-center">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-                  <p className="text-gray-600">Loading ledger reports...</p>
+
+              {/* Loading State */}
+              {isLoading && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                    <p className="text-gray-600">Loading ledger reports...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error State */}
+              {error && (
+                <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                  <div className="text-center max-w-md mx-auto">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                    <p className="text-red-700 mb-4">{error}</p>
+                    <button
+                      onClick={() => setError(null)}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Total Receivables</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {formatCurrency(dashboardStats.total_receivables)}
+                      </p>
+                      <p className="text-sm text-red-500">
+                        Overdue: {formatCurrency(dashboardStats.overdue_receivables)}
+                      </p>
+                    </div>
+                    <TrendingUp className="h-10 w-10 text-green-400" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Total Payables</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        {formatCurrency(dashboardStats.total_payables)}
+                      </p>
+                      <p className="text-sm text-red-500">
+                        Overdue: {formatCurrency(dashboardStats.overdue_payables)}
+                      </p>
+                    </div>
+                    <TrendingDown className="h-10 w-10 text-red-400" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Collection Efficiency</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {dashboardStats.collection_efficiency.toFixed(1)}%
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        This month
+                      </p>
+                    </div>
+                    <Target className="h-10 w-10 text-blue-400" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Net Position</p>
+                      <p className={`text-2xl font-bold ${dashboardStats.net_position >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                        {formatCurrency(Math.abs(dashboardStats.net_position))}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {dashboardStats.cash_flow_trend === 'positive' ? '↑' :
+                          dashboardStats.cash_flow_trend === 'negative' ? '↓' : '→'} Trend
+                      </p>
+                    </div>
+                    <DollarSign className="h-10 w-10 text-gray-400" />
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Error State */}
-            {error && (
-              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
-                <div className="text-center max-w-md mx-auto">
-                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
-                  <p className="text-red-700 mb-4">{error}</p>
-                  <button
-                    onClick={() => setError(null)}
-                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
-                  >
-                    Dismiss
-                  </button>
+              {/* Report Selection and Filters */}
+              <div className="mb-6 bg-white p-4 rounded-lg shadow">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Report Type
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {reportTypes.map((report) => {
+                        const Icon = report.icon;
+                        return (
+                          <button
+                            key={report.value}
+                            onClick={() => setSelectedReport(report.value)}
+                            className={`p-3 rounded-lg border flex items-center gap-2 ${selectedReport === report.value
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-gray-300 hover:bg-gray-50'
+                              }`}
+                          >
+                            <Icon className="h-5 w-5" />
+                            <span className="text-sm font-medium">{report.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="min-w-[200px]">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date Range
+                    </label>
+                    <div className="flex gap-2">
+                      <DatePicker
+                        value={filters.dateRange.from}
+                        onChange={(date) => setFilters(prev => ({
+                          ...prev,
+                          dateRange: { ...prev.dateRange, from: date }
+                        }))}
+                        placeholder="From date"
+                      />
+                      <DatePicker
+                        value={filters.dateRange.to}
+                        onChange={(date) => setFilters(prev => ({
+                          ...prev,
+                          dateRange: { ...prev.dateRange, to: date }
+                        }))}
+                        placeholder="To date"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Party Type
+                    </label>
+                    <Select
+                      value={filters.partyType}
+                      onChange={(value) => setFilters({ ...filters, partyType: value as any })}
+                      options={[
+                        { value: 'all', label: 'All Parties' },
+                        { value: 'customer', label: 'Customers' },
+                        { value: 'supplier', label: 'Suppliers' }
+                      ]}
+                    />
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Group By
+                    </label>
+                    <Select
+                      value={filters.groupBy}
+                      onChange={(value) => setFilters({ ...filters, groupBy: value as any })}
+                      options={[
+                        { value: 'day', label: 'Daily' },
+                        { value: 'week', label: 'Weekly' },
+                        { value: 'month', label: 'Monthly' },
+                        { value: 'quarter', label: 'Quarterly' }
+                      ]}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => handleExport('excel')}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Excel
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Receivables</p>
-              <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(dashboardStats.total_receivables)}
-              </p>
-              <p className="text-sm text-red-500">
-                Overdue: {formatCurrency(dashboardStats.overdue_receivables)}
-              </p>
-            </div>
-            <TrendingUp className="h-10 w-10 text-green-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Payables</p>
-              <p className="text-2xl font-bold text-red-600">
-                {formatCurrency(dashboardStats.total_payables)}
-              </p>
-              <p className="text-sm text-red-500">
-                Overdue: {formatCurrency(dashboardStats.overdue_payables)}
-              </p>
-            </div>
-            <TrendingDown className="h-10 w-10 text-red-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Collection Efficiency</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {dashboardStats.collection_efficiency.toFixed(1)}%
-              </p>
-              <p className="text-sm text-gray-500">
-                This month
-              </p>
-            </div>
-            <Target className="h-10 w-10 text-blue-400" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Net Position</p>
-              <p className={`text-2xl font-bold ${
-                dashboardStats.net_position >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {formatCurrency(Math.abs(dashboardStats.net_position))}
-              </p>
-              <p className="text-sm text-gray-500">
-                {dashboardStats.cash_flow_trend === 'positive' ? '↑' : 
-                 dashboardStats.cash_flow_trend === 'negative' ? '↓' : '→'} Trend
-              </p>
-            </div>
-            <DollarSign className="h-10 w-10 text-gray-400" />
-          </div>
-        </div>
-      </div>
-
-      {/* Report Selection and Filters */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Report Type
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {reportTypes.map((report) => {
-                const Icon = report.icon;
-                return (
-                  <button
-                    key={report.value}
-                    onClick={() => setSelectedReport(report.value)}
-                    className={`p-3 rounded-lg border flex items-center gap-2 ${
-                      selectedReport === report.value
-                        ? 'bg-blue-50 border-blue-500 text-blue-700'
-                        : 'bg-white border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    <span className="text-sm font-medium">{report.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="min-w-[200px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date Range
-            </label>
-            <div className="flex gap-2">
-              <DatePicker
-                value={filters.dateRange.from}
-                onChange={(date) => setFilters(prev => ({
-                  ...prev,
-                  dateRange: { ...prev.dateRange, from: date }
-                }))}
-                placeholder="From date"
-              />
-              <DatePicker
-                value={filters.dateRange.to}
-                onChange={(date) => setFilters(prev => ({
-                  ...prev,
-                  dateRange: { ...prev.dateRange, to: date }
-                }))}
-                placeholder="To date"
-              />
-            </div>
-          </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Party Type
-            </label>
-            <Select
-              value={filters.partyType}
-              onChange={(value) => setFilters({ ...filters, partyType: value as any })}
-              options={[
-                { value: 'all', label: 'All Parties' },
-                { value: 'customer', label: 'Customers' },
-                { value: 'supplier', label: 'Suppliers' }
-              ]}
-            />
-          </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Group By
-            </label>
-            <Select
-              value={filters.groupBy}
-              onChange={(value) => setFilters({ ...filters, groupBy: value as any })}
-              options={[
-                { value: 'day', label: 'Daily' },
-                { value: 'week', label: 'Weekly' },
-                { value: 'month', label: 'Monthly' },
-                { value: 'quarter', label: 'Quarterly' }
-              ]}
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleExport('pdf')}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              PDF
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Excel
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Report Content */}
-      <div className="min-h-[500px]">
-        {isLoading || reportLoading ? (
-          <div className="flex flex-col items-center justify-center h-[500px]">
-            <Loader2 className="h-10 w-10 text-blue-500 mb-4" />
-            <p className="text-gray-500">Loading report...</p>
-            {refreshing && <RefreshCw className="h-6 w-6 text-blue-500 mt-4" onClick={handleRefresh} />}
-          </div>
-        ) : (
-          renderReport()
-        )}
-      </div>
+              {/* Report Content */}
+              <div className="min-h-[500px]">
+                {isLoading || reportLoading ? (
+                  <div className="flex flex-col items-center justify-center h-[500px]">
+                    <Loader2 className="h-10 w-10 text-blue-500 mb-4" />
+                    <p className="text-gray-500">Loading report...</p>
+                    {refreshing && <RefreshCw className="h-6 w-6 text-blue-500 mt-4" onClick={handleRefresh} />}
+                  </div>
+                ) : (
+                  renderReport()
+                )}
+              </div>
             </div>
           </div>
         </div>

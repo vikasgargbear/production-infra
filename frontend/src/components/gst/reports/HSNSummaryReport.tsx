@@ -69,8 +69,8 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                     items.forEach((item: any) => {
                         const hsn = item.hsn_code || item.hsn || item.product_hsn || 'N/A';
                         const qty = item.quantity || 0;
-                        const rate = item.unit_price || item.unit_price || 0;
-                        const taxableValue = qty * rate;
+                        const unit_price = item.unit_price || item.unit_price || 0;
+                        const taxableValue = qty * unit_price;
                         const taxRate = item.tax_percent || item.gst_percent || 18;
                         const taxAmount = (taxableValue * taxRate) / 100;
 

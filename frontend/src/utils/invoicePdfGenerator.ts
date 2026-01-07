@@ -8,7 +8,6 @@
 export interface InvoiceItem {
     product_name?: string;
     batch_number?: string;
-    batch_number?: string;
     hsn_code?: string;
     pack_type?: string;
     pack_size?: number;

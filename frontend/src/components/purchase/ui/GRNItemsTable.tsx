@@ -28,7 +28,6 @@ export interface GRNItem {
     // Pricing
     mrp?: number;
     unit_price?: number;
-    unit_price?: number;
     discount_percent?: number;
     tax_percent?: number;
 

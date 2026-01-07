@@ -221,3 +221,114 @@ class OrderService:
         Delegates to repository.
         """
         return OrderRepository.get_customer_context(db, org_id, customer_id)
+    
+    @staticmethod
+    def get_order_for_edit(db: Session, order_id: int, org_id: str, order_type: str = "sales") -> Dict[str, Any]:
+        """
+        Get order status and basic info for update validation.
+        Returns dict with order_status, customer_id, or None if not found.
+        """
+        from sqlalchemy import text
+        result = db.execute(text("""
+            SELECT order_status, customer_id FROM sales.orders 
+            WHERE order_id = :order_id AND org_id = :org_id AND order_type = :order_type
+        """), {"order_id": order_id, "org_id": org_id, "order_type": order_type}).fetchone()
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def get_order_items_raw(db: Session, order_id: int) -> List[Dict[str, Any]]:
+        """
+        Get order items for inventory validation.
+        Returns list of dicts with product_id, batch_id, quantity, unit_price.
+        """
+        from sqlalchemy import text
+        items = db.execute(text("""
+            SELECT product_id, batch_id, quantity, unit_price
+            FROM sales.order_items 
+            WHERE order_id = :order_id
+        """), {"order_id": order_id}).fetchall()
+        return [dict(item._mapping) for item in items]
+    
+    @staticmethod
+    def get_order_final_amount(db: Session, order_id: int) -> float:
+        """
+        Get order final amount for credit validation.
+        """
+        from sqlalchemy import text
+        return db.execute(text("""
+            SELECT final_amount FROM sales.orders WHERE order_id = :order_id
+        """), {"order_id": order_id}).scalar() or 0.0
+    
+    @staticmethod
+    def approve_order(db: Session, order_id: int, org_id: str) -> None:
+        """
+        Update order status to approved.
+        """
+        from sqlalchemy import text
+        db.execute(text("""
+            UPDATE sales.orders
+            SET order_status = 'approved',
+                confirmed_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_id = :order_id AND org_id = :org_id
+        """), {"order_id": order_id, "org_id": org_id})
+    
+    @staticmethod
+    def update_order_status(db: Session, order_id: int, new_status: str) -> None:
+        """
+        Update order status to any valid status.
+        Used for invoiced, shipped, cancelled, etc.
+        """
+        from sqlalchemy import text
+        db.execute(text("""
+            UPDATE sales.orders
+            SET order_status = :new_status,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_id = :order_id
+        """), {"order_id": order_id, "new_status": new_status})
+    
+    @staticmethod
+    def update_order_dynamic(
+        db: Session,
+        order_id: int,
+        org_id: str,
+        update_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Update order with validated dynamic fields.
+        Uses allowlist to prevent SQL injection.
+        Returns True if update was applied.
+        """
+        from sqlalchemy import text
+        
+        # SECURITY: Allowlist of updatable fields to prevent SQL injection
+        ALLOWED_FIELDS = {
+            'customer_id', 'customer_name', 'order_date', 'delivery_date',
+            'billing_address', 'shipping_address', 'notes', 'discount_amount',
+            'discount_percent', 'order_status', 'payment_status', 'priority',
+            'sales_person_id', 'total_amount', 'final_amount'
+        }
+        
+        update_fields = []
+        params = {"order_id": order_id, "org_id": org_id}
+        
+        for field, value in update_data.items():
+            if value is not None and field in ALLOWED_FIELDS:
+                update_fields.append(f"{field} = :{field}")
+                params[field] = value
+        
+        if not update_fields:
+            return False
+        
+        # Add updated timestamp
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        # Execute update
+        update_query = f"""
+            UPDATE sales.orders 
+            SET {', '.join(update_fields)}
+            WHERE order_id = :order_id AND org_id = :org_id
+        """
+        
+        db.execute(text(update_query), params)
+        return True

@@ -19,7 +19,7 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import ReturnStatus, StockMovementType
 from ....services.document_number_service import DocumentNumberService
-from ....services.gst_service import GSTService
+from ....services.compliance.gst_service import GSTService
 from ....services.inventory.inventory_service import InventoryService
 from ....services.returns.return_service import ReturnService
 from ....schemas.inventory.inventory import StockMovementCreate
@@ -69,64 +69,15 @@ async def get_sale_returns(
     Get list of sale returns with optional filters
     """
     try:
-        query = """
-            SELECT sr.*, c.customer_name as party_name,
-                   i.invoice_number as original_invoice_number
-            FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
-            WHERE 1=1
-        """
-        params = {"skip": skip, "limit": limit}
-        
-        if party_id:
-            query += " AND sr.customer_id = :party_id"
-            params["party_id"] = party_id
-            
-        if from_date:
-            query += " AND sr.return_date >= :from_date"
-            params["from_date"] = from_date
-            
-        if to_date:
-            query += " AND sr.return_date <= :to_date"
-            params["to_date"] = to_date
-            
-        query += " ORDER BY sr.return_date DESC, sr.created_at DESC LIMIT :limit OFFSET :skip"
-        
-        returns = db.execute(text(query), params).fetchall()
-        
-        # Get items for each return
-        result = []
-        for ret in returns:
-            items_query = """
-                SELECT sri.*, p.product_name, p.hsn_code
-                FROM sales.sales_return_items sri
-                LEFT JOIN inventory.products p ON sri.product_id = p.product_id
-                WHERE sri.return_id = :return_id
-            """
-            items = db.execute(text(items_query), {"return_id": ret.return_id}).fetchall()
-            
-            return_dict = dict(ret._mapping)
-            return_dict["items"] = [dict(item._mapping) for item in items]
-            result.append(return_dict)
-            
-        # Get total count
-        count_query = """
-            SELECT COUNT(*) FROM sales.sales_returns sr WHERE 1=1
-        """
-        if party_id:
-            count_query += " AND sr.customer_id = :party_id"
-        if from_date:
-            count_query += " AND sr.return_date >= :from_date"
-        if to_date:
-            count_query += " AND sr.return_date <= :to_date"
-            
-        total = db.execute(text(count_query), params).scalar()
-        
-        return {
-            "total": total,
-            "returns": result
-        }
+        # Use service method for list returns with filters
+        return ReturnService.list_sales_returns(
+            db=db,
+            skip=skip,
+            limit=limit,
+            party_id=party_id,
+            from_date=from_date,
+            to_date=to_date
+        )
         
     except Exception as e:
         logger.error(f"Error fetching sale returns: {e}")
@@ -146,50 +97,12 @@ async def get_returnable_invoices(
     Get sales invoices that can be returned
     """
     try:
-        query = """
-            SELECT 
-                i.invoice_id,
-                i.invoice_number,
-                i.invoice_date,
-                i.customer_id as party_id,
-                c.customer_name as party_name,
-                i.final_amount as grand_total,
-                i.paid_amount,
-                COUNT(DISTINCT ii.invoice_item_id) as total_items,
-                SUM(ii.quantity) as total_quantity
-            FROM sales.invoices i
-            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
-            LEFT JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
-            WHERE i.invoice_status = 'generated'
-        """
-        params = {}
-        
-        if party_id:
-            query += " AND i.customer_id = :party_id"
-            params["party_id"] = party_id
-            
-        if invoice_number:
-            query += " AND i.invoice_number LIKE :invoice_number"
-            params["invoice_number"] = f"%{invoice_number}%"
-            
-        query += """ 
-            GROUP BY i.invoice_id, i.invoice_number, i.invoice_date, 
-                     i.customer_id, c.customer_name, i.final_amount, i.paid_amount
-            ORDER BY i.invoice_date DESC
-            LIMIT 50
-        """
-        
-        invoices = db.execute(text(query), params).fetchall()
-        
-        result = []
-        for inv in invoices:
-            invoice_dict = dict(inv._mapping)
-            invoice_dict["has_returns"] = False  # Will be checked separately if needed
-            invoice_dict["returnable_quantity"] = float(inv.total_quantity) if inv.total_quantity else 0
-            invoice_dict["can_return"] = True  # Allow all invoices to be returned
-            result.append(invoice_dict)
-            
-        return {"invoices": result}
+        # Use service method for returnable invoices
+        return ReturnService.get_returnable_invoices(
+            db=db,
+            party_id=party_id,
+            invoice_number=invoice_number
+        )
         
     except Exception as e:
         logger.error(f"Error fetching returnable invoices: {e}")
@@ -208,35 +121,8 @@ async def get_returns_for_invoice(
     Get all returns for a specific invoice
     """
     try:
-        # Get all returns for this invoice
-        returns_query = """
-            SELECT 
-                sr.return_id,
-                sr.return_number,
-                sr.return_date,
-                sr.return_reason,
-                sr.total_amount,
-                sr.credit_note_number,
-                sr.credit_note_status,
-                COUNT(sri.return_item_id) as item_count,
-                SUM(sri.return_quantity) as total_quantity_returned
-            FROM sales.sales_returns sr
-            LEFT JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
-            WHERE sr.invoice_id = :invoice_id
-            GROUP BY sr.return_id, sr.return_number, sr.return_date, 
-                     sr.return_reason, sr.total_amount, sr.credit_note_number, 
-                     sr.credit_note_status
-            ORDER BY sr.return_date DESC
-        """
-        
-        returns = db.execute(text(returns_query), {"invoice_id": invoice_id}).fetchall()
-        
-        return {
-            "invoice_id": invoice_id,
-            "has_returns": len(returns) > 0,
-            "return_count": len(returns),
-            "returns": [dict(r._mapping) for r in returns] if returns else []
-        }
+        # Use service method for invoice returns
+        return ReturnService.get_returns_for_invoice(db=db, invoice_id=invoice_id)
         
     except Exception as e:
         logger.error(f"Error fetching returns for invoice: {e}")
@@ -255,58 +141,8 @@ async def get_returnable_items(
     Get invoice items with accurate returnable quantities
     """
     try:
-        # Get invoice items with already returned quantities
-        items = db.execute(
-            text("""
-                SELECT 
-                    ii.invoice_item_id,
-                    ii.product_id,
-                    p.product_name,
-                    ii.batch_id,
-                    ii.batch_number,
-                    ii.quantity as invoice_quantity,
-                    ii.free_quantity,
-                    ii.quantity - COALESCE(ii.free_quantity, 0) as paid_quantity,
-                    COALESCE(SUM(sri.return_quantity), 0) as already_returned,
-                    ii.quantity - COALESCE(SUM(sri.return_quantity), 0) as returnable_quantity,
-                    ii.unit_price,
-                    ii.discount_percent,
-                    COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as tax_percent,
-                    ii.line_total as total_amount,
-                    p.hsn_code,
-                    ii.uom as unit
-                FROM sales.invoice_items ii
-                JOIN inventory.products p ON ii.product_id = p.product_id
-                LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id
-                WHERE ii.invoice_id = :invoice_id
-                GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
-                HAVING ii.quantity - COALESCE(SUM(sri.return_quantity), 0) > 0
-                ORDER BY ii.invoice_item_id
-            """),
-            {"invoice_id": invoice_id}
-        ).fetchall()
-        
-        result = []
-        for item in items:
-            result.append({
-                "invoice_item_id": item.invoice_item_id,
-                "product_id": item.product_id,
-                "product_name": item.product_name,
-                "batch_id": item.batch_id,
-                "batch_number": item.batch_number,
-                "invoice_quantity": float(item.invoice_quantity),
-                "already_returned": float(item.already_returned),
-                "returnable_quantity": float(item.returnable_quantity),
-                "max_returnable_qty": float(item.returnable_quantity),
-                "unit_price": float(item.unit_price),
-                "discount_percent": float(item.discount_percent) if item.discount_percent else 0,
-                "tax_percent": float(item.tax_percent) if item.tax_percent else 0,
-                "hsn_code": item.hsn_code,
-                "unit": item.unit,
-                "can_return": float(item.returnable_quantity) > 0
-            })
-        
-        return {"items": result}
+        # Use service method for returnable items
+        return ReturnService.get_returnable_items(db=db, invoice_id=invoice_id)
         
     except Exception as e:
         logger.error(f"Error fetching returnable items: {e}")
@@ -325,80 +161,13 @@ async def get_invoice_items_for_return(
     Get items from a specific invoice for return
     """
     try:
-        # Get invoice details
-        invoice = db.execute(
-            text("SELECT * FROM sales.invoices WHERE invoice_id = :invoice_id"),
-            {"invoice_id": invoice_id}
-        ).first()
+        # Use service method for invoice items with return info
+        result = ReturnService.get_invoice_for_return(db=db, invoice_id=int(invoice_id))
         
-        if not invoice:
+        if not result:
             raise HTTPException(status_code=404, detail="Invoice not found")
-            
-        # Get items with comprehensive return info
-        items_query = """
-            SELECT 
-                ii.*,
-                p.product_name,
-                p.hsn_code,
-                COALESCE(ret.total_returned, 0) as returned_quantity,
-                COALESCE(ret.saleable_returned, 0) as saleable_returned,
-                COALESCE(ret.damaged_returned, 0) as damaged_returned,
-                ret.return_numbers,
-                ret.last_return_date
-            FROM sales.invoice_items ii
-            LEFT JOIN inventory.products p ON ii.product_id = p.product_id
-            LEFT JOIN (
-                SELECT 
-                    sri.product_id,
-                    sri.batch_id,
-                    SUM(sri.return_quantity) as total_returned,
-                    SUM(sri.saleable_quantity) as saleable_returned,
-                    SUM(sri.damaged_quantity) as damaged_returned,
-                    STRING_AGG(DISTINCT sr.return_number, ', ') as return_numbers,
-                    MAX(sr.return_date) as last_return_date
-                FROM sales.sales_return_items sri
-                JOIN sales.sales_returns sr ON sri.return_id = sr.return_id
-                WHERE sr.invoice_id = :invoice_id
-                GROUP BY sri.product_id, sri.batch_id
-            ) ret ON (ret.product_id = ii.product_id 
-                     AND (ret.batch_id = ii.batch_id OR (ret.batch_id IS NULL AND ii.batch_id IS NULL)))
-            WHERE ii.invoice_id = :invoice_id
-        """
         
-        items = db.execute(text(items_query), {"invoice_id": invoice_id}).fetchall()
-        
-        result_items = []
-        for item in items:
-            item_dict = dict(item._mapping)
-            
-            # Calculate returnable quantity (original - returned)
-            original_qty = float(item.quantity) if item.quantity else 0
-            returned_qty = float(item.returned_quantity) if item.returned_quantity else 0
-            
-            item_dict["original_quantity"] = original_qty
-            item_dict["returned_quantity"] = returned_qty
-            item_dict["returnable_quantity"] = max(0, original_qty - returned_qty)
-            item_dict["can_return"] = item_dict["returnable_quantity"] > 0
-            
-            # Add return status
-            if returned_qty > 0:
-                if returned_qty >= original_qty:
-                    item_dict["return_status"] = "FULLY_RETURNED"
-                else:
-                    item_dict["return_status"] = "PARTIALLY_RETURNED"
-            else:
-                item_dict["return_status"] = "NOT_RETURNED"
-            
-            # Include return history
-            item_dict["return_numbers"] = item.return_numbers
-            item_dict["last_return_date"] = item.last_return_date
-            
-            result_items.append(item_dict)
-            
-        return {
-            "invoice": dict(invoice._mapping),
-            "items": result_items
-        }
+        return result
         
     except HTTPException:
         raise
@@ -432,22 +201,15 @@ async def create_sale_return(
         invoice_id = return_dict.get("invoice_id", "")
         return_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
         
-        # Get customer details to check for GST
-        customer = db.execute(
-            text("""
-                SELECT customer_id, customer_name, gst_number
-                FROM parties.customers
-                WHERE customer_id = :customer_id
-            """),
-            {"customer_id": return_dict["customer_id"]}
-        ).fetchone()
+        # Get customer details to check for GST using service method
+        customer = ReturnService.get_customer_for_return(db, return_dict["customer_id"])
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
             
         # Generate credit note number if customer has GST
         credit_note_no = None
-        if customer.gst_number:
+        if customer.get("gst_number"):
             credit_note_no = f"CN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
         # Calculate totals using ReturnService (DRY)
@@ -479,56 +241,17 @@ async def create_sale_return(
                 logger.error(f"No default branch for org {org_id}: {e}")
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
         
-        # Create return record using sales.sales_returns table with correct columns
-        result = db.execute(
-            text("""
-                INSERT INTO sales.sales_returns (
-                    org_id, branch_id, return_number, return_date,
-                    return_type, invoice_id, customer_id,
-                    return_reason, return_category,
-                    approval_required, approval_status,
-                    return_amount, tax_amount, total_amount,
-                    cgst_amount, sgst_amount, igst_amount,
-                    credit_note_number, credit_note_date, credit_note_status,
-                    adjusted_amount, pending_amount,
-                    notes, created_by
-                ) VALUES (
-                    :org_id, :branch_id, :return_number, :return_date,
-                    'SALES', :invoice_id, :customer_id,
-                    :reason, :category,
-                    false, 'approved',
-                    :subtotal, :tax_amount, :total_amount,
-                    :cgst_amount, :sgst_amount, :igst_amount,
-                    :credit_note_no, :credit_note_date, :credit_note_status,
-                    0, :total_amount,
-                    :notes, :created_by
-                )
-                RETURNING return_id
-            """),
-            {
-                "org_id": org_id,
-                "branch_id": branch_id,
-                "return_number": return_number,
-                "return_date": return_dict["return_date"],
-                "invoice_id": return_dict.get("invoice_id") if return_dict.get("invoice_id") else None,
-                "customer_id": return_dict["customer_id"],
-                "reason": return_dict.get("return_reason", "Customer Return"),
-                "category": return_dict.get("return_category", "QUALITY"),
-                "subtotal": float(subtotal),
-                "tax_amount": float(tax_amount),
-                "total_amount": float(total_amount),
-                "cgst_amount": float(cgst_amount),
-                "sgst_amount": float(sgst_amount),
-                "igst_amount": float(igst_amount),
-                "credit_note_no": credit_note_no,
-                "credit_note_date": return_dict["return_date"] if credit_note_no else None,
-                "credit_note_status": "issued" if credit_note_no else None,
-                "notes": return_dict.get("notes", ""),
-                "created_by": created_by
-            }
-        ).fetchone()
-        
-        return_id = result.return_id
+        # Create return record using service method
+        return_id = ReturnService.insert_sales_return(
+            db=db,
+            org_id=org_id,
+            branch_id=branch_id,
+            return_number=return_number,
+            return_data=return_dict,
+            totals=totals,
+            credit_note_no=credit_note_no,
+            created_by=created_by
+        )
         
         # Create return items and update inventory
         for item in return_dict["items"]:
@@ -559,53 +282,30 @@ async def create_sale_return(
             )
             
             if should_fetch_from_invoice:
-                invoice_item_details = db.execute(
-                    text("""
-                        SELECT 
-                            COALESCE(ii.cgst_rate, 0) + COALESCE(ii.sgst_rate, 0) + COALESCE(ii.igst_rate, 0) as gst_percent,
-                            ii.discount_percent,
-                            ii.unit_price,
-                            ii.free_quantity as invoice_free_qty
-                        FROM sales.invoice_items ii
-                        WHERE ii.invoice_item_id = :invoice_item_id
-                    """),
-                    {"invoice_item_id": invoice_item_id}
-                ).fetchone()
+                # Use service method for invoice item details
+                invoice_item_details = ReturnService.get_invoice_item_details(db, invoice_item_id)
                 
                 if invoice_item_details:
                     # Only auto-fill if NOT explicitly provided by frontend
-                    if not tax_percent_provided and invoice_item_details.gst_percent:
-                        tax_percent = Decimal(str(invoice_item_details.gst_percent))
+                    if not tax_percent_provided and invoice_item_details.get("gst_percent"):
+                        tax_percent = Decimal(str(invoice_item_details["gst_percent"]))
                         logger.info(f"Fetched tax_percent {tax_percent}% from invoice item {invoice_item_id}")
-                    if "discount_percent" not in item and invoice_item_details.discount_percent:
-                        discount_percent = Decimal(str(invoice_item_details.discount_percent))
+                    if "discount_percent" not in item and invoice_item_details.get("discount_percent"):
+                        discount_percent = Decimal(str(invoice_item_details["discount_percent"]))
                         logger.info(f"Fetched discount_percent {discount_percent}% from invoice item {invoice_item_id}")
             
-            # Validate return quantity doesn't exceed invoice quantity
+            # Validate return quantity doesn't exceed invoice quantity using service
             if invoice_item_id:
-                # Check how much has already been returned for this item
-                already_returned = db.execute(
-                    text("""
-                        SELECT 
-                            ii.quantity as invoice_qty,
-                            COALESCE(SUM(sri.return_quantity), 0) as already_returned
-                        FROM sales.invoice_items ii
-                        LEFT JOIN sales.sales_return_items sri 
-                            ON ii.invoice_item_id = sri.invoice_item_id
-                        WHERE ii.invoice_item_id = :invoice_item_id
-                        GROUP BY ii.quantity
-                    """),
-                    {"invoice_item_id": invoice_item_id}
-                ).fetchone()
+                max_returnable, already_returned_qty = ReturnService.validate_return_quantity(
+                    db, invoice_item_id, float(return_qty)
+                )
                 
-                if already_returned:
-                    max_returnable = Decimal(str(already_returned.invoice_qty)) - Decimal(str(already_returned.already_returned))
-                    if return_qty > max_returnable:
-                        product_name = item.get("product_name", "Product")
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
-                        )
+                if return_qty > Decimal(str(max_returnable)):
+                    product_name = item.get("product_name", "Product")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
+                    )
             
             # Calculate return value - check for manual override first
             if "return_value" in item and item["return_value"] is not None:
@@ -650,103 +350,31 @@ async def create_sale_return(
                 damaged_qty = 0
                 saleable_qty = float(return_qty)
             
-            # Insert return item using correct schema
-            db.execute(
-                text("""
-                    INSERT INTO sales.sales_return_items (
-                        return_id, invoice_item_id, product_id,
-                        batch_id, batch_number,
-                        return_quantity, uom,
-                        damaged_quantity, saleable_quantity,
-                        unit_price, return_value, tax_amount,
-                        item_return_reason, disposition
-                    ) VALUES (
-                        :return_id, :invoice_item_id, :product_id,
-                        :batch_id, :batch_number,
-                        :return_quantity, :uom,
-                        :damaged_quantity, :saleable_quantity,
-                        :unit_price, :return_value, :tax_amount,
-                        :item_return_reason, :disposition
-                    )
-                """),
-                {
-                    "return_id": return_id,
-                    "invoice_item_id": invoice_item_id,
-                    "product_id": item["product_id"],
-                    "batch_id": batch_id,
-                    "batch_number": batch_number,
-                    "return_quantity": float(return_qty),
-                    "uom": item.get("unit", item.get("uom", "PCS")),
-                    "damaged_quantity": damaged_qty,
-                    "saleable_quantity": saleable_qty,
-                    "unit_price": float(unit_price),
-                    "return_value": float(return_value),
-                    "tax_amount": float(item_tax_amount),
-                    "item_return_reason": item_return_reason,
-                    "disposition": disposition
-                }
-            )
+            # Insert return item using service method
+            ReturnService.insert_return_item(db, return_id, {
+                "invoice_item_id": invoice_item_id,
+                "product_id": item["product_id"],
+                "batch_id": batch_id,
+                "batch_number": batch_number,
+                "return_quantity": float(return_qty),
+                "uom": item.get("unit", item.get("uom", "PCS")),
+                "damaged_quantity": damaged_qty,
+                "saleable_quantity": saleable_qty,
+                "unit_price": float(unit_price),
+                "return_value": float(return_value),
+                "tax_amount": float(item_tax_amount),
+                "item_return_reason": item_return_reason,
+                "disposition": disposition
+            })
             
-            # Update batch stock based on batch tracking
-            if batch_id:
-                # Have batch ID - can directly update the specific batch
-                if saleable_qty > 0:
-                    # Update both quantity_available and quantity_returned for restockable items
-                    db.execute(
-                        text("""
-                            UPDATE inventory.batches 
-                            SET quantity_available = quantity_available + :saleable_qty,
-                                quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
-                            WHERE batch_id = :batch_id
-                        """),
-                        {
-                            "saleable_qty": saleable_qty,  # Only saleable items go back to available stock
-                            "total_qty": float(return_qty),  # Track total returned (damaged + saleable)
-                            "batch_id": batch_id
-                        }
-                    )
-                else:
-                    # Only update quantity_returned for non-restockable items (damaged/expired)
-                    db.execute(
-                        text("""
-                            UPDATE inventory.batches 
-                            SET quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
-                            WHERE batch_id = :batch_id
-                        """),
-                        {
-                            "total_qty": float(return_qty),  # Track total returned
-                            "batch_id": batch_id
-                        }
-                    )
-            elif saleable_qty > 0:
-                # No batch ID but item is restockable - put in quarantine for batch assignment
-                # Find the oldest batch with available quantity
-                oldest_batch = db.execute(
-                    text("""
-                        SELECT batch_id 
-                        FROM inventory.batches 
-                        WHERE product_id = :product_id
-                        AND quantity_available > 0
-                        ORDER BY expiry_date ASC NULLS LAST
-                        LIMIT 1
-                    """),
-                    {"product_id": item["product_id"]}
-                ).first()
-                
-                if oldest_batch:
-                    # Update quantity_quarantine in the oldest batch
-                    db.execute(
-                        text("""
-                            UPDATE inventory.batches 
-                            SET quantity_quarantine = COALESCE(quantity_quarantine, 0) + :qty
-                            WHERE batch_id = :batch_id
-                        """),
-                        {
-                            "qty": saleable_qty,
-                            "batch_id": oldest_batch.batch_id
-                        }
-                    )
-                # Note: Items in quarantine need manual batch assignment later
+            # Update batch stock using service method
+            ReturnService.update_batch_for_return(
+                db=db,
+                batch_id=batch_id,
+                product_id=item["product_id"],
+                saleable_qty=saleable_qty,
+                total_qty=float(return_qty)
+            )
             
             # Track inventory movement for return using InventoryService
             if batch_id or item["product_id"]:
@@ -816,44 +444,11 @@ async def get_sale_return_detail(
     Get detailed information about a specific sale return
     """
     try:
-        # Get return details
-        return_query = """
-            SELECT sr.*, c.customer_name as party_name, c.gst_number as party_gst,
-                   -- Extract invoice number from return items remarks
-                   (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')
-                    FROM sales.sales_return_items ri 
-                    WHERE ri.return_id = sr.return_id 
-                    LIMIT 1) as original_invoice_number
-            FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.return_id = :return_id AND sr.return_type = 'SALES'
-        """
+        # Use service method for return detail
+        result = ReturnService.get_return_detail(db=db, return_id=return_id)
         
-        sale_return = db.execute(
-            text(return_query), 
-            {"return_id": return_id}
-        ).first()
-        
-        if not sale_return:
+        if not result:
             raise HTTPException(status_code=404, detail="Sale return not found")
-            
-        # Get return items
-        items_query = """
-            SELECT sri.*, p.product_name, p.hsn_code,
-                   b.batch_number, b.expiry_date
-            FROM sales.sales_return_items sri
-            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON sri.batch_id = b.batch_id
-            WHERE sri.return_id = :return_id
-        """
-        
-        items = db.execute(
-            text(items_query), 
-            {"return_id": return_id}
-        ).fetchall()
-        
-        result = dict(sale_return._mapping)
-        result["items"] = [dict(item._mapping) for item in items]
         
         return result
         
@@ -876,58 +471,27 @@ async def cancel_sale_return(
     Cancel a sale return (if allowed by business rules)
     """
     try:
-        # Check if return exists
-        sale_return = db.execute(
-            text("SELECT * FROM sale_returns WHERE return_id = :return_id"),
-            {"return_id": return_id}
-        ).first()
+        # Check if return exists using service method
+        sale_return = ReturnService.get_return_status(db, int(return_id))
         
         if not sale_return:
             raise HTTPException(status_code=404, detail="Sale return not found")
             
-        if sale_return.return_status == ReturnStatus.CANCELLED.value:
+        if sale_return.get("return_status") == ReturnStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Return already cancelled")
-            
-        # Get return items to reverse inventory
-        items = db.execute(
-            text("SELECT * FROM sales.sales_return_items WHERE return_id = :return_id"),
-            {"return_id": return_id}
-        ).fetchall()
         
-        # Reverse batch stock changes
-        for item in items:
-            if item.batch_id:
-                db.execute(
-                    text("""
-                        UPDATE inventory.batches 
-                        SET quantity_available = quantity_available - :quantity,
-                            quantity_returned = quantity_returned - :quantity
-                        WHERE batch_id = :batch_id
-                    """),
-                    {
-                        "quantity": item.return_quantity,
-                        "batch_id": item.batch_id
-                    }
-                )
-            
-        # TODO: Reverse ledger entry when party_ledger table is available
-            
-        # Update return status
-        db.execute(
-            text("""
-                UPDATE sale_returns 
-                SET return_status = :cancelled_status,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE return_id = :return_id
-            """),
-            {"return_id": return_id, "cancelled_status": ReturnStatus.CANCELLED.value}
+        # Use service method to cancel and reverse inventory
+        ReturnService.cancel_sales_return(
+            db=db,
+            return_id=return_id,
+            return_number=sale_return.get("return_number")
         )
         
         db.commit()
         
         return {
             "status": "success",
-            "message": f"Sale return {sale_return.return_number} cancelled successfully"
+            "message": f"Sale return {sale_return.get('return_number')} cancelled successfully"
         }
         
     except HTTPException:

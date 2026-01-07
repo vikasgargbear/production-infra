@@ -8,19 +8,38 @@ import {
   Eye,
   X
 } from 'lucide-react';
-import { creditNotesApi, debitNotesApi } from '../../../services/api';
+import { notesApi } from '../../../services/api';
 import { Pagination, StatusBadge, useToast } from '../../global';
 import { format } from 'date-fns';
+import type { LucideIcon } from 'lucide-react';
+
+interface NotesHistoryProps {
+  onClose: () => void;
+  onSelectNote?: (note: NoteItem) => void;
+}
+
+interface NoteItem {
+  id?: string | number;
+  note_type: 'credit' | 'debit';
+  note_number: string;
+  note_date: string;
+  party_name?: string;
+  amount: number;
+  status: string;
+  reason?: string;
+  icon: LucideIcon;
+  color: string;
+}
 
 /**
  * NotesHistory Component
  * Shows all credit and debit notes in one unified view
  */
-const NotesHistory = ({ onClose, onSelectNote }) => {
+const NotesHistory: React.FC<NotesHistoryProps> = ({ onClose, onSelectNote }) => {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-  const [notes, setNotes] = useState([]);
-  const [filteredNotes, setFilteredNotes] = useState([]);
+  const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [filteredNotes, setFilteredNotes] = useState<NoteItem[]>([]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -44,15 +63,11 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
       // Fetch credit notes
       if (noteType === 'all' || noteType === 'credit') {
         try {
-          const creditRes = await creditNotesApi.getAll({
-            page: 1,
-            limit: 100,
-            search: searchTerm,
-            from_date: dateFrom,
-            to_date: dateTo
+          const creditRes = await notesApi.getCreditNotes({
+            limit: 100
           });
-
-          const creditNotes = (creditRes.data?.credit_notes || creditRes.data || []).map(note => ({
+          const creditData = (creditRes as any).data || creditRes;
+          const creditNotes: NoteItem[] = (creditData.credit_notes || creditData.data || creditData || []).map((note: any) => ({
             ...note,
             note_type: 'credit',
             note_number: note.credit_note_number || note.note_number,
@@ -72,15 +87,12 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
       // Fetch debit notes  
       if (noteType === 'all' || noteType === 'debit') {
         try {
-          const debitRes = await debitNotesApi.getAll({
-            page: 1,
-            limit: 100,
-            search: searchTerm,
-            from_date: dateFrom,
-            to_date: dateTo
+          const debitRes = await notesApi.getDebitNotes({
+            limit: 100
           });
 
-          const debitNotes = (debitRes.data?.debit_notes || debitRes.data || []).map(note => ({
+          const debitData = (debitRes as any).data || debitRes;
+          const debitNotes: NoteItem[] = (debitData.debit_notes || debitData.data || debitData || []).map((note: any) => ({
             ...note,
             note_type: 'debit',
             note_number: note.debit_note_number || note.note_number,
@@ -99,8 +111,8 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
 
       // Sort by date (newest first)
       notesList.sort((a, b) => {
-        const dateA = new Date(a.note_date);
-        const dateB = new Date(b.note_date);
+        const dateA = new Date(a.note_date).getTime();
+        const dateB = new Date(b.note_date).getTime();
         return dateB - dateA;
       });
 
@@ -114,7 +126,7 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
   };
 
   // Apply filters to notes
-  const applyFilters = (notesList = notes) => {
+  const applyFilters = (notesList: NoteItem[] = notes) => {
     let filtered = [...notesList];
 
     // Search filter
@@ -155,7 +167,7 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
   }, [searchTerm, partyFilter, currentPage]);
 
   // Format date
-  const formatDate = (date) => {
+  const formatDate = (date: string | null | undefined) => {
     if (!date) return '-';
     try {
       return format(new Date(date), 'dd MMM yyyy');
@@ -165,7 +177,7 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
   };
 
   // Format currency
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount: number | null | undefined) => {
     if (!amount && amount !== 0) return '-';
     return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
@@ -196,8 +208,8 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
                 setCurrentPage(1);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${noteType === 'all'
-                  ? 'bg-gray-100 text-gray-700 border border-gray-300'
-                  : 'text-gray-600 hover:bg-gray-50'
+                ? 'bg-gray-100 text-gray-700 border border-gray-300'
+                : 'text-gray-600 hover:bg-gray-50'
                 }`}
             >
               <FileText className="h-4 w-4 inline mr-2" />
@@ -209,8 +221,8 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
                 setCurrentPage(1);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${noteType === 'credit'
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'text-gray-600 hover:bg-gray-50'
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'text-gray-600 hover:bg-gray-50'
                 }`}
             >
               <FileMinus className="h-4 w-4 inline mr-2" />
@@ -222,8 +234,8 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
                 setCurrentPage(1);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${noteType === 'debit'
-                  ? 'bg-red-50 text-red-700 border border-red-200'
-                  : 'text-gray-600 hover:bg-gray-50'
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'text-gray-600 hover:bg-gray-50'
                 }`}
             >
               <FilePlus className="h-4 w-4 inline mr-2" />

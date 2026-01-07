@@ -612,3 +612,77 @@ class LedgerService:
                 "invoice_count": len(overdue_items)
             }
         }
+    
+    @staticmethod
+    def get_customer_details(db: Session, org_id: str, customer_id: int) -> Optional[Dict[str, Any]]:
+        """Get customer details for ledger."""
+        result = db.execute(text("""
+            SELECT customer_name as name, primary_phone, primary_email, credit_limit
+            FROM parties.customers WHERE customer_id = :party_id AND org_id = :org_id
+        """), {"party_id": customer_id, "org_id": org_id})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def get_supplier_details(db: Session, org_id: str, supplier_id: int) -> Optional[Dict[str, Any]]:
+        """Get supplier details for ledger."""
+        result = db.execute(text("""
+            SELECT supplier_name as name, primary_phone, primary_email
+            FROM parties.suppliers WHERE supplier_id = :party_id AND org_id = :org_id
+        """), {"party_id": supplier_id, "org_id": org_id})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def get_last_payment(db: Session, org_id: str, party_id: int, party_type: str) -> Optional[Dict[str, Any]]:
+        """Get last payment info for a party."""
+        result = db.execute(text("""
+            SELECT payment_id, payment_number, payment_date, payment_amount,
+                   payment_mode, CURRENT_DATE - payment_date as days_since
+            FROM financial.payments
+            WHERE party_id = :party_id AND party_type = :party_type AND org_id = :org_id
+            AND payment_status != :cancelled_status ORDER BY payment_date DESC LIMIT 1
+        """), {"party_id": party_id, "party_type": party_type, "org_id": org_id,
+               "cancelled_status": PaymentRecordStatus.CANCELLED.value})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def get_opening_balance_customer(db: Session, org_id: str, party_id: int, as_of_date: date) -> float:
+        """Calculate opening balance for customer as of date."""
+        result = db.execute(text("""
+            SELECT COALESCE(SUM(CASE WHEN type = 'invoice' THEN amount ELSE 0 END), 0) -
+                   COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as opening_balance
+            FROM (
+                SELECT 'invoice' as type, final_amount as amount FROM sales.invoices
+                WHERE customer_id = :party_id AND org_id = :org_id
+                AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
+                UNION ALL
+                SELECT 'payment' as type, payment_amount as amount FROM financial.payments
+                WHERE party_id = :party_id AND party_type = :customer_type AND org_id = :org_id
+                AND payment_date < :as_of_date AND payment_status != :cancelled_status
+            ) combined
+        """), {"party_id": party_id, "org_id": org_id, "as_of_date": as_of_date,
+               "cancelled_status": InvoiceStatus.CANCELLED.value, "customer_type": PartyType.CUSTOMER.value})
+        row = result.first()
+        return float(row.opening_balance) if row else 0
+    
+    @staticmethod
+    def get_opening_balance_supplier(db: Session, org_id: str, party_id: int, as_of_date: date) -> float:
+        """Calculate opening balance for supplier as of date."""
+        result = db.execute(text("""
+            SELECT COALESCE(SUM(CASE WHEN type = 'invoice' THEN amount ELSE 0 END), 0) -
+                   COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as opening_balance
+            FROM (
+                SELECT 'invoice' as type, final_amount as amount FROM purchases.supplier_invoices
+                WHERE supplier_id = :party_id AND org_id = :org_id
+                AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
+                UNION ALL
+                SELECT 'payment' as type, payment_amount as amount FROM financial.payments
+                WHERE party_id = :party_id AND party_type = :supplier_type AND org_id = :org_id
+                AND payment_date < :as_of_date AND payment_status != :cancelled_status
+            ) combined
+        """), {"party_id": party_id, "org_id": org_id, "as_of_date": as_of_date,
+               "cancelled_status": InvoiceStatus.CANCELLED.value, "supplier_type": PartyType.SUPPLIER.value})
+        row = result.first()
+        return float(row.opening_balance) if row else 0

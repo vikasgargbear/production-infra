@@ -69,46 +69,23 @@ async def get_all_customers_with_addresses(
     try:
         offset = (page - 1) * page_size
         
-        # Build base query with optional delta sync filter
-        where_clauses = ["c.org_id = :org_id"]
-        params = {"org_id": context.org_id, "limit": page_size, "offset": offset}
+        # Step 1: Count total customers using service
+        total_count = CustomerService.count_customers(
+            db=db,
+            org_id=str(context.org_id),
+            include_inactive=include_inactive,
+            since=since
+        )
         
-        if not include_inactive:
-            where_clauses.append("c.is_active = true")
-        
-        if since:
-            where_clauses.append("c.updated_at > :since")
-            params["since"] = since
-        
-        where_sql = " AND ".join(where_clauses)
-        
-        # Count total customers (for pagination info)
-        count_query = f"""
-            SELECT COUNT(*) as total 
-            FROM parties.customers c 
-            WHERE {where_sql}
-        """
-        count_result = db.execute(text(count_query), params)
-        total_count = count_result.fetchone()[0]
-        
-        # Fetch customers with essential fields
-        customer_query = f"""
-            SELECT 
-                c.customer_id, c.customer_code, c.customer_name, c.customer_type,
-                c.primary_phone, c.primary_email, c.secondary_phone, c.whatsapp_number,
-                c.gst_number, c.pan_number, c.drug_license_number, c.drug_license_validity,
-                c.credit_limit, c.credit_days, c.current_outstanding,
-                c.contact_person_name, c.contact_person_phone, c.contact_person_email,
-                c.business_type, c.customer_category, c.customer_grade,
-                c.is_active, c.created_at, c.updated_at
-            FROM parties.customers c
-            WHERE {where_sql}
-            ORDER BY c.customer_name
-            LIMIT :limit OFFSET :offset
-        """
-        
-        customers_result = db.execute(text(customer_query), params)
-        customers = [dict(row._mapping) for row in customers_result]
+        # Step 2: Fetch customers page using service
+        customers = CustomerService.get_customers_page(
+            db=db,
+            org_id=str(context.org_id),
+            limit=page_size,
+            offset=offset,
+            include_inactive=include_inactive,
+            since=since
+        )
         
         if not customers:
             return {
@@ -127,34 +104,18 @@ async def get_all_customers_with_addresses(
                 }
             }
         
-        # Get customer IDs for batch address fetch
+        # Step 3: Get addresses for all customers using service
         customer_ids = [c["customer_id"] for c in customers]
-        
-        # Fetch all addresses for these customers in one query
-        address_query = """
-            SELECT 
-                a.address_id, a.entity_id as customer_id, a.address_type,
-                a.address_line1, a.address_line2, a.landmark,
-                a.city, a.state_code, a.state_name, a.country, a.pincode,
-                a.contact_person, a.contact_number, a.contact_email,
-                a.is_default, a.is_active
-            FROM master.addresses a
-            WHERE a.org_id = :org_id
-              AND a.entity_type = 'customer'
-              AND a.entity_id = ANY(:customer_ids)
-              AND a.is_active = true
-            ORDER BY a.is_default DESC, a.address_type
-        """
-        addresses_result = db.execute(text(address_query), {
-            "org_id": context.org_id,
-            "customer_ids": customer_ids
-        })
+        addresses = CustomerService.get_addresses_for_customers(
+            db=db,
+            org_id=str(context.org_id),
+            customer_ids=customer_ids
+        )
         
         # Group addresses by customer_id
         addresses_by_customer = {}
         total_addresses = 0
-        for row in addresses_result:
-            addr = dict(row._mapping)
+        for addr in addresses:
             cid = addr.pop("customer_id")
             if cid not in addresses_by_customer:
                 addresses_by_customer[cid] = []
@@ -272,28 +233,12 @@ async def create_customer(
             "is_active": validated_data.get("is_active", True)
         }
         
-        # Create customer with correct column names
-        result = db.execute(text("""
-            INSERT INTO parties.customers (
-                org_id, customer_code, customer_name, customer_type, business_type,
-                primary_phone, primary_email, secondary_phone, whatsapp_number,
-                contact_person_name, contact_person_phone, contact_person_email,
-                gst_number, pan_number, drug_license_number, drug_license_validity,
-                credit_limit, credit_days, credit_rating, payment_terms,
-                internal_notes, is_active,
-                created_at, updated_at
-            ) VALUES (
-                :org_id, :customer_code, :customer_name, :customer_type, :business_type,
-                :primary_phone, :primary_email, :secondary_phone, :whatsapp_number,
-                :contact_person_name, :contact_person_phone, :contact_person_email,
-                :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
-                :credit_limit, :credit_days, :credit_rating, :payment_terms,
-                :internal_notes, :is_active,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            ) RETURNING customer_id
-        """), mapped_data)
-        
-        customer_id = result.scalar()
+        # Create customer using service method
+        customer_id = CustomerService.insert_customer(
+            db=db,
+            org_id=str(context.org_id),
+            customer_data=mapped_data
+        )
         
         # Create address record if address data is provided
         if any([customer_data.get(f) for f in ['address_line1', 'city', 'state', 'pincode']]):
@@ -301,10 +246,7 @@ async def create_customer(
             state_code = get_state_code(state_name)
             
             address_data = {
-                "org_id": str(context.org_id),  # Use org_id from context
-                "entity_type": "customer",
-                "entity_id": customer_id,
-                "address_type": "billing",  # Default billing address
+                "address_type": "billing",
                 "address_line1": customer_data.get("address_line1", ""),
                 "address_line2": customer_data.get("address_line2", ""),
                 "city": customer_data.get("city", ""),
@@ -315,32 +257,22 @@ async def create_customer(
                 "is_default": True
             }
             
-            # Insert address
-            db.execute(text("""
-                INSERT INTO master.addresses (
-                    org_id, entity_type, entity_id, address_type,
-                    address_line1, address_line2, city, state_code, state_name,
-                    pincode, country, is_default, created_at, updated_at
-                ) VALUES (
-                    :org_id, :entity_type, :entity_id, :address_type,
-                    :address_line1, :address_line2, :city, :state_code, :state_name,
-                    :pincode, :country, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-            """), address_data)
+            # Insert billing address using service
+            CustomerService.insert_address(
+                db=db,
+                org_id=str(context.org_id),
+                customer_id=customer_id,
+                address_data=address_data
+            )
             
             # Also create shipping address (same as billing for now)
             address_data["address_type"] = "shipping"
-            db.execute(text("""
-                INSERT INTO master.addresses (
-                    org_id, entity_type, entity_id, address_type,
-                    address_line1, address_line2, city, state_code, state_name,
-                    pincode, country, is_default, created_at, updated_at
-                ) VALUES (
-                    :org_id, :entity_type, :entity_id, :address_type,
-                    :address_line1, :address_line2, :city, :state_code, :state_name,
-                    :pincode, :country, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-            """), address_data)
+            CustomerService.insert_address(
+                db=db,
+                org_id=str(context.org_id),
+                customer_id=customer_id,
+                address_data=address_data
+            )
         
         db.commit()
         
@@ -392,73 +324,27 @@ async def list_customers(
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
-        # Build query - optimized for fast search but with essential fields
-        if fast_search:
-            # Essential fields for fast search - balance between performance and usefulness
-            query = """SELECT customer_id, customer_name, customer_code, primary_phone, primary_email,
-                      customer_type, business_type, gst_number, credit_limit, credit_days,
-                      is_active, org_id, created_at, updated_at 
-                      FROM parties.customers"""
-        else:
-            # Full query for detailed view
-            query = "SELECT * FROM parties.customers"
-        count_query = "SELECT COUNT(*) FROM parties.customers"
-        params = {}  # FIXED: No manual org_id needed - handled by tenant service
+        # Use service method for core customer query and count
+        customer_rows, total = CustomerService.list_customers(
+            db=db,
+            skip=skip,
+            limit=limit,
+            search=search,
+            customer_type=customer_type,
+            is_active=is_active,
+            has_gstin=has_gstin,
+            fast_search=fast_search
+        )
         
-        # Add filters - build WHERE conditions
-        where_conditions = []  # FIXED: No manual org_id filtering - automatic via tenant service
-        
-        if search:
-            search_condition = """(
-                customer_name ILIKE :search OR 
-                customer_code ILIKE :search OR 
-                primary_phone LIKE :search OR
-                gst_number LIKE :search
-            )"""
-            where_conditions.append(search_condition)
-            params["search"] = f"%{search}%"
-        
-        if customer_type:
-            where_conditions.append("customer_type = :customer_type")
-            params["customer_type"] = customer_type
-        
-        if is_active is not None:
-            where_conditions.append("is_active = :is_active")
-            params["is_active"] = is_active
-        
-        if has_gstin is not None:
-            if has_gstin:
-                where_conditions.append("gst_number IS NOT NULL")
-            else:
-                where_conditions.append("gst_number IS NULL")
-        
-        # Add WHERE clause if we have conditions
-        if where_conditions:
-            where_clause = " WHERE " + " AND ".join(where_conditions)
-            query += where_clause
-            count_query += where_clause
-        
-        # Get total count
-        logger.debug(f"Executing count query: {count_query}")
-        total = db.execute(text(count_query), params).scalar()
         logger.info(f"Total customers found: {total}")
         
-        # Get customers
-        query += " ORDER BY customer_name LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        logger.debug(f"Executing main query with params: {params}")
-        result = db.execute(text(query), params)
-        
         customers = []
-        # Collect all customer data first
-        customer_rows = list(result)
         
         # Get statistics in batch if requested (with error handling for production)
         stats_by_customer = {}
         if include_stats:
             try:
-                customer_ids = [row.customer_id for row in customer_rows]
+                customer_ids = [row["customer_id"] for row in customer_rows]
                 stats_by_customer = CustomerService.get_customers_statistics_batch(db, customer_ids)
                 logger.info(f"Successfully loaded stats for {len(stats_by_customer)} customers")
             except Exception as stats_error:
@@ -468,13 +354,13 @@ async def list_customers(
         
         # Build customer responses
         for row in customer_rows:
-            customer_dict = dict(row._mapping)
+            customer_dict = dict(row)  # Already a dict from service
             
             # ✅ CLEAN CODE: Use database field names directly - NO ALIASES
             
             # Add statistics from batch lookup or default values
             if include_stats:
-                customer_stats = stats_by_customer.get(row.customer_id, {})
+                customer_stats = stats_by_customer.get(row["customer_id"], {})
                 customer_dict.update({
                     "total_transactions": customer_stats.get("total_orders", 0),
                     "total_business_amount": customer_stats.get("total_business", 0),
@@ -514,61 +400,25 @@ async def get_customer(
 ):
     """Get customer details with addresses, outstanding balance and statistics"""
     try:
-        # Get customer with addresses
-        result = db.execute(text("""
-            SELECT c.*,
-                   COALESCE(
-                       json_agg(
-                           json_build_object(
-                               'address_id', a.address_id,
-                               'address_type', a.address_type,
-                               'address_line1', a.address_line1,
-                               'address_line2', a.address_line2,
-                               'landmark', a.landmark,
-                               'city', a.city,
-                               'state_code', a.state_code,
-                               'state_name', a.state_name,
-                               'country', a.country,
-                               'pincode', a.pincode,
-                               'contact_person', a.contact_person,
-                               'contact_number', a.contact_number,
-                               'is_default', a.is_default,
-                               'is_active', a.is_active
-                           ) ORDER BY a.is_default DESC, a.address_type
-                       ) FILTER (WHERE a.address_id IS NOT NULL),
-                       '[]'::json
-                   ) as addresses
-            FROM parties.customers c
-            LEFT JOIN master.addresses a ON (
-                a.entity_type = 'customer' 
-                AND a.entity_id = c.customer_id 
-                AND a.org_id = c.org_id
-                AND a.is_active = true
-            )
-            WHERE c.customer_id = :id
-            GROUP BY c.customer_id
-        """), {"id": customer_id})
+        # Get customer with addresses using service
+        customer_dict = CustomerService.get_customer_with_addresses(
+            db=db,
+            customer_id=customer_id
+        )
         
-        customer = result.fetchone()
-        if not customer:
+        if not customer_dict:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
         # Get statistics
         stats = CustomerService.get_customer_statistics(db, customer_id)
         
-        customer_dict = dict(customer._mapping)
-        
-        # ✅ ENTERPRISE STANDARD: Use database field names directly (no aliasing!)
-        # All fields from SELECT c.* are already in customer_dict
-        
-        # Parse addresses JSON (json module imported at top of file)
-        addresses = customer_dict.get("addresses", "[]")
+        # Parse addresses JSON if needed
+        addresses = customer_dict.get("addresses", [])
         if isinstance(addresses, str):
             customer_dict["addresses"] = json.loads(addresses)
         elif addresses is None:
             customer_dict["addresses"] = []
         
-        # ✅ CLEAN CODE: Use database field names directly - NO ALIASES
         # Add computed statistics from service
         customer_dict.update(stats)
         
@@ -590,12 +440,8 @@ async def update_customer(
 ):
     """Update customer details"""
     try:
-        # Check if customer exists
-        exists = db.execute(text("""
-            SELECT 1 FROM parties.customers WHERE customer_id = :id
-        """), {"id": customer_id}).scalar()
-        
-        if not exists:
+        # Check if customer exists using service
+        if not CustomerService.customer_exists(db, customer_id):
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
         # Get update data
@@ -637,14 +483,13 @@ async def update_customer(
                     params[field] = value
             
             if update_fields:
-                update_fields.append("updated_at = CURRENT_TIMESTAMP")
-                query = f"""
-                    UPDATE parties.customers 
-                    SET {', '.join(update_fields)}
-                    WHERE customer_id = :id
-                """
-                
-                db.execute(text(query), params)
+                # Use service method for dynamic update
+                CustomerService.update_customer_dynamic(
+                    db=db,
+                    customer_id=customer_id,
+                    update_fields=update_fields,
+                    params=params
+                )
                 db.commit()
         
         # Return updated customer
@@ -697,30 +542,17 @@ async def get_customer_addresses(
 ):
     """Get all addresses for a customer"""
     try:
-        # First check if customer exists
-        customer_check = db.execute(text("""
-            SELECT customer_id FROM parties.customers WHERE customer_id = :id
-        """), {"id": customer_id})
+        # First check if customer exists using service
+        exists = CustomerService.customer_exists(db, customer_id)
         
-        if not customer_check.fetchone():
+        if not exists:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
-        # Get all addresses for this customer
-        result = db.execute(text("""
-            SELECT 
-                address_id, entity_type, entity_id, address_type,
-                address_line1, address_line2, landmark, city, 
-                state_code, state_name, country, pincode,
-                latitude, longitude, contact_person, contact_number,
-                is_default, is_active, created_at, updated_at
-            FROM master.addresses 
-            WHERE entity_type = 'customer' 
-            AND entity_id = :customer_id 
-            AND is_active = true
-            ORDER BY is_default DESC, address_type ASC, created_at DESC
-        """), {"customer_id": customer_id})
-        
-        addresses = [dict(row._mapping) for row in result.fetchall()]
+        # Get all addresses for this customer using service
+        addresses = CustomerService.get_customer_addresses(
+            db=db,
+            customer_id=customer_id
+        )
         
         # Return empty array if no addresses found (not 404)
         return {
@@ -751,51 +583,28 @@ async def delete_customer(
     - Preserves related transactions and history
     """
     try:
-        # OPTIMIZED: Combined query using CTE (was 3 separate queries)
-        # Checks customer exists, is active, and has no outstanding balance in one round trip
-        result = db.execute(text("""
-            WITH customer_check AS (
-                SELECT 
-                    c.customer_id, 
-                    c.customer_name, 
-                    c.is_active,
-                    COALESCE(
-                        (SELECT SUM(final_amount - COALESCE(paid_amount, 0))
-                         FROM sales.invoices i
-                         WHERE i.customer_id = c.customer_id 
-                         AND i.payment_status != 'paid'),
-                        0
-                    ) as outstanding_balance
-                FROM parties.customers c
-                WHERE c.customer_id = :customer_id
-            )
-            SELECT customer_id, customer_name, is_active, outstanding_balance 
-            FROM customer_check
-        """), {"customer_id": customer_id}).fetchone()
+        # Check customer status using service
+        result = CustomerService.get_deletion_status(db, customer_id)
         
         if not result:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        if not result.is_active:
+        if not result["is_active"]:
             return {"message": "Customer is already inactive"}
         
-        if result.outstanding_balance and result.outstanding_balance > 0:
+        if result["outstanding_balance"] and result["outstanding_balance"] > 0:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot delete customer with outstanding balance of {result.outstanding_balance}"
+                detail=f"Cannot delete customer with outstanding balance of {result['outstanding_balance']}"
             )
         
-        # Soft delete - mark as inactive
-        db.execute(text("""
-            UPDATE parties.customers
-            SET is_active = false, updated_at = CURRENT_TIMESTAMP
-            WHERE customer_id = :customer_id
-        """), {"customer_id": customer_id})
+        # Soft delete using service
+        CustomerService.soft_delete(db, customer_id)
         
         db.commit()
         
         return {
-            "message": f"Customer '{result.customer_name}' has been deactivated",
+            "message": f"Customer '{result['customer_name']}' has been deactivated",
             "customer_id": customer_id
         }
         

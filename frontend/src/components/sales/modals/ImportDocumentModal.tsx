@@ -9,13 +9,11 @@ interface DocumentItem {
   product_code?: string;
   batch_id?: string;
   batch_number?: string;
-  batch_number?: string;
   hsn_code?: string;
   expiry_date?: string;
   quantity: number;
   dispatched_quantity?: number;
   mrp?: number;
-  rate?: number;
   unit_price?: number;
   sale_price?: number;
   discount_percent?: number;
@@ -152,8 +150,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       let results: Document[] = [];
 
       if (documentType === 'sales-order') {
-        const response = await salesOrdersApi.search({
-          query: searchQuery,
+        const response = await salesOrdersApi.search(searchQuery, {
           invoice_created: false
         });
         results = response.data || [];
@@ -207,12 +204,11 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               product_code: item.product_code,
               batch_id: item.batch_id,
               batch_number: item.batch_number,
-              batch_number: item.batch_number,
               hsn_code: item.hsn_code,
               expiry_date: item.expiry_date,
               quantity: item.dispatched_quantity || item.quantity,
               mrp: item.mrp,
-              unit_price: item.unit_price || item.rate || item.sale_price || 0,  // ✅ CANONICAL
+              unit_price: item.unit_price || item.unit_price || item.sale_price || 0,  // ✅ CANONICAL
               discount_percent: 0,
               free_quantity: 0,
               gst_percent: item.gst_percent || 0,
@@ -285,8 +281,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             <button
               onClick={() => setDocumentType('sales-order')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'sales-order'
-                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                  : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
                 }`}
             >
               <ShoppingCart className="w-4 h-4" />
@@ -295,8 +291,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             <button
               onClick={() => setDocumentType('challan')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${documentType === 'challan'
-                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                  : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
                 }`}
             >
               <Truck className="w-4 h-4" />
@@ -349,8 +345,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
                     key={docId || `doc-${index}`}
                     onClick={() => setSelectedDoc(doc)}
                     className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                   >
                     <div className="flex justify-between items-start">

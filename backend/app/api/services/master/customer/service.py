@@ -18,7 +18,7 @@ from ....schemas.master.customer import (
     CustomerOutstandingResponse, PaymentRecord,
     PaymentResponse, CustomerCreate, CustomerResponse
 )
-from ...gst_service import GSTService
+from ...compliance.gst_service import GSTService
 from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,14 @@ class CustomerService:
             "SELECT org_id FROM parties.customers WHERE customer_id = :id"
         ), {"id": customer_id}).scalar()
         return UUID(str(result)) if result else None
+    
+    @staticmethod
+    def customer_exists(db: Session, customer_id: int) -> bool:
+        """Check if a customer exists."""
+        count = db.execute(text(
+            "SELECT COUNT(*) FROM parties.customers WHERE customer_id = :id"
+        ), {"id": customer_id}).scalar()
+        return count > 0
     
     @staticmethod
     def _get_default_user_id(db: Session, org_id: UUID) -> Optional[int]:
@@ -932,3 +940,481 @@ class CustomerService:
             unallocated_amount=remaining_amount,
             created_at=datetime.now()
         )
+    
+    @staticmethod
+    def get_or_create_address(
+        db: Session,
+        org_id: str,
+        customer_id: int,
+        address_text: str,
+        address_type: str
+    ) -> Optional[int]:
+        """
+        Get existing address or create new one for a customer.
+        Returns address_id or None if address_text is empty.
+        """
+        if not address_text:
+            return None
+        
+        try:
+            # First check if similar address exists for this customer
+            existing = db.execute(text("""
+                SELECT address_id FROM master.addresses
+                WHERE entity_type = 'customer'
+                AND entity_id = :customer_id
+                AND address_type = :address_type
+                AND is_active = true
+                LIMIT 1
+            """), {
+                "customer_id": customer_id,
+                "address_type": address_type
+            }).fetchone()
+            
+            if existing:
+                return existing[0]
+            
+            # Parse address text (simple parsing - could be enhanced)
+            # Expected format: "Line1, Line2, City, State, Pincode"
+            parts = [p.strip() for p in address_text.split(',')]
+            
+            # Create new address
+            result = db.execute(text("""
+                INSERT INTO master.addresses (
+                    org_id, entity_type, entity_id, address_type,
+                    address_line1, address_line2, city, state_name, pincode,
+                    country, is_default, is_active,
+                    created_at, updated_at
+                ) VALUES (
+                    :org_id, 'customer', :customer_id, :address_type,
+                    :line1, :line2, :city, :state, :pincode,
+                    'India', false, true,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                ) RETURNING address_id
+            """), {
+                "org_id": org_id,
+                "customer_id": customer_id,
+                "address_type": address_type,
+                "line1": parts[0] if len(parts) > 0 else address_text,
+                "line2": parts[1] if len(parts) > 1 else None,
+                "city": parts[-3] if len(parts) >= 3 else None,
+                "state": parts[-2] if len(parts) >= 2 else None,
+                "pincode": parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
+            })
+            
+            return result.scalar()
+            
+        except Exception as e:
+            logger.warning(f"Could not create address: {str(e)}")
+            return None
+    
+    # ==================== SYNC & LIST METHODS ====================
+    
+    @staticmethod
+    def count_customers(
+        db: Session,
+        org_id: str,
+        include_inactive: bool = False,
+        since: Optional[str] = None
+    ) -> int:
+        """
+        Count customers with optional filters.
+        """
+        where_clauses = ["c.org_id = :org_id"]
+        params = {"org_id": org_id}
+        
+        if not include_inactive:
+            where_clauses.append("c.is_active = true")
+        
+        if since:
+            where_clauses.append("c.updated_at > :since")
+            params["since"] = since
+        
+        where_sql = " AND ".join(where_clauses)
+        query = f"SELECT COUNT(*) FROM parties.customers c WHERE {where_sql}"
+        
+        result = db.execute(text(query), params)
+        return result.scalar() or 0
+    
+    @staticmethod
+    def get_customers_page(
+        db: Session,
+        org_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        include_inactive: bool = False,
+        since: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get paginated customers for bulk sync.
+        """
+        where_clauses = ["c.org_id = :org_id"]
+        params = {"org_id": org_id, "limit": limit, "offset": offset}
+        
+        if not include_inactive:
+            where_clauses.append("c.is_active = true")
+        
+        if since:
+            where_clauses.append("c.updated_at > :since")
+            params["since"] = since
+        
+        where_sql = " AND ".join(where_clauses)
+        query = f"""
+            SELECT 
+                c.customer_id, c.customer_code, c.customer_name, c.customer_type,
+                c.primary_phone, c.primary_email, c.secondary_phone, c.whatsapp_number,
+                c.gst_number, c.pan_number, c.drug_license_number, c.drug_license_validity,
+                c.credit_limit, c.credit_days, c.current_outstanding,
+                c.contact_person_name, c.contact_person_phone, c.contact_person_email,
+                c.business_type, c.customer_category, c.customer_grade,
+                c.is_active, c.created_at, c.updated_at
+            FROM parties.customers c
+            WHERE {where_sql}
+            ORDER BY c.customer_name
+            LIMIT :limit OFFSET :offset
+        """
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_addresses_for_customers(
+        db: Session,
+        org_id: str,
+        customer_ids: List[int]
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all addresses for a list of customer IDs.
+        """
+        if not customer_ids:
+            return []
+        
+        query = """
+            SELECT 
+                a.address_id, a.entity_id as customer_id, a.address_type,
+                a.address_line1, a.address_line2, a.landmark,
+                a.city, a.state_code, a.state_name, a.country, a.pincode,
+                a.contact_person, a.contact_number, a.contact_email,
+                a.is_default, a.is_active
+            FROM master.addresses a
+            WHERE a.org_id = :org_id
+              AND a.entity_type = 'customer'
+              AND a.entity_id = ANY(:customer_ids)
+              AND a.is_active = true
+            ORDER BY a.is_default DESC, a.address_type
+        """
+        
+        result = db.execute(text(query), {"org_id": org_id, "customer_ids": customer_ids})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def list_customers(
+        db: Session,
+        skip: int = 0,
+        limit: int = 100,
+        search: Optional[str] = None,
+        customer_type: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        has_gstin: Optional[bool] = None,
+        fast_search: bool = True
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        List customers with filters and pagination.
+        TenantAwareSession auto-filters by org_id.
+        
+        Returns:
+            Tuple of (customers list, total count)
+        """
+        # Build base query
+        if fast_search:
+            select_cols = """customer_id, customer_name, customer_code, primary_phone, primary_email,
+                          customer_type, business_type, gst_number, credit_limit, credit_days,
+                          is_active, org_id, created_at, updated_at"""
+        else:
+            select_cols = "*"
+        
+        query = f"SELECT {select_cols} FROM parties.customers"
+        count_query = "SELECT COUNT(*) FROM parties.customers"
+        
+        where_conditions = []
+        params = {}
+        
+        if search:
+            where_conditions.append("""(
+                customer_name ILIKE :search OR 
+                customer_code ILIKE :search OR 
+                primary_phone LIKE :search OR
+                gst_number LIKE :search
+            )""")
+            params["search"] = f"%{search}%"
+        
+        if customer_type:
+            where_conditions.append("customer_type = :customer_type")
+            params["customer_type"] = customer_type
+        
+        if is_active is not None:
+            where_conditions.append("is_active = :is_active")
+            params["is_active"] = is_active
+        
+        if has_gstin is not None:
+            if has_gstin:
+                where_conditions.append("gst_number IS NOT NULL")
+            else:
+                where_conditions.append("gst_number IS NULL")
+        
+        if where_conditions:
+            where_clause = " WHERE " + " AND ".join(where_conditions)
+            query += where_clause
+            count_query += where_clause
+        
+        # Get count
+        total = db.execute(text(count_query), params).scalar() or 0
+        
+        # Get customers
+        query += " ORDER BY customer_name LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        result = db.execute(text(query), params)
+        customers = [dict(row._mapping) for row in result]
+        
+        return customers, total
+    
+    @staticmethod
+    def get_customer_with_addresses(
+        db: Session,
+        customer_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get customer with embedded addresses JSON.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT c.*,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'address_id', a.address_id,
+                               'address_type', a.address_type,
+                               'address_line1', a.address_line1,
+                               'address_line2', a.address_line2,
+                               'landmark', a.landmark,
+                               'city', a.city,
+                               'state_code', a.state_code,
+                               'state_name', a.state_name,
+                               'country', a.country,
+                               'pincode', a.pincode,
+                               'contact_person', a.contact_person,
+                               'contact_number', a.contact_number,
+                               'is_default', a.is_default,
+                               'is_active', a.is_active
+                           ) ORDER BY a.is_default DESC, a.address_type
+                       ) FILTER (WHERE a.address_id IS NOT NULL),
+                       '[]'::json
+                   ) as addresses
+            FROM parties.customers c
+            LEFT JOIN master.addresses a ON (
+                a.entity_type = 'customer' 
+                AND a.entity_id = c.customer_id 
+                AND a.org_id = c.org_id
+                AND a.is_active = true
+            )
+            WHERE c.customer_id = :id
+            GROUP BY c.customer_id
+        """), {"id": customer_id}).fetchone()
+        
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def insert_customer(
+        db: Session,
+        org_id: str,
+        customer_data: Dict[str, Any]
+    ) -> int:
+        """
+        Insert a new customer record. Returns customer_id.
+        """
+        result = db.execute(text("""
+            INSERT INTO parties.customers (
+                org_id, customer_code, customer_name, customer_type, business_type,
+                primary_phone, primary_email, secondary_phone, whatsapp_number,
+                contact_person_name, contact_person_phone, contact_person_email,
+                gst_number, pan_number, drug_license_number, drug_license_validity,
+                credit_limit, credit_days, credit_rating, payment_terms,
+                internal_notes, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :customer_code, :customer_name, :customer_type, :business_type,
+                :primary_phone, :primary_email, :secondary_phone, :whatsapp_number,
+                :contact_person_name, :contact_person_phone, :contact_person_email,
+                :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
+                :credit_limit, :credit_days, :credit_rating, :payment_terms,
+                :internal_notes, :is_active,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING customer_id
+        """), {
+            "org_id": org_id,
+            "customer_code": customer_data.get("customer_code", ""),
+            "customer_name": customer_data.get("customer_name", ""),
+            "customer_type": customer_data.get("customer_type", "retail"),
+            "business_type": customer_data.get("business_type", "retail_pharmacy"),
+            "primary_phone": customer_data.get("primary_phone"),
+            "primary_email": customer_data.get("primary_email"),
+            "secondary_phone": customer_data.get("secondary_phone"),
+            "whatsapp_number": customer_data.get("whatsapp_number"),
+            "contact_person_name": customer_data.get("contact_person_name"),
+            "contact_person_phone": customer_data.get("contact_person_phone"),
+            "contact_person_email": customer_data.get("contact_person_email"),
+            "gst_number": customer_data.get("gst_number"),
+            "pan_number": customer_data.get("pan_number"),
+            "drug_license_number": customer_data.get("drug_license_number"),
+            "drug_license_validity": customer_data.get("drug_license_validity"),
+            "credit_limit": customer_data.get("credit_limit", 0),
+            "credit_days": customer_data.get("credit_days", 0),
+            "credit_rating": customer_data.get("credit_rating", "NEW"),
+            "payment_terms": customer_data.get("payment_terms", "CASH"),
+            "internal_notes": customer_data.get("internal_notes"),
+            "is_active": customer_data.get("is_active", True)
+        })
+        
+        return result.scalar()
+    
+    @staticmethod
+    def insert_address(
+        db: Session,
+        org_id: str,
+        customer_id: int,
+        address_data: Dict[str, Any]
+    ) -> int:
+        """
+        Insert a new address for a customer. Returns address_id.
+        """
+        result = db.execute(text("""
+            INSERT INTO master.addresses (
+                org_id, entity_type, entity_id, address_type,
+                address_line1, address_line2, city, state_code, state_name,
+                pincode, country, is_default, created_at, updated_at
+            ) VALUES (
+                :org_id, 'customer', :customer_id, :address_type,
+                :address_line1, :address_line2, :city, :state_code, :state_name,
+                :pincode, :country, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING address_id
+        """), {
+            "org_id": org_id,
+            "customer_id": customer_id,
+            "address_type": address_data.get("address_type", "billing"),
+            "address_line1": address_data.get("address_line1", ""),
+            "address_line2": address_data.get("address_line2", ""),
+            "city": address_data.get("city", ""),
+            "state_code": address_data.get("state_code", ""),
+            "state_name": address_data.get("state_name", ""),
+            "pincode": address_data.get("pincode", ""),
+            "country": address_data.get("country", "India"),
+            "is_default": address_data.get("is_default", True)
+        })
+        
+        return result.scalar()
+    
+    @staticmethod
+    def get_customer_addresses(
+        db: Session,
+        customer_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all addresses for a customer.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT 
+                address_id, entity_type, entity_id, address_type,
+                address_line1, address_line2, landmark, city, 
+                state_code, state_name, country, pincode,
+                latitude, longitude, contact_person, contact_number,
+                is_default, is_active, created_at, updated_at
+            FROM master.addresses 
+            WHERE entity_type = 'customer' 
+            AND entity_id = :customer_id 
+            AND is_active = true
+            ORDER BY is_default DESC, address_type ASC, created_at DESC
+        """), {"customer_id": customer_id})
+        
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_deletion_status(
+        db: Session,
+        customer_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if customer can be deleted (exists, is active, has no outstanding).
+        """
+        result = db.execute(text("""
+            WITH customer_check AS (
+                SELECT 
+                    c.customer_id, 
+                    c.customer_name, 
+                    c.is_active,
+                    COALESCE(
+                        (SELECT SUM(final_amount - COALESCE(paid_amount, 0))
+                         FROM sales.invoices i
+                         WHERE i.customer_id = c.customer_id 
+                         AND i.payment_status != 'paid'),
+                        0
+                    ) as outstanding_balance
+                FROM parties.customers c
+                WHERE c.customer_id = :customer_id
+            )
+            SELECT customer_id, customer_name, is_active, outstanding_balance 
+            FROM customer_check
+        """), {"customer_id": customer_id}).fetchone()
+        
+        return dict(result._mapping) if result else None
+    
+    @staticmethod
+    def soft_delete(
+        db: Session,
+        customer_id: int
+    ) -> None:
+        """
+        Soft delete a customer by marking as inactive.
+        """
+        db.execute(text("""
+            UPDATE parties.customers
+            SET is_active = false, updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id
+        """), {"customer_id": customer_id})
+    
+    @staticmethod
+    def customer_exists(
+        db: Session,
+        customer_id: int
+    ) -> bool:
+        """
+        Check if a customer exists.
+        TenantAwareSession auto-filters by org_id.
+        """
+        result = db.execute(text("""
+            SELECT 1 FROM parties.customers WHERE customer_id = :id
+        """), {"id": customer_id}).scalar()
+        return result is not None
+    
+    @staticmethod
+    def update_customer_dynamic(
+        db: Session,
+        customer_id: int,
+        update_fields: List[str],
+        params: Dict[str, Any]
+    ) -> None:
+        """
+        Update customer with dynamic field list.
+        TenantAwareSession auto-filters by org_id.
+        """
+        if not update_fields:
+            return
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        query = f"""
+            UPDATE parties.customers 
+            SET {', '.join(update_fields)}
+            WHERE customer_id = :id
+        """
+        
+        db.execute(text(query), params)

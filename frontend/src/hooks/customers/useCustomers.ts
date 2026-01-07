@@ -63,7 +63,10 @@ export function useCustomer(
 ) {
   return useQuery<ApiResponse<Customer>>(
     customerKeys.detail(parseInt(customerId)),
-    () => customersApi.getById(customerId),
+    async () => {
+      const response = await customersApi.getById(customerId);
+      return (response as any).data || response;
+    },
     {
       enabled: !!customerId,
       staleTime: 5 * 60 * 1000,
@@ -81,7 +84,10 @@ export function useCreateCustomer(
   const queryClient = useQueryClient();
 
   return useMutation(
-    (data: CustomerCreateInput) => customersApi.create(data),
+    async (data: CustomerCreateInput) => {
+      const response = await customersApi.create(data);
+      return (response as any).data || response;
+    },
     {
       onSuccess: (response) => {
         // Invalidate customer queries

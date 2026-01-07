@@ -15,6 +15,8 @@ import {
 } from '../../global';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
 import { usePurchaseOrderLogic, PurchaseOrderData } from './hooks';
+import { toast } from 'react-toastify';
+import { searchCache } from '../../../utils/searchCache';
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -159,14 +161,14 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           <ItemsTable
             items={purchaseOrder.items.map(item => ({
               ...item,
-              rate: item.unit_price,
+              unit_price: item.unit_price,
               tax: item.tax_percent,
               discount_percent: item.discount_percent || 0,
               free_quantity: item.free_quantity || 0,
               total: ((item.quantity || 0) * (item.unit_price || 0) * (1 + ((item.tax_percent || 0) / 100))).toFixed(2)
             }))}
             onUpdateItem={(index, field, value) => {
-              const mappedField = field === 'rate' ? 'unit_price' :
+              const mappedField = field === 'unit_price' ? 'unit_price' :
                 field === 'tax' ? 'tax_percent' :
                   field;
               handleUpdateItem(index, mappedField, value);
@@ -174,7 +176,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             onRemoveItem={handleRemoveItem}
             showTotals={false}
             title=""
-            // columns={['product', 'pack_type', 'pack_config', 'qty', 'free', 'mrp', 'rate', 'disc', 'tax', 'total']}
+            // columns={['product', 'pack_type', 'pack_config', 'qty', 'free', 'mrp', 'unit_price', 'disc', 'tax', 'total']}
             // @ts-ignore
             customColumns={{
               pack_type: {
@@ -254,7 +256,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                   />
                 )
               },
-              rate: {
+              unit_price: {
                 label: 'Rate',
                 align: 'center',
                 render: (item, index) => (

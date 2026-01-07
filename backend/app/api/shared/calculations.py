@@ -13,7 +13,7 @@ import time
 from ...core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.auth.org_context import get_org_context, OrgContext
 from ...core.security.permissions import PermissionChecker
-from ..services.gst_service import GSTService, calculate_gst_breakdown
+from ..services.compliance.gst_service import GSTService, calculate_gst_breakdown
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])

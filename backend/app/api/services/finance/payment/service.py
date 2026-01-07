@@ -608,3 +608,462 @@ class PaymentService:
         }).first()
         
         return create_result.payment_method_id if create_result else 1
+    
+    @staticmethod
+    def allocate_payment_to_invoices(
+        db: Session,
+        org_id: str,
+        payment_id: int,
+        allocations: List[Dict[str, Any]],
+        user_id: int
+    ) -> Dict[str, Any]:
+        """
+        Allocate a payment to multiple invoices.
+        Creates allocation records and updates invoice/payment balances.
+        """
+        # Get payment details
+        payment = db.execute(text("""
+            SELECT payment_id, amount, customer_id, payment_type
+            FROM financial.payments
+            WHERE payment_id = :payment_id AND payment_status = 'completed'
+        """), {"payment_id": payment_id}).first()
+        
+        if not payment:
+            raise ValueError("Payment not found or not completed")
+        
+        total_allocated = 0
+        
+        for allocation in allocations:
+            invoice_id = allocation.get("invoice_id")
+            allocated_amount = allocation.get("amount", 0)
+            
+            if allocated_amount <= 0:
+                continue
+            
+            # Get invoice balance
+            invoice = db.execute(text("""
+                SELECT invoice_id, final_amount, paid_amount
+                FROM sales.invoices
+                WHERE invoice_id = :invoice_id AND org_id = :org_id
+            """), {"invoice_id": invoice_id, "org_id": org_id}).first()
+            
+            if not invoice:
+                raise ValueError(f"Invoice {invoice_id} not found")
+            
+            balance = invoice.final_amount - (invoice.paid_amount or 0)
+            actual_allocation = min(allocated_amount, balance)
+            
+            if actual_allocation > 0:
+                # Create allocation record
+                db.execute(text("""
+                    INSERT INTO financial.payment_allocations (
+                        payment_id, invoice_id, allocated_amount,
+                        allocation_date, created_by
+                    ) VALUES (
+                        :payment_id, :invoice_id, :allocated_amount,
+                        CURRENT_DATE, :created_by
+                    )
+                """), {
+                    "payment_id": payment_id,
+                    "invoice_id": invoice_id,
+                    "allocated_amount": actual_allocation,
+                    "created_by": user_id
+                })
+                
+                # Update invoice paid amount
+                db.execute(text("""
+                    UPDATE sales.invoices
+                    SET paid_amount = COALESCE(paid_amount, 0) + :amount,
+                        payment_status = CASE
+                            WHEN COALESCE(paid_amount, 0) + :amount >= final_amount THEN 'paid'
+                            ELSE 'partial'
+                        END
+                    WHERE invoice_id = :invoice_id
+                """), {
+                    "amount": actual_allocation,
+                    "invoice_id": invoice_id
+                })
+                
+                total_allocated += actual_allocation
+        
+        # Update payment with allocated amount
+        db.execute(text("""
+            UPDATE financial.payments
+            SET allocated_amount = :allocated_amount,
+                unallocated_amount = amount - :allocated_amount
+            WHERE payment_id = :payment_id
+        """), {
+            "allocated_amount": total_allocated,
+            "payment_id": payment_id
+        })
+        
+        return {
+            "payment_id": payment_id,
+            "total_allocated": total_allocated,
+            "unallocated_amount": float(payment.amount) - total_allocated,
+            "status": "success"
+        }
+    
+    @staticmethod
+    def process_bank_reconciliation(
+        db: Session,
+        org_id: str,
+        bank_account: str,
+        statement_date: date,
+        opening_balance: float,
+        closing_balance: float,
+        reconciled_by: int,
+        transactions: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Process bank reconciliation by matching transactions to payments.
+        Creates reconciliation record and handles matched/unmatched items.
+        """
+        # Create reconciliation record
+        result = db.execute(text("""
+            INSERT INTO financial.bank_reconciliations (
+                org_id, bank_account, statement_date, opening_balance, 
+                closing_balance, reconciled_by, reconciliation_date
+            ) VALUES (
+                :org_id, :bank_account, :statement_date, :opening_balance,
+                :closing_balance, :reconciled_by, CURRENT_DATE
+            ) RETURNING reconciliation_id
+        """), {
+            "org_id": org_id,
+            "bank_account": bank_account,
+            "statement_date": statement_date,
+            "opening_balance": opening_balance,
+            "closing_balance": closing_balance,
+            "reconciled_by": reconciled_by
+        })
+        
+        reconciliation_id = result.scalar()
+        
+        # Process each transaction
+        matched = 0
+        unmatched = 0
+        
+        for txn in transactions:
+            # Try to match with existing payments
+            match_result = db.execute(text("""
+                SELECT payment_id FROM financial.payments
+                WHERE 1=1
+                AND amount = :amount
+                AND payment_date = :date
+                AND payment_status != 'cancelled'
+                AND cleared_date IS NULL
+                LIMIT 1
+            """), {
+                "org_id": org_id,
+                "amount": abs(txn.get("amount", 0)),
+                "date": txn.get("date")
+            })
+            
+            payment_match = match_result.first()
+            
+            if payment_match:
+                # Update payment as cleared
+                db.execute(text("""
+                    UPDATE financial.payments
+                    SET cleared_date = :cleared_date,
+                        reconciliation_id = :reconciliation_id
+                    WHERE payment_id = :payment_id
+                """), {
+                    "cleared_date": txn.get("date"),
+                    "reconciliation_id": reconciliation_id,
+                    "payment_id": payment_match.payment_id
+                })
+                matched += 1
+            else:
+                # Record unmatched transaction
+                db.execute(text("""
+                    INSERT INTO financial.unmatched_transactions (
+                        reconciliation_id, transaction_date, description,
+                        amount, transaction_type
+                    ) VALUES (
+                        :reconciliation_id, :transaction_date, :description,
+                        :amount, :transaction_type
+                    )
+                """), {
+                    "reconciliation_id": reconciliation_id,
+                    "transaction_date": txn.get("date"),
+                    "description": txn.get("description", ""),
+                    "amount": txn.get("amount", 0),
+                    "transaction_type": "credit" if txn.get("amount", 0) > 0 else "debit"
+                })
+                unmatched += 1
+        
+        return {
+            "reconciliation_id": reconciliation_id,
+            "matched_transactions": matched,
+            "unmatched_transactions": unmatched,
+            "status": "completed"
+        }
+    
+    @staticmethod
+    def create_general_payment(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        payment_data: Dict[str, Any],
+        user_id: int
+    ) -> Dict[str, Any]:
+        """
+        Create a general payment (advance, invoice payment, or adjustment).
+        Handles sequence generation and insert.
+        """
+        from ...document_number_service import DocumentNumberService
+        
+        # Generate payment number if not provided
+        payment_number = payment_data.get("payment_number")
+        if not payment_number:
+            doc_type = "receipt" if payment_data.get("customer_id") else "payment"
+            payment_number = DocumentNumberService.generate_number(db, doc_type, org_id)
+        
+        # Get party name
+        party_id = payment_data.get("customer_id") or payment_data.get("supplier_id")
+        party_name = None
+        if party_id:
+            party_name = PaymentService.get_party_name(db, party_id)
+            if not party_name:
+                party_name = f"Party {party_id}"
+        
+        # Get or create payment method
+        payment_method_id = 1
+        if payment_data.get("payment_mode"):
+            payment_method_id = PaymentService.get_or_create_method(db, org_id, payment_data["payment_mode"])
+        
+        # Insert payment
+        result = db.execute(text("""
+            INSERT INTO financial.payments (
+                org_id, branch_id, payment_number, payment_date, payment_type, payment_method_id,
+                party_type, party_id, party_name, payment_amount, payment_status,
+                clearance_date, reference_number, narration, created_by
+            ) VALUES (
+                :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_method_id,
+                :party_type, :party_id, :party_name, :payment_amount, :payment_status,
+                :clearance_date, :reference_number, :narration, :created_by
+            ) RETURNING payment_id, payment_number, payment_amount, payment_status
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "payment_number": payment_number,
+            "payment_date": payment_data.get("payment_date"),
+            "payment_type": "payment" if payment_data.get("supplier_id") else "receipt",
+            "payment_method_id": payment_method_id,
+            "party_type": "supplier" if payment_data.get("supplier_id") else "customer",
+            "party_id": party_id,
+            "party_name": party_name,
+            "payment_amount": payment_data.get("amount"),
+            "payment_status": "cleared" if payment_data.get("payment_mode") == "cash" else "pending",
+            "clearance_date": payment_data.get("cleared_date") or (payment_data.get("payment_date") if payment_data.get("payment_mode") == "cash" else None),
+            "reference_number": payment_data.get("reference_number"),
+            "narration": payment_data.get("notes"),
+            "created_by": user_id
+        }).fetchone()
+        
+        return {
+            "payment_id": result.payment_id,
+            "payment_number": result.payment_number,
+            "amount": float(result.payment_amount),
+            "status": result.payment_status
+        }
+    
+    @staticmethod
+    def get_outstanding_invoices(
+        db: Session,
+        customer_id: Optional[int] = None,
+        overdue_only: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Get list of outstanding invoices with optional filters.
+        """
+        query = """
+            SELECT 
+                i.invoice_id, i.invoice_number, i.invoice_date, i.due_date,
+                c.customer_id, c.customer_name, c.customer_code,
+                i.final_amount, 
+                COALESCE(i.paid_amount, 0) as paid_amount, 
+                (i.final_amount - COALESCE(i.paid_amount, 0)) as balance_amount,
+                i.payment_status,
+                CASE 
+                    WHEN i.due_date < CURRENT_DATE THEN 
+                        CURRENT_DATE - i.due_date 
+                    ELSE 0 
+                END as days_overdue
+            FROM sales.invoices i
+            JOIN parties.customers c ON i.customer_id = c.customer_id
+            WHERE i.payment_status IN ('unpaid', 'partial')
+        """
+        
+        params = {}
+        
+        if customer_id:
+            query += " AND c.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+        
+        if overdue_only:
+            query += " AND i.due_date < CURRENT_DATE"
+        
+        query += " ORDER BY i.due_date, i.invoice_date"
+        
+        result = db.execute(text(query), params)
+        invoices = [dict(row._mapping) for row in result]
+        
+        # Calculate summary
+        total_outstanding = sum(inv["balance_amount"] for inv in invoices)
+        total_overdue = sum(inv["balance_amount"] for inv in invoices if inv["days_overdue"] > 0)
+        
+        return {
+            "invoices": invoices,
+            "summary": {
+                "total_invoices": len(invoices),
+                "total_outstanding": total_outstanding,
+                "total_overdue": total_overdue,
+                "overdue_invoices": len([inv for inv in invoices if inv["days_overdue"] > 0])
+            }
+        }
+    
+    @staticmethod
+    def get_aging_report(
+        db: Session,
+        aging_date: date,
+        customer_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate customer aging report with buckets.
+        """
+        query = """
+            WITH invoice_aging AS (
+                SELECT 
+                    i.invoice_id,
+                    i.invoice_number,
+                    i.invoice_date,
+                    i.due_date,
+                    c.customer_id,
+                    c.customer_name,
+                    c.customer_code,
+                    i.final_amount,
+                    COALESCE(i.paid_amount, 0) as paid_amount,
+                    (i.final_amount - COALESCE(i.paid_amount, 0)) as balance_amount,
+                    (:aging_date - i.due_date) as days_overdue,
+                    CASE 
+                        WHEN (:aging_date - i.due_date) <= 0 THEN 'current'
+                        WHEN (:aging_date - i.due_date) BETWEEN 1 AND 30 THEN '1-30'
+                        WHEN (:aging_date - i.due_date) BETWEEN 31 AND 60 THEN '31-60'
+                        WHEN (:aging_date - i.due_date) BETWEEN 61 AND 90 THEN '61-90'
+                        ELSE '90+'
+                    END as aging_bucket
+                FROM sales.invoices i
+                JOIN parties.customers c ON i.customer_id = c.customer_id
+                WHERE i.payment_status IN ('unpaid', 'partial')
+                    AND (i.final_amount - COALESCE(i.paid_amount, 0)) > 0
+        """
+        
+        params = {"aging_date": aging_date}
+        
+        if customer_id:
+            query += " AND c.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+            
+        query += """
+            )
+            SELECT 
+                customer_id,
+                customer_name,
+                customer_code,
+                COUNT(*) as invoice_count,
+                SUM(balance_amount) as total_outstanding,
+                SUM(CASE WHEN aging_bucket = 'current' THEN balance_amount ELSE 0 END) as current,
+                SUM(CASE WHEN aging_bucket = '1-30' THEN balance_amount ELSE 0 END) as days_1_30,
+                SUM(CASE WHEN aging_bucket = '31-60' THEN balance_amount ELSE 0 END) as days_31_60,
+                SUM(CASE WHEN aging_bucket = '61-90' THEN balance_amount ELSE 0 END) as days_61_90,
+                SUM(CASE WHEN aging_bucket = '90+' THEN balance_amount ELSE 0 END) as days_90_plus,
+                MAX(days_overdue) as max_days_overdue
+            FROM invoice_aging
+            GROUP BY customer_id, customer_name, customer_code
+            ORDER BY total_outstanding DESC
+        """
+        
+        result = db.execute(text(query), params)
+        customer_aging = [dict(row._mapping) for row in result]
+        
+        # Calculate totals
+        total_outstanding = sum(row["total_outstanding"] for row in customer_aging)
+        total_current = sum(row["current"] for row in customer_aging)
+        total_1_30 = sum(row["days_1_30"] for row in customer_aging)
+        total_31_60 = sum(row["days_31_60"] for row in customer_aging)
+        total_61_90 = sum(row["days_61_90"] for row in customer_aging)
+        total_90_plus = sum(row["days_90_plus"] for row in customer_aging)
+        
+        return {
+            "as_of_date": aging_date,
+            "customer_aging": customer_aging,
+            "summary": {
+                "total_customers": len(customer_aging),
+                "total_outstanding": total_outstanding,
+                "aging_buckets": {
+                    "current": total_current,
+                    "1-30_days": total_1_30,
+                    "31-60_days": total_31_60,
+                    "61-90_days": total_61_90,
+                    "90+_days": total_90_plus
+                },
+                "aging_percentages": {
+                    "current": round((total_current / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "1-30_days": round((total_1_30 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "31-60_days": round((total_31_60 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "61-90_days": round((total_61_90 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "90+_days": round((total_90_plus / total_outstanding * 100) if total_outstanding > 0 else 0, 2)
+                }
+            }
+        }
+    
+    @staticmethod
+    def generate_receipt_sequence(
+        db: Session,
+        payment_type: str = "receipt"
+    ) -> Dict[str, Any]:
+        """
+        Generate unique receipt/payment number using atomic sequence.
+        Format: RCT-YYYYMMDD-NNNN or PAY-YYYYMMDD-NNNN
+        """
+        from datetime import datetime
+        
+        current_date = date.today()
+        prefix = "RCT" if payment_type == "receipt" else "PAY"
+        date_part = current_date.strftime("%Y%m%d")
+        
+        # Regex patterns for sequence extraction
+        pattern = f"^{prefix}-{date_part}-[0-9]+$"
+        extract_pattern = f"{prefix}-{date_part}-([0-9]+)$"
+        like_pattern = f"{prefix}-{date_part}-%"
+        
+        # Get next sequence number atomically
+        result = db.execute(text("""
+            SELECT COALESCE(MAX(
+                CASE 
+                    WHEN payment_number ~ :pattern THEN 
+                        CAST(SUBSTRING(payment_number FROM :extract_pattern) AS BIGINT)
+                    ELSE 0 
+                END
+            ), 0) + 1 as next_number
+            FROM financial.payments 
+            WHERE 1=1
+                AND payment_date = :payment_date
+                AND payment_number LIKE :like_pattern
+        """), {
+            "payment_date": current_date,
+            "pattern": pattern,
+            "extract_pattern": extract_pattern,
+            "like_pattern": like_pattern
+        }).fetchone()
+        
+        next_number = str(result.next_number).zfill(4)
+        receipt_number = f"{prefix}-{date_part}-{next_number}"
+        
+        return {
+            "receipt_number": receipt_number,
+            "payment_type": payment_type,
+            "generated_at": datetime.now().isoformat()
+        }

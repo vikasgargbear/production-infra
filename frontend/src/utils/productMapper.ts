@@ -19,7 +19,6 @@ export interface RawBatchInput {
     batch_id?: number | string;
     id?: number | string;
     batch_number?: string;
-    batch_number?: string;
     // Pricing aliases
     sale_price_per_unit?: number | string;
     sale_price?: number | string;
@@ -176,7 +175,6 @@ export function mergeProductAndBatch(product: Product, batch: ProductBatch) {
         ...product,
         // Batch overrides
         batch_id: batch.batch_id,
-        batch_number: batch.batch_number,
         batch_number: batch.batch_number,
         expiry_date: batch.expiry_date,
         manufacturing_date: batch.manufacturing_date,

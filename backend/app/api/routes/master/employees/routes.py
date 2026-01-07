@@ -1,10 +1,10 @@
 """
 Employee Management API
 CRUD operations for master.employees table
+REFACTORED: All SQL moved to EmployeeService
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy import text
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime, date
 import logging
 import json
@@ -12,7 +12,9 @@ import json
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+
+# Service layer
+from ....services.master.employee.service import EmployeeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,7 +22,7 @@ router = APIRouter()
 
 # ============== EMPLOYEE ENDPOINTS ==============
 
-@router.get("", response_model=Dict[str, Any])  # Empty string - handles both with/without trailing slash
+@router.get("", response_model=Dict[str, Any])
 @with_tenant_context
 async def list_employees(
     limit: int = Query(100, ge=1, le=1000),
@@ -32,82 +34,9 @@ async def list_employees(
 ):
     """List all employees with pagination and search"""
     try:
-        query = text("""
-            SELECT 
-                e.employee_id,
-                e.employee_code,
-                e.full_name,
-                e.first_name,
-                e.last_name,
-                e.designation,
-                e.department_id,
-                d.department_name,
-                e.branch_id,
-                b.branch_name,
-                e.joining_date,
-                e.personal_mobile,
-                e.personal_email,
-                e.date_of_birth,
-                e.gender,
-                e.pan_number,
-                e.aadhar_number,
-                e.current_address,
-                e.permanent_address,
-                e.emergency_contact,
-                e.bank_account_details,
-                e.employment_status,
-                CASE WHEN e.employment_status = 'active' THEN true ELSE false END as is_active,
-                e.created_at
-            FROM master.employees e
-            LEFT JOIN master.departments d ON e.department_id = d.department_id AND d.org_id = e.org_id
-            LEFT JOIN master.org_branches b ON e.branch_id = b.branch_id AND b.org_id = e.org_id
-            WHERE e.org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(e.full_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(e.employee_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR (
-                CASE WHEN :is_active THEN e.employment_status = 'active'
-                ELSE e.employment_status != 'active' END
-            ))
-            ORDER BY e.full_name
-            LIMIT :limit OFFSET :offset
-        """)
-        
-        search_pattern = f"%{search}%" if search else None
-        
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active,
-            "limit": limit,
-            "offset": offset
-        })
-        
-        employees = []
-        for row in result:
-            employees.append(dict(row._mapping))
-        
-        # Get total count
-        count_query = text("""
-            SELECT COUNT(*) FROM master.employees e
-            WHERE e.org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(e.full_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(e.employee_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR (
-                CASE WHEN :is_active THEN e.employment_status = 'active'
-                ELSE e.employment_status != 'active' END
-            ))
-        """)
-        
-        count_result = db.execute(count_query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active
-        })
-        total = count_result.scalar()
+        employees, total = EmployeeService.list_employees(
+            db, str(context.org_id), search, is_active, limit, offset
+        )
         
         return {
             "success": True,
@@ -132,29 +61,14 @@ async def get_employee(
 ):
     """Get employee by ID"""
     try:
-        query = text("""
-            SELECT 
-                e.*,
-                d.department_name,
-                b.branch_name
-            FROM master.employees e
-            LEFT JOIN master.departments d ON e.department_id = d.department_id AND d.org_id = e.org_id
-            LEFT JOIN master.org_branches b ON e.branch_id = b.branch_id AND b.org_id = e.org_id
-            WHERE e.employee_id = :employee_id AND e.org_id = :org_id
-        """)
-        
-        result = db.execute(query, {
-            "employee_id": employee_id,
-            "org_id": str(context.org_id)
-        })
-        employee = result.first()
+        employee = EmployeeService.get_employee(db, str(context.org_id), employee_id)
         
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
         
         return {
             "success": True,
-            "data": dict(employee._mapping)
+            "data": employee
         }
         
     except HTTPException:
@@ -174,44 +88,19 @@ async def create_employee(
 ):
     """Create a new employee"""
     try:
+        org_id = str(context.org_id)
+        
         # Generate employee code if not provided
         employee_code = employee_data.get("employee_code")
         if not employee_code:
-            # Get next employee number
-            count_query = text("""
-                SELECT COUNT(*) FROM master.employees WHERE org_id = :org_id
-            """)
-            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
-            count = count_result.scalar() + 1
-            employee_code = f"EMP{count:04d}"
+            count = EmployeeService.count_employees(db, org_id)
+            employee_code = f"EMP{count + 1:04d}"
         
         # Extract name parts
         employee_name = employee_data.get("employee_name", "")
         name_parts = employee_name.split(" ", 1)
         first_name = name_parts[0] if name_parts else ""
         last_name = name_parts[1] if len(name_parts) > 1 else None
-        
-        query = text("""
-            INSERT INTO master.employees (
-                org_id, employee_code, first_name, last_name,
-                designation, department_id, branch_id, joining_date,
-                personal_mobile, personal_email,
-                date_of_birth, gender,
-                pan_number, aadhar_number,
-                current_address, permanent_address,
-                emergency_contact, bank_account_details,
-                employment_status
-            ) VALUES (
-                :org_id, :employee_code, :first_name, :last_name,
-                :designation, :department_id, :branch_id, :joining_date,
-                :personal_mobile, :personal_email,
-                :date_of_birth, :gender,
-                :pan_number, :aadhar_number,
-                :current_address, :permanent_address,
-                :emergency_contact, :bank_account_details,
-                :employment_status
-            ) RETURNING employee_id, full_name, employee_code
-        """)
         
         # Get personal details
         personal_details = employee_data.get("personal_details", {})
@@ -226,8 +115,7 @@ async def create_employee(
                 "pincode": personal_details.get("pincode")
             }
         
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
+        data = {
             "employee_code": employee_code,
             "first_name": first_name,
             "last_name": last_name,
@@ -246,18 +134,13 @@ async def create_employee(
             "emergency_contact": json.dumps(employee_data.get("emergency_contact")) if employee_data.get("emergency_contact") else None,
             "bank_account_details": json.dumps(employee_data.get("bank_account_details")) if employee_data.get("bank_account_details") else None,
             "employment_status": 'active' if employee_data.get("is_active", True) else 'inactive'
-        })
+        }
         
-        # TenantAwareSession auto-commits
-        row = result.first()
+        result = EmployeeService.insert_employee(db, org_id, data)
         
         return {
             "success": True,
-            "data": {
-                "employee_id": row[0],
-                "employee_name": row[1],
-                "employee_code": row[2]
-            },
+            "data": result,
             "message": "Employee created successfully"
         }
         
@@ -278,12 +161,11 @@ async def update_employee(
 ):
     """Update employee"""
     try:
+        org_id = str(context.org_id)
+        
         # Build update query dynamically
         update_fields = []
-        params = {
-            "employee_id": employee_id,
-            "org_id": str(context.org_id)
-        }
+        params = {}
         
         # Handle name update
         if "employee_name" in employee_data:
@@ -367,26 +249,16 @@ async def update_employee(
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        query = text(f"""
-            UPDATE master.employees 
-            SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
-            WHERE employee_id = :employee_id AND org_id = :org_id
-            RETURNING employee_id, full_name
-        """)
+        result = EmployeeService.update_employee_dynamic(
+            db, org_id, employee_id, update_fields, params
+        )
         
-        result = db.execute(query, params)
-        # TenantAwareSession auto-commits
-        
-        updated = result.first()
-        if not updated:
+        if not result:
             raise HTTPException(status_code=404, detail="Employee not found")
         
         return {
             "success": True,
-            "data": {
-                "employee_id": updated[0],
-                "employee_name": updated[1]
-            },
+            "data": result,
             "message": "Employee updated successfully"
         }
         
@@ -408,27 +280,16 @@ async def delete_employee(
 ):
     """Delete (soft delete) employee"""
     try:
-        # Soft delete by setting employment_status to inactive
-        query = text("""
-            UPDATE master.employees 
-            SET employment_status = 'inactive', updated_at = CURRENT_TIMESTAMP
-            WHERE employee_id = :employee_id AND org_id = :org_id
-            RETURNING employee_id, full_name
-        """)
+        result = EmployeeService.soft_delete_employee(
+            db, str(context.org_id), employee_id
+        )
         
-        result = db.execute(query, {
-            "employee_id": employee_id,
-            "org_id": str(context.org_id)
-        })
-        # TenantAwareSession auto-commits
-        
-        deleted = result.first()
-        if not deleted:
+        if not result:
             raise HTTPException(status_code=404, detail="Employee not found")
         
         return {
             "success": True,
-            "message": f"Employee {deleted[1]} deactivated successfully"
+            "message": f"Employee {result['full_name']} deactivated successfully"
         }
         
     except HTTPException:

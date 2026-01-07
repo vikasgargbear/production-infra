@@ -142,15 +142,15 @@ const BillSummary: React.FC<BillSummaryProps> = ({
           <h4 className="text-xs font-medium text-gray-700 mb-2">Tax Breakdown</h4>
           <div className="space-y-1">
             {Array.from(new Set(data.items.map(item => item.tax_rate || 0)))
-              .filter((rate): rate is number => typeof rate === 'number' && rate > 0)
-              .map((rate: number) => {
+              .filter((unit_price): unit_price is number => typeof unit_price === 'number' && unit_price > 0)
+              .map((unit_price: number) => {
                 const taxAmount = data.items
-                  .filter(item => (item.tax_rate || 0) === rate)
+                  .filter(item => (item.tax_rate || 0) === unit_price)
                   .reduce((sum: number, item) => sum + (item.tax_amount || 0), 0);
                 
                 return (
-                  <div key={rate} className="flex justify-between text-xs text-gray-600">
-                    <span>GST @ {rate}%</span>
+                  <div key={unit_price} className="flex justify-between text-xs text-gray-600">
+                    <span>GST @ {unit_price}%</span>
                     <span>{formatCurrency(taxAmount)}</span>
                   </div>
                 );

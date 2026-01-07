@@ -20,7 +20,6 @@ interface Purchase {
     supplier_name?: string;
     supplier_id?: number | string;
     total_amount?: number;
-    total_amount?: number;
     payment_status?: string;
     items?: PurchaseItem[];
 }
@@ -149,13 +148,13 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
 
         try {
             const params = {
-                supplier_id: supplierId,
+                supplier_id: supplierId ? Number(supplierId) : undefined,
                 limit: 10,
                 sort: 'purchase_date:desc',
                 ...filters
             };
 
-            const response = await purchasesApi.search(params);
+            const response = await purchasesApi.getOrders(params);
             const recentPurchases = (response as any).data?.purchases || [];
 
             cacheRef.current.set(cacheKey, {
@@ -187,12 +186,12 @@ const PurchaseSearch = forwardRef<PurchaseSearchRef, PurchaseSearchProps>((
         try {
             const params = {
                 search: query,
-                supplier_id: supplierId,
+                supplier_id: supplierId ? Number(supplierId) : undefined,
                 limit: 20,
                 ...filters
             };
 
-            const response = await purchasesApi.search(params);
+            const response = await purchasesApi.getOrders(params);
             const searchResults = (response as any).data?.purchases || [];
 
             cacheRef.current.set(cacheKey, {

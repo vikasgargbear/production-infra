@@ -1,18 +1,18 @@
 """
-Tax Entries API Router (Simplified)
-Uses existing sales and GST data for tax calculations and reporting
+Tax Entries API Router
+REFACTORED: Uses TaxService for database operations
 """
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
-from .....core.security.permissions import PermissionChecker  # RBAC
-from ....services.gst_service import GSTService
+from .....core.security.permissions import PermissionChecker
+from ....services.compliance.gst_service import GSTService
+from ....services.finance.tax.service import TaxService
 
 logger = logging.getLogger(__name__)
 
@@ -21,103 +21,38 @@ router = APIRouter(tags=["tax-entries"])
 @router.get("/")
 @with_tenant_context
 async def get_tax_entries(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = 0, limit: int = 100,
     entry_type: Optional[str] = Query(None, description="Filter by type: sales, purchase"),
-    start_date: Optional[date] = Query(None, description="Filter from date"),
-    end_date: Optional[date] = Query(None, description="Filter to date"),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
     _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Get tax entries from sales invoices and purchase records"""
+    """Get tax entries from sales invoices"""
     try:
-        # Simplified query using actual database schema - sales invoices
-        query = """
-            SELECT 
-                i.invoice_id as entry_id,
-                'sales' as entry_type,
-                i.invoice_date as entry_date,
-                i.customer_id as party_id,
-                c.customer_name as party_name,
-                c.gst_number as party_gstin,
-                i.invoice_number,
-                i.subtotal_amount as taxable_amount,
-                i.cgst_amount,
-                i.sgst_amount,
-                i.igst_amount,
-                i.total_tax_amount,
-                i.final_amount as total_amount,
-                'Customer' as party_type,
-                i.created_at
-            FROM sales.invoices i
-            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.org_id = :org_id
-        """
-        params = {"org_id": str(context.org_id)}
-        
-        if entry_type and entry_type == 'sales':
-            # Already filtered to sales above
-            pass
-        elif entry_type and entry_type == 'purchase':
-            # Return empty for purchases since we don't have purchase invoices in this simplified version
+        if entry_type and entry_type == 'purchase':
             return []
-            
-        if start_date:
-            query += " AND i.invoice_date >= :start_date"
-            params["start_date"] = start_date
-            
-        if end_date:
-            query += " AND i.invoice_date <= :end_date"
-            params["end_date"] = end_date
-            
-        query += " ORDER BY i.invoice_date DESC LIMIT :limit OFFSET :skip"
-        params.update({"limit": limit, "skip": skip})
-        
-        result = db.execute(text(query), params)
-        entries = [dict(row._mapping) for row in result]
-        
+        entries = TaxService.list_sales_tax_entries(db, str(context.org_id), entry_type, start_date, end_date, limit, skip)
         return entries
-        
     except Exception as e:
         logger.error(f"Error fetching tax entries: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get tax entries: {str(e)}")
 
 @router.get("/{entry_id}")
 @with_tenant_context
-async def get_tax_entry(entry_id: int, _: dict = Depends(PermissionChecker("finance", "view")),
+async def get_tax_entry(
+    entry_id: int,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)):
+    context: OrgContext = Depends(get_org_context)
+):
     """Get a single tax entry by invoice ID"""
     try:
-        result = db.execute(
-            text("""
-                SELECT 
-                    i.invoice_id as entry_id,
-                    'sales' as entry_type,
-                    i.invoice_date as entry_date,
-                    i.customer_id as party_id,
-                    c.customer_name as party_name,
-                    c.gst_number as party_gstin,
-                    i.invoice_number,
-                    i.subtotal_amount as taxable_amount,
-                    i.cgst_amount,
-                    i.sgst_amount,
-                    i.igst_amount,
-                    i.total_tax_amount,
-                    i.final_amount as total_amount,
-                    'Customer' as party_type,
-                    i.created_at
-                FROM sales.invoices i
-                LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
-                WHERE i.invoice_id = :entry_id AND i.org_id = :org_id
-            """),
-            {"entry_id": entry_id, "org_id": str(context.org_id)}
-        )
-        entry = result.first()
+        entry = TaxService.get_tax_entry(db, str(context.org_id), entry_id)
         if not entry:
             raise HTTPException(status_code=404, detail="Tax entry not found")
-        return dict(entry._mapping)
+        return entry
     except HTTPException:
         raise
     except Exception as e:
@@ -126,33 +61,29 @@ async def get_tax_entry(entry_id: int, _: dict = Depends(PermissionChecker("fina
 
 @router.post("/calculate")
 @with_tenant_context
-async def calculate_tax(calculation_data: dict, _: dict = Depends(PermissionChecker("finance", "view")),
+async def calculate_tax(
+    calculation_data: dict,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)):
+    context: OrgContext = Depends(get_org_context)
+):
     """Calculate tax for given parameters"""
     try:
         taxable_amount = Decimal(str(calculation_data.get("taxable_amount", 0)))
         gst_rate = Decimal(str(calculation_data.get("gst_rate", 0)))
         is_interstate = calculation_data.get("is_interstate", False)
         
-        # Use GSTService for consistent calculations
         gst_type = "IGST" if is_interstate else "CGST/SGST"
         gst = GSTService.calculate_gst_components(taxable_amount, gst_rate, gst_type)
-        
         total_amount = taxable_amount + gst["total_tax_amount"]
         
         return {
-            "taxable_amount": float(taxable_amount),
-            "cgst_rate": float(gst["cgst_percent"]),
-            "cgst_amount": float(gst["cgst_amount"]),
-            "sgst_rate": float(gst["sgst_percent"]),
-            "sgst_amount": float(gst["sgst_amount"]),
-            "igst_rate": float(gst["igst_percent"]),
-            "igst_amount": float(gst["igst_amount"]),
-            "total_tax": float(gst["total_tax_amount"]),
+            "taxable_amount": float(taxable_amount), "cgst_rate": float(gst["cgst_percent"]),
+            "cgst_amount": float(gst["cgst_amount"]), "sgst_rate": float(gst["sgst_percent"]),
+            "sgst_amount": float(gst["sgst_amount"]), "igst_rate": float(gst["igst_percent"]),
+            "igst_amount": float(gst["igst_amount"]), "total_tax": float(gst["total_tax_amount"]),
             "total_amount": float(total_amount)
         }
-        
     except Exception as e:
         logger.error(f"Error calculating tax: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to calculate tax: {str(e)}")
@@ -166,102 +97,18 @@ async def get_gstr1_summary(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Get GSTR-1 summary for the specified month using sales data"""
+    """Get GSTR-1 summary for the specified month"""
     try:
-        from datetime import timedelta
+        org_id = str(context.org_id)
         start_date = date(year, month, 1)
-        if month == 12:
-            end_date = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            end_date = date(year, month + 1, 1) - timedelta(days=1)
+        end_date = date(year + 1, 1, 1) - timedelta(days=1) if month == 12 else date(year, month + 1, 1) - timedelta(days=1)
         
-        # B2B Supplies
-        b2b_query = """
-            SELECT 
-                c.gst_number as customer_gstin,
-                c.customer_name,
-                COUNT(DISTINCT i.invoice_number) as invoice_count,
-                SUM(i.subtotal_amount) as taxable_value,
-                SUM(i.cgst_amount) as cgst,
-                SUM(i.sgst_amount) as sgst,
-                SUM(i.igst_amount) as igst,
-                SUM(i.total_tax_amount) as total_tax
-            FROM sales.invoices i
-            JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.invoice_date >= :start_date
-            AND i.invoice_date <= :end_date
-            AND i.org_id = :org_id
-            AND c.gst_number IS NOT NULL
-            GROUP BY c.gst_number, c.customer_name
-            ORDER BY taxable_value DESC
-        """
+        b2b_supplies = TaxService.get_b2b_supplies(db, org_id, start_date, end_date)
+        b2c_summary = TaxService.get_b2c_summary(db, org_id, start_date, end_date)
+        hsn_summary = TaxService.get_hsn_summary(db, org_id, start_date, end_date)
         
-        b2b_result = db.execute(text(b2b_query), {
-            "start_date": start_date, 
-            "end_date": end_date,
-            "org_id": str(context.org_id)
-        })
-        b2b_supplies = [dict(row._mapping) for row in b2b_result]
-        
-        # B2C Supplies
-        b2c_query = """
-            SELECT 
-                COUNT(DISTINCT i.invoice_number) as invoice_count,
-                SUM(i.subtotal_amount) as taxable_value,
-                SUM(i.cgst_amount) as cgst,
-                SUM(i.sgst_amount) as sgst,
-                SUM(i.igst_amount) as igst,
-                SUM(i.total_tax_amount) as total_tax
-            FROM sales.invoices i
-            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.invoice_date >= :start_date
-            AND i.invoice_date <= :end_date
-            AND i.org_id = :org_id
-            AND (c.gst_number IS NULL OR c.gst_number = '')
-        """
-        
-        b2c_result = db.execute(text(b2c_query), {
-            "start_date": start_date, 
-            "end_date": end_date,
-            "org_id": str(context.org_id)
-        })
-        b2c_summary = dict(b2c_result.first()._mapping)
-        
-        # HSN Summary (simplified - would need product HSN data)
-        hsn_query = """
-            SELECT 
-                p.hsn_code,
-                p.product_name as product_description,
-                COUNT(*) as transaction_count,
-                SUM(ii.total_amount) as taxable_value,
-                18.0 as avg_tax_rate,  -- Simplified average
-                SUM(ii.total_amount * 0.18) as total_tax  -- Simplified calculation
-            FROM sales.invoice_items ii
-            JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
-            JOIN inventory.products p ON ii.product_id = p.product_id
-            WHERE i.invoice_date >= :start_date
-            AND i.invoice_date <= :end_date
-            AND i.org_id = :org_id
-            GROUP BY p.hsn_code, p.product_name
-            ORDER BY taxable_value DESC
-        """
-        
-        hsn_result = db.execute(text(hsn_query), {
-            "start_date": start_date, 
-            "end_date": end_date,
-            "org_id": str(context.org_id)
-        })
-        hsn_summary = [dict(row._mapping) for row in hsn_result]
-        
-        return {
-            "month": month,
-            "year": year,
-            "b2b_supplies": b2b_supplies,
-            "b2c_summary": b2c_summary,
-            "hsn_summary": hsn_summary,
-            "generated_on": datetime.utcnow()
-        }
-        
+        return {"month": month, "year": year, "b2b_supplies": b2b_supplies,
+                "b2c_summary": b2c_summary, "hsn_summary": hsn_summary, "generated_on": datetime.utcnow()}
     except Exception as e:
         logger.error(f"Error generating GSTR-1 summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate GSTR-1 summary: {str(e)}")
@@ -275,43 +122,11 @@ async def get_tax_analytics(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Get tax analytics and summary from sales data"""
+    """Get tax analytics and summary"""
     try:
-        query = """
-            SELECT 
-                COUNT(*) as total_entries,
-                COUNT(*) as sales_entries,
-                0 as purchase_entries,
-                SUM(i.subtotal_amount) as total_sales_value,
-                0 as total_purchase_value,
-                SUM(i.total_tax_amount) as total_output_tax,
-                0 as total_input_tax,
-                SUM(i.cgst_amount) as total_output_cgst,
-                SUM(i.sgst_amount) as total_output_sgst,
-                SUM(i.igst_amount) as total_output_igst
-            FROM sales.invoices i
-            WHERE i.org_id = :org_id
-        """
-        params = {"org_id": str(context.org_id)}
-        
-        if start_date:
-            query += " AND i.invoice_date >= :start_date"
-            params["start_date"] = start_date
-            
-        if end_date:
-            query += " AND i.invoice_date <= :end_date"
-            params["end_date"] = end_date
-        
-        result = db.execute(text(query), params)
-        analytics = dict(result.first()._mapping)
-        
-        # Calculate tax liability
-        analytics["net_tax_liability"] = float(
-            analytics["total_output_tax"] - analytics["total_input_tax"]
-        )
-        
+        analytics = TaxService.get_tax_analytics(db, str(context.org_id), start_date, end_date)
+        analytics["net_tax_liability"] = float((analytics.get("total_output_tax") or 0) - (analytics.get("total_input_tax") or 0))
         return analytics
-        
     except Exception as e:
         logger.error(f"Error fetching tax analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get tax analytics: {str(e)}")
@@ -320,13 +135,5 @@ async def get_tax_analytics(
 @with_tenant_context
 async def tax_overview():
     """Get tax service overview"""
-    return {
-        "status": "Tax service available",
-        "features": [
-            "Tax calculation",
-            "GSTR-1 summary generation", 
-            "Tax analytics",
-            "Sales tax reporting"
-        ],
-        "note": "Simplified version using sales invoice data"
-    }
+    return {"status": "Tax service available", "features": ["Tax calculation", "GSTR-1 summary generation", "Tax analytics", "Sales tax reporting"],
+            "note": "Simplified version using sales invoice data"}

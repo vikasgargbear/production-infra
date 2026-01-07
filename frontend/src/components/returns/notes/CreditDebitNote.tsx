@@ -33,7 +33,7 @@ interface NoteItem {
   quantity: number;
   original_quantity?: number;
   max_quantity?: number;
-  rate: number;
+  unit_price: number;
   discount_percent: number;
   tax_percent: number;
   amount: number;
@@ -177,11 +177,11 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         const items = fullInvoice.data.items.map((item: any) => {
           const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0) || item.tax_percent || 0;
           const quantity = parseFloat(item.quantity || 0);
-          const rate = parseFloat(item.unit_price || item.rate || 0);
+          const unit_price = parseFloat(item.unit_price || item.unit_price || 0);
           const discount = parseFloat(item.discount_percent || 0);
 
           // Calculate amount
-          const baseAmount = quantity * rate;
+          const baseAmount = quantity * unit_price;
           const discountAmount = baseAmount * (discount / 100);
           const taxableAmount = baseAmount - discountAmount;
           const taxAmount = taxableAmount * (gstPercent / 100);
@@ -194,7 +194,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
             batch_number: item.batch_number || item.batch_number,
             quantity: quantity,
             original_quantity: quantity,
-            rate: rate,
+            unit_price: unit_price,
             discount_percent: discount,
             tax_percent: gstPercent,
             amount: totalAmount,
@@ -223,7 +223,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     let taxTotal = 0;
 
     items.filter(item => item.selected).forEach(item => {
-      const baseAmount = item.quantity * item.rate;
+      const baseAmount = item.quantity * item.unit_price;
       const discountAmount = baseAmount * (item.discount_percent / 100);
       const taxableAmount = baseAmount - discountAmount;
       const taxAmount = taxableAmount * (item.tax_percent / 100);
@@ -252,7 +252,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     item.quantity = Math.min(Math.max(0, newQuantity), maxQty);
 
     // Recalculate amount for this item
-    const baseAmount = item.quantity * item.rate;
+    const baseAmount = item.quantity * item.unit_price;
     const discountAmount = baseAmount * (item.discount_percent / 100);
     const taxableAmount = baseAmount - discountAmount;
     const taxAmount = taxableAmount * (item.tax_percent / 100);
@@ -311,7 +311,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         items: selectedItems.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
-          rate: item.rate,
+          unit_price: item.unit_price,
           discount_percent: item.discount_percent,
           tax_percent: item.tax_percent,
           amount: item.amount
@@ -560,7 +560,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                                     </div>
                                     <div>
                                       <label className="text-xs text-gray-500">Rate</label>
-                                      <p className="mt-1 font-medium">₹{item.rate.toFixed(2)}</p>
+                                      <p className="mt-1 font-medium">₹{item.unit_price.toFixed(2)}</p>
                                     </div>
                                     <div>
                                       <label className="text-xs text-gray-500">Tax %</label>

@@ -5,7 +5,7 @@ import useEscapeKey from '../../../hooks/useEscapeKey';
 interface InvoiceItem {
     gst_rate?: number;
     quantity?: number;
-    rate?: number;
+    unit_price?: number;
     discount_amount?: number;
     [key: string]: unknown;
 }
@@ -32,7 +32,7 @@ interface Invoice {
 }
 
 interface TaxGroup {
-    rate: number;
+    unit_price: number;
     items: InvoiceItem[];
     taxable_amount: number;
     cgst: number;
@@ -57,10 +57,10 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
     // Group items by tax rate
     const itemsByTaxRate: Record<number, TaxGroup> = {};
     (invoice.items || []).forEach(item => {
-        const rate = item.gst_rate || 0;
-        if (!itemsByTaxRate[rate]) {
-            itemsByTaxRate[rate] = {
-                rate,
+        const unit_price = item.gst_rate || 0;
+        if (!itemsByTaxRate[unit_price]) {
+            itemsByTaxRate[unit_price] = {
+                unit_price,
                 items: [],
                 taxable_amount: 0,
                 cgst: 0,
@@ -69,16 +69,16 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
             };
         }
 
-        const taxableAmount = (item.quantity || 0) * (item.rate || 0) - (item.discount_amount || 0);
-        itemsByTaxRate[rate].items.push(item);
-        itemsByTaxRate[rate].taxable_amount += taxableAmount;
+        const taxableAmount = (item.quantity || 0) * (item.unit_price || 0) - (item.discount_amount || 0);
+        itemsByTaxRate[unit_price].items.push(item);
+        itemsByTaxRate[unit_price].taxable_amount += taxableAmount;
 
         if (gstType === 'IGST') {
-            itemsByTaxRate[rate].igst += taxableAmount * (rate / 100);
+            itemsByTaxRate[unit_price].igst += taxableAmount * (unit_price / 100);
         } else {
-            const halfRate = rate / 2;
-            itemsByTaxRate[rate].cgst += taxableAmount * (halfRate / 100);
-            itemsByTaxRate[rate].sgst += taxableAmount * (halfRate / 100);
+            const halfRate = unit_price / 2;
+            itemsByTaxRate[unit_price].cgst += taxableAmount * (halfRate / 100);
+            itemsByTaxRate[unit_price].sgst += taxableAmount * (halfRate / 100);
         }
     });
 
@@ -140,7 +140,7 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
                                     const totalTax = gstType === 'IGST' ? group.igst : (group.cgst + group.sgst);
                                     return (
                                         <tr key={index} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3 text-sm font-medium">{group.rate}%</td>
+                                            <td className="px-4 py-3 text-sm font-medium">{group.unit_price}%</td>
                                             <td className="px-4 py-3 text-sm text-right">{group.items.length}</td>
                                             <td className="px-4 py-3 text-sm text-right">₹{group.taxable_amount.toFixed(2)}</td>
                                             {gstType === 'IGST' ? (

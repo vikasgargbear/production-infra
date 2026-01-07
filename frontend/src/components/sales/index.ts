@@ -6,7 +6,6 @@
 // Types
 export interface InvoiceItem {
     quantity: number;
-    rate?: number;
     unit_price?: number;
     tax_rate?: number;
     tax_percent?: number;
@@ -96,12 +95,12 @@ export const calculateInvoiceTotal = (
     otherCharges: number = 0
 ): InvoiceTotals => {
     const subtotal = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.rate || item.unit_price || 0));
+        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
         return sum + amount;
     }, 0);
 
     const taxAmount = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.rate || item.unit_price || 0));
+        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
         const taxRate = parseFloat(String(item.tax_rate || item.tax_percent || 0));
         return sum + (amount * taxRate / 100);
     }, 0);

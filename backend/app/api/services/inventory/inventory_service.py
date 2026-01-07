@@ -6,7 +6,7 @@ Do NOT manually filter by org_id - TenantAwareSession handles it
 
 Handles batch management, stock movements, and expiry tracking
 """
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -526,3 +526,517 @@ class InventoryService:
         }
         
         return InventoryDashboard(**dashboard)
+    
+    # ==================== BULK OPERATIONS FOR BACKGROUND TASKS ====================
+    
+    @staticmethod
+    def bulk_update_batch_quantities(
+        db: Session,
+        batch_deductions: List[dict],
+        org_id: str
+    ) -> int:
+        """
+        Bulk update batch quantities for invoice/sale processing.
+        Used by background tasks for performance.
+        
+        Args:
+            batch_deductions: List of {"batch_id": int, "quantity": int}
+            org_id: Organization ID
+            
+        Returns:
+            Number of batches updated
+        """
+        if not batch_deductions:
+            return 0
+        
+        case_parts = []
+        batch_ids_to_update = []
+        update_params = {"org_id": org_id}
+        
+        for i, bd in enumerate(batch_deductions):
+            case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
+            batch_ids_to_update.append(bd["batch_id"])
+            update_params[f"bid_{i}"] = bd["batch_id"]
+            update_params[f"qty_{i}"] = bd["quantity"]
+        
+        update_params["batch_ids"] = batch_ids_to_update
+        
+        bulk_update_sql = f"""
+            UPDATE inventory.batches
+            SET 
+                quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
+                last_movement_date = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
+        """
+        db.execute(text(bulk_update_sql), update_params)
+        logger.info(f"✅ Bulk updated {len(batch_deductions)} batch quantities")
+        
+        return len(batch_deductions)
+    
+    @staticmethod
+    def bulk_insert_movements(
+        db: Session,
+        movement_records: List[dict],
+        invoice_id: int,
+        created_by: int
+    ) -> int:
+        """
+        Bulk insert inventory movements for invoice processing.
+        Used by background tasks for performance.
+        
+        Args:
+            movement_records: List of movement data dicts
+            invoice_id: Invoice ID for reference
+            created_by: User ID who created the invoice
+            
+        Returns:
+            Number of movements inserted
+        """
+        if not movement_records:
+            return 0
+        
+        mv_values_list = []
+        mv_params = {}
+        
+        for i, mv in enumerate(movement_records):
+            mv_values_list.append(f"""(
+                :org_id_{i}, 'sale', 'out',
+                :product_id_{i}, :batch_id_{i}, :quantity_{i},
+                :pack_type_{i}, :base_quantity_{i},
+                :unit_cost_{i}, :total_cost_{i},
+                'invoice', :invoice_id_{i}, :reference_number_{i},
+                'sale', 'Customer Sale',
+                1, :created_by_{i}, CURRENT_TIMESTAMP
+            )""")
+            mv_params[f"org_id_{i}"] = mv["org_id"]
+            mv_params[f"product_id_{i}"] = mv["product_id"]
+            mv_params[f"batch_id_{i}"] = mv["batch_id"]
+            mv_params[f"quantity_{i}"] = mv["quantity"]
+            mv_params[f"pack_type_{i}"] = mv.get("pack_type")
+            mv_params[f"base_quantity_{i}"] = mv.get("base_quantity", mv["quantity"])
+            mv_params[f"unit_cost_{i}"] = mv.get("unit_cost", 0)
+            mv_params[f"total_cost_{i}"] = mv.get("total_cost", 0)
+            mv_params[f"invoice_id_{i}"] = invoice_id
+            mv_params[f"reference_number_{i}"] = f"INV-{invoice_id}"
+            mv_params[f"created_by_{i}"] = created_by
+        
+        bulk_mv_sql = f"""
+            INSERT INTO inventory.inventory_movements (
+                org_id, movement_type, movement_direction,
+                product_id, batch_id, quantity,
+                pack_type, base_quantity,
+                unit_cost, total_cost,
+                reference_type, reference_id, reference_number,
+                transfer_type, reason,
+                location_id, created_by, movement_date
+            ) VALUES {", ".join(mv_values_list)}
+        """
+        db.execute(text(bulk_mv_sql), mv_params)
+        logger.info(f"✅ Bulk inserted {len(movement_records)} inventory movements")
+        
+        return len(movement_records)
+    
+    # =========================================================================
+    # MOVEMENT QUERY METHODS
+    # =========================================================================
+    
+    @staticmethod
+    def list_inventory_movements(
+        db: Session, org_id: str,
+        movement_type: str = None, product_id: int = None, batch_id: int = None,
+        location_id: int = None, from_date: str = None, to_date: str = None,
+        sort: str = "movement_date", order: str = "desc",
+        limit: int = 100, skip: int = 0
+    ) -> List[dict]:
+        """List inventory movements with filters."""
+        query = """
+            SELECT
+                im.movement_id, im.movement_type, im.movement_date, im.movement_direction,
+                im.product_id, p.product_name, p.product_code,
+                im.batch_id, b.batch_number, im.quantity,
+                COALESCE(im.unit_cost, 0) as unit_price,
+                COALESCE(im.total_cost, im.quantity * im.unit_cost, 0) as total_value,
+                im.reference_type, im.reference_number,
+                im.from_location_id, fl.location_name as from_location_name,
+                im.to_location_id, tl.location_name as to_location_name,
+                im.reason, im.notes, im.created_at, im.created_by,
+                u.username as created_by_name
+            FROM inventory.inventory_movements im
+            LEFT JOIN inventory.products p ON im.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
+            LEFT JOIN inventory.storage_locations fl ON im.from_location_id = fl.location_id
+            LEFT JOIN inventory.storage_locations tl ON im.to_location_id = tl.location_id
+            LEFT JOIN master.org_users u ON im.created_by = u.user_id
+            WHERE im.org_id = :org_id
+        """
+        params = {"org_id": org_id, "limit": limit, "skip": skip}
+        
+        if movement_type:
+            query += " AND im.movement_type = :movement_type"
+            params["movement_type"] = movement_type
+        if product_id:
+            query += " AND im.product_id = :product_id"
+            params["product_id"] = product_id
+        if batch_id:
+            query += " AND im.batch_id = :batch_id"
+            params["batch_id"] = batch_id
+        if location_id:
+            query += " AND (im.from_location_id = :location_id OR im.to_location_id = :location_id)"
+            params["location_id"] = location_id
+        if from_date:
+            query += " AND im.movement_date >= :from_date::date"
+            params["from_date"] = from_date
+        if to_date:
+            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            params["to_date"] = to_date
+        
+        sort_field = "im.movement_date" if sort == "movement_date" else "im.movement_id"
+        sort_order = "DESC" if order == "desc" else "ASC"
+        query += f" ORDER BY {sort_field} {sort_order} LIMIT :limit OFFSET :skip"
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def count_inventory_movements(
+        db: Session, org_id: str,
+        movement_type: str = None, product_id: int = None, batch_id: int = None,
+        from_date: str = None, to_date: str = None
+    ) -> int:
+        """Count inventory movements with filters."""
+        query = "SELECT COUNT(*) FROM inventory.inventory_movements im WHERE im.org_id = :org_id"
+        params = {"org_id": org_id}
+        
+        if movement_type:
+            query += " AND im.movement_type = :movement_type"
+            params["movement_type"] = movement_type
+        if product_id:
+            query += " AND im.product_id = :product_id"
+            params["product_id"] = product_id
+        if batch_id:
+            query += " AND im.batch_id = :batch_id"
+            params["batch_id"] = batch_id
+        if from_date:
+            query += " AND im.movement_date >= :from_date::date"
+            params["from_date"] = from_date
+        else:
+            query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
+        if to_date:
+            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            params["to_date"] = to_date
+        
+        return db.execute(text(query), params).scalar() or 0
+    
+    @staticmethod
+    def get_product_by_id(db: Session, org_id: str, product_id: int) -> Optional[dict]:
+        """Get product by ID."""
+        result = db.execute(text(
+            "SELECT * FROM inventory.products WHERE product_id = :product_id AND org_id = :org_id"
+        ), {"product_id": product_id, "org_id": org_id})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def get_location_wise_stock(
+        db: Session, org_id: str, product_id: int, location_id: int, batch_id: int = None
+    ) -> Optional[dict]:
+        """Get location-wise stock entry."""
+        result = db.execute(text("""
+            SELECT * FROM inventory.location_wise_stock 
+            WHERE org_id = :org_id AND product_id = :product_id 
+            AND location_id = :location_id
+            AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
+        """), {"org_id": org_id, "product_id": product_id, "location_id": location_id, "batch_id": batch_id})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def update_location_stock_increase(db: Session, stock_id: int, quantity: float, movement_date: str) -> None:
+        """Increase location stock quantity."""
+        db.execute(text("""
+            UPDATE inventory.location_wise_stock 
+            SET quantity_on_hand = quantity_on_hand + :quantity,
+                last_movement_date = :movement_date, updated_at = CURRENT_TIMESTAMP
+            WHERE stock_id = :stock_id
+        """), {"quantity": quantity, "movement_date": movement_date, "stock_id": stock_id})
+    
+    @staticmethod
+    def update_location_stock_decrease(db: Session, stock_id: int, quantity: float, movement_date: str) -> None:
+        """Decrease location stock quantity."""
+        db.execute(text("""
+            UPDATE inventory.location_wise_stock 
+            SET quantity_on_hand = quantity_on_hand - :quantity,
+                quantity_available = quantity_available - :quantity,
+                last_movement_date = :movement_date, updated_at = CURRENT_TIMESTAMP
+            WHERE stock_id = :stock_id
+        """), {"quantity": quantity, "movement_date": movement_date, "stock_id": stock_id})
+    
+    @staticmethod
+    def insert_location_stock(
+        db: Session, org_id: str, location_id: int, product_id: int,
+        batch_id: int, quantity: float, movement_date: str
+    ) -> None:
+        """Insert new location stock entry."""
+        db.execute(text("""
+            INSERT INTO inventory.location_wise_stock (
+                org_id, location_id, product_id, batch_id,
+                quantity_on_hand, quantity_available, quantity_reserved, last_movement_date
+            ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, :quantity, 0, :movement_date)
+        """), {
+            "org_id": org_id, "location_id": location_id, "product_id": product_id,
+            "batch_id": batch_id, "quantity": quantity, "movement_date": movement_date
+        })
+    
+    @staticmethod
+    def get_product_batches_with_stock(db: Session, org_id: str, product_id: int) -> List[dict]:
+        """Get available batches for a product."""
+        result = db.execute(text("""
+            SELECT batch_number, expiry_date, quantity_available as current_stock,
+                   cost_price as purchase_price, selling_price, mrp
+            FROM inventory.batches
+            WHERE org_id = :org_id AND product_id = :product_id AND quantity_available > 0
+            ORDER BY expiry_date ASC, batch_number
+        """), {"org_id": org_id, "product_id": product_id})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_near_expiry_stock(db: Session, org_id: str, days: int) -> List[dict]:
+        """Get products nearing expiry."""
+        result = db.execute(text("""
+            SELECT i.*, p.product_name, p.hsn_code,
+                   EXTRACT(DAY FROM i.expiry_date - CURRENT_DATE) as days_to_expiry
+            FROM inventory i
+            LEFT JOIN inventory.products p ON i.product_id = p.product_id
+            WHERE i.org_id = :org_id AND i.current_stock > 0
+            AND i.expiry_date IS NOT NULL AND i.expiry_date <= CURRENT_DATE + make_interval(days => :days)
+            ORDER BY i.expiry_date ASC
+        """), {"org_id": org_id, "days": days})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_low_stock_items(db: Session, org_id: str) -> List[dict]:
+        """Get products with low stock."""
+        result = db.execute(text("""
+            SELECT p.product_id, p.product_name, p.hsn_code, p.reorder_level, p.reorder_quantity,
+                   COALESCE(SUM(i.current_stock), 0) as total_stock
+            FROM inventory.products p
+            LEFT JOIN inventory i ON p.product_id = i.product_id
+            WHERE p.org_id = :org_id AND p.reorder_level IS NOT NULL AND p.reorder_level > 0
+            GROUP BY p.product_id, p.product_name, p.hsn_code, p.reorder_level, p.reorder_quantity
+            HAVING COALESCE(SUM(i.current_stock), 0) <= p.reorder_level
+            ORDER BY (COALESCE(SUM(i.current_stock), 0) / NULLIF(p.reorder_level, 0)) ASC
+        """), {"org_id": org_id})
+        return [dict(row._mapping) for row in result]
+    
+    # =========================================================================
+    # STOCK QUERY METHODS
+    # =========================================================================
+    
+    @staticmethod
+    def get_inventory_overview(db: Session) -> dict:
+        """Get inventory overview."""
+        result = db.execute(text("""
+            SELECT COUNT(*) as total_products,
+                   SUM(CASE WHEN quantity_available > 0 THEN 1 ELSE 0 END) as products_in_stock,
+                   SUM(quantity_available) as total_quantity
+            FROM inventory.batches WHERE batch_status = 'active'
+        """), {})
+        row = result.fetchone()
+        return dict(row._mapping) if row else {}
+    
+    @staticmethod
+    def list_batches(
+        db: Session, product_id: int = None, location: str = None,
+        include_expired: bool = False, expiring_in_days: int = None,
+        limit: int = 100, skip: int = 0
+    ) -> Tuple[List[dict], int]:
+        """List batches with filters. Returns (batches, total)."""
+        query = """
+            SELECT b.*, p.product_name, p.product_code,
+                   b.expiry_date - CURRENT_DATE as days_to_expiry,
+                   b.quantity_available * b.cost_per_unit as stock_value
+            FROM inventory.batches b
+            JOIN inventory.products p ON b.product_id = p.product_id AND b.org_id = p.org_id
+            WHERE 1=1
+        """
+        params = {}
+        
+        if product_id:
+            query += " AND b.product_id = :product_id"
+            params["product_id"] = product_id
+        if location:
+            query += " AND b.location_code ILIKE :location"
+            params["location"] = f"%{location}%"
+        if not include_expired:
+            query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
+        if expiring_in_days:
+            query += " AND b.expiry_date <= CURRENT_DATE + INTERVAL ':days days'"
+            params["days"] = expiring_in_days
+        
+        count_query = f"SELECT COUNT(*) FROM ({query}) t"
+        total = db.execute(text(count_query), params).scalar() or 0
+        
+        query += " ORDER BY b.expiry_date, b.batch_id LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result], total
+    
+    @staticmethod
+    def list_current_stock(
+        db: Session, category: str = None, low_stock_only: bool = False,
+        limit: int = 100, skip: int = 0
+    ) -> Tuple[List[dict], int]:
+        """List current stock levels. Returns (stocks, total)."""
+        query = """
+            SELECT p.product_id, p.product_code, p.product_name, p.category_id,
+                   c.category_name as category, p.product_type, p.product_class,
+                   p.manufacturer, p.brand, p.generic_name, p.hsn_code, p.reorder_level,
+                   COALESCE(b.total_quantity, 0) as total_quantity,
+                   COALESCE(b.available_quantity, 0) as available_quantity,
+                   COALESCE(b.allocated_quantity, 0) as allocated_quantity,
+                   COALESCE(b.total_batches, 0) as total_batches,
+                   COALESCE(b.expired_batches, 0) as expired_batches,
+                   COALESCE(b.near_expiry_batches, 0) as near_expiry_batches,
+                   COALESCE(b.total_value, 0) as total_value,
+                   COALESCE(b.average_cost, 0) as average_cost
+            FROM inventory.products p
+            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id AND p.org_id = c.org_id
+            LEFT JOIN (
+                SELECT product_id, COUNT(*) as total_batches,
+                       SUM(quantity_available) as total_quantity,
+                       SUM(quantity_available) as available_quantity,
+                       SUM(COALESCE(quantity_reserved, 0)) as allocated_quantity,
+                       SUM(quantity_available * cost_per_unit) as total_value,
+                       AVG(cost_per_unit) as average_cost,
+                       COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
+                       COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
+                FROM inventory.batches WHERE 1=1 GROUP BY product_id
+            ) b ON p.product_id = b.product_id
+            WHERE 1=1
+        """
+        params = {}
+        
+        if category:
+            query += " AND p.category_id = :category"
+            params["category"] = category
+        if low_stock_only:
+            query += " AND COALESCE(b.total_quantity, 0) <= 10"
+        
+        count_query = f"SELECT COUNT(*) FROM ({query}) t"
+        total = db.execute(text(count_query), params).scalar() or 0
+        
+        query += " ORDER BY p.product_name LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result], total
+    
+    # =========================================================================
+    # ADJUSTMENT QUERY METHODS
+    # =========================================================================
+    
+    @staticmethod
+    def list_stock_adjustments(
+        db: Session, org_id: str, product_id: int = None, batch_id: int = None,
+        adjustment_type: str = None, start_date = None, end_date = None,
+        limit: int = 100, skip: int = 0
+    ) -> List[dict]:
+        """List stock adjustments from inventory movements."""
+        type_mapping = {"damage": "stock_damage", "expiry": "stock_expiry", "count": "stock_count", "other": "stock_adjustment"}
+        
+        query = """
+            SELECT movement_id as adjustment_id, movement_date as adjustment_date,
+                   movement_type as adjustment_type, product_id, batch_id,
+                   CASE WHEN movement_direction = 'in' THEN quantity ELSE -quantity END as quantity_adjusted,
+                   reason, reference_number, created_by as adjusted_by, created_at, org_id
+            FROM inventory.inventory_movements
+            WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
+            AND org_id = :org_id
+        """
+        params = {"org_id": org_id, "limit": limit, "skip": skip}
+        
+        if product_id:
+            query += " AND product_id = :product_id"
+            params["product_id"] = product_id
+        if batch_id:
+            query += " AND batch_id = :batch_id"
+            params["batch_id"] = batch_id
+        if adjustment_type:
+            movement_type = type_mapping.get(adjustment_type, 'stock_adjustment')
+            query += " AND movement_type = :movement_type"
+            params["movement_type"] = movement_type
+        if start_date:
+            query += " AND movement_date >= :start_date"
+            params["start_date"] = start_date
+        if end_date:
+            query += " AND movement_date <= :end_date"
+            params["end_date"] = end_date
+        
+        query += " ORDER BY movement_date DESC LIMIT :limit OFFSET :skip"
+        
+        result = db.execute(text(query), params)
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def get_batch_for_adjustment(db: Session, org_id: str, batch_id: int) -> Optional[dict]:
+        """Get batch with product info for adjustment."""
+        result = db.execute(text("""
+            SELECT b.*, p.product_name, COALESCE(b.cost_per_unit, 0) as unit_cost
+            FROM inventory.batches b
+            JOIN inventory.products p ON b.product_id = p.product_id
+            WHERE b.batch_id = :batch_id AND b.org_id = :org_id
+        """), {"batch_id": batch_id, "org_id": org_id})
+        row = result.first()
+        return dict(row._mapping) if row else None
+    
+    @staticmethod
+    def get_expired_batches(db: Session, org_id: str) -> List[dict]:
+        """Get expired batches with available stock."""
+        result = db.execute(text("""
+            SELECT b.*, p.product_name
+            FROM inventory.batches b
+            JOIN inventory.products p ON b.product_id = p.product_id
+            WHERE b.expiry_date <= CURRENT_DATE AND b.quantity_available > 0
+            AND b.batch_status != 'expired' AND b.org_id = :org_id
+        """), {"org_id": org_id})
+        return [dict(row._mapping) for row in result]
+    
+    @staticmethod
+    def update_batch_status(db: Session, batch_id: int, status: str) -> None:
+        """Update batch status."""
+        db.execute(text("""
+            UPDATE inventory.batches SET batch_status = :status WHERE batch_id = :batch_id
+        """), {"batch_id": batch_id, "status": status})
+    
+    @staticmethod
+    def get_adjustment_analytics(
+        db: Session, org_id: str, start_date = None, end_date = None
+    ) -> dict:
+        """Get stock adjustment analytics."""
+        query = """
+            SELECT COUNT(*) as total_adjustments,
+                   SUM(quantity_in) as total_quantity_added,
+                   SUM(quantity_out) as total_quantity_removed,
+                   COUNT(DISTINCT product_id) as products_affected,
+                   COUNT(DISTINCT batch_id) as batches_affected,
+                   COUNT(CASE WHEN movement_type = 'stock_damage' THEN 1 END) as damage_adjustments,
+                   COUNT(CASE WHEN movement_type = 'stock_expiry' THEN 1 END) as expiry_adjustments,
+                   COUNT(CASE WHEN movement_type = 'stock_count' THEN 1 END) as count_adjustments
+            FROM inventory.inventory_movements
+            WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
+            AND org_id = :org_id
+        """
+        params = {"org_id": org_id}
+        
+        if start_date:
+            query += " AND movement_date >= :start_date"
+            params["start_date"] = start_date
+        if end_date:
+            query += " AND movement_date <= :end_date"
+            params["end_date"] = end_date
+        
+        result = db.execute(text(query), params)
+        row = result.first()
+        return dict(row._mapping) if row else {}

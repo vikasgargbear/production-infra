@@ -8,7 +8,7 @@
 import type { InvoiceItem } from '../types/invoiceTypes';
 
 // Deprecated field names that should NEVER be used
-const DEPRECATED_PRICE_FIELDS = ['sale_price', 'rate', 'selling_price'] as const;
+const DEPRECATED_PRICE_FIELDS = ['sale_price', 'unit_price', 'selling_price'] as const;
 const DEPRECATED_DISCOUNT_FIELDS = ['discount'] as const;
 // NOTE: line_total IS canonical per sales.invoice_items table - only 'total' is deprecated
 const DEPRECATED_TOTAL_FIELDS = ['total'] as const;
@@ -83,10 +83,10 @@ export function sanitizeInvoiceItem(item: any): InvoiceItem {
         warnings.push(`Mapped 'sale_price' → 'unit_price'`);
         delete sanitized.sale_price;
     }
-    if ('rate' in sanitized && !sanitized.unit_price) {
-        sanitized.unit_price = sanitized.rate;
-        warnings.push(`Mapped 'rate' → 'unit_price'`);
-        delete sanitized.rate;
+    if ('unit_price' in sanitized && !sanitized.unit_price) {
+        sanitized.unit_price = sanitized.unit_price;
+        warnings.push(`Mapped 'unit_price' → 'unit_price'`);
+        delete sanitized.unit_price;
     }
     if ('selling_price' in sanitized && !sanitized.unit_price) {
         sanitized.unit_price = sanitized.selling_price;

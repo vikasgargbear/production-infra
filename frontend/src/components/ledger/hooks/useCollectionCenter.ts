@@ -5,8 +5,8 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { ledgerApi, customersApi } from '../../services/api';
-import apiClient from '../../services/api/apiClient';
+import { ledgerApi, customersApi } from '../../../services/api';
+import apiClient from '../../../services/api/apiClient';
 import { toast } from 'react-toastify';
 
 // ============================================

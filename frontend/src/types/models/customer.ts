@@ -9,19 +9,19 @@ export interface Customer {
   customer_code?: string; // Made optional as it might not always be present
   customer_name: string;
   customer_type?: 'b2b' | 'b2c' | 'pharmacy' | 'hospital' | 'clinic' | 'distributor' | 'other' | string; // Made optional and flexible
-  
+
   // Contact information - simplified flat structure for MVP
   phone?: string;
   email?: string;
-  
+
   // Contact information (frontend uses nested, backend uses flat)
   contact_info?: {
     primary_phone: string;
-    alternate_phone?: string;
+    secondary_phone?: string;
     email?: string;
     website?: string;
   };
-  
+
   // Address information (frontend uses nested, backend uses flat)
   billing_address?: {
     street?: string;
@@ -29,7 +29,7 @@ export interface Customer {
     state?: string;
     pincode?: string;
   };
-  
+
   address_info?: {
     billing_address: string;
     billing_city: string;
@@ -42,31 +42,30 @@ export interface Customer {
     shipping_pincode?: string;
     shipping_country?: string;
   };
-  
+
   // GST and compliance
-  gst_number?: string; // Backend field name
   gst_number?: string; // Frontend uses gst_number, backend uses gst_number
   gst_state_code?: string;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_expiry?: Date | string;
   fssai_number?: string;
-  
+
   // Credit management
   credit_limit?: number; // Made optional as it might not be set initially
   current_outstanding?: number; // Backend field name
   outstanding_balance?: number; // Frontend uses this, backend uses current_outstanding
   credit_days?: number; // Made optional
   payment_terms?: string;
-  
+
   // Computed fields
   available_credit?: number;
-  
+
   // Categorization
   customer_group?: string;
   customer_category?: string;
   discount_percentage?: number;
-  
+
   // Status and metadata
   status?: 'active' | 'inactive' | 'blocked'; // Made optional with default as 'active'
   notes?: string;
@@ -82,7 +81,7 @@ export interface CustomerCreateInput {
   customer_type: Customer['customer_type'];
   contact_info: {
     primary_phone: string;
-    alternate_phone?: string;
+    secondary_phone?: string;
     email?: string;
   };
   address_info: {

@@ -157,7 +157,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                         product_name: 'Credit Note Amount',
                         hsn_code: '',
                         quantity: 1,
-                        rate: 0,
+                        unit_price: 0,
                         discount_percent: 0,
                         total_amount: 0
                       }]);
@@ -415,7 +415,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                           const amount = parseFloat(e.target.value) || 0;
                           if (noteItems.length > 0) {
                             updateNoteItem(noteItems[0].id, 'total_amount', amount);
-                            updateNoteItem(noteItems[0].id, 'rate', amount);
+                            updateNoteItem(noteItems[0].id, 'unit_price', amount);
                           }
                         }}
                         placeholder="0.00"
@@ -548,7 +548,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                       <input
                         type="number"
                         step="0.01"
-                        value={item.rate}
+                        value={item.unit_price}
                         disabled
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                       />

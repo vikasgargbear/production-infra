@@ -52,8 +52,7 @@ export interface BaseReturnItem {
     return_quantity: number;
 
     // Pricing
-    rate: number;
-    unit_price?: number;
+    unit_price: number;
     discount_amount?: number;
     discount_percent?: number;
 

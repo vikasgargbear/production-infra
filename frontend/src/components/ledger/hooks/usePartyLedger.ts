@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ledgerApi, customersApi, suppliersApi } from '../../services/api';
+import { ledgerApi, customersApi, suppliersApi } from '../../../services/api';
 
 // ============================================
 // Type Definitions

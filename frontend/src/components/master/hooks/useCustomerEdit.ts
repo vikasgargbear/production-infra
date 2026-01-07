@@ -149,7 +149,7 @@ export function useCustomerEdit(
         try {
             const response = await metadataApi.getStates();
             if (response.data) {
-                setStates(response.data.map((s: any) => s.state_name || s.name || s));
+                setStates(response.data.map((s: any) => s.state || s.name || s));
             }
         } catch (error) {
             setStates([

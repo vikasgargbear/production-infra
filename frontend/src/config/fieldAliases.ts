@@ -103,7 +103,7 @@ export const CUSTOMER_FIELD_ALIASES = {
     gst_number: ['gst', 'gstin', 'gst_no', 'gstNumber', 'gstNo'],
     primary_phone: ['phone', 'mobile', 'contact', 'phone_number'],
     primary_email: ['email', 'emailAddress'],
-    state_name: ['state', 'stateName'],
+    state: ['state', 'stateName'],
     state_code: ['stateCode'],
 };
 

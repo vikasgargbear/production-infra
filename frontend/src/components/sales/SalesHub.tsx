@@ -3,6 +3,7 @@ import {
   FileText, Package, ShoppingCart, Truck, TrendingUp, List, DollarSign, BarChart3
 } from 'lucide-react';
 import { ModuleHub } from '../global';
+import { Module } from '../global/navigation/ModuleHub';
 import InvoiceFlow from './invoice/InvoiceFlow';
 import InvoiceList from './invoice/InvoiceList';
 import { SalesOrderFlow } from './order';
@@ -13,18 +14,10 @@ interface SalesHubProps {
   onClose?: () => void;
 }
 
-interface SalesModule {
-  id: string;
-  label: string;
-  fullLabel: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  component: React.ComponentType<any>;
-}
+// Interface SalesModule removed in favor of shared Module interface
 
 const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
-  const salesModules: SalesModule[] = [
+  const salesModules: Module[] = [
     {
       id: 'invoice',
       label: 'Create Invoice',
@@ -32,7 +25,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'GST Tax Invoice',
       icon: FileText,
       color: 'blue',
-      component: InvoiceFlow
+      component: InvoiceFlow as React.ComponentType<any>
     },
     {
       id: 'challan',
@@ -41,7 +34,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'Dispatch Note',
       icon: Truck,
       color: 'emerald',
-      component: ChallanFlow
+      component: ChallanFlow as React.ComponentType<any>
     },
     {
       id: 'sales-order',
@@ -50,7 +43,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'Order Booking',
       icon: ShoppingCart,
       color: 'purple',
-      component: SalesOrderFlow
+      component: SalesOrderFlow as React.ComponentType<any>
     },
     {
       id: 'invoice-list',

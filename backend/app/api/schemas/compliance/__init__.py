@@ -14,7 +14,8 @@ from .compliance import (
     ComplianceDashboard,
 )
 
-from .loyalty import (
+# Loyalty schemas moved to schemas/loyalty/
+from ..loyalty.loyalty import (
     # Loyalty Program
     LoyaltyProgramCreate, CustomerTier,
     PointsTransaction, PointsRedemption,
@@ -35,7 +36,7 @@ __all__ = [
     "ComplianceDocumentCreate", "ComplianceDocumentResponse",
     # Dashboard
     "ComplianceDashboard",
-    # Loyalty
+    # Loyalty (re-exported for backward compatibility)
     "LoyaltyProgramCreate", "CustomerTier",
     "PointsTransaction", "PointsRedemption",
     # Schemes

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   X, Save, Loader2, Truck, Phone, Building, CreditCard, Shield, Banknote
 } from 'lucide-react';
 import { suppliersApi, metadataApi } from '../../../services/api';
@@ -11,18 +11,18 @@ import { FORM_STYLES } from '../../../constants/formStyles';
 interface SupplierEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (supplier?: any) => void;
   supplier?: any;
 }
 
-const SupplierEditModal: React.FC<SupplierEditModalProps> = ({ 
-  isOpen, 
-  onClose, 
+const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
+  isOpen,
+  onClose,
   onSave,
   supplier = null
 }) => {
   const toast = useToast();
-  
+
   // Initialize form data with default values to prevent null warnings
   const getInitialFormData = () => ({
     // Basic Information
@@ -30,7 +30,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     supplier_name: supplier?.supplier_name || '',
     supplier_type: supplier?.supplier_type || 'distributor',
     supplier_category: supplier?.supplier_category || '',
-    
+
     // Contact Information
     primary_phone: supplier?.primary_phone || '',
     primary_email: supplier?.primary_email || '',
@@ -39,27 +39,27 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     contact_person: supplier?.contact_person || '',
     contact_person_phone: supplier?.contact_person_phone || '',
     contact_person_designation: supplier?.contact_person_designation || '',
-    
+
     // Address
     address_line_1: supplier?.address_line_1 || '',
     address_line_2: supplier?.address_line_2 || '',
     city: supplier?.city || '',
     state: supplier?.state || '',
     pincode: supplier?.pincode || '',
-    
+
     // Compliance & GST
     gst_number: supplier?.gst_number || supplier?.gst_number || '',
     pan_number: supplier?.pan_number || '',
     drug_license_number: supplier?.drug_license_number || '',
     drug_license_validity: supplier?.drug_license_validity || '',
     fssai_number: supplier?.fssai_number || '',
-    
+
     // Payment Terms
     payment_days: supplier?.payment_days || 30,
     payment_terms: supplier?.payment_terms || '',
     credit_limit: supplier?.credit_limit || 0,
     current_outstanding: supplier?.current_outstanding || 0,
-    
+
     // Banking Details
     bank_name: supplier?.bank_name || '',
     bank_branch: supplier?.bank_branch || '',
@@ -67,17 +67,17 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     account_holder_name: supplier?.account_holder_name || '',
     ifsc_code: supplier?.ifsc_code || '',
     upi_id: supplier?.upi_id || '',
-    
+
     // Preferences
     preferred_payment_mode: supplier?.preferred_payment_mode || '',
     preferred_delivery_time: supplier?.preferred_delivery_time || '',
     minimum_order_value: supplier?.minimum_order_value || 0,
     delivery_lead_time: supplier?.delivery_lead_time || '',
-    
+
     // Status
     is_active: supplier?.is_active !== false,
     is_verified: supplier?.is_verified || false,
-    
+
     // Notes
     internal_notes: supplier?.internal_notes || ''
   });
@@ -86,7 +86,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('basic');
-  
+
   // Metadata for dropdowns - loaded from backend
   const [metadata, setMetadata] = useState<any>({
     supplierTypes: [],
@@ -105,7 +105,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
       loadMetadata();
     }
   }, [isOpen, supplier]);
-  
+
   // Load metadata for dropdowns
   const loadMetadata = async () => {
     try {
@@ -114,7 +114,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         metadataApi.getPaymentTerms().catch(() => ({ data: [] })),
         metadataApi.getPaymentModes().catch(() => ({ data: [] }))
       ]);
-      
+
       setMetadata({
         // If backend doesn't provide, use minimal defaults
         supplierTypes: [
@@ -177,7 +177,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
     try {
       setIsSaving(true);
       setError(null);
-      
+
       const dataToSave = {
         ...formData,
         payment_days: parseInt(String(formData.payment_days)) || 30,
@@ -188,20 +188,21 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         gst_number: formData.gst_number,
         gst_number: formData.gst_number
       };
-      
+
       if (supplier) {
-        await suppliersApi.update(supplier.supplier_id, dataToSave);
+        const response = await suppliersApi.update(supplier.supplier_id, dataToSave);
         toast.success('Supplier updated successfully');
+        onSave(response.data || dataToSave);
       } else {
         // Generate supplier code if not provided
         if (!dataToSave.supplier_code) {
           dataToSave.supplier_code = `SUPP${Date.now().toString().slice(-6)}`;
         }
-        await suppliersApi.create(dataToSave);
+        const response = await suppliersApi.create(dataToSave);
         toast.success('Supplier created successfully');
+        onSave(response.data || dataToSave);
       }
-      
-      onSave();
+
       onClose();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to save supplier');
@@ -259,11 +260,10 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                       key={section.id}
                       type="button"
                       onClick={() => setActiveSection(section.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm ${
-                        activeSection === section.id
+                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm ${activeSection === section.id
                           ? 'bg-blue-100 text-blue-700'
                           : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <Icon className="w-4 h-4" />
                       <span className="font-medium">{section.label}</span>
@@ -282,7 +282,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <Truck className="w-5 h-5 mr-2" />
                     Basic Information
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className={FORM_STYLES.labelRequired}>
@@ -376,7 +376,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <Phone className="w-5 h-5 mr-2" />
                     Contact & Address
                   </h3>
-                  
+
                   {/* Contact Details */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-3">Contact Information</h4>
@@ -549,7 +549,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <Shield className="w-5 h-5 mr-2" />
                     Compliance & GST
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className={FORM_STYLES.label}>
@@ -620,7 +620,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <Banknote className="w-5 h-5 mr-2" />
                     Banking Details
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className={FORM_STYLES.label}>
@@ -704,7 +704,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <CreditCard className="w-5 h-5 mr-2" />
                     Payment Terms
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className={FORM_STYLES.label}>
@@ -834,14 +834,13 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                         </div>
                         <div>
                           <span className="text-gray-500">Payment Status:</span>
-                          <span className={`ml-2 font-medium ${
-                            (formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
-                            (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
-                            'text-green-600'
-                          }`}>
+                          <span className={`ml-2 font-medium ${(formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
+                              (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
+                                'text-green-600'
+                            }`}>
                             {(formData.current_outstanding || 0) > formData.credit_limit ? 'Over Limit' :
-                             (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
-                             'Good'}
+                              (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
+                                'Good'}
                           </span>
                         </div>
                       </div>
@@ -857,7 +856,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                     <Building className="w-5 h-5 mr-2" />
                     Additional Information
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -909,7 +908,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
               <div className="text-sm text-gray-500">
                 {supplier ? `Supplier ID: ${supplier.supplier_id}` : 'New Supplier'}
               </div>
-              
+
               {/* Section Navigation */}
               <div className="flex items-center space-x-2">
                 <Button
@@ -926,11 +925,11 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                 >
                   ← Previous
                 </Button>
-                
+
                 <span className="text-sm text-gray-500 px-2">
                   {sections.findIndex(s => s.id === activeSection) + 1} / {sections.length}
                 </span>
-                
+
                 <Button
                   type="button"
                   variant="secondary"
@@ -946,7 +945,7 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                   Next →
                 </Button>
               </div>
-              
+
               {/* Action Buttons */}
               <div className="flex items-center space-x-3">
                 <Button

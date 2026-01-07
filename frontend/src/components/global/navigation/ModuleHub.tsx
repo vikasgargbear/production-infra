@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Settings, HelpCircle, ChevronRight, Activity, LucideIcon } from 'lucide-react';
 
 // TypeScript interface for module configuration
-interface Module {
+export interface Module {
   id: string;
   label?: string;
   fullLabel: string;
@@ -120,7 +120,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       // ESC to close
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        if (onClose) onClose();
       }
     };
 

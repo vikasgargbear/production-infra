@@ -24,7 +24,7 @@ export interface ReturnItem {
     batch_number?: string;
     manufacturing_date?: string;
     expiry_date?: string;
-    rate: number;
+    unit_price: number;
     tax_percent: number;
     quantity: number;
     paid_quantity: number;
@@ -211,10 +211,10 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
 
                 if (paidReturnQty <= 0) return;
 
-                const rate = parseFloat(String(item.rate)) || 0;
+                const unit_price = parseFloat(String(item.unit_price)) || 0;
                 const discountPercent = parseFloat(String(item.discount_percent)) || 0;
 
-                const baseAmount = paidReturnQty * rate;
+                const baseAmount = paidReturnQty * unit_price;
                 const discountAmount = (baseAmount * discountPercent) / 100;
                 const afterDiscount = baseAmount - discountAmount;
 
@@ -323,7 +323,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
                                 paid_quantity: totalQty - freeQty,
                                 free_quantity: freeQty,
                                 quantity: totalQty,
-                                rate: item.unit_price || item.rate || 0,
+                                unit_price: item.unit_price || item.unit_price || 0,
                                 discount_percent: item.discount_percent || 0,
                                 tax_percent: gstPercent,
                                 max_returnable_qty: totalQty,
@@ -350,7 +350,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
                         paid_quantity: totalQty - freeQty,
                         free_quantity: freeQty,
                         quantity: totalQty,
-                        rate: item.unit_price || item.rate || 0,
+                        unit_price: item.unit_price || item.unit_price || 0,
                         discount_percent: item.discount_percent || 0,
                         tax_percent: gstPercent,
                         max_returnable_qty: totalQty,
@@ -414,7 +414,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
             batch_id: product.batch_id,
             batch_number: product.batch_number || product.batch_number || '',
             batch_number: product.batch_number || product.batch_number || '',
-            rate: sellingPrice,
+            unit_price: sellingPrice,
             tax_percent: gstPercent,
             quantity: 1,
             paid_quantity: 1,

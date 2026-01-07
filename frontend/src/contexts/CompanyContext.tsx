@@ -104,7 +104,8 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             const currentOrgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
             if (currentOrgId) {
                 try {
-                    const profileResponse = await companyApi.getCompanyProfile();
+                    const response = await companyApi.getCompanyProfile();
+                    const profileResponse = (response as any).data || response;
 
                     if (profileResponse.success && profileResponse.data) {
                         const profileData = profileResponse.data;
@@ -142,17 +143,20 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                         }
 
                         // Also get org ID
-                        const orgResponse = await companyApi.getOrganizationId();
+                        const orgRes = await companyApi.getOrganizationId();
+                        const orgResponse = (orgRes as any).data || orgRes;
                         if (orgResponse.org_id) {
                             setOrgId(orgResponse.org_id);
                             localStorage.setItem('orgId', orgResponse.org_id);
                         }
                     } else {
                         // Fallback to old API
-                        const [companyResponse, orgResponse] = await Promise.all([
+                        const [companyRes, orgRes] = await Promise.all([
                             companyApi.getCompanyInfo(),
                             companyApi.getOrganizationId()
                         ]);
+                        const companyResponse = (companyRes as any).data || companyRes;
+                        const orgResponse = (orgRes as any).data || orgRes;
 
                         if (companyResponse) {
                             const apiCompanyInfo: CompanyInfo = {

@@ -118,9 +118,8 @@ export const authApi = {
     // =========================================================================
 
     // Get Google OAuth URL (redirects user to Google)
-    getGoogleOAuthUrl: async () => {
-        const response = await apiHelpers.get<{ url: string }>(ENDPOINTS.OAUTH_GOOGLE_URL);
-        return response.data;
+    getGoogleOAuthUrl: () => {
+        return apiHelpers.get<{ url: string }>(ENDPOINTS.OAUTH_GOOGLE_URL);
     },
 
     // Handle Google OAuth callback
@@ -139,14 +138,12 @@ export const authApi = {
     },
 
     // Get available OAuth providers
-    getOAuthProviders: async () => {
-        const response = await apiHelpers.get<any>(ENDPOINTS.OAUTH_PROVIDERS);
-        return response.data;
+    getOAuthProviders: () => {
+        return apiHelpers.get<any>(ENDPOINTS.OAUTH_PROVIDERS);
     },
 
     // Check OAuth configuration status
-    getOAuthStatus: async () => {
-        const response = await apiHelpers.get<any>(ENDPOINTS.OAUTH_STATUS);
-        return response.data;
+    getOAuthStatus: () => {
+        return apiHelpers.get<any>(ENDPOINTS.OAUTH_STATUS);
     },
 };

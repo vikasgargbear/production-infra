@@ -1,16 +1,18 @@
 """
 Departments API
 CRUD operations for master.departments table
+REFACTORED: All SQL moved to DepartmentService
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy import text
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 import logging
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-# get_org_id_string replaced with OrgContext
+
+# Service layer
+from ....services.master.department_branch_service import DepartmentService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,69 +30,10 @@ async def list_departments(
 ):
     """List all departments"""
     try:
-        query = text("""
-            SELECT 
-                department_id,
-                department_code,
-                department_name,
-                department_type,
-                parent_department_id,
-                department_head_id,
-                cost_center_code,
-                budget_allocated,
-                is_active,
-                created_at
-            FROM master.departments
-            WHERE org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(department_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(department_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR is_active = :is_active)
-            ORDER BY department_name
-            LIMIT :limit OFFSET :offset
-        """)
-        
-        search_pattern = f"%{search}%" if search else None
-        
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active,
-            "limit": limit,
-            "offset": offset
-        })
-        
-        departments = []
-        for row in result:
-            departments.append(dict(row._mapping))
-        
-        # Get total count
-        count_query = text("""
-            SELECT COUNT(*) FROM master.departments
-            WHERE org_id = :org_id
-            AND (:search IS NULL OR 
-                 LOWER(department_name) LIKE LOWER(:search_pattern) OR
-                 LOWER(department_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR is_active = :is_active)
-        """)
-        
-        count_result = db.execute(count_query, {
-            "org_id": str(context.org_id),
-            "search": search,
-            "search_pattern": search_pattern,
-            "is_active": is_active
-        })
-        total = count_result.scalar()
-        
-        return {
-            "success": True,
-            "data": departments,
-            "total": total,
-            "limit": limit,
-            "offset": offset
-        }
-        
+        departments, total = DepartmentService.list_departments(
+            db, str(context.org_id), search, is_active, limit, offset
+        )
+        return {"success": True, "data": departments, "total": total, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Error listing departments: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -106,25 +49,10 @@ async def get_department(
 ):
     """Get department by ID"""
     try:
-        query = text("""
-            SELECT * FROM master.departments
-            WHERE department_id = :department_id AND org_id = :org_id
-        """)
-        
-        result = db.execute(query, {
-            "department_id": department_id,
-            "org_id": str(context.org_id)
-        })
-        department = result.first()
-        
+        department = DepartmentService.get_department(db, str(context.org_id), department_id)
         if not department:
             raise HTTPException(status_code=404, detail="Department not found")
-        
-        return {
-            "success": True,
-            "data": dict(department._mapping)
-        }
-        
+        return {"success": True, "data": department}
     except HTTPException:
         raise
     except Exception as e:
@@ -142,28 +70,15 @@ async def create_department(
 ):
     """Create a new department"""
     try:
-        # Generate department code if not provided
+        org_id = str(context.org_id)
+        
+        # Generate code if not provided
         department_code = department_data.get("department_code")
         if not department_code:
-            count_query = text("""
-                SELECT COUNT(*) FROM master.departments WHERE org_id = :org_id
-            """)
-            count_result = db.execute(count_query, {"org_id": str(context.org_id)})
-            count = count_result.scalar() + 1
-            department_code = f"DEPT{count:03d}"
+            count = DepartmentService.count_departments(db, org_id)
+            department_code = f"DEPT{count + 1:03d}"
         
-        query = text("""
-            INSERT INTO master.departments (
-                org_id, department_code, department_name, department_type,
-                parent_department_id, department_head_id, cost_center_code, is_active
-            ) VALUES (
-                :org_id, :department_code, :department_name, :department_type,
-                :parent_department_id, :department_head_id, :cost_center_code, :is_active
-            ) RETURNING department_id, department_name, department_code
-        """)
-        
-        result = db.execute(query, {
-            "org_id": str(context.org_id),
+        data = {
             "department_code": department_code,
             "department_name": department_data.get("department_name"),
             "department_type": department_data.get("department_type"),
@@ -171,21 +86,10 @@ async def create_department(
             "department_head_id": department_data.get("department_head_id"),
             "cost_center_code": department_data.get("cost_center_code"),
             "is_active": department_data.get("is_active", True)
-        })
-        
-        # TenantAwareSession auto-commits
-        row = result.first()
-        
-        return {
-            "success": True,
-            "data": {
-                "department_id": row[0],
-                "department_name": row[1],
-                "department_code": row[2]
-            },
-            "message": "Department created successfully"
         }
         
+        result = DepartmentService.insert_department(db, org_id, data)
+        return {"success": True, "data": result, "message": "Department created successfully"}
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating department: {str(e)}")
@@ -204,10 +108,7 @@ async def update_department(
     """Update department"""
     try:
         update_fields = []
-        params = {
-            "department_id": department_id,
-            "org_id": str(context.org_id)
-        }
+        params = {}
         
         field_mapping = {
             "department_name": "department_name",
@@ -227,29 +128,14 @@ async def update_department(
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        query = text(f"""
-            UPDATE master.departments 
-            SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
-            WHERE department_id = :department_id AND org_id = :org_id
-            RETURNING department_id, department_name
-        """)
+        result = DepartmentService.update_department_dynamic(
+            db, str(context.org_id), department_id, update_fields, params
+        )
         
-        result = db.execute(query, params)
-        # TenantAwareSession auto-commits
-        
-        updated = result.first()
-        if not updated:
+        if not result:
             raise HTTPException(status_code=404, detail="Department not found")
         
-        return {
-            "success": True,
-            "data": {
-                "department_id": updated[0],
-                "department_name": updated[1]
-            },
-            "message": "Department updated successfully"
-        }
-        
+        return {"success": True, "data": result, "message": "Department updated successfully"}
     except HTTPException:
         raise
     except Exception as e:
@@ -268,28 +154,10 @@ async def delete_department(
 ):
     """Delete (soft delete) department"""
     try:
-        query = text("""
-            UPDATE master.departments 
-            SET is_active = false, updated_at = CURRENT_TIMESTAMP
-            WHERE department_id = :department_id AND org_id = :org_id
-            RETURNING department_id, department_name
-        """)
-        
-        result = db.execute(query, {
-            "department_id": department_id,
-            "org_id": str(context.org_id)
-        })
-        # TenantAwareSession auto-commits
-        
-        deleted = result.first()
-        if not deleted:
+        result = DepartmentService.soft_delete_department(db, str(context.org_id), department_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Department not found")
-        
-        return {
-            "success": True,
-            "message": f"Department {deleted[1]} deactivated successfully"
-        }
-        
+        return {"success": True, "message": f"Department {result['department_name']} deactivated successfully"}
     except HTTPException:
         raise
     except Exception as e:

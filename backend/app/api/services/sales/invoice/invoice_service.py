@@ -324,3 +324,308 @@ class InvoiceService:
         Delegates to repository.
         """
         return InvoiceRepository.get_customer_context(db, org_id, customer_id)
+    
+    @staticmethod
+    def list_invoices(
+        db: Session,
+        limit: int = 50,
+        offset: int = 0,
+        customer_id: int = None,
+        date_from: date = None,
+        date_to: date = None,
+        payment_status: str = None,
+        invoice_status: str = None,
+        search: str = None
+    ) -> Dict[str, Any]:
+        """
+        Get list of invoices with pagination and filters.
+        TenantAwareSession auto-filters by org_id.
+        """
+        from sqlalchemy import text
+        
+        query = """
+            SELECT
+                i.invoice_id, i.invoice_number, i.invoice_date,
+                i.customer_id, i.customer_name, i.final_amount,
+                i.paid_amount, i.credit_amount, i.payment_status,
+                i.invoice_status, i.cgst_amount, i.sgst_amount,
+                i.igst_amount, i.total_tax_amount, i.taxable_amount,
+                i.subtotal_amount
+            FROM sales.invoices i
+            WHERE 1=1
+        """
+        
+        params = {"limit": limit, "offset": offset}
+        count_conditions = ""
+        count_params = {}
+
+        if customer_id:
+            query += " AND i.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+            count_conditions += " AND customer_id = :customer_id"
+            count_params["customer_id"] = customer_id
+
+        if date_from:
+            query += " AND i.invoice_date >= :date_from"
+            params["date_from"] = date_from
+            count_conditions += " AND invoice_date >= :date_from"
+            count_params["date_from"] = date_from
+
+        if date_to:
+            query += " AND i.invoice_date <= :date_to"
+            params["date_to"] = date_to
+            count_conditions += " AND invoice_date <= :date_to"
+            count_params["date_to"] = date_to
+        
+        if payment_status:
+            query += " AND i.payment_status = :payment_status"
+            params["payment_status"] = payment_status
+        
+        if invoice_status:
+            query += " AND i.invoice_status = :invoice_status"
+            params["invoice_status"] = invoice_status
+        
+        if search:
+            query += """ AND (
+                i.invoice_number ILIKE :search 
+                OR i.customer_name ILIKE :search
+            )"""
+            params["search"] = f"%{search}%"
+
+        query += " ORDER BY i.invoice_date DESC, i.created_at DESC LIMIT :limit OFFSET :offset"
+        
+        result = db.execute(text(query), params)
+        invoices = [dict(row._mapping) for row in result]
+        
+        # Get total count
+        count_query = f"SELECT COUNT(*) FROM sales.invoices WHERE 1=1{count_conditions}"
+        total = db.execute(text(count_query), count_params).scalar()
+        
+        return {
+            "invoices": invoices,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    
+    @staticmethod
+    def get_invoice_with_items(db: Session, invoice_id: int, org_id: str) -> Dict[str, Any]:
+        """
+        Get invoice with items and order info.
+        """
+        from sqlalchemy import text
+        
+        result = db.execute(text("""
+            SELECT
+                i.*,
+                o.order_number
+            FROM sales.invoices i
+            LEFT JOIN sales.orders o ON i.order_id = o.order_id AND o.org_id = i.org_id
+            WHERE i.invoice_id = :invoice_id AND i.org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        
+        invoice = result.fetchone()
+        if not invoice:
+            return None
+        
+        invoice_dict = dict(invoice._mapping)
+        
+        # Get invoice items with pack information
+        items_result = db.execute(text("""
+            SELECT
+                ii.*,
+                b.pack_type, b.pack_size, b.units_per_pack,
+                b.packages_per_box, b.pack_uom, b.base_uom
+            FROM sales.invoice_items ii
+            LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND b.org_id = :org_id
+            WHERE ii.invoice_id = :invoice_id
+            ORDER BY ii.invoice_item_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        
+        invoice_dict["items"] = [dict(item._mapping) for item in items_result]
+        
+        return invoice_dict
+    
+    @staticmethod
+    def get_invoice_status(db: Session, invoice_id: int, org_id: str) -> Dict[str, Any]:
+        """
+        Get invoice status info for validation.
+        """
+        from sqlalchemy import text
+        
+        result = db.execute(text("""
+            SELECT invoice_status, payment_status, paid_amount, final_amount
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        
+        row = result.fetchone()
+        if not row:
+            return None
+        
+        return {
+            "invoice_status": row[0],
+            "payment_status": row[1],
+            "paid_amount": row[2],
+            "final_amount": row[3]
+        }
+    
+    @staticmethod
+    def update_invoice_draft(
+        db: Session,
+        invoice_id: int,
+        org_id: str,
+        update_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Update draft invoice with permitted fields.
+        Returns True if update was applied.
+        """
+        from sqlalchemy import text
+        
+        EDITABLE_FIELDS = {
+            "notes", "payment_terms", "due_date", 
+            "freight_charges", "insurance_charges", "other_charges"
+        }
+        
+        update_fields = []
+        params = {"invoice_id": invoice_id, "org_id": org_id}
+        
+        for field in EDITABLE_FIELDS:
+            if field in update_data:
+                update_fields.append(f"{field} = :{field}")
+                params[field] = update_data[field]
+        
+        if not update_fields:
+            return False
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        db.execute(text(f"""
+            UPDATE sales.invoices
+            SET {', '.join(update_fields)}
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), params)
+        
+        return True
+    
+    @staticmethod
+    def cancel_invoice(
+        db: Session,
+        invoice_id: int,
+        org_id: str,
+        cancelled_by: int,
+        reason: str = None,
+        reverse_inventory: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Cancel invoice and optionally reverse inventory.
+        """
+        from sqlalchemy import text
+        from .....core.utils.constants import InvoiceStatus
+        
+        # Mark invoice as cancelled
+        db.execute(text("""
+            UPDATE sales.invoices
+            SET invoice_status = :cancelled_status,
+                cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by = :cancelled_by,
+                cancellation_reason = :reason,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {
+            "invoice_id": invoice_id,
+            "org_id": org_id,
+            "cancelled_status": InvoiceStatus.CANCELLED.value,
+            "cancelled_by": cancelled_by,
+            "reason": reason or "Cancelled by user"
+        })
+        
+        # Reverse inventory if needed
+        if reverse_inventory:
+            items_result = db.execute(text("""
+                SELECT product_id, batch_id, quantity
+                FROM sales.invoice_items
+                WHERE invoice_id = :invoice_id
+            """), {"invoice_id": invoice_id})
+            
+            for item in items_result:
+                if item[1]:  # Has batch_id
+                    db.execute(text("""
+                        UPDATE inventory.batches
+                        SET quantity_available = quantity_available + :quantity,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE batch_id = :batch_id AND org_id = :org_id
+                    """), {
+                        "batch_id": item[1],
+                        "quantity": item[2],
+                        "org_id": org_id
+                    })
+        
+        return {"success": True, "invoice_id": invoice_id}
+    
+    # ==================== BACKGROUND TASK METHODS ====================
+    
+    @staticmethod
+    def update_invoice_totals(db: Session, invoice_id: int, totals: dict) -> bool:
+        """
+        Update invoice totals after background calculation.
+        Used by async processing tasks.
+        
+        Args:
+            invoice_id: Invoice ID to update
+            totals: Dict with items_count, total_qty, subtotal, etc.
+        """
+        if not totals:
+            return False
+        
+        db.execute(text("""
+            UPDATE sales.invoices
+            SET 
+                items_count = :items_count,
+                total_quantity = :total_qty,
+                subtotal_amount = :subtotal,
+                discount_amount = :item_discount,
+                scheme_discount = :invoice_discount,
+                taxable_amount = :taxable_amount,
+                igst_amount = :igst,
+                cgst_amount = :cgst,
+                sgst_amount = :sgst,
+                total_tax_amount = :total_tax,
+                final_amount = :final_amount,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE invoice_id = :invoice_id
+        """), {**totals, "invoice_id": invoice_id})
+        
+        logger.info(f"✅ Updated totals for invoice {invoice_id}")
+        return True
+    
+    @staticmethod
+    def update_customer_outstanding(
+        db: Session,
+        customer_id: int,
+        amount: float
+    ) -> bool:
+        """
+        Update customer's outstanding balance after invoice creation.
+        Used by async processing tasks.
+        
+        Args:
+            customer_id: Customer ID to update
+            amount: Amount to add to outstanding balance
+        """
+        try:
+            db.execute(text("""
+                UPDATE parties.customers 
+                SET current_outstanding = COALESCE(current_outstanding, 0) + :amount,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE customer_id = :customer_id
+            """), {
+                "customer_id": customer_id,
+                "amount": amount
+            })
+            logger.info(f"✅ Updated customer {customer_id} outstanding by +{amount}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Could not update customer outstanding: {e}")
+            return False

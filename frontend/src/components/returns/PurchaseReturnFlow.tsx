@@ -12,6 +12,45 @@ import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
+import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
+
+interface TransportDetails {
+  transport_mode: string;
+  vehicle_no: string;
+  transporter_name: string;
+  lr_no: string;
+}
+
+interface PurchaseReturnItem extends Omit<BaseReturnItem, 'product_id'> {
+  id: string | number;
+  product_id: number | undefined;
+  invoice_item_id?: string | number;
+  restock?: boolean;
+  disposition?: string;
+  [key: string]: any; // Allow for other props during transition
+}
+
+interface PurchaseReturnData {
+  return_no: string;
+  return_date: string;
+  supplier_id: string | number;
+  supplier_details: any;
+  supplier_invoice_id: string | number;
+  invoice_no: string;
+  invoice_date: string;
+  original_invoice: any;
+  items: PurchaseReturnItem[];
+  return_reason: string;
+  return_reason_notes: string;
+  return_method: string;
+  subtotal_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  debit_note_no: string;
+  status: string;
+  include_gst: boolean;
+  transport_details: TransportDetails;
+}
 
 const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -21,12 +60,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const toast = useToast();
 
   // Refs for keyboard navigation
-  const supplierSearchRef = useRef(null);
-  const invoiceSearchRef = useRef(null);
+  const supplierSearchRef = useRef<any>(null);
+  const invoiceSearchRef = useRef<any>(null);
   const firstInputRef = useRef(null);
 
   // Return data state - matching sales return structure
-  const [returnData, setReturnData] = useState({
+  const [returnData, setReturnData] = useState<PurchaseReturnData>({
     return_no: '',
     return_date: new Date().toISOString().split('T')[0],
     supplier_id: '',
@@ -53,13 +92,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }
   });
 
-  const [selectedSupplier, setSelectedSupplier] = useState(null);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [returnReasons, setReturnReasons] = useState([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [returnReasons, setReturnReasons] = useState<{ value: string; label: string; }[]>([]);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
   const [manualItemCounter, setManualItemCounter] = useState(1);
-  const [returnableInvoices, setReturnableInvoices] = useState([]);
+  const [returnableInvoices, setReturnableInvoices] = useState<any[]>([]);
   const [availableBatches, setAvailableBatches] = useState({});
 
   // Load return reasons from system settings
@@ -173,9 +212,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             invoice_item_id: item.invoice_item_id,
             return_quantity: parseFloat(item.returnable_quantity || 0), // Pre-fill with max returnable
             selected: true, // Pre-select all
-            rate: item.unit_price || item.rate || item.unit_price || 0,
-            unit_price: item.unit_price || item.rate || item.unit_price || 0,
-            unit_price: item.unit_price || item.rate || item.unit_price || 0,
+            unit_price: parseFloat(item.unit_price || 0),
             tax_percent: item.tax_percent || 18,
             discount_percent: item.discount_percent || 0,
             max_returnable_qty: parseFloat(item.returnable_quantity || 0),
@@ -269,13 +306,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const handleAddManualItem = () => {
     const newItem = {
       id: `manual_${manualItemCounter}`,
-      product_id: null,
+      product_id: undefined,
       product_name: '',
       batch_number: '',
       quantity: 0,
+      original_quantity: 0,
       return_quantity: 0,
-      rate: 0,
-      unit_price: 0,
       unit_price: 0,
       tax_percent: 18,
       discount_percent: 0,
@@ -297,8 +333,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       ...prev,
       items: prev.items.map(item => {
         if (item.id === itemId || item.invoice_item_id === itemId) {
-          const updated = { ...item, [field]: value };
-          return updated;
+          return {
+            ...item,
+            [field]: value
+          };
         }
         return item;
       })
@@ -312,11 +350,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
-        const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.unit_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
+        const returnQty = typeof item.return_quantity === 'string' ? parseFloat(item.return_quantity) : item.return_quantity || 0;
+        const unit_price = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : item.unit_price || 0;
+        const taxPercent = typeof item.tax_percent === 'string' ? parseFloat(item.tax_percent) : item.tax_percent || parseFloat(item.gst_percent as any) || 0;
 
-        const itemTotal = returnQty * rate;
+        const itemTotal = returnQty * unit_price;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
 
         subtotal += itemTotal;
@@ -347,11 +385,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
-        const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.unit_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
+        const returnQty = typeof item.return_quantity === 'string' ? parseFloat(item.return_quantity) : item.return_quantity || 0;
+        const unit_price = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : item.unit_price || 0;
+        const taxPercent = typeof item.tax_percent === 'string' ? parseFloat(item.tax_percent) : item.tax_percent || parseFloat(item.gst_percent as any) || 0;
 
-        const itemTotal = returnQty * rate;
+        const itemTotal = returnQty * unit_price;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
 
         subtotal += itemTotal;
@@ -408,7 +446,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       // Debug logging
 
       const filteredItems = returnData.items.filter(item => {
-        const hasQuantity = parseFloat(item.return_quantity) > 0;
+        const hasQuantity = (item.return_quantity || 0) > 0;
         return item.selected && hasQuantity;
       });
 
@@ -426,9 +464,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               batch_number: item.batch_number,
               return_quantity: item.return_quantity,  // Transformer expects this
               quantity: item.return_quantity,  // Backend expects this
-              rate: item.rate || item.unit_price || item.unit_price || 0,
-              unit_price: item.unit_price || item.rate || item.unit_price || 0,
-              cost_per_unit: item.rate || item.unit_price || item.unit_price || 0,  // Transformer expects this
+              unit_price: parseFloat((item.unit_price || 0).toString()),
+              cost_per_unit: parseFloat((item.unit_price || 0).toString()),  // Transformer expects this
               discount_percent: item.discount_percent || 0,
               tax_percent: item.tax_percent || item.gst_percent || 0,
               return_reason: item.return_reason || returnData.return_reason,
@@ -447,7 +484,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       setTimeout(() => {
         onClose();
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       toast.error(error.message || 'Failed to create return');
     } finally {
       setSaving(false);
@@ -466,13 +503,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Purchase Return"
-            subtitle="Create return to supplier"
             documentNumber={returnData.return_no}
             status="draft"
             icon={RotateCcw}
             iconColor="text-orange-600"
             onClose={onClose}
-            historyType="return"
           />
 
           {/* Content */}
@@ -484,8 +519,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   {/* Left side - Return Date */}
                   <div className="w-64">
                     <DatePicker
-                      value={returnData.return_date}
-                      onChange={(date) => setReturnData(prev => ({ ...prev, return_date: date }))}
+                      value={returnData.return_date ? new Date(returnData.return_date) : new Date()}
+                      onChange={(date) => setReturnData(prev => ({
+                        ...prev,
+                        return_date: date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                      }))}
                       label="Return Date"
                       size="lg"
                       className="w-full"
@@ -501,7 +539,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                         </label>
                         <Select
                           value={returnData.return_reason}
-                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
+                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value as string }))}
                           options={returnReasons}
                           placeholder="Select return reason..."
                           size="lg"
@@ -641,9 +679,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   <ItemsTable
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
-                    onRemoveItem={showManualEntry ? removeManualItem : null}
-                    showRestock={true}
-                    isManualEntry={showManualEntry}
+                    onRemoveItem={showManualEntry ? removeManualItem : undefined}
                   />
                 </div>
               )}
@@ -717,7 +753,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Review Purchase Return"
-          subtitle="Confirm and generate debit note"
           documentNumber={returnData.return_no}
           status="pending"
           icon={CheckCircle}
@@ -744,7 +779,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   return_reason_notes: value
                 }))}
                 placeholder="Add any additional notes about this return..."
-                title="Return Notes"
                 rows={4}
               />
             </div>
@@ -771,7 +805,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           canProceed={true}
           onBack={() => setCurrentStep(1)}
           onProceed={handleSaveReturn}
-          onReset={null}
+          onReset={undefined}
           totalItems={returnData.items.filter(item => item.selected).length}
           totalAmount={returnData.total_amount}
           proceedText="Generate Debit Note"
