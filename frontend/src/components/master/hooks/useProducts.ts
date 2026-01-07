@@ -110,7 +110,7 @@ export function useProducts() {
                 offset: (pageNum - 1) * perPage
             });
 
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 const productData = response.data?.products || response.data || [];
                 setProducts(productData);
                 setTotalPages(Math.ceil((response.data?.total || productData.length) / perPage));
@@ -129,7 +129,7 @@ export function useProducts() {
         setLoading(true);
         try {
             const response = await productsApi.create(formData);
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 await fetchProducts(page);
                 return { success: true, data: response.data };
             }
@@ -145,7 +145,7 @@ export function useProducts() {
         setLoading(true);
         try {
             const response = await productsApi.update(productId, formData);
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 await fetchProducts(page);
                 return { success: true, data: response.data };
             }
@@ -165,7 +165,7 @@ export function useProducts() {
         setLoading(true);
         try {
             const response = await productsApi.delete(productId);
-            if (response.success) {
+            if (response.data?.success || response.status === 200) {
                 await fetchProducts(page);
                 return { success: true };
             }

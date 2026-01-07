@@ -55,14 +55,14 @@ const SplitPayment: FC<SplitPaymentProps> = ({
         { id: '2', method: 'upi', amount: 0, reference: '' }
     ]);
 
-    // Payment method options
+    // Payment method options - Credit first for B2B focus (India runs on credit)
     const paymentMethods: PaymentMethodOption[] = [
+        { value: 'credit', label: 'Credit (Pay Later)', icon: AlertCircle, color: 'orange' },
         { value: 'cash', label: 'Cash', icon: Banknote, color: 'green' },
-        { value: 'upi', label: 'UPI', icon: Smartphone, color: 'purple' },
         { value: 'card', label: 'Card', icon: CreditCard, color: 'blue' },
+        { value: 'upi', label: 'UPI', icon: Smartphone, color: 'purple' },
         { value: 'bank', label: 'Bank Transfer', icon: Building2, color: 'indigo' },
-        { value: 'check', label: 'Check', icon: FileText, color: 'gray' },
-        { value: 'credit', label: 'Credit (Pay Later)', icon: AlertCircle, color: 'orange' }
+        { value: 'check', label: 'Check', icon: FileText, color: 'gray' }
     ];
 
     // Initialize from props - only run once
@@ -137,9 +137,11 @@ const SplitPayment: FC<SplitPaymentProps> = ({
     const handleSplitToggle = (): void => {
         setIsSplitMode(!isSplitMode);
         if (!isSplitMode) {
+            // Default to Credit (full amount) + Cash (0) - B2B friendly default
+            // User can then adjust cash amount as needed
             setSplitPayments([
-                { id: '1', method: 'cash', amount: 0, reference: '' },
-                { id: '2', method: 'upi', amount: 0, reference: '' }
+                { id: '1', method: 'credit', amount: totalAmount, reference: '' },
+                { id: '2', method: 'cash', amount: 0, reference: '' }
             ]);
         } else {
             setPaymentAmount(totalAmount);
@@ -354,7 +356,8 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                             disabled={readOnly}
                                             className={`${selectClass} w-full`}
                                         >
-                                            {paymentMethods.filter(m => m.value !== 'credit').map(method => (
+                                            {/* All payment methods available in split mode */}
+                                            {paymentMethods.map(method => (
                                                 <option key={method.value} value={method.value}>{method.label}</option>
                                             ))}
                                         </select>

@@ -85,7 +85,7 @@ export function useCustomerEdit(
     onSave: () => void,
     onClose: () => void
 ) {
-    const { showToast } = useToast();
+    const toast = useToast();
 
     const [formData, setFormData] = useState<CustomerFormData>(getInitialFormData());
     const [loading, setLoading] = useState(false);
@@ -197,7 +197,7 @@ export function useCustomerEdit(
         if (e) e.preventDefault();
 
         if (!validateForm()) {
-            showToast('Please fix the errors before submitting', 'error');
+            toast.error('Please fix the errors before submitting');
             return false;
         }
 
@@ -210,22 +210,22 @@ export function useCustomerEdit(
                 response = await customersApi.create(formData);
             }
 
-            if (response.success) {
-                showToast(customer ? 'Customer updated successfully' : 'Customer created successfully', 'success');
+            if (response.data?.success || response.status === 200) {
+                toast.success(customer ? 'Customer updated successfully' : 'Customer created successfully');
                 onSave();
                 onClose();
                 return true;
             } else {
-                showToast(response.error?.message || 'Failed to save customer', 'error');
+                toast.error(response.data?.error?.message || 'Failed to save customer');
                 return false;
             }
         } catch (error: any) {
-            showToast(error.message || 'Failed to save customer', 'error');
+            toast.error(error.message || 'Failed to save customer');
             return false;
         } finally {
             setLoading(false);
         }
-    }, [formData, customer, validateForm, onSave, onClose, showToast]);
+    }, [formData, customer, validateForm, onSave, onClose, toast]);
 
     const resetForm = useCallback(() => {
         setFormData(getInitialFormData());

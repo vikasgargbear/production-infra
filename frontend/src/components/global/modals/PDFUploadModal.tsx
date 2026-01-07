@@ -605,19 +605,19 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="font-medium">₹{editedData.subtotal || 0}</span>
+                  <span className="font-medium">₹{editedData?.subtotal || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Tax:</span>
-                  <span className="font-medium">₹{editedData.tax_amount || 0}</span>
+                  <span className="font-medium">₹{editedData?.tax_amount || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Discount:</span>
-                  <span className="font-medium">₹{editedData.discount_amount || 0}</span>
+                  <span className="font-medium">₹{editedData?.discount_amount || 0}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg">
                   <span>Total:</span>
-                  <span>₹{editedData.total_amount || 0}</span>
+                  <span>₹{editedData?.total_amount || 0}</span>
                 </div>
               </div>
             </div>

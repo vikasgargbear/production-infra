@@ -168,7 +168,7 @@ export function useProductCreation(
 
         try {
             const response = await metadataApi.createProductCategory({ category_name: newCategoryName });
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 const newCategory = response.data;
                 setCategories(prev => [...prev, newCategory]);
                 setFormData(prev => ({
@@ -189,7 +189,7 @@ export function useProductCreation(
 
         try {
             const response = await metadataApi.createProductType({ type_name: newTypeName });
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 const newType = response.data;
                 setProductTypes(prev => [...prev, newType]);
                 setFormData(prev => ({
@@ -284,13 +284,13 @@ export function useProductCreation(
 
             const response = await productsApi.create(payload);
 
-            if (response.success || response.data) {
+            if (response.data?.success || response.data) {
                 const newProduct = response.data;
                 onProductCreated(newProduct);
                 onClose();
                 return true;
             } else {
-                setError(response.error?.message || 'Failed to create product');
+                setError(response.data?.error?.message || 'Failed to create product');
                 return false;
             }
         } catch (error: any) {
