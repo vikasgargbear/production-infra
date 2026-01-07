@@ -58,7 +58,7 @@ const NotesHistory: React.FC<NotesHistoryProps> = ({ onClose, onSelectNote }) =>
   const fetchNotes = async () => {
     setLoading(true);
     try {
-      const notesList = [];
+      const notesList: NoteItem[] = [];
 
       // Fetch credit notes
       if (noteType === 'all' || noteType === 'credit') {
@@ -310,13 +310,13 @@ const NotesHistory: React.FC<NotesHistoryProps> = ({ onClose, onSelectNote }) =>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                     Loading notes...
                   </td>
                 </tr>
               ) : filteredNotes.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                     No notes found
                   </td>
                 </tr>
@@ -350,8 +350,7 @@ const NotesHistory: React.FC<NotesHistoryProps> = ({ onClose, onSelectNote }) =>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge
-                          status={note.status}
-                          color={note.status === 'active' ? 'green' : 'gray'}
+                          status={note.status || 'active'}
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

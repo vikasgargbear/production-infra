@@ -93,7 +93,7 @@ export function useSupplierEdit(
     onSave: () => void,
     onClose: () => void
 ) {
-    const { showToast } = useToast();
+    const toast = useToast();
 
     const [formData, setFormData] = useState<SupplierFormData>(getInitialFormData());
     const [loading, setLoading] = useState(false);
@@ -211,7 +211,7 @@ export function useSupplierEdit(
         if (e) e.preventDefault();
 
         if (!validateForm()) {
-            showToast('Please fix the errors before submitting', 'error');
+            toast.error('Please fix the errors before submitting');
             return false;
         }
 
@@ -224,22 +224,22 @@ export function useSupplierEdit(
                 response = await suppliersApi.create(formData);
             }
 
-            if (response.success) {
-                showToast(supplier ? 'Supplier updated successfully' : 'Supplier created successfully', 'success');
+            if (response.data?.success || response.status === 200) {
+                toast.success(supplier ? 'Supplier updated successfully' : 'Supplier created successfully');
                 onSave();
                 onClose();
                 return true;
             } else {
-                showToast(response.error?.message || 'Failed to save supplier', 'error');
+                toast.error(response.data?.error?.message || 'Failed to save supplier');
                 return false;
             }
         } catch (error: any) {
-            showToast(error.message || 'Failed to save supplier', 'error');
+            toast.error(error.message || 'Failed to save supplier');
             return false;
         } finally {
             setLoading(false);
         }
-    }, [formData, supplier, validateForm, onSave, onClose, showToast]);
+    }, [formData, supplier, validateForm, onSave, onClose, toast]);
 
     const resetForm = useCallback(() => {
         setFormData(getInitialFormData());

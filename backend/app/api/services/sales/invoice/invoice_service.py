@@ -113,6 +113,34 @@ class InvoiceService:
                     due_days_int
                 )
             
+            # 6.5. Calculate paid_amount from payments array (operational tracking only)
+            # NOTE: Does NOT create records in financial.payments - that's separate
+            payments = getattr(invoice_data, 'payments', []) or []
+            paid_amount = Decimal("0")
+            
+            if payments:
+                for payment in payments:
+                    payment_method = payment.get('method', 'cash')
+                    payment_amt = Decimal(str(payment.get('amount', 0) or 0))
+                    
+                    # 'credit' method means unpaid - don't count as paid_amount
+                    if payment_method != 'credit' and payment_amt > 0:
+                        paid_amount += payment_amt
+            
+            # Determine payment_status based on paid_amount vs final_amount
+            final_amount = Decimal(str(totals["final_amount"]))
+            if paid_amount >= final_amount:
+                payment_status = "paid"
+            elif paid_amount > 0:
+                payment_status = "partial"
+            else:
+                payment_status = "pending"
+            
+            # Calculate credit_amount (amount not yet paid)
+            credit_amount = final_amount - paid_amount
+            
+            logger.info(f"💰 Payment tracking: paid={paid_amount}, credit={credit_amount}, status={payment_status}")
+            
             # 7. Create invoice
             invoice_id = InvoiceRepository.create_invoice(
                 db=db,
@@ -129,7 +157,10 @@ class InvoiceService:
                 payment_terms=payment_terms,
                 due_date=due_date,
                 notes=getattr(invoice_data, 'notes', None),
-                created_by=actual_user_id
+                created_by=actual_user_id,
+                paid_amount=paid_amount,
+                payment_status=payment_status,
+                credit_amount=credit_amount
             )
             
             # 8. Prepare invoice items data

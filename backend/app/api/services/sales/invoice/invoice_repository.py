@@ -157,16 +157,28 @@ class InvoiceRepository:
         payment_terms: str,
         due_date: str,
         notes: Optional[str],
-        created_by: int
+        created_by: int,
+        paid_amount: Decimal = Decimal("0"),
+        payment_status: str = "pending",
+        credit_amount: Optional[Decimal] = None
     ) -> int:
         """
         Create invoice record.
+        
+        Args:
+            paid_amount: Amount already paid (from split payments)
+            payment_status: 'pending', 'partial', or 'paid'
+            credit_amount: Amount on credit (unpaid balance)
         
         Returns:
             invoice_id
         """
         final_amount = totals["final_amount"]
         amount_words = number_to_indian_words(float(final_amount))
+        
+        # Calculate credit_amount if not provided
+        if credit_amount is None:
+            credit_amount = Decimal(str(final_amount)) - paid_amount
         
         result = db.execute(text("""
             INSERT INTO sales.invoices (
@@ -179,7 +191,7 @@ class InvoiceRepository:
                 round_off_amount, final_amount, amount_in_words,
                 payment_terms, due_date, notes,
                 invoice_status, payment_status, paid_amount,
-                credit_amount,
+                credit_amount, allocated_amount, unallocated_amount,
                 created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
@@ -190,8 +202,8 @@ class InvoiceRepository:
                 :freight, :insurance, :other,
                 :round_off, :final, :amount_in_words,
                 :payment_terms, :due_date, :notes,
-                'posted', 'pending', 0,
-                :final,
+                'posted', :payment_status, :paid_amount,
+                :credit_amount, 0, :credit_amount,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
@@ -221,6 +233,9 @@ class InvoiceRepository:
             "payment_terms": payment_terms,
             "due_date": due_date,
             "notes": notes,
+            "payment_status": payment_status,
+            "paid_amount": paid_amount,
+            "credit_amount": credit_amount,
             "created_by": created_by
         })
         

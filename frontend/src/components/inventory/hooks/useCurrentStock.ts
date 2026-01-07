@@ -27,6 +27,9 @@ export interface StockItem extends BaseStockItem {
     requires_cold_chain?: boolean;
     batches?: any[];
     batch_count?: number;
+    // Alias properties for compatibility
+    available_stock?: number;
+    reserved_stock?: number;
 }
 
 export interface MoreFilters {

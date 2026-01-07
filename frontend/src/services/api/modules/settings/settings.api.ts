@@ -163,6 +163,36 @@ const settingsApi = {
     system: {
         getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/system'),
         update: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put('/settings/system', data)
+    },
+
+    // ============================================
+    // Warehouses Sub-module (for WarehouseMaster)
+    // ============================================
+    warehouses: {
+        getAll: (params?: Record<string, any>): Promise<AxiosResponse> => apiHelpers.get('/warehouses', { params }),
+        getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/warehouses/${id}`),
+        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/warehouses', data),
+        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/warehouses/${id}`, data),
+        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/warehouses/${id}`)
+    },
+
+    // ============================================
+    // Features Sub-module (for FeatureSettings)
+    // ============================================
+    features: {
+        getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/features'),
+        update: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put('/settings/features', data),
+        toggle: (featureId: string, enabled: boolean): Promise<AxiosResponse> => apiHelpers.put(`/settings/features/${featureId}`, { enabled })
+    },
+
+    // ============================================
+    // Integrations Sub-module (for ThirdPartyIntegrations)
+    // ============================================
+    integrations: {
+        getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/integrations'),
+        getById: (id: string): Promise<AxiosResponse> => apiHelpers.get(`/settings/integrations/${id}`),
+        update: (id: string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/settings/integrations/${id}`, data),
+        test: (integrationId: string): Promise<AxiosResponse> => apiHelpers.post(`/settings/integrations/${integrationId}/test`)
     }
 };
 

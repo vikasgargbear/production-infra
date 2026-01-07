@@ -165,10 +165,8 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       } else {
         // Load full invoice details
         const response = await invoicesApi.getById(invoice.id || invoice.invoice_id);
-        const fullInvoice = response?.data || response;
-        if (response.success && response.data) {
-          fullInvoice = response;
-        } else {
+        fullInvoice = { data: response?.data || response };
+        if (!fullInvoice.data) {
           throw new Error('Failed to load invoice details');
         }
       }
@@ -320,7 +318,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
       const response = await notesApi.createCreditDebitNote(payload);
 
-      if (response.success || response.data) {
+      if (response.data?.success || response.data || response.status === 200) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
 
         // Reset form
@@ -475,14 +473,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         <InvoiceSelector
                           customerId={selectedCustomer.id || selectedCustomer.customer_id}
                           onSelect={handleInvoiceSelect}
-                          mode="single"
-                          filters={{}}
-                          showReturnStatus={false}
-                          showPaymentStatus={true}
-                          showItems={false}
-                          title=""
-                          filterPredicate={() => true}
-                          pageSize={5}
                         />
                       </div>
                     )}
