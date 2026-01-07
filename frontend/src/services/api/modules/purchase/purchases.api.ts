@@ -95,5 +95,15 @@ export const purchasesApi = {
     },
     getReturnableInvoices: (params: { supplier_id: number | string }): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/returnable`, { params });
+    },
+
+    // Search purchase orders
+    search: (query: string, params: PurchaseParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.ORDERS, { params: { ...params, search: query } });
+    },
+
+    // Alias for getOrders
+    getAll: (params: PurchaseParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.ORDERS, { params });
     }
 };

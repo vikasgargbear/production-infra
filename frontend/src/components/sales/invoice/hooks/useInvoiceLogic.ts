@@ -549,7 +549,7 @@ export const useInvoiceLogic = (
                     ...updatedItems[existingItemIndex],
                     quantity: parseFloat(String(updatedItems[existingItemIndex].quantity || 0)) + 1
                 };
-                toast.info(`Quantity updated for ${invoiceItem.product_name} (Batch: ${invoiceItem.batch_number})`);
+                // Note: Toast removed - visual feedback in table is sufficient
                 return { ...prev, items: updatedItems };
             } else {
                 // SANITIZE: Remove deprecated fields before adding
@@ -563,11 +563,8 @@ export const useInvoiceLogic = (
                     free_quantity: 0
                 };
 
-                const toastMsg = sanitizedItem.batch_number
-                    ? `Added ${sanitizedItem.product_name} (Batch: ${sanitizedItem.batch_number})`
-                    : `Added ${sanitizedItem.product_name}`;
-
-                toast.success(toastMsg);
+                // Note: Toast removed - visual feedback (item appearing in table) is sufficient
+                // Users can clearly see the product was added
 
                 // VALIDATION: Catch deprecated fields in development
                 validateInvoiceItem(newItem, `new item: ${sanitizedItem.product_name}`);

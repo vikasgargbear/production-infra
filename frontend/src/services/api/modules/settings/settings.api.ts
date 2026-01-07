@@ -133,6 +133,36 @@ const settingsApi = {
         const formData = new FormData();
         formData.append('backup', file);
         return apiHelpers.post(`${ENDPOINTS.BACKUP}/restore`, formData);
+    },
+
+    // ============================================
+    // Taxes Sub-module (for TaxMaster)
+    // ============================================
+    taxes: {
+        getAll: (): Promise<AxiosResponse> => apiHelpers.get('/taxes'),
+        getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/taxes/${id}`),
+        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/taxes', data),
+        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/taxes/${id}`, data),
+        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/taxes/${id}`)
+    },
+
+    // ============================================
+    // Units Sub-module (for UnitMaster)
+    // ============================================
+    units: {
+        getAll: (): Promise<AxiosResponse> => apiHelpers.get('/units'),
+        getById: (id: number | string): Promise<AxiosResponse> => apiHelpers.get(`/units/${id}`),
+        create: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.post('/units', data),
+        update: (id: number | string, data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put(`/units/${id}`, data),
+        delete: (id: number | string): Promise<AxiosResponse> => apiHelpers.delete(`/units/${id}`)
+    },
+
+    // ============================================
+    // System Sub-module (for SystemSettings)
+    // ============================================
+    system: {
+        getAll: (): Promise<AxiosResponse> => apiHelpers.get('/settings/system'),
+        update: (data: Record<string, any>): Promise<AxiosResponse> => apiHelpers.put('/settings/system', data)
     }
 };
 

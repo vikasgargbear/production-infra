@@ -109,5 +109,24 @@ export const bankAccountsApi = {
     // Search accounts
     search: (query: string) => {
         return apiHelpers.get(ENDPOINTS.BASE, { params: { search: query } });
+    },
+
+    // =========================================================================
+    // ALIASES (backward compatibility)
+    // =========================================================================
+
+    // Alias for getAll
+    getBankAccounts: (params: BankAccountParams = {}) => {
+        return apiHelpers.get(ENDPOINTS.BASE, { params });
+    },
+
+    // Alias for delete
+    deleteBankAccount: (id: number | string) => {
+        return apiHelpers.delete(ENDPOINTS.DETAILS(id));
+    },
+
+    // Set default account
+    setDefaultAccount: (id: number | string) => {
+        return apiHelpers.put(`${ENDPOINTS.DETAILS(id)}/set-default`, {});
     }
 };

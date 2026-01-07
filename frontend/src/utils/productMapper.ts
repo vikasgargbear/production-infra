@@ -82,7 +82,8 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
 export function mapProductToCanonical(raw: RawProductInput): Product {
     const mrp = parseFloat(raw.mrp_per_unit || 0);
     const salePrice = parseFloat(raw.sale_price_per_unit || 0);
-    const totalStock = parseFloat(raw.quantity_available || 0);
+    // CANONICAL: Use total_quantity_available from backend (product-level stock), fallback to legacy field names
+    const totalStock = parseFloat(raw.total_quantity_available || raw.total_stock || raw.quantity_available || 0);
 
     const product: Product = {
         product_id: raw.product_id || raw.id,
@@ -105,11 +106,11 @@ export function mapProductToCanonical(raw: RawProductInput): Product {
         // Canonical Pricing
         mrp_per_unit: mrp,
         sale_price_per_unit: salePrice,
-        cost_per_unit: parseFloat(raw.cost_per_unit || 0),
 
-        // Stock
+        // Stock - canonical field name
         total_stock: totalStock,
         total_quantity: totalStock, // Map to both for compatibility
+        total_quantity_available: totalStock, // Keep original field name too
 
         // Optional fields passed through
         brand: raw.brand, // Note: Product interface doesn't have brand, might be extra

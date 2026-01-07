@@ -105,5 +105,10 @@ export const stockApi = {
     // Get transfer history
     getTransfers: (params: StockParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.TRANSFERS, { params });
+    },
+
+    // Get stock movements (alias for adjustments history)
+    getMovements: (params: StockParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/movements`, { params });
     }
 };

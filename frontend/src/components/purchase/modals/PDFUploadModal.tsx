@@ -419,24 +419,24 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               </div>
               <div className="space-y-2">
                 {editedData?.items && editedData.items.map((item, index) => {
-                  // Ensure item exists and has all required properties
+                  // Spread item first, apply defaults only for missing values
                   const safeItem = {
-                    product_name: '',
-                    hsn_code: '',
-                    batch_number: '',
-                    expiry_date: '',
-                    unit_price: 0,
-                    selling_price: 0,
-                    quantity: 0,
-                    free_quantity: 0,
-                    pack_size: 1,
-                    pack_type: 'STRIP',
-                    total_units: 0,
-                    mrp: 0,
-                    cost_per_unit: 0,
-                    tax_percent: 12,
-                    amount: 0,
-                    ...item
+                    ...item,
+                    product_name: item.product_name ?? '',
+                    hsn_code: item.hsn_code ?? '',
+                    batch_number: item.batch_number ?? '',
+                    expiry_date: item.expiry_date ?? '',
+                    unit_price: item.unit_price ?? 0,
+                    selling_price: item.selling_price ?? 0,
+                    quantity: item.quantity ?? 0,
+                    free_quantity: item.free_quantity ?? 0,
+                    pack_size: item.pack_size ?? 1,
+                    pack_type: item.pack_type ?? 'STRIP',
+                    total_units: item.total_units ?? 0,
+                    mrp: item.mrp ?? 0,
+                    cost_per_unit: item.cost_per_unit ?? 0,
+                    tax_percent: item.tax_percent ?? 12,
+                    amount: item.amount ?? 0
                   };
                   return (
                     <div key={index} className="bg-white p-2 rounded border border-gray-200">
