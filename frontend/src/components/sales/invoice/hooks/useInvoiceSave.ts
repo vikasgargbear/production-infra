@@ -95,7 +95,9 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 shipping_address: invoice.shipping_address || '',
                 notes: invoice.notes || '',
                 gst_type: invoice.gst_type || 'CGST/SGST',
-                total_amount: invoice.final_amount || 0
+                total_amount: invoice.final_amount || 0,
+                // M.R. / Salesperson - send to backend
+                sales_person_id: invoice.sales_person_id || null
             };
 
             console.log('[Invoice] Prepared invoice data:', JSON.stringify(invoiceData, null, 2));
@@ -267,6 +269,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                         shipping_address: invoice.shipping_address || '',
                         notes: invoice.notes || '',
                         gst_type: invoice.gst_type || 'CGST/SGST',
+                        sales_person_id: invoice.sales_person_id || null,
                         invoice_no: offlineInvoiceNo,
                         temp_id: tempId,
                         _localId: tempId,

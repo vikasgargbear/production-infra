@@ -43,26 +43,26 @@ export function mapBatchToCanonical(raw: RawBatchInput): ProductBatch {
         ? Math.ceil((new Date(raw.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : null;
 
-    const mrp = parseFloat(raw.mrp_per_unit || 0);
-    const salePrice = parseFloat(raw.sale_price_per_unit || 0);
+    const mrp = Number(raw.mrp_per_unit || 0);
+    const salePrice = Number(raw.sale_price_per_unit || 0);
 
     return {
-        batch_id: raw.batch_id || raw.id,
-        product_id: raw.product_id,
+        batch_id: raw.batch_id ?? raw.id ?? '',
+        product_id: raw.product_id ?? '',
         batch_number: raw.batch_number || '',
         manufacturing_date: raw.manufacturing_date || undefined,
         expiry_date: raw.expiry_date || '',
-        quantity_available: parseFloat(raw.quantity_available || 0),
+        quantity_available: Number(raw.quantity_available || 0),
 
         // Canonical Pricing
         mrp_per_unit: mrp,
         sale_price_per_unit: salePrice,
-        cost_per_unit: parseFloat(raw.cost_per_unit || raw.cost_per_unit || 0),
+        cost_per_unit: Number(raw.cost_per_unit || 0),
 
         // Legacy Required Fields (mapped from same source)
         mrp: mrp,
         sale_price: salePrice,
-        unit_price: parseFloat(raw.unit_price || 0),
+        unit_price: Number(raw.unit_price || 0),
 
         units_per_pack: raw.units_per_pack,
         packages_per_box: raw.packages_per_box,

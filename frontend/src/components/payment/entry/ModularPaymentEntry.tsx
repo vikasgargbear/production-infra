@@ -872,11 +872,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Footer - Using Global Component */}
         <ProceedToReviewComponent
           currentStep={currentStep}
-          canProceed={
+          canProceed={Boolean(
             (currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode) ||
             (currentStep === 2)
-          }
-          onBack={currentStep === 2 ? () => setCurrentStep(1) : null}
+          )}
+          onBack={currentStep === 2 ? () => setCurrentStep(1) : undefined}
           onProceed={() => {
             if (currentStep === 1) {
               goToSummary();
@@ -884,7 +884,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               savePayment();
             }
           }}
-          onReset={currentStep === 1 ? resetPayment : null}
+          onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
           totalAmount={parseFloat(payment.amount) || 0}
           proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
@@ -895,7 +895,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       {/* GST Calculator Modal */}
       {showGSTCalculator && (
         <GSTCalculator
-          orderData={null}
+          orderData={undefined}
           onCalculationComplete={() => setShowGSTCalculator(false)}
           showDetails={true}
         />

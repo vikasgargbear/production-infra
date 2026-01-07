@@ -510,9 +510,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             </thead>
             <tbody>
               {(purchaseOrder.items || []).map((item, index) => {
-                const quantity = parseFloat(item.quantity) || 0;
-                const unitPrice = parseFloat(item.unit_price) || 0;
-                const taxPercent = parseFloat(item.tax_percent) || 0;
+                const quantity = Number(item.quantity) || 0;
+                const unitPrice = Number(item.unit_price) || 0;
+                const taxPercent = Number(item.tax_percent) || 0;
                 const itemTotal = quantity * unitPrice;
                 const itemTax = (itemTotal * taxPercent) / 100;
                 const totalWithTax = itemTotal + itemTax;

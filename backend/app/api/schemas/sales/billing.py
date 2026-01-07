@@ -215,6 +215,9 @@ class InvoiceCreateRequest(BaseModel):
     billing_address: Optional[str] = Field(None, max_length=500)
     shipping_address: Optional[str] = Field(None, max_length=500)
     
+    # Salesperson / M.R. - accept both naming conventions
+    salesperson_id: Optional[int] = Field(None, validation_alias=AliasChoices('salesperson_id', 'sales_person_id'))
+    
     # Other
     notes: Optional[str] = Field(None, max_length=1000)
     gst_type: Optional[str] = Field(default="CGST/SGST")
