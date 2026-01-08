@@ -48,7 +48,7 @@ export interface ReturnData {
     customer_id: string;
     customer_details: any | null;
     invoice_id: string;
-    invoice_no: string;
+    invoice_number: string;
     invoice_date: string;
     original_invoice: any | null;
     items: ReturnItem[];
@@ -137,7 +137,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         customer_id: '',
         customer_details: null,
         invoice_id: '',
-        invoice_no: '',
+        invoice_number: '',
         invoice_date: '',
         original_invoice: null,
         items: [],
@@ -297,7 +297,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         setReturnData(prev => ({
             ...prev,
             invoice_id: invoice.id || invoice.invoice_id,
-            invoice_no: invoice.invoice_number,
+            invoice_number: invoice.invoice_number,
             invoice_date: invoice.invoice_date,
             original_invoice: invoice
         }));
@@ -367,7 +367,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         setReturnData(prev => ({
             ...prev,
             invoice_id: '',
-            invoice_no: '',
+            invoice_number: '',
             invoice_date: '',
             original_invoice: null,
             items: []

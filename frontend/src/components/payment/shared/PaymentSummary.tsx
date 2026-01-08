@@ -23,7 +23,7 @@ interface PaymentTypeLabels {
 }
 
 interface SelectedInvoice {
-  invoice_no: string;
+  invoice_number: string;
   invoice_date: string;
   amount_due: number;
   allocated_amount: number;
@@ -150,7 +150,7 @@ const PaymentSummaryV2: React.FC = () => {
             {selectedInvoices.map((invoice: SelectedInvoice, index: number) => (
               <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">{invoice.invoice_no}</p>
+                  <p className="font-medium text-gray-900">{invoice.invoice_number}</p>
                   <p className="text-sm text-gray-600">
                     Due: ₹{invoice.amount_due.toFixed(2)} • {formatDate(invoice.invoice_date)}
                   </p>

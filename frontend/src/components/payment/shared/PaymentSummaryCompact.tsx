@@ -7,7 +7,7 @@ import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 
 interface SelectedInvoice {
-  invoice_no: string;
+  invoice_number: string;
   invoice_date: string;
   amount_due: number;
   allocated_amount: number;
@@ -152,7 +152,7 @@ const PaymentSummaryCompact: React.FC = () => {
                   <div className="space-y-1">
                     {selectedInvoices.slice(0, 2).map((invoice: any, index: number) => (
                       <div key={index} className="flex items-center justify-between text-xs text-green-700">
-                        <span>{invoice.invoice_no || invoice.invoice_number}</span>
+                        <span>{invoice.invoice_number || invoice.invoice_number}</span>
                         <span>₹{(invoice.allocated_amount || invoice.allocatedAmount || 0).toFixed(2)}</span>
                       </div>
                     ))}

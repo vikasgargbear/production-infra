@@ -168,7 +168,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         return_type: 'sales' as const,
         customer_name: ret.party_name || ret.customer_name || 'Unknown Customer',  // Backend uses party_name
         supplier_name: undefined,
-        original_document_no: ret.original_invoice_number || ret.original_invoice_no || ret.invoice_no || '-',
+        original_document_no: ret.original_invoice_number || ret.original_invoice_number || ret.invoice_number || '-',
         return_date: ret.return_date,
         total_amount: ret.total_amount || 0,
         status: ret.approval_status || ret.status || 'pending',  // Backend uses approval_status

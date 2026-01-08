@@ -103,7 +103,7 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
                                 (actualResponse.orders && Array.isArray(actualResponse.orders)) ? actualResponse.orders : [];
                     formattedItems = invoiceData.map((invoice: any) => ({
                         id: invoice.invoice_id || invoice.id || invoice.order_id,
-                        number: invoice.invoice_number || invoice.invoice_no || `INV-${invoice.invoice_id || invoice.order_id || invoice.id}`,
+                        number: invoice.invoice_number || invoice.invoice_number || `INV-${invoice.invoice_id || invoice.order_id || invoice.id}`,
                         date: invoice.invoice_date || invoice.created_at || invoice.order_date,
                         customerName: invoice.customer_name || 'N/A',
                         customerPhone: invoice.customer_phone || invoice.phone || invoice.primary_phone || '',
@@ -158,7 +158,7 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
                         const purchaseData = response.data?.purchases || response.data || [];
                         formattedItems = purchaseData.map((purchase: any) => ({
                             id: purchase.id,
-                            number: purchase.invoice_no || `PUR-${purchase.id}`,
+                            number: purchase.invoice_number || `PUR-${purchase.id}`,
                             date: purchase.invoice_date || purchase.created_at,
                             customerName: purchase.supplier_name || 'Unknown Supplier',
                             amount: purchase.total_amount || 0,

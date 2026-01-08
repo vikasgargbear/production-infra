@@ -36,7 +36,7 @@ interface PurchaseReturnData {
   supplier_id: string | number;
   supplier_details: any;
   supplier_invoice_id: string | number;
-  invoice_no: string;
+  invoice_number: string;
   invoice_date: string;
   original_invoice: any;
   items: PurchaseReturnItem[];
@@ -71,7 +71,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     supplier_id: '',
     supplier_details: null,
     supplier_invoice_id: '',
-    invoice_no: '',
+    invoice_number: '',
     invoice_date: '',
     original_invoice: null,
     items: [],
@@ -191,7 +191,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setReturnData(prev => ({
       ...prev,
       supplier_invoice_id: invoice.supplier_invoice_id || invoice.invoice_id,
-      invoice_no: invoice.supplier_invoice_number || invoice.invoice_number,
+      invoice_number: invoice.supplier_invoice_number || invoice.invoice_number,
       invoice_date: invoice.invoice_date,
       original_invoice: invoice
     }));
@@ -297,7 +297,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setReturnData(prev => ({
       ...prev,
       supplier_invoice_id: '',
-      invoice_no: '',
+      invoice_number: '',
       items: []
     }));
   };

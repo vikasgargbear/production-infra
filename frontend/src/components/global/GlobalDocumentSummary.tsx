@@ -27,7 +27,7 @@ interface TypeConfig {
 
 interface DocumentData {
     document_number?: string;
-    invoice_no?: string;
+    invoice_number?: string;
     purchase_no?: string;
     document_date?: string;
     invoice_date?: string;
@@ -161,7 +161,7 @@ const GlobalDocumentSummary: React.FC<GlobalDocumentSummaryProps> = ({
                         <h3 className="font-semibold text-gray-900">{config.title}</h3>
                     </div>
                     <span className={`text-sm font-medium text-${config.color}-600`}>
-                        {data.document_number || data.invoice_no || data.purchase_no || 'DRAFT'}
+                        {data.document_number || data.invoice_number || data.purchase_no || 'DRAFT'}
                     </span>
                 </div>
             </div>
@@ -172,7 +172,7 @@ const GlobalDocumentSummary: React.FC<GlobalDocumentSummaryProps> = ({
                     <div>
                         <span className="text-gray-500">{config.numberLabel}:</span>
                         <span className="ml-2 font-medium text-gray-900">
-                            {data.document_number || data.invoice_no || data.purchase_no || 'DRAFT'}
+                            {data.document_number || data.invoice_number || data.purchase_no || 'DRAFT'}
                         </span>
                     </div>
                     <div>

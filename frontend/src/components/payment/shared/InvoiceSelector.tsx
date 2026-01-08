@@ -10,7 +10,7 @@ import {
 } from '../../global';
 
 interface Invoice {
-  invoice_no: string;
+  invoice_number: string;
   invoice_date: string;
   total_amount: number;
   amount_due: number;
@@ -42,7 +42,7 @@ const InvoiceSelectorV2: React.FC = () => {
   // Handle allocation change
   const handleAllocationChange = (invoiceId: string, value: string): void => {
     const amount = parseFloat(value) || 0;
-    const invoice = outstandingInvoices.find((inv: Invoice) => inv.invoice_no === invoiceId);
+    const invoice = outstandingInvoices.find((inv: Invoice) => inv.invoice_number === invoiceId);
 
     const maxAllocation = invoice?.remaining_due !== undefined ? invoice.remaining_due : invoice?.amount_due || 0;
     if (invoice && amount > maxAllocation) {
@@ -60,10 +60,10 @@ const InvoiceSelectorV2: React.FC = () => {
 
     // Update selected invoices
     const selected = outstandingInvoices
-      .filter((inv: Invoice) => newAllocations[inv.invoice_no] > 0)
+      .filter((inv: Invoice) => newAllocations[inv.invoice_number] > 0)
       .map((inv: Invoice) => ({
         ...inv,
-        allocated_amount: newAllocations[inv.invoice_no]
+        allocated_amount: newAllocations[inv.invoice_number]
       }));
 
     setSelectedInvoices(selected);
@@ -85,7 +85,7 @@ const InvoiceSelectorV2: React.FC = () => {
       const dueAmount = invoice.remaining_due !== undefined ? invoice.remaining_due : invoice.amount_due;
       const allocationAmount = Math.min(remainingAmount, dueAmount);
       if (allocationAmount > 0) {
-        newAllocations[invoice.invoice_no] = allocationAmount;
+        newAllocations[invoice.invoice_number] = allocationAmount;
         remainingAmount -= allocationAmount;
       }
     }
@@ -94,10 +94,10 @@ const InvoiceSelectorV2: React.FC = () => {
 
     // Update selected invoices
     const selected = outstandingInvoices
-      .filter((inv: Invoice) => newAllocations[inv.invoice_no] > 0)
+      .filter((inv: Invoice) => newAllocations[inv.invoice_number] > 0)
       .map((inv: Invoice) => ({
         ...inv,
-        allocated_amount: newAllocations[inv.invoice_no]
+        allocated_amount: newAllocations[inv.invoice_number]
       }));
 
     setSelectedInvoices(selected);
@@ -200,16 +200,16 @@ const InvoiceSelectorV2: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {outstandingInvoices.map((invoice: Invoice) => {
-              const allocated = allocations[invoice.invoice_no] || 0;
+              const allocated = allocations[invoice.invoice_number] || 0;
               const remainingDue = invoice.remaining_due !== undefined ? invoice.remaining_due : invoice.amount_due;
               const previouslyPaid = (invoice.total_amount || 0) - (invoice.amount_due || 0);
               const existingAllocations = invoice.existing_allocations || 0;
               const isFullyAllocated = allocated >= remainingDue;
 
               return (
-                <tr key={invoice.invoice_no} className="hover:bg-gray-50">
+                <tr key={invoice.invoice_number} className="hover:bg-gray-50">
                   <td className="py-4 px-4">
-                    <p className="text-sm font-medium text-gray-900">{invoice.invoice_no}</p>
+                    <p className="text-sm font-medium text-gray-900">{invoice.invoice_number}</p>
                   </td>
                   <td className="py-4 px-4 text-center">
                     <p className="text-sm text-gray-600">
@@ -252,7 +252,7 @@ const InvoiceSelectorV2: React.FC = () => {
                     <input
                       type="number"
                       value={allocated || ''}
-                      onChange={(e) => handleAllocationChange(invoice.invoice_no, e.target.value)}
+                      onChange={(e) => handleAllocationChange(invoice.invoice_number, e.target.value)}
                       placeholder="0.00"
                       className="w-24 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       min="0"

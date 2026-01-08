@@ -310,7 +310,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     }).format(invoice.total_amount);
 
     return {
-      primary: invoice.invoice_no,
+      primary: invoice.invoice_number,
       secondary: `${invoice.customer_name} • ${date}`,
       amount,
       status: invoice.status,

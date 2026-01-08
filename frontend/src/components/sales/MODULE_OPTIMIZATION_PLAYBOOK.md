@@ -1,4 +1,5 @@
-# Module Optimization Playbook
+as per 
+as# Module Optimization Playbook
 
 **Purpose:** A comprehensive guide to optimize any module (inventory, master, returns, etc.) using the patterns and principles proven in the sales module optimization.
 

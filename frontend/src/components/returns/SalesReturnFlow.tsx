@@ -55,7 +55,7 @@ interface ReturnFormData {
   customer_id: string | number;
   customer_details: Customer | null;
   invoice_id: string | number;
-  invoice_no: string;
+  invoice_number: string;
   invoice_date: string;
   original_invoice: Invoice | null;
   items: ReturnFormItem[];
@@ -90,7 +90,7 @@ const SalesReturnFlow = ({ onClose }) => {
     customer_id: '',
     customer_details: null,
     invoice_id: '',
-    invoice_no: '',
+    invoice_number: '',
     invoice_date: '',
     original_invoice: null,
     items: [],
@@ -237,7 +237,7 @@ const SalesReturnFlow = ({ onClose }) => {
     setReturnData(prev => ({
       ...prev,
       invoice_id: invoice.id || invoice.invoice_id,
-      invoice_no: invoice.invoice_number,
+      invoice_number: invoice.invoice_number,
       invoice_date: invoice.invoice_date,
       original_invoice: invoice
     }));
@@ -409,7 +409,7 @@ const SalesReturnFlow = ({ onClose }) => {
     setReturnData(prev => ({
       ...prev,
       invoice_id: '',
-      invoice_no: '',
+      invoice_number: '',
       invoice_date: '',
       original_invoice: null,
       items: [] // Will be populated manually

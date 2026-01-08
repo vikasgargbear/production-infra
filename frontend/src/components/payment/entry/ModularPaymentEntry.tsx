@@ -321,7 +321,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       if (allocatedAmount > 0) {
         allocations.push({
           invoice_id: invoice.invoice_id,
-          invoice_no: invoice.invoice_no,
+          invoice_number: invoice.invoice_number,
           allocated_amount: allocatedAmount,
           invoice_date: invoice.invoice_date,
           total_amount: invoice.total_amount,
@@ -378,7 +378,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
       return {
         invoice_id: id,
-        invoice_no: inv?.invoice_no || '',
+        invoice_number: inv?.invoice_number || '',
         allocated_amount: newManualAllocations[id] || 0
       };
     });
@@ -466,7 +466,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             const amountDue = inv.remaining_due;
 
             return {
-              invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
+              invoice_number: inv.invoice_number || inv.invoice_number || `INV-${inv.invoice_id}`,
               invoice_date: inv.invoice_date || inv.created_at,
               total_amount: totalAmount,
               paid_amount: paidAmount,
@@ -781,7 +781,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                               const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
                                               return {
                                                 invoice_id: id,
-                                                invoice_no: inv?.invoice_no || '',
+                                                invoice_number: inv?.invoice_number || '',
                                                 allocated_amount: newAllocations[id] || 0
                                               };
                                             });
@@ -809,7 +809,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                   const invoiceId = invoice.invoice_id || index;
                                   const isSelected = selectedInvoiceIds.has(invoiceId);
                                   const autoAllocation = payment.allocations?.find((alloc: any) =>
-                                    alloc.invoice_id === invoiceId || alloc.invoice_no === invoice.invoice_no
+                                    alloc.invoice_id === invoiceId || alloc.invoice_number === invoice.invoice_number
                                   );
 
                                   return (
@@ -826,7 +826,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                           />
                                         )}
                                       </td>
-                                      <td className="py-2 px-2 font-medium">{invoice.invoice_no}</td>
+                                      <td className="py-2 px-2 font-medium">{invoice.invoice_number}</td>
                                       <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
                                       <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
                                       <td className="text-right py-2 px-2 text-gray-600">

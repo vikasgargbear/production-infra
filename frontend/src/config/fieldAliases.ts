@@ -58,7 +58,7 @@ export const ITEM_FIELD_ALIASES = {
 
 export const INVOICE_FIELD_ALIASES = {
     // Identity
-    invoice_number: ['invoice_no', 'invoiceNumber', 'invoiceNumber', 'inv_no'],
+    invoice_number: ['invoice_number', 'invoiceNumber', 'invoiceNumber', 'inv_no'],
     invoice_id: ['invoiceId', 'id'],
 
     // Dates

@@ -147,7 +147,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   {returnMethod === 'credit_note' ? 'Credit Note' : returnMethod === 'replacement' ? 'Replacement Note' : 'Refund Note'} No: {returnData.credit_note_no || returnData.return_no}
                 </p>
                 <p className="text-gray-600">Date: {formatDate(returnData.return_date)}</p>
-                {invoice && <p className="text-gray-600">Original Invoice: {invoice.invoice_no || invoice.invoice_number}</p>}
+                {invoice && <p className="text-gray-600">Original Invoice: {invoice.invoice_number || invoice.invoice_number}</p>}
                 {!invoice && <p className="text-gray-600">Manual Return - No Invoice Reference</p>}
                 {invoice && <p className="text-gray-600">Invoice Date: {formatDate(invoice.invoice_date)}</p>}
                 <p className="text-gray-600">

@@ -668,7 +668,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                                 className="rounded border-gray-300"
                               />
                             </td>
-                            <td className="px-4 py-2 text-sm">{inv.invoice_number || inv.invoice_no}</td>
+                            <td className="px-4 py-2 text-sm">{inv.invoice_number || inv.invoice_number}</td>
                             <td className="px-4 py-2 text-sm text-right">₹{(inv.outstanding_amount || inv.amount || 0).toLocaleString()}</td>
                             <td className="px-4 py-2 text-sm text-right">
                               <input

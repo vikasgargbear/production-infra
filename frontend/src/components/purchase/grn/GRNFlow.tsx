@@ -46,7 +46,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
     supplier_id: prefilledData?.supplier_id || '',
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
-    supplier_invoice_no: '',
+    supplier_invoice_number: '',
     supplier_invoice_date: new Date().toISOString().split('T')[0],
     items: prefilledData?.items || [],
     quality_check: {
@@ -205,7 +205,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
         grn_date: grn.grn_date,
         po_reference: grn.po_reference,
         supplier_id: parseInt(grn.supplier_id),
-        supplier_invoice_no: grn.supplier_invoice_no,
+        supplier_invoice_number: grn.supplier_invoice_number,
         supplier_invoice_date: grn.supplier_invoice_date,
         items: grn.items.map(item => ({
           product_id: parseInt(item.product_id),
@@ -253,8 +253,8 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
       errors.supplier = 'Supplier is required';
     }
 
-    if (!grn.supplier_invoice_no) {
-      errors.invoice_no = 'Supplier invoice number is required';
+    if (!grn.supplier_invoice_number) {
+      errors.invoice_number = 'Supplier invoice number is required';
     }
 
     if (!grn.items || grn.items.length === 0) {
@@ -307,8 +307,8 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
               </label>
               <input
                 type="text"
-                value={grn.supplier_invoice_no}
-                onChange={(e) => setGrn(prev => ({ ...prev, supplier_invoice_no: e.target.value }))}
+                value={grn.supplier_invoice_number}
+                onChange={(e) => setGrn(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                 placeholder="Supplier's invoice number"
                 required
@@ -513,7 +513,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
             <p className="text-gray-600">GRN No: <span className="font-semibold">{grn.grn_no}</span></p>
             <p className="text-gray-600">Date: {new Date(grn.grn_date).toLocaleDateString('en-IN')}</p>
             <p className="text-gray-600">PO Reference: {grn.po_reference}</p>
-            <p className="text-gray-600">Supplier Invoice: {grn.supplier_invoice_no}</p>
+            <p className="text-gray-600">Supplier Invoice: {grn.supplier_invoice_number}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-6 mb-6">
@@ -651,7 +651,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
         // Validation & Actions
         canProceedToReview={() => {
           return !!selectedSupplier &&
-            !!grn.supplier_invoice_no &&
+            !!grn.supplier_invoice_number &&
             grn.items &&
             grn.items.length > 0;
         }}

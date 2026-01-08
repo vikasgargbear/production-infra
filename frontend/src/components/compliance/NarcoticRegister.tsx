@@ -454,7 +454,7 @@ const NarcoticRegister: React.FC = () => {
                   opening_balance: 1000, // This would come from actual stock tracking
                   quantity_dispensed: item.quantity,
                   closing_balance: 1000 - item.quantity, // This would come from actual stock tracking
-                  invoice_number: invoice.invoice_number || invoice.invoice_no,
+                  invoice_number: invoice.invoice_number || invoice.invoice_number,
                   created_by: invoice.created_by || 'System'
                 });
               }

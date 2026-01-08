@@ -79,7 +79,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
         movement_type: movement.movement_type || movement.type || 'adjustment',
         quantity: Math.abs(parseFloat(movement.quantity) || 0),
-        reference_no: movement.reference_no || movement.reference_document || movement.invoice_no,
+        reference_no: movement.reference_no || movement.reference_document || movement.invoice_number,
         movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
         reason: movement.reason || movement.notes,
         batch_number: movement.batch_number || movement.batch_number,
