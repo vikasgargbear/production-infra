@@ -71,13 +71,18 @@ class InvoiceService:
             
             totals = {
                 'subtotal_amount': subtotal,
-                'total_tax_amount': total_tax,
+                'discount_amount': 0,
+                'scheme_discount': 0,
+                'taxable_amount': subtotal,
                 'cgst_amount': cgst,
                 'sgst_amount': sgst,
                 'igst_amount': igst,
+                'total_tax_amount': total_tax,
+                'freight_charges': float(getattr(invoice_data, 'freight_charges', 0) or 0),
+                'insurance_charges': float(getattr(invoice_data, 'insurance_charges', 0) or 0),
+                'other_charges': float(getattr(invoice_data, 'other_charges', 0) or 0),
+                'round_off_amount': 0,
                 'final_amount': final_amount,
-                'taxable_amount': subtotal,
-                'discount_amount': 0
             }
             
             # 4. Generate numbers
@@ -368,13 +373,18 @@ class InvoiceService:
         
         return {
             'subtotal_amount': subtotal,
-            'total_tax_amount': total_tax,
+            'discount_amount': discount_amount if discount_type == 'amount' else 0,
+            'scheme_discount': 0,
+            'taxable_amount': subtotal,
             'cgst_amount': cgst,
             'sgst_amount': sgst,
             'igst_amount': igst,
+            'total_tax_amount': total_tax,
+            'freight_charges': freight_charges,
+            'insurance_charges': insurance_charges,
+            'other_charges': other_charges,
+            'round_off_amount': 0,
             'final_amount': final_amount,
-            'taxable_amount': subtotal,
-            'discount_amount': discount_amount if discount_type == 'amount' else 0
         }
     
     @staticmethod

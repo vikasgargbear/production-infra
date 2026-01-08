@@ -338,7 +338,7 @@ export const useInvoiceLogic = (
                         handleCustomerSelect(prefilledData.customer as Customer);
                     }
                     if (prefilledData.items && prefilledData.items.length > 0) {
-                        const transformedItems = prefilledData.items.map(item => prepareItemForInvoice(item));
+                        const transformedItems = prefilledData.items.map(item => prepareItemForInvoice(item as any));
                         setInvoice(prev => ({ ...prev, items: transformedItems }));
                     }
                 }
@@ -455,8 +455,8 @@ export const useInvoiceLogic = (
 
         // If product already has batch_id, it came from BatchSelector
         const invoiceItem = product.batch_id
-            ? prepareItemForInvoice(product)
-            : prepareItemForInvoice(product);
+            ? prepareItemForInvoice(product as any)
+            : prepareItemForInvoice(product as any);
 
         // OFFLINE: If no batch selected, fetch best batch from IndexedDB
         if (!isOnline && !invoiceItem.batch_id && invoiceItem.product_id) {
@@ -557,6 +557,7 @@ export const useInvoiceLogic = (
 
                 const newItem: InvoiceItem = {
                     ...sanitizedItem,
+                    mrp: sanitizedItem.mrp || 0,
                     quantity: 1,
                     // PRESERVE user's discount - don't reset!
                     discount_percent: sanitizedItem.discount_percent || 0,
@@ -611,7 +612,7 @@ export const useInvoiceLogic = (
             }
 
             if (importData.items && importData.items.length > 0) {
-                const transformedItems = importData.items.map(item => prepareItemForInvoice(item));
+                const transformedItems = importData.items.map(item => prepareItemForInvoice(item as any));
                 setInvoice(prev => ({ ...prev, items: transformedItems }));
             }
 
