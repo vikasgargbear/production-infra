@@ -318,7 +318,6 @@ export interface Invoice {
     id?: string | number;
     invoice_id?: string | number;
     invoice_number?: string;
-    invoice_number?: string;
     order_number?: string;
 
     // Dates

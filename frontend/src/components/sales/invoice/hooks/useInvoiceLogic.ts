@@ -68,7 +68,6 @@ export interface InvoiceTotals extends SharedInvoiceTotals {
 
 export interface Invoice {
     invoice_number: string;
-    invoice_number?: string;
     invoice_date: string;
     due_date: string;
     items: InvoiceItem[];

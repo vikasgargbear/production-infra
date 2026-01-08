@@ -172,7 +172,7 @@ export function batchToLegacyFormat(batch: CanonicalBatch): any {
         sale_price: batch.sale_price_per_unit,
         rate: batch.sale_price_per_unit,
         available_quantity: batch.quantity_available,
-        batch_no: batch.batch_number
+        batch_number: batch.batch_number
     };
 }
 
