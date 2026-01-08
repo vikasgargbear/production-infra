@@ -63,24 +63,46 @@ class InvoiceService:
             
             # Simple total calculation with GST breakdown
             subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+            
+            # Invoice-level discount (scheme_discount)
+            discount_type = getattr(invoice_data, 'discount_type', 'percentage')
+            discount_percent = float(getattr(invoice_data, 'discount_percent', 0) or 0)
+            discount_amount = float(getattr(invoice_data, 'discount_amount', 0) or 0)
+            
+            if discount_type == 'percentage' and discount_percent > 0:
+                scheme_discount = subtotal * (discount_percent / 100)
+            elif discount_type == 'amount' and discount_amount > 0:
+                scheme_discount = discount_amount
+            else:
+                scheme_discount = 0
+            
+            # Taxable amount after scheme discount
+            taxable_amount = subtotal - scheme_discount
+            
+            # Calculate GST on taxable amount
             cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
             sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
             igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
             total_tax = cgst + sgst + igst
-            final_amount = subtotal + total_tax + float(getattr(invoice_data, 'freight_charges', 0) or 0)
+            
+            # Final amount
+            freight = float(getattr(invoice_data, 'freight_charges', 0) or 0)
+            insurance = float(getattr(invoice_data, 'insurance_charges', 0) or 0)
+            other = float(getattr(invoice_data, 'other_charges', 0) or 0)
+            final_amount = taxable_amount + total_tax + freight + insurance + other
             
             totals = {
                 'subtotal_amount': subtotal,
-                'discount_amount': 0,
-                'scheme_discount': 0,
-                'taxable_amount': subtotal,
+                'discount_amount': 0,  # Item-level discount (sum from items)
+                'scheme_discount': scheme_discount,  # Invoice-level discount
+                'taxable_amount': taxable_amount,
                 'cgst_amount': cgst,
                 'sgst_amount': sgst,
                 'igst_amount': igst,
                 'total_tax_amount': total_tax,
-                'freight_charges': float(getattr(invoice_data, 'freight_charges', 0) or 0),
-                'insurance_charges': float(getattr(invoice_data, 'insurance_charges', 0) or 0),
-                'other_charges': float(getattr(invoice_data, 'other_charges', 0) or 0),
+                'freight_charges': freight,
+                'insurance_charges': insurance,
+                'other_charges': other,
                 'round_off_amount': 0,
                 'final_amount': final_amount,
             }
@@ -365,17 +387,32 @@ class InvoiceService:
         """
         # Basic inline calculation with GST breakdown
         subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+        
+        # Invoice-level discount (scheme_discount)
+        if discount_type == 'percentage' and discount_percent > 0:
+            scheme_discount = subtotal * (discount_percent / 100)
+        elif discount_type == 'amount' and discount_amount > 0:
+            scheme_discount = discount_amount
+        else:
+            scheme_discount = 0
+        
+        # Taxable amount after scheme discount
+        taxable_amount = subtotal - scheme_discount
+        
+        # GST calculation
         cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
         sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
         igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
         total_tax = cgst + sgst + igst
-        final_amount = subtotal + total_tax + freight_charges + insurance_charges + other_charges
+        
+        # Final amount
+        final_amount = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
         
         return {
             'subtotal_amount': subtotal,
             'discount_amount': discount_amount if discount_type == 'amount' else 0,
-            'scheme_discount': 0,
-            'taxable_amount': subtotal,
+            'scheme_discount': scheme_discount,
+            'taxable_amount': taxable_amount,
             'cgst_amount': cgst,
             'sgst_amount': sgst,
             'igst_amount': igst,
