@@ -60,7 +60,7 @@ class SalesReturnItem(BaseModel):
     product_id: int = Field(..., description="Product ID")
     invoice_item_id: Optional[int] = Field(None, description="Original invoice item ID")
     batch_id: Optional[int] = Field(None, description="Batch ID")
-    batch_no: Optional[str] = Field(None, max_length=50, description="Batch number")
+    batch_number: Optional[str] = Field(None, max_length=50, description="Batch number")
     
     return_quantity: Decimal = Field(..., gt=0, description="Total quantity being returned (paid + free)")
     quantity: Optional[Decimal] = Field(None, description="Alias for return_quantity")

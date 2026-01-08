@@ -333,7 +333,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
 
         if (window.confirm('Are you sure you want to delete this batch?')) {
             try {
-                await batchesApi.delete(id);
+                await batchesApi.delete(typeof id === 'string' ? parseInt(id) : id);
                 setBatches(prev => prev.filter(b => b.id !== id));
                 setSuccessMessage('Batch deleted successfully!');
             } catch (error) {

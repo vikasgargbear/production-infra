@@ -598,7 +598,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     <>
       <EnhancedGlobalDocumentFlow
         documentType="purchase-order"
-        documentData={purchaseOrder}
+        documentData={purchaseOrder as any}
         onDocumentUpdate={setPurchaseOrder as any}
         onClose={onClose}
 

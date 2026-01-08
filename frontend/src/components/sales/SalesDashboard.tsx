@@ -108,8 +108,8 @@ const ActionCard: React.FC<{
   return (
     <div
       className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${urgent
-          ? 'bg-danger-50 border-danger-200 hover:border-danger-300'
-          : 'bg-white border-app-200 hover:border-sales-300'
+        ? 'bg-danger-50 border-danger-200 hover:border-danger-300'
+        : 'bg-white border-app-200 hover:border-sales-300'
         }`}
       onClick={onClick}
     >
@@ -166,7 +166,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
         salesTrendResponse
       ] = await Promise.all([
         dashboardApi.getStats(),
-        dashboardApi.getRecentOrders({ limit: 10 }),
+        dashboardApi.getRecentOrders(10),
         dashboardApi.getTopProducts({ limit: 10 }),
         (reportsApi as any).getSalesTrends({ period: selectedPeriod })
       ]);

@@ -130,7 +130,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
     } = useSettingsEntity<Unit, UnitFormData>({
         entityName: 'unit',
         idField: 'id',
-        api: settingsApi.units,
+        api: settingsApi.units as any,
         searchFields: ['name', 'code', 'symbol'],
         filterField: 'category',
         initialFormData: INITIAL_FORM_DATA,

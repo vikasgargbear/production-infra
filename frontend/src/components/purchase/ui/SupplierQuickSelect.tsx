@@ -21,7 +21,7 @@ const SupplierQuickSelect = ({ value, onChange }: { value?: any; onChange: (supp
         // Load recent suppliers
         setLoading(true);
         try {
-          const response = await suppliersApi.search({ limit: 10 });
+          const response = await suppliersApi.search('limit=10');
           setSuppliers(response.data || []);
         } catch (error) {
           // Silently handle error for recent suppliers
@@ -34,10 +34,9 @@ const SupplierQuickSelect = ({ value, onChange }: { value?: any; onChange: (supp
 
       setLoading(true);
       try {
-        const response = await suppliersApi.search({
-          search: term,
-          limit: 10
-        });
+        const response = await suppliersApi.search(
+          `search=${term}&limit=10`
+        );
         setSuppliers(response.data || []);
       } catch (error) {
         // Silently handle search error

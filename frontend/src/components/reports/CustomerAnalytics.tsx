@@ -66,8 +66,8 @@ const CustomerAnalytics: React.FC = () => {
       // Calculate date range
       const endDate = new Date();
       const startDate = dateRange === '6months' ? subMonths(endDate, 6) :
-                       dateRange === '12months' ? subMonths(endDate, 12) :
-                       subMonths(endDate, 3);
+        dateRange === '12months' ? subMonths(endDate, 12) :
+          subMonths(endDate, 3);
 
       const dateParams = {
         date_from: format(startDate, 'yyyy-MM-dd'),
@@ -99,8 +99,8 @@ const CustomerAnalytics: React.FC = () => {
 
         // Determine customer type
         const type = customer.customer_type === 'hospital' ? 'Hospital' :
-                    customer.customer_type === 'clinic' ? 'Clinic' :
-                    customer.customer_type === 'wholesale' ? 'Wholesale' : 'Retail';
+          customer.customer_type === 'clinic' ? 'Clinic' :
+            customer.customer_type === 'wholesale' ? 'Wholesale' : 'Retail';
 
         return {
           id: customer.id || customer.customer_id,
@@ -138,22 +138,22 @@ const CustomerAnalytics: React.FC = () => {
 
   const filteredCustomers = useMemo(() => {
     let filtered = customers;
-    
+
     if (selectedType !== 'all') {
       filtered = filtered.filter(c => c.type === selectedType);
     }
-    
+
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(c => c.status === selectedStatus);
     }
-    
+
     if (searchQuery) {
-      filtered = filtered.filter(c => 
+      filtered = filtered.filter(c =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.location.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     return filtered;
   }, [searchQuery, selectedType, selectedStatus]);
 
@@ -256,10 +256,10 @@ const CustomerAnalytics: React.FC = () => {
           y: c.avgOrderValue / 1000,
           label: c.name
         })),
-        backgroundColor: customers.map(c => 
+        backgroundColor: customers.map(c =>
           c.status === 'Active' ? 'rgba(34, 197, 94, 0.6)' :
-          c.status === 'Inactive' ? 'rgba(251, 146, 60, 0.6)' :
-          'rgba(239, 68, 68, 0.6)'
+            c.status === 'Inactive' ? 'rgba(251, 146, 60, 0.6)' :
+              'rgba(239, 68, 68, 0.6)'
         ),
         pointRadius: 8,
         pointHoverRadius: 10
@@ -584,8 +584,8 @@ const CustomerAnalytics: React.FC = () => {
                       {customer.frequency}x/month
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className={customer.current_outstanding > customer.creditLimit * 0.8 ? 'text-red-600 font-medium' : ''}>
-                        {formatCurrency(customer.current_outstanding)}
+                      <span className={customer.outstanding > customer.creditLimit * 0.8 ? 'text-red-600 font-medium' : ''}>
+                        {formatCurrency(customer.outstanding)}
                       </span>
                       <p className="text-xs text-gray-500">of {formatCurrency(customer.creditLimit)}</p>
                     </td>

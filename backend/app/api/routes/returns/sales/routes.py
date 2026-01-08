@@ -328,7 +328,7 @@ async def create_sale_return(
             batch_id, batch_number = ReturnService.resolve_batch(
                 db,
                 product_id=item["product_id"],
-                batch_number=item.get("batch_no") or item.get("batch_number"),
+                batch_number=item.get("batch_number"),
                 batch_id=item.get("batch_id"),
                 source_item_id=invoice_item_id,
                 source_type="sales_invoice"

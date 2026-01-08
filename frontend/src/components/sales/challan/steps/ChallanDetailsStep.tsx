@@ -110,7 +110,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                 ]} />
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50" ref={challanFormRef as React.RefObject<HTMLDivElement>}>
+                <div className="flex-1 overflow-y-auto bg-blue-50" ref={challanFormRef as unknown as React.RefObject<HTMLDivElement>}>
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* Top Section - Dates and Import */}
@@ -183,7 +183,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                             </div>
                             <CustomerSearch
                                 value={selectedCustomer}
-                                onChange={handleCustomerSelect}
+                                onChange={handleCustomerSelect as any}
                                 onCreateNew={() => setShowCreateCustomer(true)}
                                 displayMode="inline"
                                 placeholder="Search customer by name, phone, or code..."
@@ -223,14 +223,11 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                 </h3>
                                 <ItemsTableKeyboard
                                     ref={itemsTableRef}
-                                    items={challan.items}
+                                    items={challan.items as any}
                                     onUpdateItem={updateItem}
                                     onRemoveItem={(index: number) => removeItem(challan.items[index]?.id)}
-                                    productSearchRef={productSearchRef}
+                                    productSearchRef={productSearchRef as any}
                                     currencySymbol="₹"
-                                    showPricing={true}
-                                    showGST={false}
-                                    editable={true}
                                 />
                             </div>
                         )}

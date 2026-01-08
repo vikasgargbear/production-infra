@@ -225,13 +225,13 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                         <ChallanPreview
                             challan={{
                                 ...challan,
-                                customer_details: selectedCustomer ? {
+                                customer_details: (selectedCustomer ? {
                                     address: selectedCustomer.address || '',
                                     city: selectedCustomer.city || '',
                                     state: selectedCustomer.state || '',
                                     pincode: selectedCustomer.pincode || '',
                                     phone: selectedCustomer.phone || ''
-                                } : null,
+                                } : null) as any,
                                 delivery_address: challan.delivery_address || '',
                                 delivery_city: challan.delivery_city || '',
                                 delivery_state: challan.delivery_state || '',
@@ -250,7 +250,7 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                                 placeholder="Add delivery instructions or special notes..."
                                 rows={2}
                                 title="Notes"
-                                compact={true}
+                                compact={true as any}
                                 className=""
                             />
                         </div>

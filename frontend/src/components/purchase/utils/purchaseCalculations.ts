@@ -26,9 +26,9 @@ export function calculateItemTotals(item: BasePurchaseItem): {
     const taxableAmount = baseAmount - discountAmount;
 
     // Calculate tax
-    const gstPercent = parseFloat(String(item.gst_percent || 0));
-    const cgstRate = parseFloat(String(item.cgst_rate)) || gstPercent / 2;
-    const sgstRate = parseFloat(String(item.sgst_rate)) || gstPercent / 2;
+    const taxPercent = parseFloat(String(item.tax_percent || 0));
+    const cgstRate = parseFloat(String(item.cgst_rate)) || taxPercent / 2;
+    const sgstRate = parseFloat(String(item.sgst_rate)) || taxPercent / 2;
     const igstRate = parseFloat(String(item.igst_rate)) || 0;
 
     let taxAmount = 0;

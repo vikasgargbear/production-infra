@@ -137,7 +137,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                 // Refs
                 challanFormRef={logic.challanFormRef}
                 itemsTableRef={logic.itemsTableRef}
-                productSearchRef={logic.productSearchRef}
+                productSearchRef={logic.productSearchRef as React.RefObject<HTMLInputElement>}
 
                 // Navigation
                 onClose={onClose}

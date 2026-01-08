@@ -156,7 +156,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
     } = useSettingsEntity<Tax, TaxFormData>({
         entityName: 'tax',
         idField: 'id',
-        api: settingsApi.taxes,
+        api: settingsApi.taxes as any,
         searchFields: ['name', 'description'],
         filterField: 'type',
         initialFormData: INITIAL_FORM_DATA,

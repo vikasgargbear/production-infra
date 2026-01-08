@@ -24,7 +24,7 @@ interface UseNetworkStatusReturn {
 }
 
 export function useNetworkStatus(): UseNetworkStatusReturn {
-    const [isOnline, setIsOnline] = useState<boolean>(networkMonitor.isOnline);
+    const [isOnline, setIsOnline] = useState<boolean>((networkMonitor as any).isOnline);
     const [syncStats, setSyncStats] = useState<SyncStats>({
         pending: 0,
         syncing: 0,
@@ -36,7 +36,7 @@ export function useNetworkStatus(): UseNetworkStatusReturn {
     const updateSyncStats = async (): Promise<void> => {
         try {
             const stats = await offlineDB.getSyncStats();
-            setSyncStats(stats);
+            setSyncStats(stats as any);
         } catch (error) {
             console.error('Failed to get sync stats:', error);
         }

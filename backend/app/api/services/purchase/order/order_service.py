@@ -274,7 +274,7 @@ class PurchaseOrderService:
                 
                 # Create batch for inventory
                 if product_id:
-                    batch_number = item.get("batch_number") or item.get("batch_no") or f"BATCH{po_number[-4:]}"
+                    batch_number = item.get("batch_number") or f"BATCH{po_number[-4:]}"
                     
                     # Check if batch exists
                     existing_batch = PurchaseOrderRepository.find_existing_batch(db, product_id, batch_number)

@@ -69,7 +69,7 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
 
       setSearching(true);
       try {
-        const response = await purchasesApi.searchProducts({ product_name: term });
+        const response = await (purchasesApi as any).searchProducts?.({ product_name: term });
         if (response && response.data) {
           setSearchResults(response.data.products || []);
           setShowDropdown(true);

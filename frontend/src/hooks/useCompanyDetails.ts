@@ -87,7 +87,7 @@ const useCompanyDetails = (): UseCompanyDetailsReturn => {
                         bank_details: info.bank_details || {}
                     };
                 } else {
-                    response = await settingsApi.getSettings();
+                    response = await (settingsApi as any).getSettings();
                     if (response?.data?.success && response.data.data) {
                         const settings = response.data.data;
                         details = {

@@ -424,9 +424,9 @@ class PurchaseOrderRepository:
         """Find existing batch by product and batch number. Returns batch_id or None."""
         result = db.execute(text("""
             SELECT batch_id FROM inventory.batches 
-            WHERE product_id = :product_id AND batch_number = :batch_no
+            WHERE product_id = :product_id AND batch_number = :batch_number
             LIMIT 1
-        """), {"product_id": product_id, "batch_no": batch_number}).fetchone()
+        """), {"product_id": product_id, "batch_number": batch_number}).fetchone()
         return result.batch_id if result else None
     
     @staticmethod

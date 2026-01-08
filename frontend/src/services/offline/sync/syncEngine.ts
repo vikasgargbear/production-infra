@@ -547,7 +547,7 @@ class SyncEngine {
         const cleanedPayment = cleanData(payment);
 
         if (payment.payment_id && !payment.payment_id.startsWith('LOCAL_')) {
-            return await paymentsApi.update(payment.payment_id, cleanedPayment);
+            return await paymentsApi.update(parseInt(String(payment.payment_id)), cleanedPayment);
         } else {
             return await paymentsApi.create(cleanedPayment);
         }

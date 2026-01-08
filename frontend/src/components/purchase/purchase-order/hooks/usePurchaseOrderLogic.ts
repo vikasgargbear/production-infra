@@ -305,7 +305,7 @@ export function usePurchaseOrderLogic({
                 notes: purchaseOrder.notes
             };
 
-            const response = await purchasesApi.createPurchaseOrder(poData);
+            const response = await (purchasesApi as any).create(poData);
 
             if (response?.data) {
                 const poNumber = response.data.po_no || purchaseOrder.po_no;

@@ -471,7 +471,7 @@ export function usePurchaseEntryLogic({
                 lr_number: purchase.lr_number
             };
 
-            const response = await purchasesApi.create(purchaseData);
+            const response = await (purchasesApi as any).create(purchaseData as any);
 
             if (response?.data) {
                 const purchaseNumber = response.data.purchase_number || purchase.purchase_number;
