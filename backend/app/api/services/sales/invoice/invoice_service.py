@@ -10,7 +10,7 @@ import logging
 
 from .invoice_repository import InvoiceRepository
 from .invoice_validator import InvoiceValidator
-from ..calculations import InvoiceCalculator
+# NOTE: InvoiceCalculator removed - calculations now done inline or in repository
 from ...document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -57,20 +57,22 @@ class InvoiceService:
             actual_branch_id = branch_id or context["branch_id"]
             actual_user_id = user_id or context["user_id"]
             
-            # 3. Calculate totals
+            # 3. Calculate totals (basic inline calculation - TODO: use shared/calculations.py API)
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in invoice_data.items]
             
-            totals = InvoiceCalculator.calculate_invoice_totals(
-                items=items,
-                gst_type=getattr(invoice_data, 'gst_type', 'CGST/SGST'),
-                freight_charges=float(getattr(invoice_data, 'freight_charges', 0) or 0),
-                insurance_charges=float(getattr(invoice_data, 'insurance_charges', 0) or 0),
-                other_charges=float(getattr(invoice_data, 'other_charges', 0) or 0),
-                discount_type=getattr(invoice_data, 'discount_type', 'percentage'),
-                discount_percent=float(getattr(invoice_data, 'discount_percent', 0) or 0),
-                discount_amount=float(getattr(invoice_data, 'discount_amount', 0) or 0)
-            )
+            # Simple total calculation
+            subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+            total_tax = sum(float(item.get('tax_amount', 0) or 0) for item in items)
+            final_amount = subtotal + total_tax + float(getattr(invoice_data, 'freight_charges', 0) or 0)
+            
+            totals = {
+                'subtotal_amount': subtotal,
+                'tax_amount': total_tax,
+                'final_amount': final_amount,
+                'taxable_amount': subtotal,
+                'discount_amount': 0
+            }
             
             # 4. Generate numbers
             order_number = DocumentNumberService.generate_number(db, "sales_order", org_id)
@@ -348,18 +350,20 @@ class InvoiceService:
     ) -> Dict[str, Any]:
         """
         Calculate all invoice totals from item list.
-        Delegates to InvoiceCalculator (existing calculation service).
+        TODO: Call shared/calculations.py API endpoint instead.
         """
-        return InvoiceCalculator.calculate_invoice_totals(
-            items=items,
-            gst_type=gst_type,
-            freight_charges=freight_charges,
-            insurance_charges=insurance_charges,
-            other_charges=other_charges,
-            discount_type=discount_type,
-            discount_percent=discount_percent,
-            discount_amount=discount_amount
-        )
+        # Basic inline calculation
+        subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+        total_tax = sum(float(item.get('tax_amount', 0) or 0) for item in items)
+        final_amount = subtotal + total_tax + freight_charges + insurance_charges + other_charges
+        
+        return {
+            'subtotal_amount': subtotal,
+            'tax_amount': total_tax,
+            'final_amount': final_amount,
+            'taxable_amount': subtotal,
+            'discount_amount': discount_amount if discount_type == 'amount' else 0
+        }
     
     @staticmethod
     def get_customer_details(db: Session, customer_id: int, org_id: str) -> Dict[str, Any]:
