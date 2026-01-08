@@ -841,7 +841,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                       <td className="text-right py-2 px-2 font-medium text-green-600">
                                         {payment.allocation_method === 'manual'
                                           ? (isSelected ? `₹${(manualAllocations[invoiceId] || 0).toFixed(2)}` : '-')
-                                          : (autoAllocation ? `₹${(autoAllocation.allocated_amount || 0).toFixed(2)}` : '-')
+                                          : (autoAllocation ? `₹${(autoAllocation.amount || 0).toFixed(2)}` : '-')
                                         }
                                       </td>
                                     </tr>

@@ -1,9 +1,9 @@
 """
 Sales Services Module
 Business logic for sales-related operations
-
-Note: InvoiceService, calculations temporarily excluded - requires type refactoring
 """
-from .order_service import OrderService
+from .order.order_service import OrderService
+from .invoice.invoice_service import InvoiceService
 
-__all__ = ['OrderService']
+__all__ = ['OrderService', 'InvoiceService']
+

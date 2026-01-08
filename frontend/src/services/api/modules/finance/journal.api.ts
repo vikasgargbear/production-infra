@@ -72,5 +72,10 @@ export const journalApi = {
     // Get voucher types
     getVoucherTypes: (): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.VOUCHER_TYPES);
+    },
+
+    // Get chart of accounts
+    getChartOfAccounts: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/accounts/chart');
     }
 };

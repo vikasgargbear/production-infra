@@ -89,13 +89,13 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
       // Call the actual API to generate the report based on type
       switch (reportId) {
         case 'trial_balance':
-          reportResponse = await reportsApi.financial.trialBalance({ period: selectedPeriod });
+          reportResponse = await (reportsApi as any).trialBalance({ period: selectedPeriod });
           break;
         case 'profit_loss':
-          reportResponse = await reportsApi.financial.profitLoss({ period: selectedPeriod });
+          reportResponse = await (reportsApi as any).profitLoss({ period: selectedPeriod });
           break;
         case 'balance_sheet':
-          reportResponse = await reportsApi.financial.balanceSheet({ period: selectedPeriod });
+          reportResponse = await (reportsApi as any).balanceSheet({ period: selectedPeriod });
           break;
         default:
           throw new Error(`Unknown report type: ${reportId}`);
@@ -230,8 +230,8 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                     key={period.value}
                     onClick={() => setSelectedPeriod(period.value)}
                     className={`p-3 rounded-lg border text-sm font-medium transition-colors ${selectedPeriod === period.value
-                        ? 'bg-purple-50 border-purple-200 text-purple-700'
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      ? 'bg-purple-50 border-purple-200 text-purple-700'
+                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                       }`}
                   >
                     {period.label}
@@ -261,8 +261,8 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                         <p className="text-sm text-gray-600 mb-4">{report.description}</p>
                         <button
                           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedReport === report.id
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                         >
                           {selectedReport === report.id ? 'Selected' : 'Generate'}

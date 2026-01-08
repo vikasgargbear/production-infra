@@ -140,7 +140,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       };
 
       // Call the actual API to save the expense claim
-      const response = await expensesApi.create(claimData);
+      const response = await expensesApi.create(claimData as any);
 
       alert(`Expense claim saved successfully! Claim Number: ${response.data?.claim_number}`);
 

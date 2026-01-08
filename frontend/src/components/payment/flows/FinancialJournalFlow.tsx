@@ -50,7 +50,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
 
       // Load chart of accounts
       const accountsResponse = await journalApi.getChartOfAccounts();
-      setAccounts(accountsResponse.accounts || []);
+      setAccounts(accountsResponse?.data?.accounts || accountsResponse?.data || []);
 
     } catch (error) {
       setError('Failed to load chart of accounts');
@@ -174,7 +174,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
       };
 
       // Call the actual API to save the journal entry
-      const response = await journalApi.create(journalData);
+      const response = await journalApi.create(journalData as any);
 
       alert(`Journal entry saved successfully! Journal Number: ${response.data?.journal_number}`);
 

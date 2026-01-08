@@ -148,7 +148,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const fetchOutstandingInvoices = async (customerId: string | number) => {
     try {
       setLoading(true);
-      const response = await paymentsApi.getOutstandingInvoices(customerId, 'customer');
+      const response = await paymentsApi.getOutstandingInvoices(Number(customerId), 'customer');
 
       if (response.data?.invoices) {
         // Transform backend data to component format
@@ -348,7 +348,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
     try {
 
-      const response = await paymentsApi.create(paymentData);
+      const response = await paymentsApi.create(paymentData as any);
 
       // Show success message with backend status
       if (response.data?.message === 'Payment recorded locally (backend unavailable)') {
@@ -674,7 +674,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                               <input
                                 type="number"
                                 value={(selectedInvoices as any[]).find((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))?.amount || 0}
-                                onChange={(e) => handleAmountChange(inv.invoice_id || inv.id, parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleAmountChange((inv.invoice_id || inv.id) as number, parseFloat(e.target.value) || 0)}
                                 className="w-24 px-2 py-1 border rounded text-right"
                                 disabled={!(selectedInvoices as any[]).some((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))}
                               />

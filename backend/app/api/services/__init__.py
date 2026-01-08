@@ -14,7 +14,7 @@ Organized by domain:
 Note: InvoiceService temporarily disabled - requires type schema refactoring
 """
 # Domain-organized services
-from .sales.order_service import OrderService
+from .sales.order.order_service import OrderService
 from .returns.return_service import ReturnService
 from .master.product.service import ProductService
 from .master.customer.service import CustomerService
