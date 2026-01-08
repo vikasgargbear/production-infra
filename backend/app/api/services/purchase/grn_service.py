@@ -176,7 +176,7 @@ class GRNService:
         """), {
             "grn_id": grn_id,
             "product_id": item.get("product_id"),
-            "batch_number": item.get("batch_number") or item.get("batch_no"),
+            "batch_number": item.get("batch_number"),
             "manufacturing_date": item.get("manufacturing_date") or item.get("mfg_date"),
             "expiry_date": item.get("expiry_date"),
             "ordered_quantity": item.get("ordered_quantity", 0),
@@ -250,7 +250,7 @@ class GRNService:
             """), {
                 "org_id": org_id,
                 "product_id": item.get("product_id"),
-                "batch_number": item.get("batch_number") or item.get("batch_no"),
+                "batch_number": item.get("batch_number"),
                 "manufacturing_date": item.get("manufacturing_date") or item.get("mfg_date"),
                 "expiry_date": item.get("expiry_date"),
                 "mrp_per_unit": item.get("mrp"),
