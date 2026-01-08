@@ -45,7 +45,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 {/* Header - Using Global ModuleHeader */}
                 <ModuleHeader
                     title="Invoice Details"
-                    documentNumber={invoice.invoice_no}
+                    documentNumber={invoice.invoice_number}
                     status="review"
                     icon={FileText}
                     iconColor="text-blue-600"

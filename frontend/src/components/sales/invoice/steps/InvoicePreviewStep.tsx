@@ -42,7 +42,7 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                 {/* Header - Using Global ModuleHeader */}
                 <ModuleHeader
                     title="Invoice Preview"
-                    documentNumber={invoice.invoice_no}
+                    documentNumber={invoice.invoice_number}
                     status="preview"
                     icon={FileText}
                     iconColor="text-blue-600"

@@ -236,7 +236,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 <div className="space-y-1.5">
                   <p className="text-xs text-gray-700">
                     <span className="text-gray-500">No:</span>
-                    <span className="ml-1 font-medium">{invoice.invoice_number || invoice.invoice_no}</span>
+                    <span className="ml-1 font-medium">{invoice.invoice_number || invoice.invoice_number}</span>
                   </p>
                   <p className="text-xs text-gray-700">
                     <span className="text-gray-500">Date:</span>

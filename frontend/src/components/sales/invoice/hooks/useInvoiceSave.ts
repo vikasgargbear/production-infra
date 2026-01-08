@@ -112,7 +112,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
 
                 const offlineInvoice = {
                     ...invoiceData,
-                    invoice_no: offlineInvoiceNo,
+                    invoice_number: offlineInvoiceNo,
                     temp_id: tempId,
                     _localId: tempId,
                     sync_status: 'pending',
@@ -162,7 +162,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             // Save locally first (instant)
             const localInvoice = {
                 ...invoiceData,
-                invoice_no: localInvoiceNo,
+                invoice_number: localInvoiceNo,
                 invoice_number: localInvoiceNo,
                 temp_id: tempId,
                 _localId: tempId,
@@ -190,7 +190,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             setInvoice(prev => ({
                 ...prev,
                 invoice_number: localInvoiceNo,
-                invoice_no: localInvoiceNo
+                invoice_number: localInvoiceNo
             }));
 
             setCreatedInvoiceData(createdData);
@@ -270,7 +270,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                         notes: invoice.notes || '',
                         gst_type: invoice.gst_type || 'CGST/SGST',
                         salesperson_id: invoice.salesperson_id || null,
-                        invoice_no: offlineInvoiceNo,
+                        invoice_number: offlineInvoiceNo,
                         temp_id: tempId,
                         _localId: tempId,
                         sync_status: 'pending',

@@ -317,7 +317,7 @@ export interface Invoice {
     // Document identifiers
     id?: string | number;
     invoice_id?: string | number;
-    invoice_no?: string;
+    invoice_number?: string;
     invoice_number?: string;
     order_number?: string;
 

@@ -390,7 +390,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                     <InvoicePreview
                         invoice={{
                             ...invoice,
-                            invoice_no: createdInvoiceData.invoiceNumber,
+                            invoice_number: createdInvoiceData.invoiceNumber,
                             customer_name: createdInvoiceData.customerName,
                             customer_details: {
                                 ...selectedCustomer,
