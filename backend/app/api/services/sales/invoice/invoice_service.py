@@ -61,8 +61,9 @@ class InvoiceService:
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in invoice_data.items]
             
-            # Simple total calculation with GST breakdown
+            # Item-level totals
             subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+            item_discount = sum(float(item.get('discount_amount', 0) or 0) for item in items)
             
             # Invoice-level discount (scheme_discount)
             discount_type = getattr(invoice_data, 'discount_type', 'percentage')
@@ -85,15 +86,21 @@ class InvoiceService:
             igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
             total_tax = cgst + sgst + igst
             
-            # Final amount
+            # Additional charges
             freight = float(getattr(invoice_data, 'freight_charges', 0) or 0)
             insurance = float(getattr(invoice_data, 'insurance_charges', 0) or 0)
             other = float(getattr(invoice_data, 'other_charges', 0) or 0)
-            final_amount = taxable_amount + total_tax + freight + insurance + other
+            
+            # Amount before rounding
+            amount_before_round = taxable_amount + total_tax + freight + insurance + other
+            
+            # Round to nearest integer (Indian practice)
+            final_amount = round(amount_before_round)
+            round_off_amount = final_amount - amount_before_round
             
             totals = {
                 'subtotal_amount': subtotal,
-                'discount_amount': 0,  # Item-level discount (sum from items)
+                'discount_amount': item_discount,  # Item-level discount (sum from items)
                 'scheme_discount': scheme_discount,  # Invoice-level discount
                 'taxable_amount': taxable_amount,
                 'cgst_amount': cgst,
@@ -103,7 +110,7 @@ class InvoiceService:
                 'freight_charges': freight,
                 'insurance_charges': insurance,
                 'other_charges': other,
-                'round_off_amount': 0,
+                'round_off_amount': round_off_amount,
                 'final_amount': final_amount,
             }
             
@@ -385,8 +392,9 @@ class InvoiceService:
         Calculate all invoice totals from item list.
         TODO: Call shared/calculations.py API endpoint instead.
         """
-        # Basic inline calculation with GST breakdown
+        # Item-level totals
         subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
+        item_discount = sum(float(item.get('discount_amount', 0) or 0) for item in items)
         
         # Invoice-level discount (scheme_discount)
         if discount_type == 'percentage' and discount_percent > 0:
@@ -405,12 +413,16 @@ class InvoiceService:
         igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
         total_tax = cgst + sgst + igst
         
-        # Final amount
-        final_amount = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
+        # Amount before rounding
+        amount_before_round = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
+        
+        # Round to nearest integer (Indian practice)
+        final_amount = round(amount_before_round)
+        round_off_amount = final_amount - amount_before_round
         
         return {
             'subtotal_amount': subtotal,
-            'discount_amount': discount_amount if discount_type == 'amount' else 0,
+            'discount_amount': item_discount,
             'scheme_discount': scheme_discount,
             'taxable_amount': taxable_amount,
             'cgst_amount': cgst,
@@ -420,7 +432,7 @@ class InvoiceService:
             'freight_charges': freight_charges,
             'insurance_charges': insurance_charges,
             'other_charges': other_charges,
-            'round_off_amount': 0,
+            'round_off_amount': round_off_amount,
             'final_amount': final_amount,
         }
     
