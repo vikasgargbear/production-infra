@@ -141,7 +141,7 @@ export function useSalesTransaction<
         const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0);
         const totalAmount = items.reduce((sum, item) => {
             const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0;
+            const unitPrice = parseFloat(String(item.unit_price)) || 0;
             return sum + (quantity * unitPrice);
         }, 0);
 
@@ -185,7 +185,7 @@ export function useSalesTransaction<
         setDocument(prev => ({
             ...prev,
             customer_id: customer.customer_id || '',
-            customer_name: customer.customer_name || customer.name || '',
+            customer_name: customer.customer_name || '',
             billing_address: billingAddress
         } as TDoc));
 

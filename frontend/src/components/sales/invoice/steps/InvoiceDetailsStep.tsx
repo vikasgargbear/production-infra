@@ -502,7 +502,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
                                                 </span>
                                                 <span className="text-green-600">
-                                                    -₹{parseFloat(String(invoice.totals.scheme_discount)).toFixed(2)}
+                                                    -₹{parseFloat(String(invoice.totals?.scheme_discount)).toFixed(2)}
                                                 </span>
                                             </div>
                                         )}

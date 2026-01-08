@@ -228,8 +228,8 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             // Try to update via API
             try {
                 const response = await companyApi.updateCompanyInfo(updates);
-                if (!response.success) {
-                    throw new Error(response.message || 'Failed to update company info');
+                if (!response?.data?.success) {
+                    throw new Error(response?.data?.message || 'Failed to update company info');
                 }
             } catch (apiError) {
                 // Continue with local update

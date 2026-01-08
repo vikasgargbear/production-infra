@@ -21,7 +21,6 @@ export interface ReturnItem {
     product_name: string;
     batch_id?: number;
     batch_number?: string;
-    batch_number?: string;
     manufacturing_date?: string;
     expiry_date?: string;
     unit_price: number;
@@ -412,8 +411,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
             product_id: product.product_id,
             product_name: product.product_name || product.name,
             batch_id: product.batch_id,
-            batch_number: product.batch_number || product.batch_number || '',
-            batch_number: product.batch_number || product.batch_number || '',
+            batch_number: product.batch_number || '',
             unit_price: sellingPrice,
             tax_percent: gstPercent,
             quantity: 1,

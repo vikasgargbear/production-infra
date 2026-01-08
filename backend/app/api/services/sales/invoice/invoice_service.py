@@ -61,14 +61,20 @@ class InvoiceService:
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in invoice_data.items]
             
-            # Simple total calculation
+            # Simple total calculation with GST breakdown
             subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
-            total_tax = sum(float(item.get('tax_amount', 0) or 0) for item in items)
+            cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
+            sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
+            igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
+            total_tax = cgst + sgst + igst
             final_amount = subtotal + total_tax + float(getattr(invoice_data, 'freight_charges', 0) or 0)
             
             totals = {
                 'subtotal_amount': subtotal,
-                'tax_amount': total_tax,
+                'total_tax_amount': total_tax,
+                'cgst_amount': cgst,
+                'sgst_amount': sgst,
+                'igst_amount': igst,
                 'final_amount': final_amount,
                 'taxable_amount': subtotal,
                 'discount_amount': 0
@@ -352,14 +358,20 @@ class InvoiceService:
         Calculate all invoice totals from item list.
         TODO: Call shared/calculations.py API endpoint instead.
         """
-        # Basic inline calculation
+        # Basic inline calculation with GST breakdown
         subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
-        total_tax = sum(float(item.get('tax_amount', 0) or 0) for item in items)
+        cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
+        sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
+        igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
+        total_tax = cgst + sgst + igst
         final_amount = subtotal + total_tax + freight_charges + insurance_charges + other_charges
         
         return {
             'subtotal_amount': subtotal,
-            'tax_amount': total_tax,
+            'total_tax_amount': total_tax,
+            'cgst_amount': cgst,
+            'sgst_amount': sgst,
+            'igst_amount': igst,
             'final_amount': final_amount,
             'taxable_amount': subtotal,
             'discount_amount': discount_amount if discount_type == 'amount' else 0

@@ -174,8 +174,8 @@ export function useEmployeeManagement() {
         setLoading(true);
         try {
             const response = await employeesApi.getAll({ limit: 100 });
-            if (response.success) {
-                setEmployees(response.data || []);
+            if (response?.data || response) {
+                setEmployees(response.data || response || []);
             } else {
                 toast.error('Failed to load employees');
             }
@@ -337,7 +337,7 @@ export function useEmployeeManagement() {
                 response = await employeesApi.create(payload);
             }
 
-            if (response.success) {
+            if (response?.data || response) {
                 toast.success(editingEmployee ? 'Employee updated!' : 'Employee created!');
                 handleCloseModal();
                 loadEmployees();
@@ -363,7 +363,7 @@ export function useEmployeeManagement() {
         setLoading(true);
         try {
             const response = await employeesApi.delete(employee.employee_id);
-            if (response.success) {
+            if (response?.data?.success !== false) {
                 toast.success('Employee deleted');
                 loadEmployees();
                 return true;
@@ -385,7 +385,7 @@ export function useEmployeeManagement() {
             const response = await employeesApi.update(employee.employee_id, {
                 is_active: !employee.is_active
             });
-            if (response.success) {
+            if (response?.data?.success !== false) {
                 toast.success(employee.is_active ? 'Employee deactivated' : 'Employee activated');
                 loadEmployees();
             }

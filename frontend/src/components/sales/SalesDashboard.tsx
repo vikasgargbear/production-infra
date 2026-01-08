@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, TrendingDown, Users, Package, IndianRupee, 
+  TrendingUp, TrendingDown, Users, Package, IndianRupee,
   FileText, Clock, Calendar, Filter, Download, RefreshCw,
   ChevronRight, Eye, Edit, Plus, Search, BarChart3, AlertCircle
 } from 'lucide-react';
@@ -60,7 +60,7 @@ const StatsCard: React.FC<{
 }> = ({ title, value, change, icon: Icon, color, subtitle }) => {
   const colorMap = {
     blue: 'bg-sales-500',
-    green: 'bg-sales-500', 
+    green: 'bg-sales-500',
     amber: 'bg-warning-500',
     purple: 'bg-primary-500',
     red: 'bg-danger-500',
@@ -106,12 +106,11 @@ const ActionCard: React.FC<{
   urgent?: boolean;
 }> = ({ title, description, icon: Icon, onClick, urgent = false }) => {
   return (
-    <div 
-      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${
-        urgent 
-          ? 'bg-danger-50 border-danger-200 hover:border-danger-300' 
+    <div
+      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${urgent
+          ? 'bg-danger-50 border-danger-200 hover:border-danger-300'
           : 'bg-white border-app-200 hover:border-sales-300'
-      }`}
+        }`}
       onClick={onClick}
     >
       <div className="flex items-center">
@@ -167,9 +166,9 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
         salesTrendResponse
       ] = await Promise.all([
         dashboardApi.getStats(),
-        dashboardApi.getRecentOrders(10),
-        dashboardApi.getTopProducts(10),
-        reportsApi.sales.trends({ period: selectedPeriod })
+        dashboardApi.getRecentOrders({ limit: 10 }),
+        dashboardApi.getTopProducts({ limit: 10 }),
+        (reportsApi as any).getSalesTrends({ period: selectedPeriod })
       ]);
 
       // Update stats
@@ -179,7 +178,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           stats: {
             totalSales: statsResponse.data.totalRevenue || 0,
             totalInvoices: statsResponse.data.totalOrders || 0,
-            avgOrderValue: statsResponse.data.totalOrders > 0 ? 
+            avgOrderValue: statsResponse.data.totalOrders > 0 ?
               Math.round(statsResponse.data.totalRevenue / statsResponse.data.totalOrders) : 0,
             pendingOrders: statsResponse.data.pendingOrders || 0,
             totalCustomers: statsResponse.data.totalCustomers || 0,
@@ -263,11 +262,11 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
             <div>
               <h1 className="text-2xl font-bold text-app-800">Sales Dashboard</h1>
               <p className="text-sm text-app-500 mt-1">
-                {new Date().toLocaleDateString('en-IN', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
+                {new Date().toLocaleDateString('en-IN', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
                 })}
               </p>
             </div>
@@ -371,26 +370,26 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
               title="Create Invoice"
               description="Generate new sales invoice"
               icon={FileText}
-              onClick={() => {/* TODO: Navigate to invoice creation */}}
+              onClick={() => {/* TODO: Navigate to invoice creation */ }}
             />
             <ActionCard
               title="Record Payment"
               description="Update payment status"
               icon={IndianRupee}
-              onClick={() => {/* TODO: Navigate to payment recording */}}
+              onClick={() => {/* TODO: Navigate to payment recording */ }}
             />
             <ActionCard
               title="Overdue Follow-up"
               description="3 invoices overdue"
               icon={Clock}
-              onClick={() => {/* TODO: Navigate to overdue management */}}
+              onClick={() => {/* TODO: Navigate to overdue management */ }}
               urgent={true}
             />
             <ActionCard
               title="Sales Reports"
               description="View detailed analytics"
               icon={BarChart3}
-              onClick={() => {/* TODO: Navigate to analytics */}}
+              onClick={() => {/* TODO: Navigate to analytics */ }}
             />
           </div>
         </div>
@@ -411,7 +410,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-app-800">{invoice.id}</p>
-                      <StatusBadge 
+                      <StatusBadge
                         status={invoice.status}
                         variant={getStatusColor(invoice.status)}
                       />
@@ -480,7 +479,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
               const height = (item.sales / maxSales) * 200;
               return (
                 <div key={item.month} className="flex-1 flex flex-col items-center">
-                  <div 
+                  <div
                     className="w-full bg-sales-500 rounded-t-lg transition-all hover:bg-sales-600"
                     style={{ height: `${height}px` }}
                   />

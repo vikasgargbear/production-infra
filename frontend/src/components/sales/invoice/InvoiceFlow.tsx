@@ -41,7 +41,7 @@ const InvoicePreviewStep = React.memo(InvoicePreviewStepBase);
 const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefilledData = null }) => {
 
 
-    const { companyInfo } = useCompany() as { companyInfo: CompanyInfo };
+    const { companyInfo } = useCompany() as unknown as { companyInfo: CompanyInfo };
     const [currentStep, setCurrentStep] = useState(1); // 1: Items, 2: Details, 3: Preview
     const invoiceFormRef = useRef<HTMLDivElement>(null); // For Enter-as-Tab scoping
 

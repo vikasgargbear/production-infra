@@ -185,15 +185,15 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         const loadEmployees = async (): Promise<void> => {
             try {
                 const response = await usersApi.getAll({ limit: 20, role: 'sales' });
-                const users = response.data?.data || response.data?.users || response.data || [];
+                const users = response.data?.data || response.data || [];
 
                 if (Array.isArray(users) && users.length > 0) {
                     setEmployees(users);
                     if (!order.created_by && users.length > 0) {
                         setOrder(prev => ({
                             ...prev,
-                            created_by: users[0].user_id || users[0].id,
-                            created_by_name: users[0].full_name || users[0].name || 'User'
+                            created_by: users[0].id,
+                            created_by_name: users[0].full_name || 'User'
                         }));
                     }
                 } else {
