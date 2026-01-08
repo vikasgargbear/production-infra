@@ -143,7 +143,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         book_balance: bookBalance
       });
 
-      if (response?.success) {
+      if (response?.data?.success) {
         // Refresh data after successful reconciliation
         await loadReconciliationData();
         setError(null);

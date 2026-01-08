@@ -213,7 +213,7 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
               value={settings.companyAddress}
               onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows="2"
+              rows={2}
               placeholder="Enter company address"
             />
           </div>
@@ -420,7 +420,7 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
                   id="signature-upload"
                   accept="image/*"
                   onChange={(e) => {
-                    const file = e.target.files[0];
+                    const file = e.target.files?.[0];
                     if (file) {
                       const reader = new FileReader();
                       reader.onloadend = () => {

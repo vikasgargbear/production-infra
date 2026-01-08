@@ -213,7 +213,7 @@ const ProductMaster: React.FC = () => {
       {/* Filters and Search */}
       <ContentCard
         title="Search & Filter"
-        subtitle={null}
+        subtitle={undefined}
         actions={selectedIds.length > 0 ? (
           <Button variant="danger" size="sm" onClick={handleBulkDelete}>
             <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
@@ -248,7 +248,7 @@ const ProductMaster: React.FC = () => {
 
       {/* Error Message */}
       {error && (
-        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
+        <ContentCard title="" subtitle={undefined} actions={undefined} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
           <div className="flex items-center space-x-3">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-800">{error}</span>
@@ -257,7 +257,7 @@ const ProductMaster: React.FC = () => {
       )}
 
       {/* Product List */}
-      <ContentCard title="Product List" subtitle={null} actions={null} className="overflow-hidden" icon={Package}>
+      <ContentCard title="Product List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Package}>
         {products.length === 0 && !isLoading ? (
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-app-400 mx-auto mb-4" />

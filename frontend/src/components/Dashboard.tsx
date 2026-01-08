@@ -368,8 +368,8 @@ const Dashboard: React.FC = () => {
         dashboardApi.getStats(),
         invoicesApi.getAll({ limit: 10 }).catch(() => ({ data: [] })), // Get recent invoices
         dashboardApi.getRecentOrders(10),
-        dashboardApi.getRevenueData('monthly'),
-        dashboardApi.getTopProducts(10),
+        dashboardApi.getRevenue({ period: 'monthly' }),
+        dashboardApi.getTopProducts({ limit: 10 }),
         dashboardApi.getInventoryAlerts(),
         dashboardApi.getPendingPayments(),
         productsApi.getAll().catch(() => ({ data: [] })), // Get all products

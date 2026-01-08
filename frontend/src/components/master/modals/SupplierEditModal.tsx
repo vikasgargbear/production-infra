@@ -185,7 +185,6 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         minimum_order_value: parseFloat(String(formData.minimum_order_value)) || 0,
         // Map GST field properly
-        gst_number: formData.gst_number,
         gst_number: formData.gst_number
       };
 
@@ -261,8 +260,8 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                       type="button"
                       onClick={() => setActiveSection(section.id)}
                       className={`w-full text-left px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm ${activeSection === section.id
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-100'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -835,8 +834,8 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
                         <div>
                           <span className="text-gray-500">Payment Status:</span>
                           <span className={`ml-2 font-medium ${(formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
-                              (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
-                                'text-green-600'
+                            (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
+                              'text-green-600'
                             }`}>
                             {(formData.current_outstanding || 0) > formData.credit_limit ? 'Over Limit' :
                               (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :

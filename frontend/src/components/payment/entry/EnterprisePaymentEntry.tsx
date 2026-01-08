@@ -646,15 +646,44 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                   <p className="text-sm text-gray-600 mb-4">
                     Select invoices to allocate this payment against, or leave unselected to record as advance payment.
                   </p>
-                  <OutstandingInvoicesTable
-                    invoices={outstandingInvoices as any}
-                    selectedInvoices={selectedInvoices as any}
-                    onInvoiceSelect={handleInvoiceSelect}
-                    onAmountChange={handleAmountChange}
-                    paymentMode={allocationMethod}
-                    totalPayment={parseFloat(formData.totalAmount) || 0}
-                    showSummary={allocationMethod === 'manual'}
-                  />
+                  {/* Inline outstanding invoices table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Select</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Invoice</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Outstanding</th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Allocate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {(outstandingInvoices as any[]).map((inv: any) => (
+                          <tr key={inv.invoice_id || inv.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2">
+                              <input
+                                type="checkbox"
+                                checked={(selectedInvoices as any[]).some((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))}
+                                onChange={() => handleInvoiceSelect(inv)}
+                                className="rounded border-gray-300"
+                              />
+                            </td>
+                            <td className="px-4 py-2 text-sm">{inv.invoice_number || inv.invoice_no}</td>
+                            <td className="px-4 py-2 text-sm text-right">₹{(inv.outstanding_amount || inv.amount || 0).toLocaleString()}</td>
+                            <td className="px-4 py-2 text-sm text-right">
+                              <input
+                                type="number"
+                                value={(selectedInvoices as any[]).find((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))?.amount || 0}
+                                onChange={(e) => handleAmountChange(inv.invoice_id || inv.id, parseFloat(e.target.value) || 0)}
+                                className="w-24 px-2 py-1 border rounded text-right"
+                                disabled={!(selectedInvoices as any[]).some((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </>
               )}
             </>

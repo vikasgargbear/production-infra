@@ -22,7 +22,6 @@ from ....schemas.sales.order import (
 )
 from ....services.sales.order import OrderService
 from ....services.master.customer.service import CustomerService
-from ....services.sales.invoice_service import InvoiceService
 from ....services.settings.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
@@ -305,42 +304,16 @@ async def convert_to_invoice(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    """Convert approved sales order to invoice"""
-    try:
-        # Check order exists and is approved using service method
-        order = OrderService.get_order_for_edit(db, order_id, str(context.org_id), "sales")
-        
-        if not order:
-            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
-        
-        if order["order_status"] not in ["approved", "confirmed"]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot convert to invoice. Order status: {order['order_status']}"
-            )
-        
-        # Generate invoice
-        invoice_data = InvoiceService.generate_invoice_for_order(
-            db, 
-            order_id, 
-            invoice_request.invoice_date,
-            str(context.org_id)
-        )
-        
-        # Update order status using service method
-        OrderService.update_order_status(db, order_id, "invoiced")
-        
-        # TenantAwareSession auto-commits
-        
-        return InvoiceResponse(**invoice_data)
-        
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error converting to invoice: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to convert to invoice: {str(e)}")
+    """
+    Convert approved sales order to invoice.
+    
+    TODO: Implement using InvoiceService.create_invoice_with_items()
+    The original implementation called a non-existent method.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Order to Invoice conversion not yet implemented. Use direct invoice creation instead."
+    )
 
 @router.post("/{order_id}/convert-to-challan")
 @with_tenant_context

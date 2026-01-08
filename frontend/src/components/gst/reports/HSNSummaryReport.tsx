@@ -54,9 +54,9 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                 }
 
                 // Compute from invoices
-                const invoiceRes = await invoicesApi.search({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
+                const invoiceRes = await invoicesApi.getAll({
+                    from_date: dateRange.from,
+                    to_date: dateRange.to,
                     limit: 5000
                 });
                 const invoiceData = invoiceRes?.data || invoiceRes;
@@ -160,6 +160,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                 </div>
                 <DataTable
                     data={data}
+                    keyField="hsn_code"
                     columns={[
                         { key: 'hsn_code', header: 'HSN Code' },
                         { key: 'description', header: 'Description' },

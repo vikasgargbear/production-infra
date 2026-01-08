@@ -41,9 +41,9 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
             setError(null);
 
             try {
-                const response = await purchasesApi.search({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
+                const response = await purchasesApi.getAll({
+                    from_date: dateRange.from,
+                    to_date: dateRange.to,
                     limit: 5000
                 });
                 const purchases = Array.isArray(response) ? response : response?.data?.purchases || response?.data || [];
@@ -148,6 +148,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                 </div>
                 <DataTable
                     data={data}
+                    keyField="id"
                     columns={[
                         { key: 'invoice_no', header: 'Invoice No' },
                         { key: 'invoice_date', header: 'Date' },

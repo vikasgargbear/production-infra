@@ -782,7 +782,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             onClose={() => setAllocationModal({ isOpen: false, customerId: null, customerName: '' })}
             customerId={allocationModal.customerId}
             customerName={allocationModal.customerName}
-            invoices={selectedParty?.invoices || []}
+            invoices={(selectedParty?.invoices || []) as any}
             onAllocationComplete={() => {
               refetch(); // Refresh outstanding data after allocation
               setAllocationModal({ isOpen: false, customerId: null, customerName: '' });
@@ -954,7 +954,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
 
                     <Select
                       value={filters.status}
-                      onChange={(value) => setFilters({ ...filters, status: value })}
+                      onChange={(value) => setFilters({ ...filters, status: String(value) })}
                       options={[
                         { value: 'all', label: 'All Customers' },
                         { value: 'net-outstanding', label: 'Net Outstanding Only' },

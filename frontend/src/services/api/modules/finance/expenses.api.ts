@@ -70,5 +70,10 @@ export const expensesApi = {
 
     getSummary: (params: ExpenseParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.SUMMARY, { params });
+    },
+
+    // Alias for expense types (alias for getCategories)
+    getExpenseTypes: (): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.CATEGORIES);
     }
 };

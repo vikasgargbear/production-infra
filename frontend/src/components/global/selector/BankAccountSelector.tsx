@@ -82,10 +82,11 @@ const BankAccountSelector: React.FC<BankAccountSelectorProps> = ({
     const fetchBankAccounts = async (): Promise<void> => {
         try {
             setLoading(true);
-            const data = await bankAccountsApi.getBankAccounts();
+            const response = await bankAccountsApi.getBankAccounts();
+            const responseData = response?.data || response;
 
             // Filter based on transaction type if needed
-            let filteredAccounts = data as BankAccount[];
+            let filteredAccounts = (Array.isArray(responseData) ? responseData : responseData?.accounts || responseData || []) as BankAccount[];
             if (transactionType === 'payment') {
                 filteredAccounts = filteredAccounts.filter(acc => acc.is_payment_account !== false);
             } else if (transactionType === 'receipt') {

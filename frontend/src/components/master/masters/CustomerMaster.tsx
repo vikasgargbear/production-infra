@@ -145,11 +145,11 @@ const getColumns = (
       header: 'GST/License',
       render: (_, customer) => {
         if (!customer) return <div>N/A</div>;
-        const gstNumber = customer.gst_number || (customer as Record<string, unknown>).gst_number;
+        const gstNumber = (customer.gst_number || (customer as unknown as Record<string, unknown>).gst_number || '') as string;
         return (
           <div className="text-sm">
             {gstNumber ? (
-              <div className="text-app-800">{gstNumber}</div>
+              <div className="text-app-800">{String(gstNumber)}</div>
             ) : (
               <div className="text-app-400">No GST</div>
             )}

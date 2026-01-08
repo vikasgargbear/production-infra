@@ -19,6 +19,8 @@ export interface LedgerParams {
     party_type?: 'customer' | 'supplier';
     from_date?: string;
     to_date?: string;
+    date_from?: string;  // Alias for from_date
+    date_to?: string;    // Alias for to_date
     as_of_date?: string;
     limit?: number;
     offset?: number;
@@ -240,6 +242,11 @@ export const ledgerApi = {
             params: { party_type: partyType, format },
             responseType: 'blob'
         });
+    },
+
+    // Get bank accounts for reconciliation
+    getBankAccounts: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/bank-accounts');
     }
 };
 

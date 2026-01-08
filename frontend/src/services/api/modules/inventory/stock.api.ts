@@ -18,15 +18,26 @@ export interface StockParams {
     days?: number;
     limit?: number;
     offset?: number;
+    skip?: number;
+    sort?: string;
+    order?: 'asc' | 'desc';
+}
+
+export interface StockAdjustmentItem {
+    product_id: number;
+    quantity: number;
+    batch_number?: string | null;
 }
 
 export interface StockAdjustmentData {
-    product_id: number;
+    product_id?: number;          // For single-item adjustments
     batch_id?: number;
-    adjustment_type: 'add' | 'remove' | 'set';
-    quantity: number;
+    adjustment_type: string;      // 'add' | 'remove' | 'set' | 'increase' | 'decrease'
+    quantity?: number;            // For single-item adjustments
     reason: string;
     notes?: string;
+    adjustment_date?: string;     // ISO date string
+    items?: StockAdjustmentItem[]; // For batch adjustments
 }
 
 export interface StockTransferData {
@@ -110,5 +121,10 @@ export const stockApi = {
     // Get stock movements (alias for adjustments history)
     getMovements: (params: StockParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/movements`, { params });
+    },
+
+    // Create stock adjustment (proper method name for flow components)
+    createAdjustment: (data: StockAdjustmentData): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.ADJUSTMENTS, data);
     }
 };

@@ -156,6 +156,7 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
                 </div>
                 <DataTable
                     data={data?.b2b || []}
+                    keyField="gst_number"
                     columns={[
                         { key: 'gst_number', header: 'Supplier GSTIN' },
                         { key: 'name', header: 'Supplier Name' },

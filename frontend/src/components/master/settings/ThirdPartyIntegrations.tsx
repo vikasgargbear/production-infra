@@ -113,8 +113,8 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
     const handleTestConnection = async (integrationId: string): Promise<void> => {
         setTestingConnection(integrationId);
         try {
-            const response = await settingsApi.integrations.testConnection(integrationId);
-            if (response.success) {
+            const response = await settingsApi.integrations.test(integrationId);
+            if (response.data?.success || response.status === 200) {
                 // Update integration status
                 setIntegrations(prev => prev.map(integration =>
                     integration.id === integrationId
@@ -132,7 +132,7 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
     const handleToggleIntegration = async (integrationId: string, enabled: boolean): Promise<void> => {
         try {
             const response = await settingsApi.integrations.update(integrationId, { enabled });
-            if (response.success) {
+            if (response.data?.success || response.status === 200) {
                 setIntegrations(prev => prev.map(integration =>
                     integration.id === integrationId
                         ? { ...integration, enabled }
@@ -152,7 +152,7 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
     const handleSaveConfiguration = async (integrationId: string, config: Record<string, string> | undefined): Promise<void> => {
         try {
             const response = await settingsApi.integrations.update(integrationId, config || {});
-            if (response.success) {
+            if (response.data?.success || response.status === 200) {
                 setIntegrations(prev => prev.map(integration =>
                     integration.id === integrationId
                         ? { ...integration, ...config }
@@ -289,8 +289,8 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center space-x-2">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${integration.status === 'active'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-gray-100 text-gray-800'
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-gray-100 text-gray-800'
                                                 }`}>
                                                 {integration.status}
                                             </span>
@@ -298,8 +298,8 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
                                         <button
                                             onClick={() => handleToggleIntegration(integration.id, !integration.enabled)}
                                             className={`px-3 py-1 rounded-md text-sm font-medium ${integration.enabled
-                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                                                 }`}
                                         >
                                             {integration.enabled ? 'Enabled' : 'Disabled'}

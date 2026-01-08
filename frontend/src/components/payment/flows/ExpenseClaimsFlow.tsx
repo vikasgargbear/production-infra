@@ -46,7 +46,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
 
       // Load expense types from API
       const expenseTypesResponse = await expensesApi.getExpenseTypes();
-      setExpenseTypes(expenseTypesResponse.expense_types || []);
+      setExpenseTypes(expenseTypesResponse?.data?.expense_types || expenseTypesResponse?.data || []);
 
       // Set default employee name (in real app, get from auth context)
       setEmployeeName('Current User');

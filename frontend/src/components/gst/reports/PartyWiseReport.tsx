@@ -39,9 +39,9 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
             setError(null);
 
             try {
-                const response = await invoicesApi.search({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
+                const response = await invoicesApi.getAll({
+                    from_date: dateRange.from,
+                    to_date: dateRange.to,
                     limit: 5000
                 });
                 const responseData = response?.data || response;
@@ -145,6 +145,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                 </div>
                 <DataTable
                     data={data}
+                    keyField="party_name"
                     columns={[
                         { key: 'party_name', header: 'Party Name' },
                         { key: 'gst_number', header: 'GSTIN', render: (v) => v || '-' },

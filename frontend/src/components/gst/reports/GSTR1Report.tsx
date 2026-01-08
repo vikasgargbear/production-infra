@@ -30,9 +30,9 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
 
     // Load invoice data
     const loadInvoices = async (): Promise<any[]> => {
-        const response = await invoicesApi.search({
-            dateFrom: dateRange.from,
-            dateTo: dateRange.to,
+        const response = await invoicesApi.getAll({
+            from_date: dateRange.from,
+            to_date: dateRange.to,
             limit: 5000
         });
         const responseData = response?.data || response;
@@ -171,6 +171,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
                 </div>
                 <DataTable
                     data={data?.b2b || []}
+                    keyField="gst_number"
                     columns={[
                         { key: 'gst_number', header: 'GSTIN' },
                         { key: 'name', header: 'Party Name' },

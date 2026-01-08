@@ -392,42 +392,45 @@ const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose
                 </button>
               </div>
             ) : (
-              filteredRules.map(rule => (
-                <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <rule.icon className={`w-5 h-5 text-${rule.color}-600`} />
-                      <div>
-                        <h3 className="font-medium text-gray-900">{rule.name}</h3>
-                        <p className="text-sm text-gray-500">{rule.condition}</p>
+              filteredRules.map(rule => {
+                const IconComponent = rule.icon as React.ElementType;
+                return (
+                  <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {IconComponent && <IconComponent className={`w-5 h-5 text-${rule.color}-600`} />}
+                        <div>
+                          <h3 className="font-medium text-gray-900">{rule.name}</h3>
+                          <p className="text-sm text-gray-500">{rule.condition}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleRule(rule.id)}
+                          className={`px-3 py-1 text-xs rounded-full ${rule.enabled
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-600'
+                            }`}
+                        >
+                          {rule.enabled ? 'Enabled' : 'Disabled'}
+                        </button>
+                        <button
+                          onClick={() => {/* Edit rule */ }}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRule(rule.id)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleToggleRule(rule.id)}
-                        className={`px-3 py-1 text-xs rounded-full ${rule.enabled
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
-                          }`}
-                      >
-                        {rule.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-                      <button
-                        onClick={() => {/* Edit rule */ }}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         ) : (

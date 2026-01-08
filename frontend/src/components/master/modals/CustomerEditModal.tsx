@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   X, Save, Loader2, User, Phone, Building, CreditCard, Shield
 } from 'lucide-react';
 import { customersApi, metadataApi } from '../../../services/api';
@@ -15,14 +15,14 @@ interface CustomerEditModalProps {
   customer?: any;
 }
 
-const CustomerEditModal: React.FC<CustomerEditModalProps> = ({ 
-  isOpen, 
-  onClose, 
+const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
+  isOpen,
+  onClose,
   onSave,
   customer = null
 }) => {
   const toast = useToast();
-  
+
   // Initialize form data with default values to prevent null warnings
   const getInitialFormData = () => ({
     // Basic Information
@@ -31,7 +31,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     customer_type: customer?.customer_type || 'retail', // lowercase to match backend
     business_type: customer?.business_type || '',
     customer_category: customer?.customer_category || '',
-    
+
     // Contact Information
     primary_phone: customer?.primary_phone || '',
     primary_email: customer?.primary_email || '',
@@ -40,21 +40,21 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     contact_person: customer?.contact_person || '',
     contact_person_phone: customer?.contact_person_phone || '',
     contact_person_email: customer?.contact_person_email || '',
-    
+
     // Address
     address_line_1: customer?.address_line_1 || '',
     address_line_2: customer?.address_line_2 || '',
     city: customer?.city || '',
     state: customer?.state || '',
     pincode: customer?.pincode || '',
-    
+
     // Compliance & GST
     gst_number: customer?.gst_number || customer?.gst_number || '',
     pan_number: customer?.pan_number || '',
     drug_license_number: customer?.drug_license_number || '',
     drug_license_validity: customer?.drug_license_validity || '',
     fssai_number: customer?.fssai_number || '',
-    
+
     // Credit Management
     credit_limit: customer?.credit_limit || 0,
     credit_days: customer?.credit_days || 0,
@@ -62,17 +62,17 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     payment_terms: customer?.payment_terms || 'NET30',
     current_outstanding: customer?.current_outstanding || 0,
     security_deposit: customer?.security_deposit || 0,
-    
+
     // Preferences
     preferred_payment_mode: customer?.preferred_payment_mode || 'cash',
     preferred_delivery_time: customer?.preferred_delivery_time || '',
     prefer_sms: customer?.prefer_sms !== false,
     prefer_email: customer?.prefer_email !== false,
     prefer_whatsapp: customer?.prefer_whatsapp !== false,
-    
+
     // Status
     is_active: customer?.is_active !== false,
-    
+
     // Notes
     internal_notes: customer?.internal_notes || ''
   });
@@ -81,7 +81,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('basic');
-  
+
   // Metadata for dropdowns - loaded from backend
   const [metadata, setMetadata] = useState<any>({
     customerTypes: [],
@@ -101,7 +101,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
       loadMetadata();
     }
   }, [isOpen, customer]);
-  
+
   // Load metadata for dropdowns
   const loadMetadata = async () => {
     try {
@@ -111,7 +111,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         metadataApi.getPaymentTerms().catch(() => ({ data: [] })),
         metadataApi.getPaymentModes().catch(() => ({ data: [] }))
       ]);
-      
+
       setMetadata({
         // If backend doesn't provide, use minimal defaults
         customerTypes: [
@@ -170,7 +170,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     try {
       setIsSaving(true);
       setError(null);
-      
+
       const dataToSave = {
         ...formData,
         credit_limit: parseFloat(String(formData.credit_limit)) || 0,
@@ -178,10 +178,9 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         security_deposit: parseFloat(String(formData.security_deposit)) || 0,
         // Map GST field properly
-        gst_number: formData.gst_number,
         gst_number: formData.gst_number
       };
-      
+
       if (customer) {
         await customersApi.update(customer.customer_id, dataToSave);
         toast.success('Customer updated successfully');
@@ -193,7 +192,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         await customersApi.create(dataToSave);
         toast.success('Customer created successfully');
       }
-      
+
       onSave();
       onClose();
     } catch (err: any) {
@@ -251,11 +250,10 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                       key={section.id}
                       type="button"
                       onClick={() => setActiveSection(section.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm ${
-                        activeSection === section.id
+                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm ${activeSection === section.id
                           ? 'bg-blue-100 text-blue-700'
                           : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       <Icon className="w-4 h-4" />
                       <span className="font-medium">{section.label}</span>
@@ -274,7 +272,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                     <User className="w-5 h-5 mr-2" />
                     Basic Information
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -371,7 +369,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                     <Phone className="w-5 h-5 mr-2" />
                     Contact & Address
                   </h3>
-                  
+
                   {/* Contact Details */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-3">Contact Information</h4>
@@ -532,7 +530,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                     <Shield className="w-5 h-5 mr-2" />
                     Compliance & GST
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -603,7 +601,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                     <CreditCard className="w-5 h-5 mr-2" />
                     Credit & Payment
                   </h3>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -760,14 +758,13 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                         </div>
                         <div>
                           <span className="text-gray-500">Credit Status:</span>
-                          <span className={`ml-2 font-medium ${
-                            (formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
-                            (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
-                            'text-green-600'
-                          }`}>
+                          <span className={`ml-2 font-medium ${(formData.current_outstanding || 0) > formData.credit_limit ? 'text-red-600' :
+                              (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'text-yellow-600' :
+                                'text-green-600'
+                            }`}>
                             {(formData.current_outstanding || 0) > formData.credit_limit ? 'Over Limit' :
-                             (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
-                             'Good'}
+                              (formData.current_outstanding || 0) > formData.credit_limit * 0.8 ? 'Near Limit' :
+                                'Good'}
                           </span>
                         </div>
                       </div>
@@ -783,7 +780,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                     <Building className="w-5 h-5 mr-2" />
                     Additional Information
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -856,7 +853,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
               <div className="text-sm text-gray-500">
                 {customer ? `Customer ID: ${customer.customer_id}` : 'New Customer'}
               </div>
-              
+
               {/* Section Navigation */}
               <div className="flex items-center space-x-2">
                 <Button
@@ -873,11 +870,11 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                 >
                   ← Previous
                 </Button>
-                
+
                 <span className="text-sm text-gray-500 px-2">
                   {sections.findIndex(s => s.id === activeSection) + 1} / {sections.length}
                 </span>
-                
+
                 <Button
                   type="button"
                   variant="secondary"
@@ -893,7 +890,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                   Next →
                 </Button>
               </div>
-              
+
               {/* Action Buttons */}
               <div className="flex items-center space-x-3">
                 <Button

@@ -36,6 +36,7 @@ export interface PaymentData {
 export interface PaymentAllocation {
     invoice_id: number;
     amount: number;
+    allocated_amount?: number;  // Alias for amount for backward compatibility
 }
 
 // ============================================
@@ -114,5 +115,20 @@ export const paymentsApi = {
     // Get outstanding invoices for a party
     getOutstandingInvoices: (partyId: number, partyType: 'customer' | 'supplier' = 'customer'): Promise<AxiosResponse> => {
         return apiHelpers.get('/invoices/outstanding', { params: { party_id: partyId, party_type: partyType } });
+    },
+
+    // Get unreconciled transactions for bank reconciliation
+    getUnreconciledTransactions: (params: { date?: string; bank_account?: string } = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/unreconciled`, { params });
+    },
+
+    // Start bank reconciliation
+    startBankReconciliation: (data: {
+        bank_account: string;
+        reconciliation_date: string;
+        bank_statement_balance: number;
+        book_balance: number;
+    }): Promise<AxiosResponse> => {
+        return apiHelpers.post(`${ENDPOINTS.BASE}/reconcile`, data);
     }
 };

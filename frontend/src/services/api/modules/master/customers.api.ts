@@ -17,6 +17,7 @@ export interface CustomerParams {
   offset?: number;
   search?: string;
   has_outstanding?: boolean;
+  include_credit?: boolean;
 }
 
 // ============================================================================

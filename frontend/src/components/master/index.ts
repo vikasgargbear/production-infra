@@ -18,8 +18,7 @@ export * from './settings';
 // ==================== MODALS ====================
 export * from './modals';
 
-// ==================== UTILITIES ====================
-export * from './utilities';
+// Note: utilities merged into utils
 
 // ==================== PRODUCTS (Subdirectory) ====================
 export * from './products';

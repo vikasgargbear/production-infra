@@ -21,6 +21,7 @@ interface Party {
     type?: 'customer' | 'supplier' | 'both';
     gst_number?: string;
     pan?: string;
+    pan_number?: string;
     contact_person?: string;
     contact?: string;
     phone?: string;

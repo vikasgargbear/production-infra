@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer, CheckCircle, CreditCard } from 'lucide-react';
-import { suppliersApi, productsApi, purchasesApi } from '../../../services/api';
+import { suppliersApi, productsApi, grnApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import {
   EnhancedGlobalDocumentFlow,
@@ -221,7 +221,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
         notes: grn.notes
       };
 
-      const response = await purchasesApi.createGRN(grnData);
+      const response = await grnApi.create(grnData);
 
       if (response && response.data) {
         const grnNumber = response.data.grn_no || grn.grn_no;

@@ -108,7 +108,7 @@ export function useCreditManagement(): UseCreditManagementReturn {
         try {
             const [customersResponse, invoicesResponse] = await Promise.all([
                 customersApi.getAll({ include_credit: true }),
-                invoicesApi.getByCustomer(undefined)
+                invoicesApi.getAll({ payment_status: 'unpaid' })
             ]);
 
             if (customersResponse?.data && Array.isArray(customersResponse.data)) {

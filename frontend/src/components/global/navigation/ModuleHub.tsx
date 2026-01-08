@@ -7,7 +7,7 @@ export interface Module {
   label?: string;
   fullLabel: string;
   description?: string;
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   color: string;
   component?: React.ComponentType<{ open?: boolean; onClose?: () => void }>;
   badge?: string;

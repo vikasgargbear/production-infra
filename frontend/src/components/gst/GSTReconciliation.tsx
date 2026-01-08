@@ -74,8 +74,8 @@ const GSTReconciliation: React.FC = () => {
 
       try {
         const [invoiceResponse, purchaseResponse] = await Promise.all([
-          invoicesApi.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
-          purchasesApi.search({ dateFrom: fromDate, dateTo: toDate, limit: 1000 })
+          invoicesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 }),
+          purchasesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 })
         ]) as [any, any];
 
         invoices = Array.isArray(invoiceResponse) ? invoiceResponse :

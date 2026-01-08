@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { productsApi, batchApi } from '../../../services/api';
+import { productsApi, batchesApi } from '../../../services/api';
 import { toast } from 'react-toastify';
 
 // ============================================
@@ -123,7 +123,7 @@ export function useBatchMaster() {
         setError(null);
 
         try {
-            const response = await batchApi.getAll({
+            const response = await batchesApi.getAll({
                 limit: perPage,
                 offset: (pageNum - 1) * perPage
             });
@@ -222,9 +222,9 @@ export function useBatchMaster() {
 
             let response;
             if (editingBatch) {
-                response = await batchApi.update(editingBatch.batch_id, payload);
+                response = await batchesApi.update(editingBatch.batch_id, payload);
             } else {
-                response = await batchApi.create(payload);
+                response = await batchesApi.create(payload);
             }
 
             if (response.success || response.data) {
@@ -249,7 +249,7 @@ export function useBatchMaster() {
 
         setLoading(true);
         try {
-            await batchApi.delete(batch.batch_id);
+            await batchesApi.delete(batch.batch_id);
             toast.success('Batch deleted');
             fetchBatches(page);
             return true;
