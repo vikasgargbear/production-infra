@@ -17,7 +17,7 @@ interface Invoice {
   id: string;
   invoice_id?: string;
   invoice_number: string;
-  invoiceNo?: string; // For backward compatibility
+  invoiceNumber?: string; // For backward compatibility
   customer_name: string;
   customerName?: string; // For backward compatibility
   invoice_date: string;
@@ -336,7 +336,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             id: invoice.invoice_id?.toString() || invoice.invoice_number,
             invoice_id: invoice.invoice_id,
             invoice_number: invoice.invoice_number,
-            invoiceNo: invoice.invoice_number, // For backward compatibility
+            invoiceNumber: invoice.invoice_number, // For backward compatibility
             customer_name: invoice.customer_name,
             customerName: invoice.customer_name, // For backward compatibility
             invoice_date: invoice.invoice_date,
@@ -428,7 +428,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     ];
 
     const rows = data.map(invoice => [
-      invoice.invoice_number || invoice.invoiceNo || '',
+      invoice.invoice_number || invoice.invoiceNumber || '',
       invoice.customer_name || invoice.customerName || '',
       invoice.invoice_date || invoice.date || '',
       invoice.dueDate || '',

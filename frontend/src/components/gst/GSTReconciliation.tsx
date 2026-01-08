@@ -17,7 +17,7 @@ interface ReconciliationItem {
   id: number;
   supplierGSTIN?: string;
   supplierName?: string;
-  invoiceNo: string;
+  invoiceNumber: string;
   invoiceDate: string;
   ourAmount: number;
   gstPortalAmount: number;
@@ -110,7 +110,7 @@ const GSTReconciliation: React.FC = () => {
           id: index + 1,
           supplierGSTIN: (purchase as any).supplier_gst_number || (purchase as any).gst_number || 'N/A',
           supplierName: (purchase as any).supplier_name || `Supplier ${index + 1}`,
-          invoiceNo: (purchase as any).invoice_no || (purchase as any).purchase_no || `PUR-${index + 1}`,
+          invoiceNumber: (purchase as any).invoice_number || (purchase as any).invoice_no || (purchase as any).purchase_no || `PUR-${index + 1}`,
           invoiceDate: (purchase as any).invoice_date || (purchase as any).purchase_date || (purchase as any).created_at?.split('T')[0] || fromDate,
           ourAmount,
           gstPortalAmount,
@@ -139,7 +139,7 @@ const GSTReconciliation: React.FC = () => {
           id: index + 1,
           supplierGSTIN: (invoice as any).customer_gst_number || (invoice as any).gst_number || 'N/A',
           supplierName: (invoice as any).customer_name || `Customer ${index + 1}`,
-          invoiceNo: (invoice as any).invoice_number || (invoice as any).invoice_no || `INV-${index + 1}`,
+          invoiceNumber: (invoice as any).invoice_number || (invoice as any).invoice_no || `INV-${index + 1}`,
           invoiceDate: (invoice as any).invoice_date || (invoice as any).created_at?.split('T')[0] || fromDate,
           ourAmount,
           gstPortalAmount,
@@ -253,7 +253,7 @@ const GSTReconciliation: React.FC = () => {
 
     if (searchTerm) {
       items = items.filter(item =>
-        item.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (item.supplierName && item.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.supplierGSTIN && item.supplierGSTIN.toLowerCase().includes(searchTerm.toLowerCase()))
       );
@@ -273,7 +273,7 @@ const GSTReconciliation: React.FC = () => {
       const data = reconciliationData[activeTab];
       const csvHeader = 'Invoice No,Date,Supplier,GSTIN,Our Amount,Portal Amount,Our GST,Portal GST,Status\n';
       const csvRows = data.items.map(item =>
-        `${item.invoiceNo},${item.invoiceDate},"${item.supplierName}",${item.supplierGSTIN},${item.ourAmount},${item.gstPortalAmount},${item.ourGST},${item.portalGST},${item.status}`
+        `${item.invoiceNumber},${item.invoiceDate},"${item.supplierName}",${item.supplierGSTIN},${item.ourAmount},${item.gstPortalAmount},${item.ourGST},${item.portalGST},${item.status}`
       ).join('\n');
 
       const csvContent = csvHeader + csvRows;
@@ -515,7 +515,7 @@ const GSTReconciliation: React.FC = () => {
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{item.invoiceNo}</div>
+                        <div className="text-sm font-medium text-gray-900">{item.invoiceNumber}</div>
                         <div className="text-sm text-gray-500">{item.invoiceDate}</div>
                       </div>
                     </td>

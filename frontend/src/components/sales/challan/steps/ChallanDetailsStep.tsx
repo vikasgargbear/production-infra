@@ -90,7 +90,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                 {/* Header */}
                 <ModuleHeader
                     title="Delivery Challan"
-                    documentNumber={challan.challan_number}
+                    documentData={challan as any}
                     status={challan.status}
                     icon={Truck}
                     iconColor="text-blue-600"
@@ -182,7 +182,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                 </button>
                             </div>
                             <CustomerSearch
-                                value={selectedCustomer}
+                                selectedCustomer={selectedCustomer as any}
                                 onChange={handleCustomerSelect as any}
                                 onCreateNew={() => setShowCreateCustomer(true)}
                                 displayMode="inline"

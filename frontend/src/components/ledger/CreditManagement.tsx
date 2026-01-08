@@ -351,7 +351,7 @@ const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({ customer, o
                             {customer.outstandingInvoices.map((invoice, index) => (
                                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                     <div>
-                                        <div className="font-medium">{invoice.invoiceNo}</div>
+                                        <div className="font-medium">{invoice.invoiceNumber}</div>
                                         <div className="text-sm text-gray-500">Due: {invoice.dueDate}</div>
                                     </div>
                                     <div className="text-right">

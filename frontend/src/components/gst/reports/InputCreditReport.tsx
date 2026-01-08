@@ -18,7 +18,7 @@ interface InputCreditReportProps {
 
 interface PurchaseItem {
     id: number;
-    invoice_no: string;
+    invoice_number: string;
     invoice_date: string;
     supplier_name: string;
     supplier_gst_number: string;
@@ -50,7 +50,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
 
                 const items: PurchaseItem[] = purchases.map((p: any, idx: number) => ({
                     id: idx + 1,
-                    invoice_no: p.invoice_no || p.purchase_no || `PUR-${idx + 1}`,
+                    invoice_number: p.invoice_number || p.purchase_no || `PUR-${idx + 1}`,
                     invoice_date: p.invoice_date || p.purchase_date || '-',
                     supplier_name: p.supplier_name || 'Unknown Supplier',
                     supplier_gst_number: p.supplier_gst_number || p.gst_number || '-',
@@ -150,7 +150,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                     data={data}
                     keyField="id"
                     columns={[
-                        { key: 'invoice_no', header: 'Invoice No' },
+                        { key: 'invoice_number', header: 'Invoice No' },
                         { key: 'invoice_date', header: 'Date' },
                         { key: 'supplier_name', header: 'Supplier' },
                         { key: 'supplier_gst_number', header: 'GSTIN' },

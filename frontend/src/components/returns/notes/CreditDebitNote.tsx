@@ -140,7 +140,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     }));
   };
 
-  // Handle invoice selection from InvoiceSelector
+  // Handle invoice selection
   const handleInvoiceSelect = async (invoice: any) => {
     if (!invoice) return;
 
@@ -316,7 +316,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         }))
       };
 
-      const response = await notesApi.createCreditDebitNote(payload);
+      const response = await notesApi.createCreditDebitNote(payload as any);
 
       if (response.data?.success || response.data || response.status === 200) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);

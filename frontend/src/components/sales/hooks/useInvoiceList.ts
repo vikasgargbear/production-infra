@@ -16,7 +16,7 @@ export interface Invoice {
     id: string;
     invoice_id?: string;
     invoice_number: string;
-    invoiceNo?: string;
+    invoiceNumber?: string;
     customer_name: string;
     customerName?: string;
     invoice_date: string;
@@ -202,7 +202,7 @@ export function useInvoiceList(onClose?: () => void) {
                     id: invoice.invoice_id?.toString() || invoice.invoice_number,
                     invoice_id: invoice.invoice_id,
                     invoice_number: invoice.invoice_number,
-                    invoiceNo: invoice.invoice_number,
+                    invoiceNumber: invoice.invoice_number,
                     customer_name: invoice.customer_name,
                     customerName: invoice.customer_name,
                     invoice_date: invoice.invoice_date,
@@ -312,7 +312,7 @@ export function useInvoiceList(onClose?: () => void) {
         ];
 
         const rows = data.map(invoice => [
-            invoice.invoice_number || invoice.invoiceNo || '',
+            invoice.invoice_number || invoice.invoiceNumber || '',
             invoice.customer_name || invoice.customerName || '',
             invoice.invoice_date || invoice.date || '',
             invoice.dueDate || '',

@@ -92,7 +92,6 @@ export interface Invoice {
     // Identifiers
     invoice_id?: number | string;
     invoice_number: string;
-    invoice_no?: string;
 
     // Dates
     invoice_date: string;

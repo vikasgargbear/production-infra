@@ -247,7 +247,7 @@ const PaymentTracking: React.FC = () => {
                                     return (
                                         <tr key={payment.id} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{payment.invoiceNo || 'N/A'}</div>
+                                                <div className="text-sm font-medium text-gray-900">{payment.invoiceNumber || 'N/A'}</div>
                                                 <div className="text-sm text-gray-500">{payment.paymentDate || 'N/A'}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -319,7 +319,7 @@ const PaymentTracking: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Invoice No</label>
-                                    <p className="text-sm text-gray-900">{selectedPayment.invoiceNo || 'N/A'}</p>
+                                    <p className="text-sm text-gray-900">{selectedPayment.invoiceNumber || 'N/A'}</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Customer</label>

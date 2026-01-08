@@ -11,7 +11,7 @@ import offlineStorage from '../../../services/offlineStorage';
 
 // Types
 export interface OutstandingInvoice {
-    invoiceNo: string;
+    invoiceNumber: string;
     amount: number;
     dueDate: string;
     daysOverdue: number;
@@ -128,7 +128,7 @@ export function useCreditManagement(): UseCreditManagementReturn {
                         creditUsed,
                         creditAvailable,
                         outstandingInvoices: customerInvoices.map((inv: any) => ({
-                            invoiceNo: inv.invoice_number,
+                            invoiceNumber: inv.invoice_number,
                             amount: inv.amount,
                             dueDate: inv.due_date,
                             daysOverdue: inv.days_overdue || 0

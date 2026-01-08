@@ -429,7 +429,7 @@ export interface InvoiceSummary {
     order_date?: string;
 
     // Legacy support (optional)
-    invoiceNo?: string;
+    invoiceNumber?: string;
     customerName?: string;
     date?: string;
     amount?: number;

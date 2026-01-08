@@ -14,7 +14,7 @@ interface BatchMasterProps {
 
 interface Batch {
     id: number | string;
-    batchNo: string;
+    batchNumber: string;
     productId: number | string;
     productName: string;
     productCode: string;
@@ -28,7 +28,7 @@ interface Batch {
     status: string;
     location: string;
     supplier: string;
-    invoiceNo: string;
+    invoiceNumber: string;
     description: string;
 }
 
@@ -39,7 +39,7 @@ interface ProductDropdownItem {
 }
 
 interface BatchFormData {
-    batchNo: string;
+    batchNumber: string;
     productId: string;
     manufacturingDate: string;
     expiryDate: string;
@@ -49,7 +49,7 @@ interface BatchFormData {
     salePrice: string | number;
     location: string;
     supplier: string;
-    invoiceNo: string;
+    invoiceNumber: string;
     description: string;
     productName?: string;
     productCode?: string;
@@ -88,7 +88,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                 // Transform backend data to match frontend structure
                 const transformedBatches = (response as any).data.map((batch: any) => ({
                     id: batch.id,
-                    batchNo: batch.batch_number || batch.batch_number || `BT-${batch.id}`,
+                    batchNumber: batch.batch_number || batch.batch_number || `BT-${batch.id}`,
                     productId: batch.product_id || batch.productId,
                     productName: batch.product_name || batch.productName || 'Unknown Product',
                     productCode: batch.product_code || batch.productCode || 'N/A',
@@ -102,7 +102,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     status: getBatchStatus(batch.expiry_date || batch.expiryDate, batch.available_quantity || batch.availableQty),
                     location: batch.location || batch.warehouse || 'Unknown',
                     supplier: batch.supplier_name || batch.supplier || 'Unknown Supplier',
-                    invoiceNo: batch.invoice_number || batch.invoiceNo || 'N/A',
+                    invoiceNumber: batch.invoice_number || batch.invoiceNumber || 'N/A',
                     description: batch.description || batch.notes || ''
                 }));
 
@@ -169,7 +169,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
 
     const filteredBatches = batches.filter(batch => {
         const matchesSearch = searchTerm === '' ||
-            batch.batchNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            batch.batchNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
             batch.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             batch.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
             batch.supplier.toLowerCase().includes(searchTerm.toLowerCase());
@@ -178,7 +178,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
     });
 
     const [formData, setFormData] = useState<BatchFormData>({
-        batchNo: '',
+        batchNumber: '',
         productId: '',
         manufacturingDate: '',
         expiryDate: '',
@@ -188,7 +188,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
         salePrice: '',
         location: '',
         supplier: '',
-        invoiceNo: '',
+        invoiceNumber: '',
         description: ''
     });
 
@@ -306,7 +306,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
     const handleEdit = (batch: Batch) => {
         setEditingBatch(batch);
         setFormData({
-            batchNo: batch.batchNo,
+            batchNumber: batch.batchNumber,
             productId: String(batch.productId),
             manufacturingDate: batch.manufacturingDate,
             expiryDate: batch.expiryDate,
@@ -316,7 +316,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
             salePrice: batch.salePrice,
             location: batch.location,
             supplier: batch.supplier,
-            invoiceNo: batch.invoiceNo,
+            invoiceNumber: batch.invoiceNumber,
             description: batch.description || ''
         });
         setShowAddModal(true);
@@ -327,7 +327,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
         if (!batch) return;
 
         if (batch.availableQty > 0) {
-            alert(`Cannot delete batch ${batch.batchNo}. It still has ${batch.availableQty} units in stock.`);
+            alert(`Cannot delete batch ${batch.batchNumber}. It still has ${batch.availableQty} units in stock.`);
             return;
         }
 
@@ -349,7 +349,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
         setShowAddModal(false);
         setEditingBatch(null);
         setFormData({
-            batchNo: '',
+            batchNumber: '',
             productId: '',
             manufacturingDate: '',
             expiryDate: '',
@@ -359,7 +359,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
             salePrice: '',
             location: '',
             supplier: '',
-            invoiceNo: '',
+            invoiceNumber: '',
             description: ''
         });
     };
@@ -648,14 +648,14 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                                                     <td className="px-6 py-4">
                                                         <div>
                                                             <p className="text-sm font-medium text-gray-900">
-                                                                {batch.batchNo}
+                                                                {batch.batchNumber}
                                                             </p>
                                                             <p className="text-xs text-gray-500">
                                                                 {batch.location} • {batch.supplier}
                                                             </p>
-                                                            {batch.invoiceNo && (
+                                                            {batch.invoiceNumber && (
                                                                 <p className="text-xs text-gray-400">
-                                                                    Invoice: {batch.invoiceNo}
+                                                                    Invoice: {batch.invoiceNumber}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -770,8 +770,8 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                                     <input
                                         type="text"
                                         required
-                                        value={formData.batchNo}
-                                        onChange={(e) => handleInputChange('batchNo', e.target.value)}
+                                        value={formData.batchNumber}
+                                        onChange={(e) => handleInputChange('batchNumber', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                         placeholder="e.g., BT-2024-001"
                                     />
@@ -912,8 +912,8 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                                     </label>
                                     <input
                                         type="text"
-                                        value={formData.invoiceNo}
-                                        onChange={(e) => handleInputChange('invoiceNo', e.target.value)}
+                                        value={formData.invoiceNumber}
+                                        onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>

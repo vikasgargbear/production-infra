@@ -33,7 +33,7 @@ export const ITEM_FIELD_ALIASES = {
     product_name: ['name', 'productName', 'product'],
     product_code: ['code', 'productCode', 'sku'],
     batch_id: ['batchId'],
-    batch_number: ['batch', 'batch_no', 'batchNo', 'batchNumber'],
+    batch_number: ['batch', 'batch_no', 'batchNumber', 'batchNumber'],
 
     // Quantities
     quantity: ['qty'],
@@ -58,7 +58,7 @@ export const ITEM_FIELD_ALIASES = {
 
 export const INVOICE_FIELD_ALIASES = {
     // Identity
-    invoice_number: ['invoice_no', 'invoiceNo', 'invoiceNumber', 'inv_no'],
+    invoice_number: ['invoice_no', 'invoiceNumber', 'invoiceNumber', 'inv_no'],
     invoice_id: ['invoiceId', 'id'],
 
     // Dates

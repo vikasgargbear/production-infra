@@ -26,7 +26,7 @@ export interface Payment {
     id: number | string;
     customerName?: string;
     customerPhone?: string;
-    invoiceNo?: string;
+    invoiceNumber?: string;
     invoiceAmount?: number;
     paymentAmount: number;
     paymentDate?: string;
@@ -168,7 +168,7 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(payment =>
                 payment.customerName?.toLowerCase().includes(term) ||
-                payment.invoiceNo?.toLowerCase().includes(term) ||
+                payment.invoiceNumber?.toLowerCase().includes(term) ||
                 payment.transactionId?.toLowerCase().includes(term)
             );
         }

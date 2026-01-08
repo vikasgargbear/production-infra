@@ -23,7 +23,7 @@ interface InvoiceTotals {
 }
 
 interface Invoice {
-    invoice_no?: string;
+    invoice_number?: string;
     customer_name?: string;
     gst_type?: string;
     items?: InvoiceItem[];
@@ -103,7 +103,7 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
                         <div className="grid grid-cols-3 gap-4">
                             <div>
                                 <div className="text-sm text-gray-600">Invoice No</div>
-                                <div className="font-semibold">{invoice.invoice_no}</div>
+                                <div className="font-semibold">{invoice.invoice_number}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-600">Customer</div>

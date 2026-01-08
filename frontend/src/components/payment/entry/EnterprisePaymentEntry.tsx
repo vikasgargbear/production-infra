@@ -56,7 +56,7 @@ interface FormData {
 
 interface Invoice {
   id: string | number;
-  invoiceNo: string;
+  invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
   totalAmount: number;
@@ -154,7 +154,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
         // Transform backend data to component format
         const transformedInvoices: Invoice[] = response.data.invoices.map((invoice: any) => ({
           id: invoice.invoice_id,
-          invoiceNo: invoice.invoice_number,
+          invoiceNumber: invoice.invoice_number,
           invoiceDate: invoice.invoice_date,
           dueDate: invoice.due_date,
           totalAmount: parseFloat(invoice.total_amount || 0),
@@ -631,7 +631,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                       {selectedInvoices.map((invoice) => (
                         <div key={invoice.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                           <span className="text-sm text-gray-600">
-                            Invoice #{invoice.invoiceNo} ({new Date(invoice.invoiceDate).toLocaleDateString()})
+                            Invoice #{invoice.invoiceNumber} ({new Date(invoice.invoiceDate).toLocaleDateString()})
                           </span>
                           <span className="text-sm font-medium text-gray-900">
                             ₹{invoice.payingAmount.toLocaleString()}

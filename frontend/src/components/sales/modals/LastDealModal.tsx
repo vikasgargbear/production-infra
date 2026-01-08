@@ -10,7 +10,7 @@ interface Deal {
     quantity?: number;
     discount_percent?: number;
     total_amount?: number;
-    invoice_no?: string;
+    invoice_number?: string;
 }
 
 interface LastDealModalProps {
@@ -136,9 +136,9 @@ const LastDealModal: React.FC<LastDealModalProps> = ({ isOpen, onClose, productI
                                             </div>
                                         </div>
 
-                                        {deal.invoice_no && (
+                                        {deal.invoice_number && (
                                             <div className="text-xs text-gray-500 mt-2">
-                                                Invoice: {deal.invoice_no}
+                                                Invoice: {deal.invoice_number}
                                             </div>
                                         )}
                                     </div>
