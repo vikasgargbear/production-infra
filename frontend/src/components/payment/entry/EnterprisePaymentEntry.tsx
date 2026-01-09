@@ -21,6 +21,7 @@ import {
 import { CustomerSearch } from '../../global';
 import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
 import { paymentsApi } from '../../../services/api';
+import type { Customer as BaseCustomer } from '../../../types/models';
 
 
 interface EnterprisePaymentEntryProps {
@@ -28,14 +29,11 @@ interface EnterprisePaymentEntryProps {
   onClose: () => void;
 }
 
-interface Customer {
-  customer_id: string | number;
-  customer_name?: string;
+// Extended Customer with UI fields for payment entry
+type Customer = BaseCustomer & {
   name?: string;
-  phone?: string;
-  type?: string;
   balance?: number;
-}
+};
 
 interface PaymentMethod {
   id: number;
@@ -664,7 +662,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                               <input
                                 type="checkbox"
                                 checked={(selectedInvoices as any[]).some((s: any) => (s.invoice_id || s.id) === (inv.invoice_id || inv.id))}
-                                onChange={() => handleInvoiceSelect(inv)}
+                                onChange={() => handleInvoiceSelect(inv, {} as any)}
                                 className="rounded border-gray-300"
                               />
                             </td>

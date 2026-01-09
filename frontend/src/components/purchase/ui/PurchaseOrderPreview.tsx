@@ -1,57 +1,8 @@
 import React from 'react';
 import { Calendar, Phone, Mail, MapPin, Building2, CreditCard, Truck, Shield } from 'lucide-react';
+import type { PurchaseOrder, PurchaseOrderItem, Supplier } from '../types/purchaseSharedTypes';
 
-interface PurchaseOrderItem {
-  id: string;
-  product_name: string;
-  hsn_code?: string;
-  pack_size?: string;
-  quantity: string | number;
-  free_quantity?: string | number;
-  unit_price: string | number;
-  mrp?: string | number;
-  discount_percent?: string | number;
-  tax_percent?: string | number;
-  [key: string]: any;
-}
-
-interface SupplierDetails {
-  gst_number?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  [key: string]: any;
-}
-
-interface PurchaseOrder {
-  po_no: string;
-  po_date: string;
-  expected_delivery_date: string;
-  supplier_name: string;
-  billing_address?: string;
-  supplier_details?: SupplierDetails;
-  drug_license_no?: string;
-  payment_terms?: string;
-  delivery_terms?: string;
-  quotation_no?: string;
-  requisition_no?: string;
-  reference_no?: string;
-  items: PurchaseOrderItem[];
-  subtotal_amount: number;
-  discount_amount: number;
-  tax_amount: number;
-  freight_charges?: number;
-  insurance_charges?: number;
-  other_charges?: number;
-  round_off?: number;
-  total_amount: number;
-  temperature_conditions?: string;
-  quality_standards?: string;
-  return_policy?: string;
-  terms_conditions?: string;
-  notes?: string;
-  [key: string]: any;
-}
+// Use canonical types from purchaseSharedTypes - DO NOT define duplicates
 
 interface PurchaseOrderPreviewProps {
   purchaseOrder: PurchaseOrder;
@@ -73,18 +24,18 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
   // Calculate GST breakup
   const calculateGSTBreakup = () => {
     const gstBreakup: { [key: number]: any } = {};
-    
+
     purchaseOrder.items.forEach(item => {
       const quantity = parseFloat(String(item.quantity)) || 0;
       const unit_price = parseFloat(String(item.unit_price)) || 0;
       const discountPercent = parseFloat(String(item.discount_percent)) || 0;
       const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-      
+
       const itemTotal = quantity * unit_price;
       const discountAmount = (itemTotal * discountPercent) / 100;
       const taxableAmount = itemTotal - discountAmount;
       const taxAmount = (taxableAmount * taxPercent) / 100;
-      
+
       if (!gstBreakup[taxPercent]) {
         gstBreakup[taxPercent] = {
           taxableAmount: 0,
@@ -94,13 +45,13 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
           totalTax: 0
         };
       }
-      
+
       gstBreakup[taxPercent].taxableAmount += taxableAmount;
       gstBreakup[taxPercent].cgst += taxAmount / 2;
       gstBreakup[taxPercent].sgst += taxAmount / 2;
       gstBreakup[taxPercent].totalTax += taxAmount;
     });
-    
+
     return gstBreakup;
   };
 
@@ -142,10 +93,10 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               <div className="space-y-1">
                 <p className="text-lg font-semibold text-gray-700">PO No: {purchaseOrder.po_no}</p>
                 <p className="text-gray-600">Date: {formatDate(purchaseOrder.po_date)}</p>
-                <p className="text-gray-600">Expected Delivery: {formatDate(purchaseOrder.expected_delivery_date)}</p>
+                <p className="text-gray-600">Expected Delivery: {formatDate(purchaseOrder.expected_delivery_date || '')}</p>
               </div>
             </div>
-            
+
             <div className="text-right">
               <h2 className="text-xl font-bold text-gray-900 mb-2">
                 {localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
@@ -317,12 +268,12 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               <div className="space-y-2">
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">{formatCurrency(purchaseOrder.subtotal_amount)}</span>
+                  <span className="font-medium">{formatCurrency(purchaseOrder.subtotal_amount || 0)}</span>
                 </div>
-                {purchaseOrder.discount_amount > 0 && (
+                {(purchaseOrder.discount_amount || 0) > 0 && (
                   <div className="flex justify-between py-2">
                     <span className="text-gray-600">Discount</span>
-                    <span className="font-medium text-red-600">- {formatCurrency(purchaseOrder.discount_amount)}</span>
+                    <span className="font-medium text-red-600">- {formatCurrency(purchaseOrder.discount_amount || 0)}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-2">
@@ -355,7 +306,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
                 )}
                 <div className="flex justify-between py-3 border-t-2 border-gray-300">
                   <span className="font-semibold text-lg">Total Amount</span>
-                  <span className="font-bold text-lg text-blue-600">{formatCurrency(purchaseOrder.total_amount)}</span>
+                  <span className="font-bold text-lg text-blue-600">{formatCurrency(purchaseOrder.total_amount || 0)}</span>
                 </div>
               </div>
             </div>

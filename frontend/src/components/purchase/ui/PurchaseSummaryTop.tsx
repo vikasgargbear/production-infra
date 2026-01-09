@@ -1,21 +1,14 @@
 import React from 'react';
 import { FileText, Calendar, CreditCard, Package, Building, Hash } from 'lucide-react';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
+import type { PurchaseEntry, PurchaseEntryItem } from '../types/purchaseSharedTypes';
 
-interface PurchaseItem {
-  id: string;
-  [key: string]: any;
-}
-
-interface Purchase {
-  invoice_number?: string;
-  supplier_name?: string;
-  invoice_date?: string;
-  items?: PurchaseItem[];
-  payment_mode?: string;
-  total_amount?: number;
+// Use canonical types - DO NOT define duplicates
+// Extended for summary display
+interface Purchase extends Partial<PurchaseEntry> {
+  invoice_number?: string;  // UI field (purchase invoice number)
+  payment_mode?: string;  // UI field
   payment_status?: 'paid' | 'partial' | 'pending';
-  [key: string]: any;
 }
 
 interface PurchaseSummaryTopProps {
@@ -25,10 +18,10 @@ interface PurchaseSummaryTopProps {
 const PurchaseSummaryTop: React.FC<PurchaseSummaryTopProps> = ({ purchase }) => {
   const formatDate = (date?: string): string => {
     if (!date) return '-';
-    return new Date(date).toLocaleDateString('en-IN', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
+    return new Date(date).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
     });
   };
 

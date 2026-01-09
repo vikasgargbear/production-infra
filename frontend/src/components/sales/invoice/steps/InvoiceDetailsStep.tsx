@@ -151,7 +151,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             }}
                                             onSave={(addressData: unknown) => {
                                                 console.log('[Invoice] Billing address saved:', addressData);
-                                                setInvoice(prev => ({ ...prev, billing_address_data: addressData }));
+                                                setInvoice(prev => ({ ...prev, billing_address_data: addressData } as Invoice));
                                             }}
                                         />
                                         <AddressForm
@@ -170,7 +170,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                 }
                                             }}
                                             onChange={(address: string) => setInvoice(prev => ({ ...prev, shipping_address: address }))}
-                                            onSave={(addressData: unknown) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData }))}
+                                            onSave={(addressData: unknown) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData } as Invoice))}
                                         />
                                     </div>
                                 </div>

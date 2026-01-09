@@ -7,5 +7,5 @@
 export { default as CurrentStock } from './CurrentStock';
 export { default as StockMovement } from './StockMovement';
 export { default as BatchTracking } from './BatchTracking';
-export { default as EnhancedStockAdjustmentFlow } from './EnhancedStockAdjustmentFlow';
+export { default as EnhancedStockAdjustmentFlow } from './StockAdjustmentFlow';
 export { default as StockTransfer } from './StockTransfer';

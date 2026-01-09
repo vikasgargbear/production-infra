@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Calendar, User, Building2, Phone, Mail, MapPin, CreditCard } from 'lucide-react';
+import { FileText, User, Phone, Mail, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { formatCurrency } from '../../../utils/formatters';
 

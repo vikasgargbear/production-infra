@@ -1,5 +1,6 @@
 import React from 'react';
 import { Truck, Package, Calendar, FileText, User, ShoppingCart } from 'lucide-react';
+import type { Order } from '../../../../types/models';
 
 interface OrderStatus {
   value: string;
@@ -7,23 +8,15 @@ interface OrderStatus {
   color: string;
 }
 
-interface SalesOrder {
-  order_status?: string;
-  delivery_date?: string;
-  reference_no?: string;
-  sales_person?: string;
-  delivery_type?: string;
-  priority?: string;
-  terms_conditions?: string;
-}
+// Use canonical Order type - DO NOT define duplicate
 
 interface SalesOrderSummaryTopProps {
-  salesOrder: SalesOrder;
-  onOrderUpdate: (updates: Partial<SalesOrder>) => void;
+  salesOrder: Order;
+  onOrderUpdate: (updates: Partial<Order>) => void;
 }
 
 const SalesOrderSummaryTop: React.FC<SalesOrderSummaryTopProps> = ({ salesOrder, onOrderUpdate }) => {
-  const handleFieldChange = (field: keyof SalesOrder, value: string) => {
+  const handleFieldChange = (field: keyof Order, value: string) => {
     onOrderUpdate({ [field]: value });
   };
 
@@ -39,7 +32,7 @@ const SalesOrderSummaryTop: React.FC<SalesOrderSummaryTopProps> = ({ salesOrder,
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">ORDER & DELIVERY DETAILS</h3>
-      
+
       {/* First Row - Status, Delivery Date, Reference */}
       <div className="grid grid-cols-3 gap-6 mb-4">
         <div>

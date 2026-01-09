@@ -14,7 +14,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 
 
 // Import global components
-import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card } from '../../global';
+import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card } from '../../global';
 import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
 
 

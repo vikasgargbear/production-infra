@@ -10,11 +10,10 @@ import Home from './components/Home';
 import SalesHub from './components/sales/SalesHub';
 import PurchaseHub from './components/purchase/PurchaseHub';
 import FinancialHub from './components/payment/FinancialHub';
-import CompanySettings from './components/master/settings/CompanySettings';
 import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
-import { LedgerHub, PartyLedgerV3 } from './components/ledger';
+import { LedgerHub } from './components/ledger';
 import { NotesHub } from './components/returns/notes';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
@@ -28,10 +27,12 @@ import { PaymentProvider } from './contexts/PaymentContext';
 // OLD InitialSetup moved to _OLD - not used with new AuthContext
 // import InitialSetup from './components/InitialSetup';
 import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
-import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+
+// NEW: Offline-first components for instant UX
+import { InitialSyncLoader, OfflineBanner } from './components/offline';
+
 import syncEngine from './services/offline/sync/syncEngine';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -48,7 +49,7 @@ const Orders = lazy(() => import('./components/sales/order/Orders'));
 const PaymentTracking = lazy(() => import('./components/payment/tracking/PaymentTracking'));
 const PaymentDashboard = lazy(() => import('./components/payment/tracking/PaymentDashboard'));
 const CreditManagement = lazy(() => import('./components/ledger/CreditManagement'));
-const WhatsAppBusiness = lazy(() => import('./components/global/WhatsAppSimple'));
+const WhatsAppBusiness = lazy(() => import('./components/global/WhatsApp'));
 // OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
 // const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
 const CompanyProfile = lazy(() => import('./components/master/settings/CompanyProfile'));
@@ -90,10 +91,7 @@ type TabName =
   | 'receivables-collection'
   | 'components-test';
 
-interface AppState {
-  activeTab: TabName;
-  isAuthenticated: boolean;
-}
+
 
 // Memoized placeholder components for future features
 const AnalyticsPlaceholder = React.memo(() => (
@@ -112,21 +110,7 @@ const AnalyticsPlaceholder = React.memo(() => (
   </div>
 ));
 
-const ReportsPlaceholder = React.memo(() => (
-  <div className="p-4 bg-gray-50 min-h-screen">
-    <div className="max-w-6xl mx-auto">
-      <div className="bg-white rounded-lg shadow-md border border-gray-200 p-8 text-center animate-fade-in">
-        <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-pharma-green-500 to-pharma-green-600 rounded-xl flex items-center justify-center">
-          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <h1 className="text-xl font-bold text-gray-900 mb-3">Financial Reports</h1>
-        <p className="text-gray-600 max-w-md mx-auto text-sm">Comprehensive financial reporting, GST returns, and business performance analysis tools.</p>
-      </div>
-    </div>
-  </div>
-));
+
 
 const CompliancePlaceholder = React.memo(() => (
   <div className="p-4 bg-gray-50 min-h-screen">
@@ -145,7 +129,7 @@ const CompliancePlaceholder = React.memo(() => (
 ));
 
 const AppContent = (): JSX.Element => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabName>('home');
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
@@ -246,7 +230,7 @@ const AppContent = (): JSX.Element => {
       case 'whatsapp':
         return <WhatsAppBusiness key="whatsapp" />;
       case 'profile':
-        return <CompanyProfile key="profile" />;
+        return <CompanyProfile key="company-profile" open={true} onClose={() => setActiveTab('dashboard')} />;
       case 'inventory':
         return <StockHub key="inventory" open={true} onClose={() => setActiveTab('home')} />;
       case 'accounting':
@@ -306,28 +290,33 @@ const AppContent = (): JSX.Element => {
     return <LoginPage />;
   }
 
-  // User is authenticated - show main app
+  // User is authenticated - show main app with offline support
   return (
-    <QueryClientProvider client={queryClient}>
-      <CompanyProvider>
-        <EscapeKeyProvider>
-          <ToastProvider>
-            <ErrorBoundary>
-              <div className="min-h-screen bg-gray-50">
-                <Suspense fallback={<LoadingSpinner />}>
-                  {renderActiveComponent()}
-                </Suspense>
-                <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
-                  <SyncStatusIndicator />
-                  <OfflineIndicator />
+    <InitialSyncLoader>
+      <QueryClientProvider client={queryClient as any}>
+        <CompanyProvider>
+          <EscapeKeyProvider>
+            <ToastProvider>
+              <ErrorBoundary>
+                <div className="min-h-screen bg-gray-50">
+                  {/* Offline banner at top */}
+                  <OfflineBanner />
+
+                  <Suspense fallback={<LoadingSpinner />}>
+                    {renderActiveComponent()}
+                  </Suspense>
+                  <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
+                    <SyncStatusIndicator />
+                    <OfflineIndicator />
+                  </div>
+                  <ToastContainer position="top-right" />
                 </div>
-                <ToastContainer position="top-right" />
-              </div>
-            </ErrorBoundary>
-          </ToastProvider>
-        </EscapeKeyProvider>
-      </CompanyProvider>
-    </QueryClientProvider>
+              </ErrorBoundary>
+            </ToastProvider>
+          </EscapeKeyProvider>
+        </CompanyProvider>
+      </QueryClientProvider>
+    </InitialSyncLoader>
   );
 };
 

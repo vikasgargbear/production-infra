@@ -17,6 +17,7 @@ import { DocumentImportModal } from '../../global/modals';
 import { useSalesOrderLogic } from './hooks/useSalesOrderLogic';
 import OrderItemsStep from './steps/OrderItemsStep';
 import OrderReviewStep from './steps/OrderReviewStep';
+import type { Customer, Product } from '../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -25,18 +26,7 @@ interface SalesOrderFlowProps {
     onClose: () => void;
 }
 
-interface Customer {
-    customer_id?: number | string;
-    customer_name?: string;
-    phone?: string;
-    email?: string;
-}
-
-interface Product {
-    product_id: number | string;
-    product_name: string;
-    [key: string]: unknown;
-}
+// Using canonical types from /types/models - no local duplicates
 
 // ==================== MAIN COMPONENT ====================
 

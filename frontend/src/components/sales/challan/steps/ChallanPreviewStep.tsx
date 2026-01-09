@@ -249,8 +249,6 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                                 onChange={(value: string) => setChallan(prev => ({ ...prev, notes: value }))}
                                 placeholder="Add delivery instructions or special notes..."
                                 rows={2}
-                                title="Notes"
-                                compact={true as any}
                                 className=""
                             />
                         </div>
@@ -279,18 +277,20 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
             {/* Success Modal */}
             {showSuccessModal && createdChallanData && (
                 <GenericSuccessModal
-                    isOpen={showSuccessModal}
-                    onClose={() => {
-                        setShowSuccessModal(false);
-                        onClose?.();
-                    }}
-                    documentType="Delivery Challan"
-                    documentNumber={createdChallanData.challan_number}
-                    documentData={createdChallanData}
-                    onPrint={printChallan}
-                    onThermalPrint={thermalPrintChallan}
-                    onWhatsApp={shareOnWhatsApp}
-                    phoneNumber={createdChallanData.customer_details?.phone || challan.customer_details?.phone}
+                    {...{
+                        isOpen: showSuccessModal,
+                        onClose: () => {
+                            setShowSuccessModal(false);
+                            onClose?.();
+                        },
+                        documentType: "Delivery Challan",
+                        documentNumber: createdChallanData.challan_number,
+                        documentData: createdChallanData as any,
+                        onPrint: printChallan,
+                        onThermalPrint: thermalPrintChallan,
+                        onWhatsApp: shareOnWhatsApp,
+                        phoneNumber: createdChallanData.customer_details?.phone || challan.customer_details?.phone
+                    } as any}
                 />
             )}
         </div>

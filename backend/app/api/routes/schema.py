@@ -39,7 +39,8 @@ async def get_all_schemas(db: Session = Depends(get_db)):
             )
             ORDER BY schema_name
         """
-        schemas_result = db.execute(text(schemas_query))
+        # P3-9: Safety LIMIT to prevent loading entire DB
+        schemas_result = db.execute(text(schemas_query + " LIMIT 100"))
         schemas = [row[0] for row in schemas_result]
         
         result = {}
@@ -52,6 +53,7 @@ async def get_all_schemas(db: Session = Depends(get_db)):
                 WHERE table_schema = :schema_name
                   AND table_type = 'BASE TABLE'
                 ORDER BY table_name
+            LIMIT 200  -- P3-9: Safety limit per schema
             """
             tables_result = db.execute(text(tables_query), {"schema_name": schema_name})
             tables = [row[0] for row in tables_result]
@@ -73,6 +75,7 @@ async def get_all_schemas(db: Session = Depends(get_db)):
                     WHERE table_schema = :schema_name
                       AND table_name = :table_name
                     ORDER BY ordinal_position
+                    LIMIT 500  -- P3-9: Safety limit for columns
                 """
                 columns_result = db.execute(text(columns_query), {
                     "schema_name": schema_name,
@@ -130,6 +133,7 @@ async def get_schema(schema_name: str, db: Session = Depends(get_db)):
             WHERE table_schema = :schema_name
               AND table_type = 'BASE TABLE'
             ORDER BY table_name
+            LIMIT 200  -- P3-9: Safety limit
         """
         tables_result = db.execute(text(tables_query), {"schema_name": schema_name})
         tables = [row[0] for row in tables_result]
@@ -151,6 +155,7 @@ async def get_schema(schema_name: str, db: Session = Depends(get_db)):
                 WHERE table_schema = :schema_name
                   AND table_name = :table_name
                 ORDER BY ordinal_position
+                LIMIT 500  -- P3-9: Safety limit
             """
             columns_result = db.execute(text(columns_query), {
                 "schema_name": schema_name,
@@ -205,6 +210,7 @@ async def get_table(schema_name: str, table_name: str, db: Session = Depends(get
             WHERE table_schema = :schema_name
               AND table_name = :table_name
             ORDER BY ordinal_position
+            LIMIT 500  -- P3-9: Safety limit
         """
         columns_result = db.execute(text(columns_query), {
             "schema_name": schema_name,
@@ -257,6 +263,7 @@ async def get_table_columns_quick(schema_name: str, table_name: str, db: Session
             WHERE table_schema = :schema_name
               AND table_name = :table_name
             ORDER BY ordinal_position
+            LIMIT 500  -- P3-9: Safety limit
         """
         columns_result = db.execute(text(columns_query), {
             "schema_name": schema_name,

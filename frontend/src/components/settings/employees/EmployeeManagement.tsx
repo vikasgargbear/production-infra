@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, X, Save, Upload, FileText, User, Filter } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Save, Upload, User, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { employeesApi, apiClient } from '../../../services/api';
-import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS } from '../../../constants/pharmaEmployeeOptions';
+import { PHARMA_DESIGNATIONS } from '../../../constants/pharmaEmployeeOptions';
 
 
 interface EmployeeFormData {

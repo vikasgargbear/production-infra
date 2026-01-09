@@ -5,7 +5,7 @@ import {
   Archive, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import PartyLedgerV3 from './PartyLedgerV3';
+import PartyLedger from './PartyLedger';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 
@@ -38,7 +38,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'View transaction history',
       icon: FileText,
       color: 'blue',
-      component: PartyLedgerV3
+      component: PartyLedger
     },
     {
       id: 'outstanding',

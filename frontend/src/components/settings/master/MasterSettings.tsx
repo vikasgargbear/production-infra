@@ -40,8 +40,8 @@ const Button: React.FC<{ variant?: 'outline' | 'default'; onClick?: () => void; 
     onClick={onClick}
     disabled={disabled}
     className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${variant === 'outline'
-        ? 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-        : 'bg-blue-600 text-white hover:bg-blue-700'
+      ? 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+      : 'bg-blue-600 text-white hover:bg-blue-700'
       }`}
   >
     {children}
@@ -197,7 +197,7 @@ const MasterSettings = () => {
       setLoading(true);
       const response = await fetch('/api/settings/features', {
         headers: {
-          'X-Org-ID': localStorage.getItem('orgId'),
+          'X-Org-ID': localStorage.getItem('orgId') || '',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
@@ -237,7 +237,7 @@ const MasterSettings = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-Org-ID': localStorage.getItem('orgId'),
+          'X-Org-ID': localStorage.getItem('orgId') || '',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({ features })
@@ -253,7 +253,7 @@ const MasterSettings = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Org-ID': localStorage.getItem('orgId'),
+          'X-Org-ID': localStorage.getItem('orgId') || '',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(systemFeatures)

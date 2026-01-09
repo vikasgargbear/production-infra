@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft,
-  Search, Calendar, Save, Printer, X, Edit2, Trash2
+  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft, X
 } from 'lucide-react';
 import {
   Button,
@@ -9,12 +8,10 @@ import {
   CardSection,
   Select,
   DatePicker,
-  DataTable,
   SummaryCard,
   CustomerSearch,
   InvoiceSelector,
-  useToast,
-  NotesSection
+  useToast
 } from '../../global';
 import { theme, classes } from '../../../config/theme.config';
 import { notesApi } from '../../../services/api';
@@ -445,7 +442,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                       <div>
                         <label className={classes.formLabel}>Note Date *</label>
                         <DatePicker
-                          value={noteData.note_date}
+                          value={noteData.note_date as any}
                           onChange={(date) => setNoteData(prev => ({
                             ...prev,
                             note_date: typeof date === 'string' ? date : date?.toISOString().split('T')[0] || ''
@@ -460,7 +457,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                       <label className={classes.formLabel}>Customer *</label>
                       <CustomerSearch
                         value={selectedCustomer}
-                        onChange={handleCustomerSelect}
+                        onChange={handleCustomerSelect as any}
                         placeholder="Search customer by name, phone or ID..."
                         className="mt-1"
                       />
@@ -473,6 +470,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         <InvoiceSelector
                           customerId={selectedCustomer.id || selectedCustomer.customer_id}
                           onSelect={handleInvoiceSelect}
+                          onClose={() => { }}
                         />
                       </div>
                     )}
@@ -484,7 +482,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         <Select
                           options={reasonOptions}
                           value={noteData.reason}
-                          onChange={(reason) => setNoteData(prev => ({ ...prev, reason }))}
+                          onChange={(reason) => setNoteData(prev => ({ ...prev, reason }) as any)}
                           placeholder="Select reason..."
                           className="mt-1"
                         />

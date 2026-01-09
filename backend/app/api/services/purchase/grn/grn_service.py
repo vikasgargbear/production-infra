@@ -65,12 +65,11 @@ class GRNService:
             )
             
             # Insert GRN items
+            # P2-1: Using bulk insert instead of loop (50 items: 50 queries → 1 query)
             items = grn_data.get("items", [])
-            items_created = 0
+            items_created = GRNRepository.create_grn_items_bulk(db, grn_id, items)
             
-            for idx, item in enumerate(items):
-                GRNRepository.create_grn_item(db, grn_id, item, idx + 1)
-                items_created += 1
+            logger.info(f"Created {items_created} GRN items in bulk insert")
             
             # If QC not required, update inventory immediately
             batches_created = 0
@@ -106,19 +105,14 @@ class GRNService:
     ) -> int:
         """
         Create/update inventory batches from GRN items.
-        Business logic wrapper around repository batch creation.
+        P2-1: Using bulk UPSERT instead of loop.
         """
-        batches_created = 0
+        # Use bulk upsert (50 items: 50 UPSERT queries → 1 query)
+        batches_created = GRNRepository.create_inventory_batches_bulk(
+            db, org_id, grn_id, supplier_id, items
+        )
         
-        for item in items:
-            quantity = item.get("quantity") or item.get("received_quantity") or 0
-            if quantity <= 0:
-                continue
-            
-            GRNRepository.create_inventory_batch(
-                db, org_id, grn_id, supplier_id, item, quantity
-            )
-            batches_created += 1
+        logger.info(f"Created/updated {batches_created} inventory batches in bulk UPSERT")
         
         return batches_created
     

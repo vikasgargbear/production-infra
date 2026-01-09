@@ -9,7 +9,7 @@ import StockMovement from './stock/StockMovement';
 import StockTransfer from './stock/StockTransfer';
 import CurrentStock from './stock/CurrentStock';
 import BatchTracking from './stock/BatchTracking';
-import EnhancedStockAdjustmentFlow from './stock/EnhancedStockAdjustmentFlow';
+import EnhancedStockAdjustmentFlow from './stock/StockAdjustmentFlow';
 
 interface StockHubProps {
   open?: boolean;

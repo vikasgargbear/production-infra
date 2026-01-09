@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, Shield, MessageCircle, FileText, CreditCard, ToggleLeft, ToggleRight, Check } from 'lucide-react';
-import { customersApi } from '../../../services/api';
-import { metadataApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
+import { Building2, User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, Shield, MessageCircle, CreditCard } from 'lucide-react';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import { useOfflineCustomers } from '../../../hooks/offline/sales';
+import { toast } from 'react-toastify';
 
 /**
  * Enhanced Customer Creation Component
@@ -221,101 +220,66 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     return `${initials}${timestamp}`;
   };
 
+  // Use optimistic offline hook
+  const { saveCustomer: saveCustomerOffline } = useOfflineCustomers();
+
   const handleSubmit = async () => {
     if (!validateForm()) {
-      setMessage('Please fix the validation errors');
-      setMessageType('error');
+      toast.error('Please fix the validation errors');
       return;
     }
 
     setLoading(true);
-    setMessage('');
 
     // Auto-fill WhatsApp number with primary phone if not provided
     const whatsappNumber = formData.whatsapp_number || formData.primary_phone;
 
     const customerData = {
-      // org_id should NOT be sent - backend gets it from auth token
       customer_name: formData.customer_name,
-      customer_type: customerType === 'B2B' ? 'wholesale' : 'retail',
+      customer_type: (customerType === 'B2B' ? 'wholesale' : 'b2c') as 'regular' | 'b2b' | 'b2c' | 'wholesale',
       primary_phone: formData.primary_phone.replace(/\D/g, ''),
-      email: formData.primary_email || null,
-      secondary_phone: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null,
-      whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null, // Also save as whatsapp_number
-      contact_person: formData.contact_person || null,
-      contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
-      contact_person_email: formData.contact_person_email || null,
-      gst_number: formData.gst_number || null,
-      pan_number: formData.pan_number || null,
-      drug_license_number: formData.drug_license_number || null,
-      drug_license_validity: formData.drug_license_validity || null,
-      business_type: formData.business_type || 'retail_pharmacy', // Send as its own field
-      // Address fields
-      address_line1: formData.address.address_line1 || null,
-      address_line2: formData.address.address_line2 || null,
-      city: formData.address.city || null,
-      state: formData.address.state || null,
-      pincode: formData.address.pincode || null,
-      // Credit configuration - ALL fields saved to backend
+      primary_email: formData.primary_email || undefined,
+      whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : undefined,
+      contact_person: formData.contact_person || undefined,
+      contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : undefined,
+      contact_person_email: formData.contact_person_email || undefined,
+      gst_number: formData.gst_number || undefined,
+      pan_number: formData.pan_number || undefined,
+      drug_license_number: formData.drug_license_number || undefined,
+      drug_license_validity: formData.drug_license_validity || undefined,
+      business_type: formData.business_type || 'retail_pharmacy',
+      billing_address: {
+        street: formData.address.address_line1 || undefined,
+        city: formData.address.city || undefined,
+        state: formData.address.state || undefined,
+        pincode: formData.address.pincode || undefined
+      },
       credit_limit: formData.credit_limit ? Number(formData.credit_limit) : 0,
       credit_days: formData.credit_days ? Number(formData.credit_days) : 0,
-      credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
-      payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
-      notes: `${customerType} customer`, // Remove business_type from notes
       is_active: true
     };
 
     try {
-      // If offline, queue operation and exit gracefully
-      if (!navigator.onLine) {
-        offlineStorage.queueOfflineOperation({
-          type: 'CREATE_CUSTOMER',
-          endpoint: 'customers.create',
-          payload: customerData,
-          priority: 'high'
+      // OPTIMISTIC: Save customer (returns immediately!)
+      const customerId = await saveCustomerOffline(customerData);
+
+      // Show success immediately
+      toast.success(`${customerType} customer created!`);
+
+      // Call callback if provided
+      if (onCustomerCreated) {
+        onCustomerCreated({
+          ...customerData,
+          customer_id: customerId
         });
-        setMessage('Offline: Customer creation queued. It will sync automatically when online.');
-        setMessageType('success');
-        setLoading(false);
-        return;
       }
 
-      const response = await customersApi.create(customerData);
+      // Close modal immediately (user doesn't wait!)
+      onClose();
 
-      if (response.data) {
-        setMessage(`${customerType} Customer created successfully!`);
-        setMessageType('success');
-
-        // Call the callback with the created customer
-        if (onCustomerCreated) {
-          const createdCustomer = {
-            customer_id: response.data.customer_id || response.data.id,
-            customer_name: customerData.customer_name,
-            contact_person: customerData.contact_person,
-            primary_phone: customerData.primary_phone,
-            customer_type: 'B2B',
-            ...response.data
-          };
-          onCustomerCreated(createdCustomer);
-        }
-
-        // Close modal after 1.5 seconds
-        setTimeout(() => {
-          onClose();
-        }, 1500);
-      }
     } catch (error) {
-
-      // Queue on server error/network issues as well
-      offlineStorage.queueOfflineOperation({
-        type: 'CREATE_CUSTOMER',
-        endpoint: 'customers.create',
-        payload: customerData,
-        priority: 'high'
-      });
-
-      setMessage('Network issue: Saved locally and queued for sync.');
-      setMessageType('error');
+      console.error('Customer creation failed:', error);
+      toast.error('Failed to create customer. Please try again.');
     } finally {
       setLoading(false);
     }

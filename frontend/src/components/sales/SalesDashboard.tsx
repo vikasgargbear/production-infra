@@ -20,7 +20,8 @@ interface Invoice {
   status: string;
 }
 
-interface Product {
+// Dashboard-specific type - NOT the canonical Product
+interface TopProduct {
   name: string;
   sold: number;
   revenue: number;
@@ -45,7 +46,7 @@ interface DashboardData {
     pendingOrdersChange: number;
   };
   recentInvoices: Invoice[];
-  topProducts: Product[];
+  topProducts: TopProduct[];
   salesTrend: SalesTrend[];
 }
 

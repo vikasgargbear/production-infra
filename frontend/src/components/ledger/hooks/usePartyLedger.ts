@@ -1,7 +1,7 @@
 /**
  * usePartyLedger Hook
  * 
- * Extracts state management and data fetching from PartyLedgerV3.tsx
+ * Extracts state management and data fetching from PartyLedger.tsx
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';

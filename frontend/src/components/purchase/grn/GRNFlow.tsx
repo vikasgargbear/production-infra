@@ -3,10 +3,10 @@ import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer, Che
 import { suppliersApi, productsApi, grnApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import {
-  EnhancedGlobalDocumentFlow,
+  GlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
-  ProductSearchSimple,
+  ProductSearch,
 
   SupplierCreationModal,
   ProductCreationModal,
@@ -361,7 +361,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
             Create Product
           </button>
         </div>
-        <ProductSearchSimple
+        <ProductSearch
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
             setShowProductModal(true);
@@ -634,7 +634,7 @@ const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledDat
 
   return (
     <>
-      <EnhancedGlobalDocumentFlow
+      <GlobalDocumentFlow
         documentType="grn"
         documentData={grn}
         onDocumentUpdate={setGrn}

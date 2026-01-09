@@ -1,32 +1,14 @@
 import React, { FC } from 'react';
 import ProductCreationModal from '../creation/ProductCreationModal';
+import type { Product } from '../../../types/models';
 
-// ==================== TYPE DEFINITIONS ====================
+// Use canonical Product type - DO NOT define duplicate
 
-interface Product {
-    id?: string;
-    product_id?: number | string;
-    product_name?: string;
-    generic_name?: string;
-    product_code?: string;
-    category?: string;
-    hsn_code?: string;
-    brand?: string;
-    manufacturer?: string;
-    mrp?: number;
-    cost_per_unit?: number;
-    pack_size?: string;
-    unit?: string;
-    tax_rate?: number;
-    status?: string;
-    is_active?: boolean;
-    [key: string]: unknown;
-}
-
+// Accept a flexible product type to support different Product extensions
 export interface ProductEditModalProps {
     isOpen: boolean;
     onClose: () => void;
-    product?: Product | null;
+    product?: { product_name?: string;[key: string]: unknown } | null;
     onSave?: (product: Product) => void;
     mode?: 'edit' | 'create' | 'view';
 }
@@ -52,7 +34,7 @@ const ProductEditModal: FC<ProductEditModalProps> = ({
             onClose={onClose}
             onProductCreated={(savedProduct) => {
                 if (onSave) {
-                    onSave(savedProduct as Product);
+                    onSave(savedProduct as unknown as Product);
                 }
             }}
             initialProductName={product?.product_name || ''}

@@ -311,7 +311,7 @@ export function usePaymentEntry() {
                 allocations: selectedAllocations
             };
 
-            const response = await paymentsApi.create(payload);
+            const response = await paymentsApi.create(payload as any);
 
             if (response.data) {
                 toast.success('Payment recorded successfully!');

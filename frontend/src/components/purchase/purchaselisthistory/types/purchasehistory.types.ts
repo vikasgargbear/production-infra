@@ -1,0 +1,76 @@
+/**
+ * PurchaseListHistory Types
+ * Type definitions for purchase history listing and management
+ */
+
+export interface PurchaseOrder {
+    id: string;
+    po_number: string;
+    po_date: string;
+    supplier_id: string;
+    supplier_name: string;
+    total_amount: number;
+    paid_amount: number;
+    pending_amount: number;
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue';
+    status: 'draft' | 'confirmed' | 'received' | 'cancelled';
+    items_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PurchaseListHistoryProps {
+    onClose?: () => void;
+}
+
+export interface PurchaseFiltersProps {
+    searchQuery: string;
+    dateFilter: string;
+    statusFilter: string;
+    showFilters: boolean;
+    onSearchChange: (query: string) => void;
+    onDateFilterChange: (filter: string) => void;
+    onStatusFilterChange: (status: string) => void;
+    onToggleFilters: () => void;
+    onRefresh: () => void;
+    refreshing: boolean;
+}
+
+export interface PurchaseHistoryTableProps {
+    purchases: PurchaseOrder[];
+    selectedIds: Set<string>;
+    isAllSelected: boolean;
+    loading: boolean;
+    onToggleSelect: (id: string) => void;
+    onToggleSelectAll: () => void;
+    onViewPurchase: (purchase: PurchaseOrder) => void;
+}
+
+export interface PurchaseBulkActionsProps {
+    selectedCount: number;
+    onExport: () => void;
+    onClear: () => void;
+}
+
+export interface PurchaseListHistoryState {
+    purchases: PurchaseOrder[];
+    selectedIds: Set<string>;
+    filters: {
+        searchQuery: string;
+        dateFilter: string;
+        statusFilter: string;
+    };
+    ui: {
+        showFilters: boolean;
+        refreshing: boolean;
+        exporting: boolean;
+    };
+    pagination: {
+        total: number;
+        page: number;
+        per_page: number;
+        total_pages: number;
+    };
+    loading: boolean;
+    error: string | null;
+}

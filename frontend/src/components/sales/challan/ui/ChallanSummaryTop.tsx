@@ -1,23 +1,8 @@
 import React from 'react';
 import { Truck, Calendar, MapPin, Hash, Phone, User, FileText, Package } from 'lucide-react';
+import type { Challan, TransportDetails } from '../types/challanTypes';
 
-interface TransportDetails {
-  transporter_name?: string;
-  vehicle_no?: string;
-  driver_name?: string;
-  lr_no?: string;
-  driver_phone?: string;
-  eway_bill_no?: string;
-  freight_charges?: number;
-  loading_charges?: number;
-  other_charges?: number;
-  weight?: string;
-}
-
-interface Challan {
-  transport_details?: TransportDetails;
-  delivery_address?: string;
-}
+// Use canonical types from types/challanTypes - DO NOT define duplicates
 
 interface ChallanSummaryTopProps {
   challan: Challan;
@@ -41,7 +26,7 @@ const ChallanSummaryTop: React.FC<ChallanSummaryTopProps> = ({ challan, onChalla
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">TRANSPORT & DELIVERY DETAILS</h3>
-      
+
       {/* First Row - Transport Company, Vehicle, Driver */}
       <div className="grid grid-cols-3 gap-6 mb-4">
         <div>

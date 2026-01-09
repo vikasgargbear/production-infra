@@ -1,181 +1,179 @@
-# 📚 Pharma ERP Documentation
+# Production Infrastructure Documentation
 
-## Overview
-Complete documentation for the Pharma ERP system including architecture, testing, deployment, and development guides.
-
-## 📂 Documentation Structure
-
-### 🧪 [Testing](/docs/testing/)
-Comprehensive testing documentation for all modules
-- [Sales Invoice Testing Suite](/docs/testing/sales-invoice/) - **NEW** ✨
-  - Complete testing documentation
-  - Flow diagrams and architecture
-  - Action plans for fixes
-- More modules coming soon
-
-### 🏗️ [Architecture](/docs/architecture/)
-System architecture and design documentation
-- Database schema
-- API design
-- Component architecture
-- Data flow diagrams
-
-### 📡 [API Documentation](/docs/api/)
-Complete API reference for all endpoints
-- REST API endpoints
-- Request/Response formats
-- Authentication
-- Error codes
-
-### 🚀 [Deployment](/docs/deployment/)
-Deployment guides and procedures
-- Railway deployment
-- Environment configuration
-- CI/CD pipeline
-- Monitoring setup
-
-### 📖 [Guides](/docs/guides/)
-Development and usage guides
-- Getting started
-- Development workflow
-- Best practices
-- Troubleshooting
-
-### 🎯 [Action Plans](/docs/action-plans/)
-Priority-ordered implementation plans
-- Bug fixes
-- Feature development
-- Performance optimization
-- Technical debt
+Enterprise-grade documentation for the Pharmacy Management System.
 
 ---
 
-## 🔍 Quick Start
+## Quick Navigation
 
-### For QA/Testing
-➡️ Start with [Testing Documentation](/docs/testing/)
-
-### For Developers
-➡️ Check [Architecture](/docs/architecture/) and [API Docs](/docs/api/)
-
-### For DevOps
-➡️ See [Deployment Guide](/docs/deployment/)
-
-### For New Team Members
-➡️ Begin with [Guides](/docs/guides/)
+| I want to... | Go to |
+|--------------|-------|
+| Start developing | [Getting Started](guides/getting-started.md) |
+| Understand the architecture | [System Design](backend/architecture/system-design.md) |
+| Find API endpoints | [API Reference](backend/api/) |
+| Deploy to production | [Production Guide](deployment/production.md) |
+| Debug an issue | [Troubleshooting](guides/troubleshooting.md) |
 
 ---
 
-## 📊 Documentation Status
+## Documentation Map
 
-| Section | Status | Completeness | Last Updated |
-|---------|--------|--------------|--------------|
-| Testing - Sales Invoice | ✅ Complete | 100% | Aug 4, 2024 |
-| Architecture | 🟡 In Progress | 60% | Aug 1, 2024 |
-| API Documentation | 🟡 In Progress | 40% | Aug 1, 2024 |
-| Deployment | 🟢 Good | 80% | Aug 1, 2024 |
-| Guides | 🔴 Needs Update | 30% | Aug 1, 2024 |
-
----
-
-## 🔗 Key Documents
-
-### Latest Additions
-1. **[Sales Invoice Implementation Summary](/docs/testing/sales-invoice/05_IMPLEMENTATION_SUMMARY.md)** 🆕
-   - Complete analysis of 75+ triggers
-   - Critical fixes implemented
-   - Ready-to-deploy solutions
-
-2. **[Complete Trigger Flow Documentation](/docs/testing/sales-invoice/04_COMPLETE_TRIGGER_FLOW.md)** 🆕
-   - Maps entire invoice creation flow
-   - Identifies missing components
-   - Performance considerations
-
-3. **[Sales Invoice Complete Testing Doc](/docs/testing/sales-invoice/01_COMPLETE_TESTING_DOC.md)**
-   - Ready for Linear import
-   - 15 test cases
-   - Full component mapping
-
-4. **[Sales Invoice Flow Diagram](/docs/testing/sales-invoice/02_FLOW_DIAGRAM.md)**
-   - Visual architecture
-   - State management
-   - Transaction flow
-
-5. **[Sales Invoice Action Plan](/docs/testing/sales-invoice/03_ACTION_PLAN.md)**
-   - Prioritized fixes
-   - Code snippets
-   - Troubleshooting
-
-### Important References
-- [Database Schema](/database/schema-docs/MASTER_SCHEMA_INDEX.md)
-- [Branching Strategy](BRANCHING_STRATEGY.md)
-- [Environment Variables](/docs/deployment/environment.md)
-
----
-
-## 📝 Documentation Standards
-
-### File Naming
-- Use UPPER_CASE for main documents
-- Use kebab-case for folders
-- Prefix with numbers for ordering (01_, 02_, etc.)
-
-### Content Format
-- Use Markdown (.md) for all documentation
-- Include table of contents for long documents
-- Add status badges where applicable
-- Include last updated date
-
-### Code Examples
-```javascript
-// Always include language identifier
-// Add comments for clarity
-// Keep examples concise
+```
+docs/
+├── backend/                      # Backend documentation
+│   ├── api/                      # API reference (14 files)
+│   ├── services/                 # Service layer (8 files)
+│   ├── database/                 # Schema documentation (7 files)
+│   ├── architecture/             # System architecture (4 files)
+│   └── deployment/               # Deploy configs (4 files)
+│
+├── frontend/                     # Frontend documentation
+│   ├── offline/                  # Offline-first architecture
+│   └── design-system.md          # UI components & patterns
+│
+├── guides/                       # Developer guides
+│   ├── getting-started.md        # New developer setup
+│   ├── development.md            # Development workflow
+│   ├── testing.md                # Testing guide
+│   └── troubleshooting.md        # Common issues
+│
+└── deployment/                   # Deployment documentation
+    ├── production.md             # Production deployment
+    ├── docker.md                 # Docker setup
+    ├── monitoring.md             # Monitoring & logging
+    └── backup.md                 # Backup & recovery
 ```
 
+---
+
+## Backend Documentation
+
+### API Reference
+
+Complete REST API documentation with enterprise features.
+
+| Section | Description |
+|---------|-------------|
+| [API Overview](backend/api/) | Authentication, pagination, rate limits |
+| [Sales API](backend/api/sales/) | Invoices, orders, challans |
+| [Purchase API](backend/api/purchase/) | PO, GRN, supplier invoices |
+| [Inventory API](backend/api/inventory/) | Products, batches, stock |
+| [Finance API](backend/api/finance/) | Payments, ledger, credit notes |
+| [Master API](backend/api/master/) | Customers, suppliers, categories |
+| [Returns API](backend/api/returns/) | Sales & purchase returns |
+| [Auth API](backend/api/auth/) | Login, tokens, permissions |
+
+**Enterprise Guides:**
+- [SDK Examples](backend/api/sdk-examples.md) - Python & JavaScript code
+- [Testing Guide](backend/api/testing.md) - Postman, automated tests
+- [Idempotency](backend/api/idempotency.md) - Safe retries
+- [Webhooks](backend/api/webhooks.md) - Event notifications
+- [Best Practices](backend/api/best-practices.md) - Security, performance
+- [Error Reference](backend/api/errors.md) - 60+ error codes
+
+### Architecture
+
+| Document | Description |
+|----------|-------------|
+| [System Design](backend/architecture/system-design.md) | High-level architecture, components |
+| [Multi-Tenancy](backend/architecture/multi-tenancy.md) | Data isolation, TenantAwareSession |
+| [Authentication](backend/architecture/authentication.md) | JWT, RBAC, permissions |
+| [Performance](backend/architecture/performance.md) | Caching, bulk operations |
+
+### Database
+
+| Document | Description |
+|----------|-------------|
+| [Database Overview](backend/database/) | 10 schemas, 166 tables |
+| [Master Schema Index](backend/database/MASTER_SCHEMA_INDEX.md) | All tables reference |
+| [Schema Details](backend/database/schemas/) | Per-module schemas with ERDs |
+
+### Services
+
+| Module | Description |
+|--------|-------------|
+| [Services Overview](backend/services/) | Service layer patterns |
+| [Sales Services](backend/services/sales/) | Invoice, order logic |
+| [Purchase Services](backend/services/purchase/) | PO, GRN logic |
+| [Inventory Services](backend/services/inventory/) | Stock, batch management |
+| [Finance Services](backend/services/finance/) | Payments, ledger |
+| [Master Services](backend/services/master/) | Customer, supplier logic |
+| [Returns Services](backend/services/returns/) | Return processing |
+| [Core Services](backend/services/core/) | Auth, audit, base |
+
+---
+
+## Frontend Documentation
+
+Frontend docs are split between two locations:
+
+| Location | Content |
+|----------|---------|
+| [docs/frontend/](frontend/) | Overview, offline architecture |
+| [frontend/docs/](../frontend/docs/) | Detailed dev docs, user guides (66 files) |
+
+### Key Docs
+
+| Document | Description |
+|----------|-------------|
+| [Offline Architecture](frontend/offline/) | IndexedDB schema, sync engine, delta sync |
+| [Design System](../frontend/docs/design-system.md) | Complete (511 lines) |
+| [User Guides](../frontend/docs/user-guides/) | End-user operational guides (36 files) |
+
+---
+
+## Developer Guides
+
+| Guide | Audience |
+|-------|----------|
+| [Getting Started](guides/getting-started.md) | New developers |
+| [Development Workflow](guides/development.md) | All developers |
+| [Testing Guide](guides/testing.md) | All developers |
+| [Troubleshooting](guides/troubleshooting.md) | All developers |
+
+---
+
+## Deployment
+
+| Document | Description |
+|----------|-------------|
+| [Production Deployment](deployment/production.md) | Deployment architecture, checklists |
+| [Docker Setup](deployment/docker.md) | Dockerfiles, docker-compose |
+| [Monitoring & Logging](deployment/monitoring.md) | Prometheus, Grafana, Sentry |
+| [Backup & Recovery](deployment/backup.md) | Backup strategies, DR plan |
+
+---
+
+## Documentation Standards
+
+### File Naming
+- Use `kebab-case.md` for files
+- Use `README.md` for directory indexes
+
+### Structure
+Each document includes:
+1. **Overview** - What this covers
+2. **Details** - Main content
+3. **Examples** - Code samples
+4. **See Also** - Related docs
+
 ### Diagrams
-- Use Mermaid for flow diagrams
-- Include ASCII art for simple diagrams
-- Add screenshots when necessary
+Mermaid diagrams for:
+- Sequence diagrams (API flows)
+- ER diagrams (database)
+- Flowcharts (business logic)
+- Component diagrams (architecture)
 
 ---
 
-## 🤝 Contributing
+## Contributing to Docs
 
-### To Add Documentation
-1. Create document in appropriate folder
-2. Follow naming conventions
-3. Update relevant README/index files
-4. Add to navigation if needed
-5. Submit PR with description
-
-### To Update Documentation
-1. Check last updated date
-2. Make changes
-3. Update version/date
-4. Note changes in commit message
+1. Follow the file structure above
+2. Use consistent formatting
+3. Include code examples
+4. Add cross-references
+5. Update this index when adding new sections
 
 ---
 
-## 📈 Metrics
-
-- **Total Documents:** 25+
-- **Test Cases Documented:** 15
-- **APIs Documented:** 10
-- **Guides Available:** 5
-
----
-
-## 🔄 Maintenance Schedule
-
-- **Weekly:** Update test results
-- **Sprint End:** Review and update all sections
-- **Monthly:** Architecture review
-- **Quarterly:** Full documentation audit
-
----
-
-**Documentation Version:** 2.0
-**Last Major Update:** August 4, 2024
-**Maintained By:** Development Team
-**Next Review:** End of Current Sprint
+**Last Updated**: 2026-01-09

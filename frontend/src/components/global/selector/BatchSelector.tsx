@@ -6,6 +6,7 @@ import DateFormatter from '../../../services/dateFormatter';
 import { INVOICE_CONFIG, getExpiryStatusConfig } from '../../../config/invoice.config';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
 import { mergeProductAndBatch } from '../../../utils/productMapper';
+import type { Product as CanonicalProduct } from '../../../types/models';
 
 // ==================== HELPERS ====================
 
@@ -24,22 +25,17 @@ const styles = {
     iconButton: 'p-2 hover:bg-gray-100 rounded-lg transition-colors group',
 };
 
-
 // ==================== TYPE DEFINITIONS ====================
 
-interface Product {
-    product_id?: number | string;
+// Extended Product with batch-specific UI fields
+type Product = CanonicalProduct & {
     id?: number | string;
-    product_name?: string;
     name?: string;
-    gst_percent?: number;
     mrp_per_unit?: number;
-    mrp?: number;
     sale_price_per_unit?: number;
     unit_price?: number;
-    [key: string]: unknown;
-    batches?: any[]; // OPTIMIZATION: Embedded batches from search
-}
+    batches?: any[];  // OPTIMIZATION: Embedded batches from search
+};
 
 interface Batch {
     batch_id: number | string;

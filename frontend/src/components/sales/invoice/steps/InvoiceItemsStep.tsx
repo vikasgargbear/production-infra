@@ -2,7 +2,7 @@ import React, { RefObject } from 'react';
 import { FileText, User, Package, FileInput, Loader2, AlertCircle, X, CheckCircle } from 'lucide-react';
 
 // Global Components
-import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearchSimple, ItemsTableKeyboard, DocumentFooter } from '../../../global';
+import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard, DocumentFooter } from '../../../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 
 // Modals
@@ -253,7 +253,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     Create Product
                                 </button>
                             </div>
-                            <ProductSearchSimple
+                            <ProductSearch
                                 onAddItem={handleAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
                                 ref={productSearchRef}

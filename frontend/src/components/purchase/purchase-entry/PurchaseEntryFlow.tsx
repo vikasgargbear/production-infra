@@ -1,10 +1,10 @@
 import React, { useRef } from 'react';
 import { Package, FileText, Building2 } from 'lucide-react';
 import {
-  EnhancedGlobalDocumentFlow,
+  GlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
-  ProductSearchSimple,
+  ProductSearch,
   SupplierCreationModal,
   ProductCreationModal,
   GenericSuccessModal,
@@ -187,7 +187,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             </button>
           </div>
         </div>
-        <ProductSearchSimple
+        <ProductSearch
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
             setShowProductModal(true);
@@ -636,7 +636,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
 
   return (
     <>
-      <EnhancedGlobalDocumentFlow
+      <GlobalDocumentFlow
         documentType="purchase"
         documentData={purchase}
         onDocumentUpdate={setPurchase as any}

@@ -57,62 +57,20 @@ class InvoiceService:
             actual_branch_id = branch_id or context["branch_id"]
             actual_user_id = user_id or context["user_id"]
             
-            # 3. Calculate totals (basic inline calculation - TODO: use shared/calculations.py API)
+            # 3. Calculate totals using canonical method
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in invoice_data.items]
             
-            # Item-level totals
-            subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
-            item_discount = sum(float(item.get('discount_amount', 0) or 0) for item in items)
-            
-            # Invoice-level discount (scheme_discount)
-            discount_type = getattr(invoice_data, 'discount_type', 'percentage')
-            discount_percent = float(getattr(invoice_data, 'discount_percent', 0) or 0)
-            discount_amount = float(getattr(invoice_data, 'discount_amount', 0) or 0)
-            
-            if discount_type == 'percentage' and discount_percent > 0:
-                scheme_discount = subtotal * (discount_percent / 100)
-            elif discount_type == 'amount' and discount_amount > 0:
-                scheme_discount = discount_amount
-            else:
-                scheme_discount = 0
-            
-            # Taxable amount after scheme discount
-            taxable_amount = subtotal - scheme_discount
-            
-            # Calculate GST on taxable amount
-            cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
-            sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
-            igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
-            total_tax = cgst + sgst + igst
-            
-            # Additional charges
-            freight = float(getattr(invoice_data, 'freight_charges', 0) or 0)
-            insurance = float(getattr(invoice_data, 'insurance_charges', 0) or 0)
-            other = float(getattr(invoice_data, 'other_charges', 0) or 0)
-            
-            # Amount before rounding
-            amount_before_round = taxable_amount + total_tax + freight + insurance + other
-            
-            # Round to nearest integer (Indian practice)
-            final_amount = round(amount_before_round)
-            round_off_amount = final_amount - amount_before_round
-            
-            totals = {
-                'subtotal_amount': subtotal,
-                'discount_amount': item_discount,  # Item-level discount (sum from items)
-                'scheme_discount': scheme_discount,  # Invoice-level discount
-                'taxable_amount': taxable_amount,
-                'cgst_amount': cgst,
-                'sgst_amount': sgst,
-                'igst_amount': igst,
-                'total_tax_amount': total_tax,
-                'freight_charges': freight,
-                'insurance_charges': insurance,
-                'other_charges': other,
-                'round_off_amount': round_off_amount,
-                'final_amount': final_amount,
-            }
+            # Use the static calculate_invoice_totals method (eliminates 50+ lines of duplication)
+            totals = InvoiceService.calculate_invoice_totals(
+                items=items,
+                freight_charges=float(getattr(invoice_data, 'freight_charges', 0) or 0),
+                insurance_charges=float(getattr(invoice_data, 'insurance_charges', 0) or 0),
+                other_charges=float(getattr(invoice_data, 'other_charges', 0) or 0),
+                discount_type=getattr(invoice_data, 'discount_type', 'percentage'),
+                discount_percent=float(getattr(invoice_data, 'discount_percent', 0) or 0),
+                discount_amount=float(getattr(invoice_data, 'discount_amount', 0) or 0)
+            )
             
             # 4. Generate numbers
             order_number = DocumentNumberService.generate_number(db, "sales_order", org_id)

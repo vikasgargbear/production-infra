@@ -233,16 +233,22 @@ async def send_whatsapp_reminder(
     For now returns success - integrate with WhatsApp Business API later
     """
     try:
-        # Get customer details
-        customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
-        if not customer:
+        # P3-11: Standardized to raw SQL (no ORM)
+        result = db.execute(text("""
+            SELECT customer_id, customer_name, primary_phone
+            FROM parties.customers
+            WHERE customer_id = :customer_id
+            LIMIT 1
+        """), {"customer_id": customer_id}).fetchone()
+        
+        if not result:
             raise HTTPException(status_code=404, detail="Customer not found")
         
         # Log the reminder (you can create a reminders table)
         reminder_log = {
             "customer_id": customer_id,
-            "customer_name": customer.customer_name,
-            "phone": customer.primary_phone,
+            "customer_name": result.customer_name,
+            "phone": result.primary_phone,
             "template_type": template_type,
             "variables": variables,
             "sent_at": datetime.now(),
@@ -262,7 +268,7 @@ async def send_whatsapp_reminder(
             "success": True,
             "message_id": f"whatsapp_{datetime.now().timestamp()}",
             "delivered_at": datetime.now().isoformat(),
-            "customer_name": customer.customer_name
+            "customer_name": result.customer_name
         }
         
     except Exception as e:
@@ -284,16 +290,22 @@ async def send_sms_reminder(
     Send SMS reminder to customer
     """
     try:
-        customer = db.query(Customer).filter(Customer.customer_id == customer_id).first()
-        if not customer:
+        # P3-11: Standardized to raw SQL    
+        result = db.execute(text("""
+            SELECT customer_id, customer_name
+            FROM parties.customers
+            WHERE customer_id = :customer_id
+            LIMIT 1
+        """), {"customer_id": customer_id}).fetchone()
+        
+        if not result:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # TODO: Integrate with SMS service
         return {
             "success": True,
             "message_id": f"sms_{datetime.now().timestamp()}",
             "delivered_at": datetime.now().isoformat(),
-            "customer_name": customer.customer_name
+            "customer_name": result.customer_name
         }
         
     except Exception as e:

@@ -3,48 +3,9 @@ import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, FileText, Download }
 import api from '../../../services/api';
 import { invoicesApi } from '../../../services/api';
 import { downloadInvoicePDF } from '../../../utils/invoicePdfGenerator';
+import type { Order, OrderItem, Customer, Product } from '../../../types/models';
 
-// Type definitions
-interface Order {
-  order_id: number;
-  customer_id: number;
-  order_date?: string;
-  delivery_date?: string;
-  status?: 'pending' | 'processing' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
-  payment_status?: 'pending' | 'partial' | 'completed' | 'refunded';
-  payment_mode?: 'cash' | 'card' | 'upi' | 'netbanking' | 'cheque';
-  total_amount?: number;
-  discount?: number;
-  final_amount?: number;
-  notes?: string;
-  org_id?: string;
-  items?: OrderItem[];
-}
-
-interface OrderItem {
-  product_id: number;
-  quantity: number;
-  unit_price: number;
-  discount_percent: number;
-  discount_amount: number;
-  tax_percent: number;
-  tax_amount: number;
-  line_total: number;
-}
-
-interface Customer {
-  customer_id: number;
-  customer_name: string;
-  contact_person?: string;
-  phone?: string;
-  email?: string;
-}
-
-interface Product {
-  product_id: number;
-  product_name: string;
-  sale_price?: number;
-}
+// Using canonical types from /types/models - no local duplicates
 
 interface OrderFormData {
   customer_id: string;
@@ -194,12 +155,14 @@ const Orders: React.FC = () => {
       // Add default items if creating new order (temporary fix)
       if (!editingOrder && !orderData.items) {
         orderData.items = [{
+          id: Date.now(),  // Required field
           product_id: 15,  // API Test Product
+          product_name: 'API Test Product',  // Required field
           quantity: 1,
           unit_price: 100.00,
           discount_percent: 0,
           discount_amount: 0,
-          tax_percent: 12,
+          gst_percent: 12,  // Changed from tax_percent to match canonical OrderItem
           tax_amount: 12.00,
           line_total: 112.00  // ✅ CANONICAL
         }];

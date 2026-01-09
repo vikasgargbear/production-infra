@@ -36,6 +36,8 @@ export interface BasePurchaseItem {
 
 /** Purchase Order Item - for ordering goods */
 export interface PurchaseOrderItem extends BasePurchaseItem {
+    pack_size?: string;  // UI field
+    mrp?: number;  // UI field
     expected_delivery_date?: string;
     notes?: string;
 }
@@ -100,14 +102,49 @@ export interface BasePurchaseDocument extends Supplier {
     created_at?: string;
 }
 
-/** Purchase Order document */
+/** Purchase Order document matching procurement.purchase_orders DB schema
+ * Fields marked as required match NOT NULL columns in the database
+ */
 export interface PurchaseOrder extends Omit<BasePurchaseDocument, 'items'> {
-    po_number: string;
+    // Identifiers - DB: purchase_order_id (integer NOT NULL), po_number (text NOT NULL)
+    purchase_order_id: number;  // REQUIRED - DB: integer NOT NULL
+    po_number: string;  // REQUIRED - DB: text NOT NULL
+    po_date: string;  // REQUIRED - DB: date NOT NULL
+
+    // Supplier - DB: supplier_id (integer NOT NULL), supplier_name (text NOT NULL)  
+    supplier_id: number;  // REQUIRED - DB: integer NOT NULL (override Supplier interface)
+    supplier_name: string;  // Already required from Supplier
+    billing_address?: string;  // UI field
+    drug_license_no?: string;  // UI field
+    po_no?: string;  // Alias for po_number
+
     expected_delivery_date?: string;
     items: PurchaseOrderItem[];
     payment_terms?: string;
     delivery_terms?: string;
+    po_status?: string;  // DB field
+    po_type?: string;  // DB field
+
+    // Additional UI fields
+    subtotal_amount?: number;  // DB field (nullable)
+    discount_amount?: number;  // DB field (nullable)
+    quotation_no?: string;
+    requisition_no?: string;
+    reference_no?: string;
+    freight_charges?: number;
+    insurance_charges?: number;
+    round_off?: number;
+    temperature_conditions?: string;
+    quality_standards?: string;
+    return_policy?: string;
+    terms_conditions?: string;
+    notes?: string;
 }
+
+/** Type for creating new purchase orders (before saved to DB)
+ * Omits purchase_order_id since it's auto-generated
+ */
+export type NewPurchaseOrder = Omit<PurchaseOrder, 'purchase_order_id'>;
 
 /** Purchase Entry document */
 export interface PurchaseEntry extends Omit<BasePurchaseDocument, 'items'> {

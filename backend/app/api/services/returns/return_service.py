@@ -339,13 +339,68 @@ class ReturnService:
         from_date: str = None,
         to_date: str = None
     ) -> Dict[str, Any]:
-        """List sales returns with items and filters."""
+        """
+        List sales returns with items and filters.
+        
+        P3-10: Optimized to eliminate N+1 query pattern.
+        Uses JSON_AGG to fetch all items in single query.
+        """
         query = """
-            SELECT sr.*, c.customer_name as party_name,
-                   i.invoice_number as original_invoice_number
+            SELECT 
+                sr.return_id,
+                sr.return_number,
+                sr.return_date,
+                sr.return_type,
+                sr.invoice_id,
+                sr.customer_id,
+                sr.return_reason,
+                sr.return_category,
+                sr.approval_required,
+                sr.approval_status,
+                sr.return_amount,
+                sr.tax_amount,
+                sr.total_amount,
+                sr.cgst_amount,
+                sr.sgst_amount,
+                sr.igst_amount,
+                sr.credit_note_number,
+                sr.credit_note_date,
+                sr.credit_note_status,
+                sr.adjusted_amount,
+                sr.pending_amount,
+                sr.notes,
+                sr.created_at,
+                sr.updated_at,
+                c.customer_name as party_name,
+                i.invoice_number as original_invoice_number,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'return_item_id', sri.return_item_id,
+                            'invoice_item_id', sri.invoice_item_id,
+                            'product_id', sri.product_id,
+                            'product_name', p.product_name,
+                            'hsn_code', p.hsn_code,
+                            'batch_id', sri.batch_id,
+                            'batch_number', sri.batch_number,
+                            'return_quantity', sri.return_quantity,
+                            'uom', sri.uom,
+                            'damaged_quantity', sri.damaged_quantity,
+                            'saleable_quantity', sri.saleable_quantity,
+                            'unit_price', sri.unit_price,
+                            'return_value', sri.return_value,
+                            'tax_amount', sri.tax_amount,
+                            'item_return_reason', sri.item_return_reason,
+                            'disposition', sri.disposition
+                        ) ORDER BY sri.return_item_id
+                    ) FILTER (WHERE sri.return_item_id IS NOT NULL),
+                    '[]'::json
+                ) as items
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
+            LEFT JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
+            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
@@ -366,22 +421,53 @@ class ReturnService:
             params["to_date"] = to_date
             count_conditions += " AND sr.return_date <= :to_date"
         
-        query += " ORDER BY sr.return_date DESC, sr.created_at DESC LIMIT :limit OFFSET :skip"
+        query += """
+            GROUP BY sr.return_id, sr.return_number, sr.return_date, sr.return_type,
+                     sr.invoice_id, sr.customer_id, sr.return_reason, sr.return_category,
+                     sr.approval_required, sr.approval_status, sr.return_amount,
+                     sr.tax_amount, sr.total_amount, sr.cgst_amount, sr.sgst_amount,
+                     sr.igst_amount, sr.credit_note_number, sr.credit_note_date,
+                     sr.credit_note_status, sr.adjusted_amount, sr.pending_amount,
+                     sr.notes, sr.created_at, sr.updated_at,
+                     c.customer_name, i.invoice_number
+            ORDER BY sr.return_date DESC, sr.created_at DESC
+            LIMIT :limit OFFSET :skip
+        """
         
         returns = db.execute(text(query), params).fetchall()
         
-        # Get items for each return
+        # Convert to dict format
         result = []
         for ret in returns:
-            items = db.execute(text("""
-                SELECT sri.*, p.product_name, p.hsn_code
-                FROM sales.sales_return_items sri
-                LEFT JOIN inventory.products p ON sri.product_id = p.product_id
-                WHERE sri.return_id = :return_id
-            """), {"return_id": ret.return_id}).fetchall()
-            
-            return_dict = dict(ret._mapping)
-            return_dict["items"] = [dict(item._mapping) for item in items]
+            return_dict = {
+                "return_id": ret.return_id,
+                "return_number": ret.return_number,
+                "return_date": ret.return_date,
+                "return_type": ret.return_type,
+                "invoice_id": ret.invoice_id,
+                "customer_id": ret.customer_id,
+                "party_name": ret.party_name,
+                "original_invoice_number": ret.original_invoice_number,
+                "return_reason": ret.return_reason,
+                "return_category": ret.return_category,
+                "approval_required": ret.approval_required,
+                "approval_status": ret.approval_status,
+                "return_amount": ret.return_amount,
+                "tax_amount": ret.tax_amount,
+                "total_amount": ret.total_amount,
+                "cgst_amount": ret.cgst_amount,
+                "sgst_amount": ret.sgst_amount,
+                "igst_amount": ret.igst_amount,
+                "credit_note_number": ret.credit_note_number,
+                "credit_note_date": ret.credit_note_date,
+                "credit_note_status": ret.credit_note_status,
+                "adjusted_amount": ret.adjusted_amount,
+                "pending_amount": ret.pending_amount,
+                "notes": ret.notes,
+                "created_at": ret.created_at,
+                "updated_at": ret.updated_at,
+                "items": ret.items if isinstance(ret.items, list) else []
+            }
             result.append(return_dict)
         
         # Get total count

@@ -6,8 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
-import syncPullService from '../services/offline/sync/syncPullService';
-import deltaSyncService from '../services/offline/sync/deltaSyncService';
+import { salesSyncService } from '../services/offline/modules/sales';
 
 // Types
 export interface User {
@@ -128,8 +127,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      * Logout
      */
     const logout = () => {
-        // Stop background sync
-        deltaSyncService.stopBackgroundSync();
+        // Stop background sync and clear cache
+        salesSyncService.stop();
 
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
@@ -242,18 +241,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 isLoading: false
             });
 
-            // Offline sync (non-blocking)
-            syncPullService.fullSync()
-                .then((result) => {
-                    // Initialize delta sync with server timestamp
-                    const syncTimestamp = new Date().toISOString();
-                    deltaSyncService.initializeAfterFullSync(syncTimestamp);
-                    // Start background sync (every 5 minutes)
-                    deltaSyncService.startBackgroundSync();
-                    console.log('[Auth] ✅ Full sync complete, background sync started');
+            // CRITICAL: Start initial sync with memory cache warmup
+            // This is NON-BLOCKING - UI is already auth'd and ready
+            // Background: Sync data → Warm cache → Enable instant search
+            salesSyncService.performInitialSync()
+                .then(() => {
+                    console.log('[Auth] ✅ Initial sync complete - App ready with instant performance!');
                 })
                 .catch((err: Error) => {
-                    console.warn('[Auth] Offline sync failed:', err.message);
+                    console.warn('[Auth] Initial sync failed:', err.message);
+                    // App still works offline with cached data
                 });
 
             return { success: true, user };
@@ -470,10 +467,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 isLoading: false
             });
 
-            // Start background delta sync if user is already logged in
-            if (deltaSyncService.canDeltaSync()) {
-                deltaSyncService.startBackgroundSync();
-                console.log('[Auth] Background sync started for existing session');
+            // Start background sync for existing session
+            if (salesSyncService.isReady() || navigator.onLine) {
+                salesSyncService.performInitialSync().catch((err) => {
+                    console.warn('[Auth] Background sync failed for existing session:', err);
+                });
             }
         };
 

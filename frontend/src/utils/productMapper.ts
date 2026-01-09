@@ -86,35 +86,29 @@ export function mapProductToCanonical(raw: RawProductInput): Product {
     const totalStock = parseFloat(raw.total_quantity_available || raw.total_stock || raw.quantity_available || 0);
 
     const product: Product = {
-        product_id: raw.product_id || raw.id,
+        // Required fields (NOT NULL in DB)
+        product_id: raw.product_id || raw.id || 0,
         product_code: raw.product_code || '',
         product_name: raw.product_name || '',
+        product_type: raw.product_type || 'general',  // Required field
+
+        // Optional fields
         generic_name: raw.generic_name,
-        // Required legacy fields
-        manufacturer: raw.manufacturer || '',
-        base_unit: raw.base_unit || 'pc',
-
-        hsn_code: raw.hsn_code || '',
+        manufacturer: raw.manufacturer,
+        hsn_code: raw.hsn_code,
         gst_percent: parseFloat(raw.gst_percent || raw.tax_rate || 0),
-        category: raw.category_name || '', // Mapped to name if ID not suitable
+        category: raw.category_name || raw.category,
+        brand: raw.brand,
 
-        // Pricing
+        // Pricing (from batch but often needed on product)
         mrp: mrp,
         sale_price: salePrice,
         cost_per_unit: parseFloat(raw.cost_per_unit || 0),
 
-        // Canonical Pricing
-        mrp_per_unit: mrp,
-        sale_price_per_unit: salePrice,
-
         // Stock - canonical field name
         total_stock: totalStock,
-        total_quantity: totalStock, // Map to both for compatibility
-        total_quantity_available: totalStock, // Keep original field name too
-
-        // Optional fields passed through
-        brand: raw.brand, // Note: Product interface doesn't have brand, might be extra
-    } as Product; // Cast to ensure loose compatibility if Product has strict checks
+        total_quantity_available: totalStock,
+    };
 
     // Handle embedded batches
     if (raw.batches && Array.isArray(raw.batches)) {

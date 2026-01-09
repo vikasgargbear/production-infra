@@ -6,21 +6,11 @@ import {
 import { salesOrdersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
 import jsPDF from 'jspdf';
+import type { Order } from '../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
-interface SalesOrder {
-    order_id: number | string;
-    order_number?: string;
-    order_date: string;
-    customer_name?: string;
-    total_amount?: number;
-    final_amount?: number;
-    order_status?: string;
-    invoice_number?: string;
-    invoice_created?: boolean;
-    challan_created?: boolean;
-}
+// Use canonical Order type from types/models - DO NOT define duplicate Order interface
 
 interface InvoiceData {
     invoice_number: string;
@@ -41,8 +31,8 @@ interface jsPDFWithAutoTable extends jsPDF {
 
 // ==================== MAIN COMPONENT ====================
 
-const SalesOrderList: React.FC = () => {
-    const [orders, setOrders] = useState<SalesOrder[]>([]);
+const OrderList: React.FC = () => {
+    const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -79,7 +69,7 @@ const SalesOrderList: React.FC = () => {
         ));
     };
 
-    const getStatusBadge = (order: SalesOrder): ReactElement[] => {
+    const getStatusBadge = (order: Order): ReactElement[] => {
         const badges: ReactElement[] = [];
 
         // Order status
@@ -493,4 +483,4 @@ const SalesOrderList: React.FC = () => {
     );
 };
 
-export default SalesOrderList;
+export default OrderList;

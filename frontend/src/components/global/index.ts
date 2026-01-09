@@ -44,7 +44,7 @@ export {
 // ============== SEARCH COMPONENTS ==============
 export { CustomerSearch } from './search/CustomerSearch';
 export { EntitySearch } from './search/EntitySearch';
-export { default as ProductSearchSimple } from './search/ProductSearchSimple';
+export { default as ProductSearch } from './search/ProductSearch';
 export { default as SupplierSearch } from './search/SupplierSearch';
 export { default as PurchaseProductSearch } from './search/PurchaseProductSearch';
 export { default as InvoiceSearch } from './search/InvoiceSearch';
@@ -76,7 +76,7 @@ export {
     FormSection,
     StatsGrid
 } from './layout/GlobalLayout';
-export { default as EnhancedGlobalDocumentFlow } from './layout/EnhancedGlobalDocumentFlow';
+export { default as GlobalDocumentFlow } from './layout/GlobalDocumentFlow';
 export { default as DocumentLayout } from './layout/DocumentLayout';
 export { default as SectionHeader } from './ui/SectionHeader';
 export { default as FormGrid, FormField } from './ui/FormGrid';
@@ -136,7 +136,7 @@ export { StandardFormInput, StandardSelect, DocumentSummaryTop } from './ui/Stan
 
 // ============== NAVIGATION COMPONENTS ==============
 export * from './navigation';
-export { ModuleHub, EnhancedSidebar } from './navigation';
+export { ModuleHub, Sidebar } from './navigation';
 
 // ============== TYPES ==============
 export const GlobalComponentTypes = {

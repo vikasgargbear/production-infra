@@ -10,7 +10,7 @@ import { Truck, FileInput, User, Package } from 'lucide-react';
 import {
     ModuleHeader,
     CustomerSearch,
-    ProductSearchSimple,
+    ProductSearch,
     DocumentFooter,
     ProductCreationModal,
     StandardDatePicker
@@ -88,17 +88,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
             <div className="h-full flex flex-col">
 
                 {/* Header */}
-                <ModuleHeader
-                    title="Delivery Challan"
-                    documentData={challan as any}
-                    status={challan.status}
-                    icon={Truck}
-                    iconColor="text-blue-600"
-                    onClose={onClose}
-                    historyType="challan"
-                    showSaveDraft={true}
-                    onSaveDraft={() => {/* TODO: Implement */ }}
-                />
+                <ModuleHeader {...{ title: "Delivery Challan", documentData: challan, status: challan.status, icon: Truck, iconColor: "text-blue-600", onClose, historyType: "challan", showSaveDraft: true, onSaveDraft: () => { } } as any} />
 
                 {/* Keyboard Shortcuts */}
                 <KeyboardShortcuts shortcuts={[
@@ -181,14 +171,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                     Create Customer
                                 </button>
                             </div>
-                            <CustomerSearch
-                                selectedCustomer={selectedCustomer as any}
-                                onChange={handleCustomerSelect as any}
-                                onCreateNew={() => setShowCreateCustomer(true)}
-                                displayMode="inline"
-                                placeholder="Search customer by name, phone, or code..."
-                                required
-                            />
+                            <CustomerSearch {...{ selectedCustomer, onChange: handleCustomerSelect, onCreateNew: () => setShowCreateCustomer(true), displayMode: "inline", placeholder: "Search customer by name, phone, or code...", required: true } as any} />
                         </div>
 
                         {/* Products Section */}
@@ -205,7 +188,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                     Create Product
                                 </button>
                             </div>
-                            <ProductSearchSimple
+                            <ProductSearch
                                 onAddItem={handleProductSelect}
                                 onCreateProduct={(productName: string) => {
                                     setNewProductName(productName || '');

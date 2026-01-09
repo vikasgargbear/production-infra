@@ -1,58 +1,8 @@
 import React from 'react';
 import { formatCurrency } from '../../../../utils/formatters';
+import type { Challan, ChallanItem, CustomerDetails, CompanyInfo } from '../types/challanTypes';
 
-interface ChallanItem {
-    product_name: string;
-    hsn_code?: string;
-    quantity: number | string;
-    unit?: string;
-    base_uom?: string;
-    mrp?: number;
-    unit_price?: number;
-    sale_price?: number;
-    gst_percent?: number;
-    tax_percent?: number;
-}
-
-interface CustomerDetails {
-    address?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    gst_number?: string;
-    phone?: string;
-}
-
-interface Challan {
-    challan_number: string;
-    challan_date: string;
-    expected_delivery_date?: string;
-    customer_name?: string;
-    customer_details?: CustomerDetails;
-    billing_address?: string;
-    delivery_address?: string;
-    delivery_city?: string;
-    delivery_state?: string;
-    delivery_pincode?: string;
-    delivery_gst_number?: string;
-    delivery_contact_person?: string;
-    delivery_contact_phone?: string;
-    transport_company?: string;
-    vehicle_number?: string;
-    lr_number?: string;
-    driver_phone?: string;
-    freight_charges?: number;
-    items: ChallanItem[];
-    notes?: string;
-}
-
-interface CompanyInfo {
-    name?: string;
-    address?: string;
-    gst_number?: string;
-    logo?: string;
-    drugLicense?: string;
-}
+// Use canonical types from types/challanTypes - DO NOT define duplicates
 
 interface ChallanPreviewProps {
     challan: Challan;

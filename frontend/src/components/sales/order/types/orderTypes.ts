@@ -3,6 +3,10 @@
  * 
  * Re-exports and additional types for the order module
  */
+/* eslint-disable import/first */
+
+// Import type for local use
+import type { OrderItem as OrderItemModel } from '../../../../types/models';
 
 // Re-export from central types for convenience
 export type {
@@ -13,9 +17,6 @@ export type {
     CreatedOrderData,
     BankAccount
 } from '../../../../types/models';
-
-// Import OrderItem for local use in this file
-import type { OrderItem as OrderItemModel } from '../../../../types/models';
 
 // Local types used in useSalesOrderLogic
 export interface Customer {

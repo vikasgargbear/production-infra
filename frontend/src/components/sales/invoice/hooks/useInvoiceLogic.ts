@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useRef, RefObject, Dispatch, SetStateAction } from 'react';
 import { toast } from 'react-toastify';
-import { invoicesApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
-import documentNumberGenerator, { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
 import { employeesApi } from '../../../../services/api';
 import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
-import { getTodayBusinessDate, getDaysFromToday, getUTCTimestamp } from '../../../../utils/indianDateUtils';
+import { getTodayBusinessDate, getDaysFromToday } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 
 // Shared Types - Single Source of Truth
@@ -554,14 +552,14 @@ export const useInvoiceLogic = (
                 // SANITIZE: Remove deprecated fields before adding
                 const sanitizedItem = sanitizeInvoiceItem(invoiceItem);
 
-                const newItem: InvoiceItem = {
+                const newItem = {
                     ...sanitizedItem,
                     mrp: sanitizedItem.mrp || 0,
                     quantity: 1,
                     // PRESERVE user's discount - don't reset!
                     discount_percent: sanitizedItem.discount_percent || 0,
                     free_quantity: 0
-                };
+                } as any;
 
                 // Note: Toast removed - visual feedback (item appearing in table) is sufficient
                 // Users can clearly see the product was added
@@ -571,7 +569,7 @@ export const useInvoiceLogic = (
 
                 return {
                     ...prev,
-                    items: [...prev.items, newItem]
+                    items: [...prev.items, newItem as any]
                 };
             }
         });

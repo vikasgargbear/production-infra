@@ -17,22 +17,15 @@ import Button from '../../global/ui/Button';
 import Input from '../../global/ui/forms/Input';
 import CustomerEditModal from '../modals/CustomerEditModal';
 import { useEntityMaster } from '../hooks';
+import type { Customer as BaseCustomer } from '../../../types/models';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface Customer {
-  customer_id: number;
-  customer_name: string;
-  customer_code?: string;
-  customer_type?: string;
-  primary_phone: string;
-  primary_email?: string;
+// Extended Customer with master-grid specific fields
+type Customer = BaseCustomer & {
   whatsapp_number?: string;
-  gst_number?: string;
-  pan_number?: string;
-  drug_license_number?: string;
   drug_license_validity?: string;
   credit_limit?: number;
   credit_days?: number;
@@ -40,17 +33,12 @@ interface Customer {
   current_outstanding?: number;
   customer_category?: string;
   business_type?: string;
-  is_active?: boolean;
-  created_at?: string;
   last_transaction_date?: string;
   total_business_amount?: number;
   loyalty_tier?: string;
   loyalty_points?: number;
   address_line_1?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-}
+};
 
 // ============================================================================
 // Constants

@@ -316,11 +316,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
 
       if (editingUser && editingUser.id) {
         // Update existing user
-        await usersApi.update(editingUser.id, userData);
+        await usersApi.update(editingUser.id, userData as any);
         setSuccessMessage('User updated successfully!');
       } else {
         // Add new user
-        await usersApi.create(userData);
+        await usersApi.create(userData as any);
         setSuccessMessage('User created successfully!');
       }
 

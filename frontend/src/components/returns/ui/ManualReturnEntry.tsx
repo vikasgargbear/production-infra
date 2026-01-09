@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react';
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
-import { ProductSearchSimple, NumberInput, Select } from '../../global';
+import { ProductSearch, NumberInput, Select } from '../../global';
 import { batchesApi } from '../../../services/api';
 
 const DISPOSITION_OPTIONS = [
@@ -182,13 +182,8 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
                       <label className="block text-sm font-medium mb-1">
                         Product *
                       </label>
-                      <ProductSearchSimple
-                        value={item.product_id ? { 
-                          product_id: item.product_id, 
-                          product_name: item.product_name 
-                        } : null}
-                        onChange={(product) => handleProductSelect(product, index)}
-                        placeholder="Search product..."
+                      <ProductSearch
+                        {...{ value: item.product_id ? { product_id: item.product_id, product_name: item.product_name } : null, onChange: (product) => handleProductSelect(product, index), placeholder: "Search product..." } as any}
                       />
                       {errors[`product_${index}`] && (
                         <p className="text-red-500 text-xs mt-1">{errors[`product_${index}`]}</p>

@@ -9,26 +9,23 @@ import { apiClient, usersApi, authApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount } from '../../../../types/models';
+import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
-interface Customer {
-    customer_id?: number | string;
+// Using canonical Customer type with additional UI fields
+import type { Customer as BaseCustomer } from '../../../../types/models/customer';
+
+// Extended Customer with UI fields for this component
+type Customer = BaseCustomer & {
     id?: number | string;
-    customer_name?: string;
     name?: string;
     address?: string;
     address2?: string;
     city?: string;
     state?: string;
     pincode?: string;
-    phone?: string;
-    primary_phone?: string;
-    email?: string;
-    gst_number?: string;
-    drug_license_number?: string;
-}
+};
 
 interface Employee {
     user_id?: number | string;
@@ -49,11 +46,8 @@ interface CompanyInfo {
     city?: string;
 }
 
-interface Product {
-    product_id: number | string;
-    product_name: string;
-    product_code?: string;
-    hsn_code?: string;
+// Using canonical Product type from /types/models - extended with UI fields
+type ProductInput = Product & {
     batch_id?: number | string;
     batch_number?: string;
     quantity?: number;
@@ -64,10 +58,7 @@ interface Product {
     mrp?: number;
     sale_price?: number;
     unit_price?: number;
-    gst_percent?: number;
-    manufacturer?: string;
-    category?: string;
-}
+};
 
 interface ImportData {
     customer_id?: number | string;
@@ -108,7 +99,7 @@ export interface UseSalesOrderLogicReturn {
 
     // Handlers
     handleCustomerSelect: (customer: Customer | null) => Promise<void>;
-    handleProductSelect: (product: Product) => void;
+    handleProductSelect: (product: ProductInput) => void;
     handleImport: (importData: ImportData) => void;
     updateItem: (index: number, field: string, value: unknown) => void;
     removeItem: (index: number) => void;
@@ -125,10 +116,11 @@ export interface UseSalesOrderLogicReturn {
 // ==================== INITIAL STATE ====================
 
 const createInitialOrder = (): Order => ({
+    order_id: 0,  // Will be set when order is saved
     order_number: '',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    customer_id: null,
+    customer_id: 0,  // Will be set when customer is selected
     customer_name: '',
     customer_details: null,
     billing_address: '',
@@ -342,7 +334,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         if (!customer) {
             setOrder(prev => ({
                 ...prev,
-                customer_id: null,
+                customer_id: 0,  // Reset when customer is cleared
                 customer_name: '',
                 customer_details: null,
                 billing_address: '',
@@ -423,7 +415,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
         setOrder(prev => ({
             ...prev,
-            customer_id: customer?.customer_id || customer?.id || null,
+            customer_id: Number(customer?.customer_id || customer?.id) || 0,
             customer_name: customer?.customer_name || customer?.name || '',
             customer_details: customer as unknown as Order['customer_details'],
             billing_address: fullAddress,
@@ -436,7 +428,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     }, [companyInfo]);
 
     // Handle product selection
-    const handleProductSelect = useCallback((product: Product): void => {
+    const handleProductSelect = useCallback((product: ProductInput): void => {
         const existingItem = order.items.find(item => item.product_id === product.product_id);
 
         if (existingItem) {

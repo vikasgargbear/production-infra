@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  FileText, Package, ShoppingCart, Truck, TrendingUp, List, DollarSign, BarChart3
+  FileText, ShoppingCart, Truck, TrendingUp, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { Module } from '../global/navigation/ModuleHub';

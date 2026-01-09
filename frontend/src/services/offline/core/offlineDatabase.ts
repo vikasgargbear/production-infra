@@ -87,7 +87,8 @@ class OfflineDatabase {
         if (this.db) {
             try {
                 // Quick validation - attempt to get store names (fails if connection is closing)
-                this.db.objectStoreNames;
+                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+                void this.db.objectStoreNames;
                 return this.db;
             } catch (e) {
                 // Connection is stale, need to reconnect

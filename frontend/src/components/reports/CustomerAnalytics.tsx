@@ -31,7 +31,8 @@ ChartJS.register(
   Filler
 );
 
-interface Customer {
+// Analytics-specific customer type - NOT the canonical Customer
+interface AnalyticsCustomer {
   id: string;
   name: string;
   type: 'Retail' | 'Wholesale' | 'Hospital' | 'Clinic';
@@ -53,7 +54,7 @@ const CustomerAnalytics: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [dateRange, setDateRange] = useState('6months');
   const [loading, setLoading] = useState(true);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<AnalyticsCustomer[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>({});
 
   useEffect(() => {
@@ -83,9 +84,9 @@ const CustomerAnalytics: React.FC = () => {
       ]);
 
       // Process customer list
-      const processedCustomers: Customer[] = (customerList.data || []).map((customer: any) => {
+      const processedCustomers: AnalyticsCustomer[] = (customerList.data || []).map((customer: any) => {
         // Determine customer status based on last purchase
-        let status: Customer['status'] = 'Active';
+        let status: AnalyticsCustomer['status'] = 'Active';
         if (customer.last_purchase_date) {
           const daysSinceLastPurchase = Math.ceil(
             (new Date().getTime() - new Date(customer.last_purchase_date).getTime()) / (1000 * 60 * 60 * 24)

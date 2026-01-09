@@ -2,22 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Search, Edit, Trash2, Package, Loader2 } from 'lucide-react';
 import api from '../../../services/api';
 import { productsApi } from '../../../services/api';
+import type { BaseProduct } from '../types/masterSharedTypes';
 
-// Type definitions
-interface Product {
-  product_id: number;
-  product_name: string;
+// Use canonical BaseProduct from master shared types
+// Extended Product interface for this component's needs
+interface Product extends BaseProduct {
+  // Additional fields for this component
   category?: string;
-  manufacturer?: string;
   product_type?: string;
-  hsn_code?: string;
-  generic_name?: string;
-  gst_percent?: number;
   cgst_percent?: number;
   sgst_percent?: number;
   igst_percent?: number;
-  mrp?: number;
-  sale_price?: number;
   drug_schedule?: 'G' | 'H' | 'H1' | 'X' | 'OTC' | '';
   requires_prescription?: boolean;
   controlled_substance?: boolean;
@@ -35,6 +30,8 @@ interface Product {
   color?: string;
   asin?: string;
   is_discontinued?: boolean;
+  sale_price?: number;
+  mrp?: number;
 }
 
 interface ProductFormData {

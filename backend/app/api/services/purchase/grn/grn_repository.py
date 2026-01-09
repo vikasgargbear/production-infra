@@ -1,12 +1,10 @@
 """
-GRN Repository - Data Access Layer
-All SQL queries for GRN operations
-Follows same pattern as invoice_repository.py from sales module
+GRN Repository - Data access layer for GRN operations
 """
-from typing import Optional, Dict, Any, List
-from datetime import datetime, date
-from sqlalchemy.orm import Session
+from typing import Dict, Any, List
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,6 +132,98 @@ class GRNRepository:
         return result.scalar()
     
     @staticmethod
+    def create_grn_items_bulk(
+        db: Session,
+        grn_id: int,
+        items: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Create multiple GRN items in a single query (bulk insert).
+        
+        P2-1: Optimized from N individual INSERTs to 1 bulk INSERT.
+        For 50 items: 50 queries → 1 query (98% reduction).
+        
+        Args:
+            db: Database session
+            grn_id: GRN ID to associate items with
+            items: List of item dictionaries
+            
+        Returns:
+            Number of items inserted
+        """
+        if not items:
+            return 0
+        
+        # Build VALUES clause for bulk insert
+        values_list = []
+        params = {"grn_id": grn_id}
+        
+        for idx, item in enumerate(items):
+            # Create unique param names for each item
+            prefix = f"item_{idx}_"
+            
+            values_list.append(f"""(
+                :grn_id,
+                :{prefix}product_id,
+                :{prefix}batch_number,
+                :{prefix}mfg_date,
+                :{prefix}expiry_date,
+                :{prefix}ordered_qty,
+                :{prefix}received_qty,
+                :{prefix}accepted_qty,
+                :{prefix}rejected_qty,
+                :{prefix}free_qty,
+                :{prefix}uom,
+                :{prefix}pack_type,
+                :{prefix}pack_size,
+                :{prefix}unit_price,
+                :{prefix}mrp,
+                :{prefix}ptr,
+                :{prefix}pts,
+                :{prefix}qc_status,
+                :{prefix}item_status,
+                {idx + 1},
+                CURRENT_TIMESTAMP
+            )""")
+            
+            # Add params for this item
+            params[f"{prefix}product_id"] = item.get("product_id")
+            params[f"{prefix}batch_number"] = item.get("batch_number")
+            params[f"{prefix}mfg_date"] = item.get("manufacturing_date") or item.get("mfg_date")
+            params[f"{prefix}expiry_date"] = item.get("expiry_date")
+            params[f"{prefix}ordered_qty"] = item.get("ordered_quantity", 0)
+            params[f"{prefix}received_qty"] = item.get("received_quantity") or item.get("quantity")
+            params[f"{prefix}accepted_qty"] = item.get("accepted_quantity") or item.get("quantity")
+            params[f"{prefix}rejected_qty"] = item.get("rejected_quantity", 0)
+            params[f"{prefix}free_qty"] = item.get("free_quantity", 0)
+            params[f"{prefix}uom"] = item.get("uom", "Strip")
+            params[f"{prefix}pack_type"] = item.get("pack_type", "STRIP")
+            params[f"{prefix}pack_size"] = item.get("pack_size", 10)
+            params[f"{prefix}unit_price"] = item.get("unit_price") or item.get("purchase_price")
+            params[f"{prefix}mrp"] = item.get("mrp")
+            params[f"{prefix}ptr"] = item.get("ptr")
+            params[f"{prefix}pts"] = item.get("pts")
+            params[f"{prefix}qc_status"] = item.get("qc_status", "pending")
+            params[f"{prefix}item_status"] = item.get("item_status", "received")
+        
+        # Execute bulk insert
+        query = f"""
+            INSERT INTO procurement.grn_items (
+                grn_id, product_id, batch_number,
+                manufacturing_date, expiry_date,
+                ordered_quantity, received_quantity,
+                accepted_quantity, rejected_quantity, free_quantity,
+                uom, pack_type, pack_size,
+                unit_price, mrp, ptr, pts,
+                qc_status, item_status, display_order, created_at
+            ) VALUES {', '.join(values_list)}
+        """
+        
+        db.execute(text(query), params)
+        
+        return len(items)
+    
+    @staticmethod
     def create_inventory_batch(
         db: Session,
         org_id: str,
@@ -192,6 +282,87 @@ class GRNRepository:
             "base_uom": item.get("base_uom", "NOS"),
             "units_per_pack": item.get("units_per_pack", 1)
         })
+    
+    @staticmethod
+    def create_inventory_batches_bulk(
+        db: Session,
+        org_id: str,
+        grn_id: int,
+        supplier_id: Optional[int],
+        items: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Bulk UPSERT inventory batches from multiple GRN items.
+        
+        P2-1: Optimized from N individual UPSERTs to 1 bulk UPSERT.
+        For 50 items: 50 UPSERT queries → 1 query (98% reduction).
+        """
+        # Filter items with valid quantities
+        valid_items = [
+            item for item in items
+            if (item.get("quantity") or item.get("received_quantity") or 0) > 0
+        ]
+        
+        if not valid_items:
+            return 0
+        
+        # Build VALUES clause
+        values_list = []
+        params = {"org_id": org_id, "grn_id": grn_id, "supplier_id": supplier_id}
+        
+        for idx, item in enumerate(valid_items):
+            prefix = f"b{idx}_"
+            quantity = item.get("quantity") or item.get("received_quantity")
+            
+            values_list.append(f"""(
+                :org_id, :{prefix}product_id, :{prefix}batch_number,
+                :{prefix}mfg_date, :{prefix}expiry_date,
+                :{prefix}mrp, :{prefix}initial_qty, :{prefix}avail_qty,
+                :{prefix}cost, :supplier_id,
+                'GRN', :grn_id, 'active',
+                :{prefix}storage,
+                :{prefix}pack_size, :{prefix}pack_type, :{prefix}pack_uom, 
+                :{prefix}base_uom, :{prefix}units_per_pack,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )""")
+            
+            params[f"{prefix}product_id"] = item.get("product_id")
+            params[f"{prefix}batch_number"] = item.get("batch_number")
+            params[f"{prefix}mfg_date"] = item.get("manufacturing_date") or item.get("mfg_date")
+            params[f"{prefix}expiry_date"] = item.get("expiry_date")
+            params[f"{prefix}mrp"] = item.get("mrp")
+            params[f"{prefix}initial_qty"] = quantity
+            params[f"{prefix}avail_qty"] = quantity
+            params[f"{prefix}cost"] = item.get("unit_price") or item.get("purchase_price")
+            params[f"{prefix}storage"] = item.get("storage_conditions", "room_temperature")
+            params[f"{prefix}pack_size"] = item.get("pack_size", 1)
+            params[f"{prefix}pack_type"] = item.get("pack_type", "PACK")
+            params[f"{prefix}pack_uom"] = item.get("pack_uom", "PACK")
+            params[f"{prefix}base_uom"] = item.get("base_uom", "NOS")
+            params[f"{prefix}units_per_pack"] = item.get("units_per_pack", 1)
+        
+        # Bulk UPSERT
+        query = f"""
+            INSERT INTO inventory.batches (
+                org_id, product_id, batch_number,
+                manufacturing_date, expiry_date,
+                mrp_per_unit, initial_quantity, quantity_available,
+                cost_per_unit, supplier_id,
+                source_type, source_reference_id, batch_status,
+                storage_condition,
+                pack_size, pack_type, pack_uom, base_uom, units_per_pack,
+                created_at, updated_at
+            ) VALUES {', '.join(values_list)}
+            ON CONFLICT (org_id, product_id, batch_number)
+            DO UPDATE SET
+                initial_quantity = inventory.batches.initial_quantity + EXCLUDED.initial_quantity,
+                quantity_available = inventory.batches.quantity_available + EXCLUDED.quantity_available,
+                updated_at = CURRENT_TIMESTAMP
+        """
+        
+        db.execute(text(query), params)
+        return len(valid_items)
+
     
     @staticmethod
     def update_grn_stock_status(db: Session, grn_id: int, stock_updated: bool = True) -> None:

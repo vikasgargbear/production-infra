@@ -13,10 +13,8 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
-  AlertCircle,
-  LucideIcon
+  AlertCircle
 } from 'lucide-react';
-import { settingsApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 // TypeScript Interfaces

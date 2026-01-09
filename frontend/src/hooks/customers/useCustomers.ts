@@ -31,11 +31,8 @@ export const customerKeys = {
  * Hook to search customers (most commonly used)
  * Now with local-first approach for instant results
  */
-export function useCustomerSearch(
-  query: string,
-  options?: UseQueryOptions<ApiResponse<Customer[]>, unknown, ApiResponse<Customer[]>>
-) {
-  return useQuery<ApiResponse<Customer[]>>(
+export function useCustomerSearch(query: string) {
+  return useQuery(
     customerKeys.search(query),
     async () => {
       // Use local-first service for instant results
@@ -49,7 +46,6 @@ export function useCustomerSearch(
       enabled: query.length >= 2, // Only search with 2+ characters
       staleTime: 1 * 60 * 1000, // 1 minute
       keepPreviousData: true,
-      ...options,
     }
   );
 }

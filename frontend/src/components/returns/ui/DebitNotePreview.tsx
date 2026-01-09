@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Calendar, Building2, Phone, Mail, Truck } from 'lucide-react';
+import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 
 interface ReturnItem {

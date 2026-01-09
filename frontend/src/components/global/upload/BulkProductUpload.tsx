@@ -17,7 +17,9 @@ interface TemplateColumn {
     example: string;
 }
 
-interface Product {
+// Bulk upload specific product type - includes batch/quantity fields
+// This is NOT the canonical Product from /types/models
+interface BulkUploadProduct {
     product_id?: string | number | null;
     product_name: string;
     generic_name?: string;
@@ -50,13 +52,13 @@ interface ValidationError {
 }
 
 interface SaveResult {
-    success: Product[];
-    failed: Array<{ product: Product; error: string }>;
+    success: BulkUploadProduct[];
+    failed: Array<{ product: BulkUploadProduct; error: string }>;
 }
 
 export interface BulkProductUploadProps {
-    onProductsAdded?: (products: Product[]) => void;
-    onUpload?: (products: Product[]) => void;
+    onProductsAdded?: (products: BulkUploadProduct[]) => void;
+    onUpload?: (products: BulkUploadProduct[]) => void;
     onClose?: () => void;
     mode?: 'purchase' | 'inventory';
     createInDatabase?: boolean;
@@ -83,7 +85,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
     const toast = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState<boolean>(false);
-    const [products, setProducts] = useState<Product[]>([]);
+    const [products, setProducts] = useState<BulkUploadProduct[]>([]);
     const [errors, setErrors] = useState<ValidationError[]>([]);
     const [saving, setSaving] = useState<boolean>(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -201,7 +203,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                     return;
                 }
 
-                const processedProducts: Product[] = [];
+                const processedProducts: BulkUploadProduct[] = [];
                 const validationErrors: ValidationError[] = [];
 
                 filteredData.forEach((row, index) => {
@@ -212,7 +214,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                         row['Batch No*'] === 'BATCH001';
                     if (isExampleRow) return;
 
-                    const product: Partial<Product> = {};
+                    const product: Partial<BulkUploadProduct> = {};
                     const rowErrors: string[] = [];
 
                     templateColumns.forEach(col => {
@@ -242,7 +244,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                                     const [month, year] = value.split('/');
                                     if (month && year) {
                                         const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-                                        product[col.field as keyof Product] = `${year}-${month.padStart(2, '0')}-${lastDay}` as any;
+                                        product[col.field as keyof BulkUploadProduct] = `${year}-${month.padStart(2, '0')}-${lastDay}` as any;
                                     }
                                     break;
                                 default:
@@ -275,7 +277,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
                     if (rowErrors.length > 0) {
                         validationErrors.push({ row: index + 2, errors: rowErrors });
                     } else {
-                        processedProducts.push(product as Product);
+                        processedProducts.push(product as BulkUploadProduct);
                     }
                 });
 
@@ -303,7 +305,7 @@ const BulkProductUpload: React.FC<BulkProductUploadProps> = ({
     };
 
     // Handle inline editing
-    const handleEdit = (index: number, field: keyof Product, value: string | number): void => {
+    const handleEdit = (index: number, field: keyof BulkUploadProduct, value: string | number): void => {
         const updatedProducts = [...products];
         updatedProducts[index] = {
             ...updatedProducts[index],

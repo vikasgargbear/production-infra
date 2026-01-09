@@ -4,7 +4,7 @@ import {
   RotateCcw, FileText, Building2, ChevronRight, Save, Printer, History, Truck, Plus, Trash2
 } from 'lucide-react';
 import {
-  SupplierSearch, ProductSearchSimple, ModuleHeader,
+  SupplierSearch, ProductSearch, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
   ProceedToReviewComponent, StandardDatePicker, ItemsTable
 } from '../global';

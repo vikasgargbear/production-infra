@@ -12,16 +12,9 @@ import {
 } from '../../../global';
 import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { numberToWords } from '../../../../utils/formatters';
-import type { Order, OrderItem, BankAccount } from '../../../../types/models';
+import type { Order, OrderItem, BankAccount, Customer } from '../../../../types/models';
 
-interface Customer {
-    customer_id?: number | string;
-    customer_name?: string;
-    phone?: string;
-    primary_phone?: string;
-    gst_number?: string;
-    drug_license_number?: string;
-}
+// Using canonical Customer type from /types/models - no local duplicate
 
 interface CompanyInfo {
     name?: string;

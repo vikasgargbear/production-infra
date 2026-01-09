@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, Calendar, Banknote, MessageCircle, AlertCircle, User, Clock, Star, Package, Hash, Globe, Briefcase, Check } from 'lucide-react';
+import { Building2, MapPin, FileText, Globe, Briefcase, Check } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';

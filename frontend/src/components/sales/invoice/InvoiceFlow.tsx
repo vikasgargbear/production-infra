@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
 import useEscapeKey from '../../../hooks/useEscapeKey';

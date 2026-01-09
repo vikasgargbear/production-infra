@@ -18,28 +18,11 @@ import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
 import Input from '../../global/ui/forms/Input';
 import { useEntityMaster } from '../hooks';
+import type { BaseProduct } from '../types/masterSharedTypes';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface Product {
-  product_id: number;
+// Use canonical BaseProduct type - DO NOT define duplicate
+interface Product extends BaseProduct {
   id?: string;
-  product_name: string;
-  generic_name?: string;
-  product_code?: string;
-  category?: string;
-  hsn_code?: string;
-  brand?: string;
-  manufacturer?: string;
-  mrp?: number;
-  cost_per_unit?: number;
-  pack_size?: string;
-  unit?: string;
-  tax_rate?: number;
-  status?: string;
-  is_active?: boolean;
   total_quantity_available?: number;
   [key: string]: unknown;
 }

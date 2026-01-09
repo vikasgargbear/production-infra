@@ -253,7 +253,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                     status: getBatchStatus(formData.expiryDate, Number(formData.quantity))
                 };
 
-                const response = await batchesApi.create(newBatch);
+                const response = await batchesApi.create(newBatch as any);
                 if ((response as any)?.success && (response as any).data) {
                     setBatches(prev => [...prev, (response as any).data]);
                     setSuccessMessage('Batch added successfully!');

@@ -22,6 +22,7 @@ from ...core.utils.constants import (
     OrderStatus, InvoicePaymentStatus, InvoiceStatus, 
     BatchStatus, BusinessLimits
 )
+from ...core.cache import cache_with_ttl  # P1-3: Dashboard caching
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class DashboardService:
     """
     
     @staticmethod
+    @cache_with_ttl(ttl=300, key_prefix="dashboard")  # P1-3: Cache for 5 minutes
     def get_dashboard_stats(
         db: Session,
         org_id: str
@@ -148,6 +150,7 @@ class DashboardService:
         return [dict(row._mapping) for row in result]
     
     @staticmethod
+    @cache_with_ttl(ttl=600, key_prefix="dashboard")  # P1-3: Cache for 10 minutes
     def get_revenue_data(
         db: Session,
         org_id: str,
@@ -233,6 +236,7 @@ class DashboardService:
         }
     
     @staticmethod
+    @cache_with_ttl(ttl=300, key_prefix="dashboard")  # P1-3: Cache for 5 minutes
     def get_top_products(
         db: Session,
         org_id: str,

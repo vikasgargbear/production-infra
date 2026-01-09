@@ -1,10 +1,10 @@
 import React, { useRef } from 'react';
 import { Package, FileText, Building2, Truck, CreditCard } from 'lucide-react';
 import {
-  EnhancedGlobalDocumentFlow,
+  GlobalDocumentFlow,
   DocumentSummaryTop,
   SupplierSearch,
-  ProductSearchSimple,
+  ProductSearch,
   ItemsTable,
   SupplierCreationModal,
   ProductCreationModal,
@@ -140,7 +140,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             Create Product
           </button>
         </div>
-        <ProductSearchSimple
+        <ProductSearch
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
             setShowProductModal(true);
@@ -525,7 +525,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                     </td>
                     <td className="text-center py-2">{quantity}</td>
                     <td className="text-center py-2">{item.free_quantity || 0}</td>
-                    <td className="text-right py-2">{formatCurrency(item.mrp)}</td>
+                    <td className="text-right py-2">{formatCurrency(item.mrp ?? 0)}</td>
                     <td className="text-right py-2">{formatCurrency(unitPrice)}</td>
                     <td className="text-right py-2">{taxPercent}%</td>
                     <td className="text-right py-2 font-medium">{formatCurrency(totalWithTax)}</td>
@@ -596,7 +596,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
 
   return (
     <>
-      <EnhancedGlobalDocumentFlow
+      <GlobalDocumentFlow
         documentType="purchase-order"
         documentData={purchaseOrder as any}
         onDocumentUpdate={setPurchaseOrder as any}

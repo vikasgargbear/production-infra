@@ -64,6 +64,7 @@ if IS_SUPABASE_POOLER:
     )
 else:
     # Direct connection or local database
+    # P1-5: Added query timeout protection (30s limit)
     engine = create_engine(
         DATABASE_URL,
         pool_size=5,              # Normal pool size
@@ -71,7 +72,11 @@ else:
         pool_pre_ping=True,
         pool_recycle=3600,        # Recycle every hour
         pool_timeout=30,
-        echo=False
+        echo=False,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000"  # 30 second query timeout
+        }
     )
 
 # Create session factory

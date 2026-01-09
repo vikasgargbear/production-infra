@@ -1,12 +1,11 @@
 /**
  * useInvoiceSave Hook
  * 
- * Handles invoice save logic with offline-first approach:
- * - Validation
- * - Online save with optimistic UI + background sync
- * - Offline fallback
- * - Stock deduction
- * - Error handling
+ * Handles invoice save logic with OPTIMISTIC UI:
+ * - Instant feedback (< 100ms)
+ * - Atomic stock operations
+ * - Background sync
+ * - Error rollback
  */
 
 import { useState, useCallback, Dispatch, SetStateAction } from 'react';
@@ -18,6 +17,7 @@ import { getTodayBusinessDate } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
 import { generateTempId, deductStockLocally } from '../../utils/offlineSaveHelpers';
+import { salesDataService } from '../../../../services/offline/modules/sales';
 import type { Invoice, InvoiceItem } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
 
@@ -163,7 +163,6 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             const localInvoice = {
                 ...invoiceData,
                 invoice_number: localInvoiceNo,
-                invoice_number: localInvoiceNo,
                 temp_id: tempId,
                 _localId: tempId,
                 sync_status: 'pending',
@@ -189,7 +188,6 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
 
             setInvoice(prev => ({
                 ...prev,
-                invoice_number: localInvoiceNo,
                 invoice_number: localInvoiceNo
             }));
 

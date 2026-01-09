@@ -1,33 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback, ChangeEvent, KeyboardEvent } from 'react';
-import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
+import { Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import PackTypeSelector from '../selector/PackTypeSelector';
 import MonthYearPicker from '../ui/forms/MonthYearPicker';
-import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
 import { FullScreenModal } from '../modals/FullScreenModal';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import type { Product as CanonicalProduct } from '../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
-interface Product {
-    product_id?: number | string;
+// Extended Product with UI-specific fields for creation modal
+type Product = CanonicalProduct & {
     id?: number | string;
-    product_name: string;
-    product_code?: string;
-    manufacturer?: string;
-    hsn_code?: string;
-    gst_percent?: number;
-    mrp?: number;
-    sale_price?: number;
-    cost_per_unit?: number;
     batch_number?: string;
     manufacturing_date?: string;
     expiry_date?: string;
     quantity_available?: number;
     [key: string]: unknown;
-}
+};
 
 interface ProductFormData {
     product_name: string;

@@ -8,7 +8,7 @@ import LedgerHub from './LedgerHub';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
-import PartyLedgerV3 from './PartyLedgerV3';
+import PartyLedger from './PartyLedger';
 
 // Main Hub Component
 export { default as LedgerHub } from './LedgerHub';
@@ -20,7 +20,7 @@ export { default as LedgerReports } from './LedgerReports';
 export { default as CreditManagement } from './CreditManagement';
 
 // Ledger Components
-export { default as PartyLedgerV3 } from './PartyLedgerV3';
+export { default as PartyLedger } from './PartyLedger';
 
 // Hooks - re-export from hooks folder
 export * from './hooks';
@@ -107,7 +107,7 @@ interface LedgerComponents {
   Outstanding: React.ComponentType<any>;
   CollectionCenter: React.ComponentType<any>;
   LedgerReports: React.ComponentType<any>;
-  PartyLedgerV3: React.ComponentType<any>;
+  PartyLedger: React.ComponentType<any>;
 }
 
 interface LedgerConstants {
@@ -121,15 +121,16 @@ interface LedgerUtils {
   groupByAgingBucket: typeof groupByAgingBucket;
 }
 
-// Default export
-interface LedgerModule {
+// Import LedgerModule type from LedgerHub to avoid duplication
+// Type will be inferred from the object structure
+type LedgerModuleType = {
   LedgerHub: React.ComponentType<any>;
   components: LedgerComponents;
   constants: LedgerConstants;
   utils: LedgerUtils;
-}
+};
 
-const LedgerModule: LedgerModule = {
+const LedgerModule: LedgerModuleType = {
   // Main Hub
   LedgerHub,
 
@@ -140,7 +141,7 @@ const LedgerModule: LedgerModule = {
     LedgerReports,
 
     // Ledger Components
-    PartyLedgerV3
+    PartyLedger
   },
 
   constants: {

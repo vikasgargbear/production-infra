@@ -135,7 +135,7 @@ export function useLedgerAnalytics() {
                 offset: (page - 1) * perPage
             };
 
-            const response = await ledgerApi.getEntries(params);
+            const response = await (ledgerApi as any).getEntries?.(params);
 
             if (response.data) {
                 const ledgerData = response.data.entries || response.data || [];

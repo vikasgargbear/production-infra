@@ -1,4 +1,4 @@
-import React, { useState, forwardRef, Ref } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { Search, FileText, Calendar, ChevronRight, Package, Truck, AlertCircle } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================

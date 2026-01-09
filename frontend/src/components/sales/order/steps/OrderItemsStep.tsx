@@ -9,27 +9,14 @@ import {
 } from 'lucide-react';
 import {
     CustomerSearch,
-    ProductSearchSimple,
+    ProductSearch,
     ItemsTable,
     StandardDatePicker
 } from '../../../global';
 import type { Order, OrderItem } from '../../../../types/models';
+import type { Customer, Product } from '../../../../types/models';
 
-interface Customer {
-    customer_id?: number | string;
-    id?: number | string;
-    customer_name?: string;
-    name?: string;
-    phone?: string;
-    gst_number?: string;
-    drug_license_number?: string;
-}
-
-interface Product {
-    product_id: number | string;
-    product_name: string;
-    [key: string]: unknown;
-}
+// Using canonical types from /types/models - no local duplicates
 
 interface OrderItemsStepProps {
     order: Order;
@@ -138,7 +125,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         Create Product
                     </button>
                 </div>
-                <ProductSearchSimple
+                <ProductSearch
                     onAddItem={onProductSelect as any}
                     onCreateProduct={onCreateProduct as any}
                 />

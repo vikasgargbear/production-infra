@@ -148,10 +148,10 @@ export const useToast = (): ToastMethods => {
 // ==================== TOAST COMPONENT ====================
 
 const Toast: React.FC<ToastProps> = ({ toast, removeToast }) => {
-    // Safety check for undefined toast prop
-    if (!toast) return null;
-
     const [isExiting, setIsExiting] = useState<boolean>(false);
+
+    // Safety check for undefined toast prop - moved AFTER hooks
+    if (!toast) return null;
 
     const handleRemove = (): void => {
         setIsExiting(true);

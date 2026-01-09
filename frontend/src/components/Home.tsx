@@ -17,8 +17,6 @@ import {
 } from 'lucide-react';
 import { Card, Button } from './global';
 import NotificationCenter from './global/NotificationCenter';
-import { settingsApi } from '../services/api';
-import offlineStorage from '../services/offlineStorage';
 
 interface HomeProps {
   setActiveTab: (tab: string) => void;

@@ -9,10 +9,10 @@
 
 import offlineDB from '../core/offlineDatabase';
 import { invoicesApi, customersApi, productsApi, paymentsApi } from '../../api';
-import apiClient from '../../api/apiClient';
 import { cleanData } from '../../api/utils/dataUtils';
 import { toast } from 'react-toastify';
 import { AxiosResponse } from 'axios';
+// SyncStats is used via offlineDB.updateSyncStats() calls throughout this file
 import { SyncQueueItem as BaseSyncQueueItem, SyncStats } from '../types';
 
 // ==================== TYPE DEFINITIONS ====================

@@ -28,7 +28,8 @@ ChartJS.register(
   Filler
 );
 
-interface Product {
+// Analytics-specific product type - NOT the canonical Product
+interface AnalyticsProduct {
   id: string;
   name: string;
   category: string;
@@ -43,7 +44,7 @@ interface Product {
 }
 
 interface ProductAnalyticsData {
-  products: Product[];
+  products: AnalyticsProduct[];
   categories: string[];
   summary: {
     totalProducts: number;
@@ -156,14 +157,14 @@ const ProductAnalytics: React.FC = () => {
     const categoryData = data.categoryPerformance && Object.keys(data.categoryPerformance).length > 0
       ? data.categoryPerformance
       : data.products.reduce((acc, product) => {
-          if (!acc[product.category]) {
-            acc[product.category] = { revenue: 0, profit: 0, count: 0 };
-          }
-          acc[product.category].revenue += product.revenue;
-          acc[product.category].profit += product.profit;
-          acc[product.category].count += 1;
-          return acc;
-        }, {} as Record<string, { revenue: number; profit: number; count: number }>);
+        if (!acc[product.category]) {
+          acc[product.category] = { revenue: 0, profit: 0, count: 0 };
+        }
+        acc[product.category].revenue += product.revenue;
+        acc[product.category].profit += product.profit;
+        acc[product.category].count += 1;
+        return acc;
+      }, {} as Record<string, { revenue: number; profit: number; count: number }>);
 
     return {
       labels: Object.keys(categoryData),
@@ -191,8 +192,8 @@ const ProductAnalytics: React.FC = () => {
         data: data.products.map(p => ({ x: p.revenue / 1000, y: p.margin, label: p.name })),
         backgroundColor: data.products.map(p =>
           p.margin >= 25 ? 'rgba(34, 197, 94, 0.6)' :
-          p.margin >= 20 ? 'rgba(251, 146, 60, 0.6)' :
-          'rgba(239, 68, 68, 0.6)'
+            p.margin >= 20 ? 'rgba(251, 146, 60, 0.6)' :
+              'rgba(239, 68, 68, 0.6)'
         ),
         pointRadius: 8,
         pointHoverRadius: 10
@@ -372,74 +373,74 @@ const ProductAnalytics: React.FC = () => {
         {/* Charts */}
         {!loading && data.products.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 border-b border-gray-200">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Performance</h3>
-            <Bar
-              data={categoryPerformance}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'bottom' as const
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Performance</h3>
+              <Bar
+                data={categoryPerformance}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom' as const
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => {
+                          return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                        }
+                      }
+                    }
                   },
-                  tooltip: {
-                    callbacks: {
-                      label: (context) => {
-                        return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                  scales: {
+                    y: {
+                      ticks: {
+                        callback: (value) => `₹${(value as number / 1000).toFixed(0)}K`
                       }
                     }
                   }
-                },
-                scales: {
-                  y: {
-                    ticks: {
-                      callback: (value) => `₹${(value as number / 1000).toFixed(0)}K`
-                    }
-                  }
-                }
-              }}
-              height={250}
-            />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue & Margin Trend</h3>
-            <Line
-              data={trendData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'bottom' as const
-                  }
-                },
-                scales: {
-                  y: {
-                    type: 'linear' as const,
-                    display: true,
-                    position: 'left' as const,
-                    ticks: {
-                      callback: (value) => `₹${(value as number / 100000).toFixed(0)}L`
+                }}
+                height={250}
+              />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue & Margin Trend</h3>
+              <Line
+                data={trendData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom' as const
                     }
                   },
-                  y1: {
-                    type: 'linear' as const,
-                    display: true,
-                    position: 'right' as const,
-                    grid: {
-                      drawOnChartArea: false
+                  scales: {
+                    y: {
+                      type: 'linear' as const,
+                      display: true,
+                      position: 'left' as const,
+                      ticks: {
+                        callback: (value) => `₹${(value as number / 100000).toFixed(0)}L`
+                      }
                     },
-                    ticks: {
-                      callback: (value) => `${value}%`
+                    y1: {
+                      type: 'linear' as const,
+                      display: true,
+                      position: 'right' as const,
+                      grid: {
+                        drawOnChartArea: false
+                      },
+                      ticks: {
+                        callback: (value) => `${value}%`
+                      }
                     }
                   }
-                }
-              }}
-              height={250}
-            />
+                }}
+                height={250}
+              />
+            </div>
           </div>
-        </div>
         )}
 
         {/* Empty State */}
@@ -461,101 +462,98 @@ const ProductAnalytics: React.FC = () => {
         {!loading && data.products.length > 0 && (
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Performance Details</h3>
-          
-          {view === 'grid' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProducts.map(product => (
-                <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{product.name}</h4>
-                      <p className="text-sm text-gray-500">{product.category}</p>
+
+            {view === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredProducts.map(product => (
+                  <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{product.name}</h4>
+                        <p className="text-sm text-gray-500">{product.category}</p>
+                      </div>
+                      {getTrendIcon(product.trend, product.trendValue)}
                     </div>
-                    {getTrendIcon(product.trend, product.trendValue)}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Revenue</p>
-                      <p className="font-semibold">{formatCurrency(product.revenue)}</p>
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <div>
+                        <p className="text-xs text-gray-500">Revenue</p>
+                        <p className="font-semibold">{formatCurrency(product.revenue)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Margin</p>
+                        <p className="font-semibold">{product.margin}%</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Sales</p>
+                        <p className="font-semibold">{product.sales.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Turnover</p>
+                        <p className="font-semibold">{product.turnover}x</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Margin</p>
-                      <p className="font-semibold">{product.margin}%</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Sales</p>
-                      <p className="font-semibold">{product.sales.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Turnover</p>
-                      <p className="font-semibold">{product.turnover}x</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500">Stock Level</span>
-                      <span className={`text-sm font-medium ${
-                        product.stock < 1000 ? 'text-red-600' : 
-                        product.stock < 3000 ? 'text-yellow-600' : 
-                        'text-green-600'
-                      }`}>
-                        {product.stock.toLocaleString()} units
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 text-gray-700">Product</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Category</th>
-                    <th className="text-right py-3 px-4 text-gray-700">Sales</th>
-                    <th className="text-right py-3 px-4 text-gray-700">Revenue</th>
-                    <th className="text-right py-3 px-4 text-gray-700">Margin</th>
-                    <th className="text-right py-3 px-4 text-gray-700">Stock</th>
-                    <th className="text-right py-3 px-4 text-gray-700">Turnover</th>
-                    <th className="text-center py-3 px-4 text-gray-700">Trend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.map((product, index) => (
-                    <tr key={product.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                      <td className="py-3 px-4 font-medium text-gray-900">{product.name}</td>
-                      <td className="py-3 px-4 text-gray-600">{product.category}</td>
-                      <td className="py-3 px-4 text-right">{product.sales.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(product.revenue)}</td>
-                      <td className="py-3 px-4 text-right">
-                        <span className={`font-medium ${
-                          product.margin >= 25 ? 'text-green-600' :
-                          product.margin >= 20 ? 'text-yellow-600' :
-                          'text-red-600'
-                        }`}>
-                          {product.margin}%
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-500">Stock Level</span>
+                        <span className={`text-sm font-medium ${product.stock < 1000 ? 'text-red-600' :
+                            product.stock < 3000 ? 'text-yellow-600' :
+                              'text-green-600'
+                          }`}>
+                          {product.stock.toLocaleString()} units
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className={`${
-                          product.stock < 1000 ? 'text-red-600' :
-                          product.stock < 3000 ? 'text-yellow-600' :
-                          'text-gray-900'
-                        }`}>
-                          {product.stock.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">{product.turnover}x</td>
-                      <td className="py-3 px-4 text-center">
-                        {getTrendIcon(product.trend, product.trendValue)}
-                      </td>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-gray-700">Product</th>
+                      <th className="text-left py-3 px-4 text-gray-700">Category</th>
+                      <th className="text-right py-3 px-4 text-gray-700">Sales</th>
+                      <th className="text-right py-3 px-4 text-gray-700">Revenue</th>
+                      <th className="text-right py-3 px-4 text-gray-700">Margin</th>
+                      <th className="text-right py-3 px-4 text-gray-700">Stock</th>
+                      <th className="text-right py-3 px-4 text-gray-700">Turnover</th>
+                      <th className="text-center py-3 px-4 text-gray-700">Trend</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {filteredProducts.map((product, index) => (
+                      <tr key={product.id} className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <td className="py-3 px-4 font-medium text-gray-900">{product.name}</td>
+                        <td className="py-3 px-4 text-gray-600">{product.category}</td>
+                        <td className="py-3 px-4 text-right">{product.sales.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right">{formatCurrency(product.revenue)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={`font-medium ${product.margin >= 25 ? 'text-green-600' :
+                              product.margin >= 20 ? 'text-yellow-600' :
+                                'text-red-600'
+                            }`}>
+                            {product.margin}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={`${product.stock < 1000 ? 'text-red-600' :
+                              product.stock < 3000 ? 'text-yellow-600' :
+                                'text-gray-900'
+                            }`}>
+                            {product.stock.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">{product.turnover}x</td>
+                        <td className="py-3 px-4 text-center">
+                          {getTrendIcon(product.trend, product.trendValue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,14 +1,12 @@
-import React, { useState, ChangeEvent } from 'react';
-import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customersApi } from '../../../services/api';
-import { APP_CONFIG } from '../../../config/app.config';
 import { FullScreenModal } from '../modals/FullScreenModal';
 
 // Imports from centralized types
 import type {
     Customer,
-    CustomerFormData,
-    CustomerAddress
+    CustomerFormData
 } from '../../sales/invoice/types/invoiceTypes';
 
 // ==================== INLINE TRANSFORMERS ====================

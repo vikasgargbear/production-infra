@@ -1,0 +1,140 @@
+/**
+ * SalesReturnFlow Type Definitions
+ * Extracted from SalesReturnFlow.tsx for better organization
+ */
+
+import type { Invoice, Customer } from '../../../types/api.types';
+
+// ============================================================================
+// Core Return Types
+// ============================================================================
+
+export interface ReturnFormItem {
+    id?: string | number;
+    product_id: number;
+    product_name: string;
+    batch_id?: number | string;
+    batch_number: string;
+    manufacturing_date?: string;
+    expiry_date?: string;
+    quantity: number;
+    paid_quantity: number;
+    free_quantity: number;
+    return_quantity: number;
+    max_returnable_qty: number;
+    unit_price: number;
+    discount_percent: number;
+    tax_percent: number;
+    selected: boolean;
+    hsn_code?: string;
+    unit?: string;
+    uom?: string;
+    manufacturer?: string;
+    is_manual?: boolean;
+    available_stock?: number;
+    return_reason?: string;
+    disposition?: string;
+    invoice_item_id?: number;
+    requires_approval?: boolean;
+    verification_status?: string;
+    [key: string]: any;
+}
+
+export interface ReturnFormData {
+    return_no: string;
+    return_date: string;
+    customer_id: string | number;
+    customer_details: Customer | null;
+    invoice_id: string | number;
+    invoice_number: string;
+    invoice_date: string;
+    original_invoice: Invoice | null;
+    items: ReturnFormItem[];
+    return_reason: string;
+    return_reason_notes: string;
+    return_method: string;
+    subtotal_amount: number;
+    tax_amount: number;
+    total_amount: number;
+    credit_note_no: string;
+    status: string;
+    include_gst: boolean;
+    credit_adjustment_type: 'future' | 'existing_dues';
+}
+
+export interface ReturnReason {
+    value: string;
+    label: string;
+}
+
+// ============================================================================
+// Component Props
+// ============================================================================
+
+export interface SalesReturnFlowProps {
+    onClose: () => void;
+}
+
+export interface ReturnCustomerSelectorProps {
+    selectedCustomer: Customer | null;
+    onCustomerSelect: (customer: Customer | null) => void;
+    onCreateCustomer: () => void;
+    customerSearchRef: React.RefObject<any>;
+}
+
+export interface ReturnInvoiceSelectorProps {
+    selectedCustomer: Customer | null;
+    selectedInvoice: Invoice | null;
+    onInvoiceSelect: (invoice: Invoice | null) => void;
+    onSkipInvoice: () => void;
+    showInvoiceSection: boolean;
+    invoiceSearchRef: React.RefObject<any>;
+}
+
+export interface ReturnItemsTableProps {
+    items: ReturnFormItem[];
+    selectedInvoice: Invoice | null;
+    showManualEntry: boolean;
+    availableBatches: Record<number, any[]>;
+    onUpdateItem: (indexOrId: string | number, field: string, value: any) => void;
+    onAddManualItem: (product: any) => void;
+    onRemoveItem: (itemId: string | number) => void;
+}
+
+export interface ReturnReviewPanelProps {
+    returnData: ReturnFormData;
+    selectedCustomer: Customer | null;
+    customerDues: number;
+    onSave: () => void;
+    onPrint: () => void;
+    onBack: () => void;
+    saving: boolean;
+}
+
+// ============================================================================
+// State Management Types
+// ============================================================================
+
+export interface ReturnUIState {
+    currentStep: number;
+    showCustomerModal: boolean;
+    showManualEntry: boolean;
+    showInvoiceSection: boolean;
+}
+
+export interface ReturnAsyncState {
+    loading: boolean;
+    saving: boolean;
+}
+
+export interface ReturnState {
+    ui: ReturnUIState;
+    async: ReturnAsyncState;
+    returnData: ReturnFormData;
+    selectedCustomer: Customer | null;
+    selectedInvoice: Invoice | null;
+    customerDues: number;
+    returnReasons: ReturnReason[];
+    manualItemCounter: number;
+    availableBatches: Record<number, any[]>;
+}

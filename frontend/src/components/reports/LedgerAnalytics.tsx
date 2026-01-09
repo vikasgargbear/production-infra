@@ -154,8 +154,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   );
 
   const dashboardStats: DashboardStats = (stats ? {
-    ...stats,
-    cash_flow_trend: (stats.cash_flow_trend as 'positive' | 'negative' | 'neutral') || 'neutral'
+    ...(stats as any),
+    cash_flow_trend: ((stats as any).cash_flow_trend as 'positive' | 'negative' | 'neutral') || 'neutral'
   } : {
     total_receivables: 0,
     total_payables: 0,
@@ -165,7 +165,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     collection_efficiency: 0,
     payment_efficiency: 0,
     cash_flow_trend: 'neutral' as const
-  });
+  }) as any;
 
   const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     try {
@@ -352,8 +352,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                     <td className="text-right py-2">{party.days_overdue} days</td>
                     <td className="py-2">
                       <span className={`px-2 py-1 rounded text-xs ${party.risk_level === 'high' ? 'bg-red-100 text-red-800' :
-                          party.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
+                        party.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
                         }`}>
                         {party.risk_level}
                       </span>
@@ -785,8 +785,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                             key={report.value}
                             onClick={() => setSelectedReport(report.value)}
                             className={`p-3 rounded-lg border flex items-center gap-2 ${selectedReport === report.value
-                                ? 'bg-blue-50 border-blue-500 text-blue-700'
-                                : 'bg-white border-gray-300 hover:bg-gray-50'
+                              ? 'bg-blue-50 border-blue-500 text-blue-700'
+                              : 'bg-white border-gray-300 hover:bg-gray-50'
                               }`}
                           >
                             <Icon className="h-5 w-5" />

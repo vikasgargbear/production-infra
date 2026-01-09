@@ -63,10 +63,16 @@ async def get_order_item(order_item_id: int, _: dict = Depends(PermissionChecker
     context: OrgContext = Depends(get_org_context)):
     """Get a single order item by ID"""
     try:
-        order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
-        if not order_item:
+        # P3-11: Standardized to raw SQL
+        result = db.execute(text("""
+            SELECT * FROM sales.order_items
+            WHERE order_item_id = :id
+            LIMIT 1
+        """), {"id": order_item_id}).fetchone()
+        
+        if not result:
             raise HTTPException(status_code=404, detail="Order item not found")
-        return order_item
+        return dict(result._mapping)
     except HTTPException:
         raise
     except Exception as e:
@@ -97,16 +103,37 @@ async def update_order_item(order_item_id: int, order_item_data: dict, _: dict =
     context: OrgContext = Depends(get_org_context)):
     """Update an order item"""
     try:
-        order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
-        if not order_item:
+        # P3-11: Standardized to raw SQL
+        # First check if exists
+        check_result = db.execute(text("""
+            SELECT order_item_id FROM sales.order_items
+            WHERE order_item_id = :id
+            LIMIT 1
+        """), {"id": order_item_id}).fetchone()
+        
+        if not check_result:
             raise HTTPException(status_code=404, detail="Order item not found")
         
+        # Build UPDATE query dynamically
+        fields = []
+        params = {"id": order_item_id}
         for key, value in order_item_data.items():
-            setattr(order_item, key, value)
+            fields.append(f"{key} = :{key}")
+            params[key] = value
         
-        # TenantAwareSession auto-commits
-        db.refresh(order_item)
-        return order_item
+        if fields:
+            update_query = f"""
+                UPDATE sales.order_items
+                SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP
+                WHERE order_item_id = :id
+            """
+            db.execute(text(update_query), params)
+        
+        # Return updated item
+        result = db.execute(text("""
+            SELECT * FROM sales.order_items WHERE order_item_id = :id
+        """), {"id": order_item_id}).fetchone()
+        return dict(result._mapping)
     except HTTPException:
         raise
     except Exception as e:
@@ -121,12 +148,16 @@ async def delete_order_item(order_item_id: int, _: dict = Depends(PermissionChec
     context: OrgContext = Depends(get_org_context)):
     """Delete an order item"""
     try:
-        order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
-        if not order_item:
+        # P3-11: Standardized to raw SQL
+        result = db.execute(text("""
+            DELETE FROM sales.order_items
+            WHERE order_item_id = :id
+            RETURNING order_item_id
+        """), {"id": order_item_id}).fetchone()
+        
+        if not result:
             raise HTTPException(status_code=404, detail="Order item not found")
         
-        db.delete(order_item)
-        # TenantAwareSession auto-commits
         return {"message": "Order item deleted successfully"}
     except HTTPException:
         raise

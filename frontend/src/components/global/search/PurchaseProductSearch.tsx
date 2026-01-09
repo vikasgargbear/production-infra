@@ -1,5 +1,5 @@
 import React, { forwardRef, ForwardRefRenderFunction } from 'react';
-import ProductSearchSimple from './ProductSearchSimple';
+import ProductSearch from './ProductSearch';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -32,7 +32,7 @@ const PurchaseProductSearchComponent: ForwardRefRenderFunction<PurchaseProductSe
     className = ""
 }, ref) => {
     return (
-        <ProductSearchSimple
+        <ProductSearch
             ref={ref}
             onAddItem={onAddItem as (product: any) => void}
             onCreateProduct={onCreateProduct}
