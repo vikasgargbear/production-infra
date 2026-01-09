@@ -151,25 +151,26 @@ class LocalSearchService {
                 return true;
             });
 
-            // Calculate USABLE stock (available - offline reservations)
-            // This prevents overselling when invoices are created locally but not yet synced
+            // Calculate usable stock directly from batches (always accurate)
+            // This matches SalesStockService.getUsableStock() logic
+            // CRITICAL: Never use product.total_stock directly - it's stale cached data
             const resultsWithUsableStock = uniqueMatches.slice(0, limit).map((product: any) => {
-                // Calculate total offline reservations from all batches
                 const batches = product.batches || [];
-                const totalReservedOffline = batches.reduce(
-                    (sum: number, batch: any) => sum + (batch.quantity_reserved_offline || 0),
-                    0
-                );
 
-                // Usable stock = total - reserved
-                const totalStock = product.total_stock || 0;
-                const usableStock = Math.max(0, totalStock - totalReservedOffline);
+                // Sum (available - reserved) for all active batches
+                const usableStock = batches
+                    .filter((batch: any) => batch.is_active !== false)
+                    .reduce((total: number, batch: any) => {
+                        const available = batch.quantity_available || 0;
+                        const reserved = batch.quantity_reserved_offline || 0;
+                        return total + Math.max(0, available - reserved);
+                    }, 0);
 
                 return {
                     ...product,
-                    total_stock: usableStock,  // Override with usable stock for display
-                    _raw_total_stock: totalStock,  // Keep original for debugging
-                    _total_reserved_offline: totalReservedOffline
+                    total_stock: usableStock,  // Override with calculated usable stock
+                    _raw_total_stock: product.total_stock || 0,  // Keep original for debugging
+                    _calculated_from_batches: true
                 };
             });
 
