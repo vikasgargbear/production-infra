@@ -1,7 +1,7 @@
 """
 GRN Repository - Data access layer for GRN operations
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from decimal import Decimal

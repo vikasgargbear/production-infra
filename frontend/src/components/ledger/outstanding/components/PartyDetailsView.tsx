@@ -7,7 +7,7 @@
 import React, { useMemo } from 'react';
 import { CreditCard, Clock } from 'lucide-react';
 import { DataTable } from '../../../global';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency } from '../../../../utils/formatters';
 import { format, parseISO } from 'date-fns';
 import type { PartyDetailsViewProps, InvoiceDetail } from '../types/outstanding.types';
 

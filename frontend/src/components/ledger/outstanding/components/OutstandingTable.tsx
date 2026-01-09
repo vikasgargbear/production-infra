@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { CreditCard } from 'lucide-react';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency } from '../../../../utils/formatters';
 import type { OutstandingTableProps } from '../types/outstanding.types';
 
 export const OutstandingTable = React.memo<OutstandingTableProps>(({

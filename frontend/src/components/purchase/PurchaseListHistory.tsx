@@ -377,9 +377,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                   currentPage={pagination.page}
                   totalPages={pagination.total_pages}
                   onPageChange={(page) => fetchPurchases(page, buildSearchParams())}
-                  perPage={pagination.per_page}
-                  total={pagination.total}
-                  onPerPageChange={(perPage) => {
+                  itemsPerPage={pagination.per_page}
+                  totalItems={pagination.total}
+                  onItemsPerPageChange={(perPage) => {
                     dispatch({ type: 'SET_PAGINATION', pagination: { per_page: perPage, page: 1 } });
                     fetchPurchases(1, buildSearchParams());
                   }}

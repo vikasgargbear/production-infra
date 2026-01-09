@@ -16,7 +16,16 @@ const RETURN_REASONS = [
   { value: 'OTHER', label: 'Other' }
 ];
 
-const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, customerDues = 0, returnMethod = 'credit_note' }) => {
+interface CreditNotePreviewProps {
+  returnData: any;
+  customer: any;
+  invoice?: any;
+  includeGst?: boolean;
+  customerDues?: number;
+  returnMethod?: string;
+}
+
+const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, customer, invoice = null, includeGst = true, customerDues = 0, returnMethod = 'credit_note' }) => {
   const { companyDetails } = useCompanyDetails();
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {

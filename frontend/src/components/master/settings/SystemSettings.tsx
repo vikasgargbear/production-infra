@@ -18,9 +18,6 @@ import { settingsApi } from '../../../services/api';
 import { useSystemSettingsState } from './systemsettings/hooks/useSystemSettingsState';
 import type { SystemSettingsProps } from './systemsettings/types/settings.types';
 
-// Import the original settings rendering functions from backup
-import SystemSettingsBackup from './SystemSettings.tsx.backup';
-
 const SystemSettings: React.FC<SystemSettingsProps> = ({ open, onClose }) => {
     const { state, dispatch, settings, ui } = useSystemSettingsState();
 
@@ -184,18 +181,22 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ open, onClose }) => {
                         })}
                     </div>
 
-                    {/* Settings Content - Use backup component's rendering logic */}
+                    {/* Settings Content */}
                     <div className="flex-1 overflow-y-auto p-6">
                         {ui.isLoading ? (
                             <div className="flex items-center justify-center h-64">
                                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                             </div>
                         ) : (
-                            <SystemSettingsBackup
-                                settings={settings}
-                                activeTab={ui.activeTab}
-                                onSettingChange={handleSettingChange}
-                            />
+                            <div className="text-center py-12 text-gray-500">
+                                <Settings className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                                <p className="text-lg font-medium text-gray-700 mb-2">
+                                    {ui.activeTab.charAt(0).toUpperCase() + ui.activeTab.slice(1)} Settings
+                                </p>
+                                <p className="text-sm">
+                                    Settings configuration for this tab.
+                                </p>
+                            </div>
                         )}
                     </div>
                 </div>

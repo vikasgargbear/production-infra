@@ -17,7 +17,15 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
     showInvoiceSection,
     invoiceSearchRef
 }) => {
+    // State to manage modal open - must be before any early returns
+    const [showModal, setShowModal] = React.useState(false);
+
     if (!selectedCustomer || !showInvoiceSection) return null;
+
+    // Handle invoice selection from modal
+    const handleInvoiceSelect = (invoice: any) => {
+        onInvoiceSelect(invoice);
+    };
 
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -28,16 +36,20 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                 </h3>
 
                 <div className="flex items-center space-x-3">
-                    <div className="flex-1">
-                        <InvoiceSelector
-                            ref={invoiceSearchRef}
-                            customerId={selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id}
-                            value={selectedInvoice}
-                            onChange={onInvoiceSelect}
-                            placeholder="Search invoice by number or date... (Ctrl+I)"
-                            size="lg"
-                        />
-                    </div>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="flex-1 px-4 py-3 text-left border border-gray-300 rounded-lg hover:border-blue-500 transition-colors"
+                    >
+                        {selectedInvoice ? (
+                            <span className="font-medium text-gray-900">
+                                {selectedInvoice.invoice_number}
+                            </span>
+                        ) : (
+                            <span className="text-gray-500">
+                                Click to search invoice by number or date... (Ctrl+I)
+                            </span>
+                        )}
+                    </button>
                     <button
                         onClick={onSkipInvoice}
                         className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
@@ -47,6 +59,14 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
+
+                {showModal && (
+                    <InvoiceSelector
+                        customerId={String(selectedCustomer.customer_id)}
+                        onSelect={handleInvoiceSelect}
+                        onClose={() => setShowModal(false)}
+                    />
+                )}
 
                 {selectedInvoice && (
                     <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">

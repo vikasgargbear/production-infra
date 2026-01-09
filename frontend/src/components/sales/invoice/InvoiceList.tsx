@@ -347,9 +347,9 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                   currentPage={pagination.page}
                   totalPages={pagination.total_pages}
                   onPageChange={handlePageChange}
-                  perPage={pagination.per_page}
-                  total={pagination.total}
-                  onPerPageChange={handlePerPageChange}
+                  itemsPerPage={pagination.per_page}
+                  totalItems={pagination.total}
+                  onItemsPerPageChange={handlePerPageChange}
                 />
               </div>
             )}

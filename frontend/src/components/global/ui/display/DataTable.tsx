@@ -19,7 +19,7 @@ import Checkbox from '../forms/Checkbox';
 
 export interface Column<T> {
   key: keyof T | string;
-  header: string;
+  header: React.ReactNode;
   accessor?: (row: T) => React.ReactNode;
   render?: (value: any, row: T) => React.ReactNode;
   sortable?: boolean;
@@ -32,18 +32,18 @@ export interface DataTableProps<T = Record<string, any>> {
   data: T[];
   columns: Column<T>[];
   keyField: keyof T;
-  
+
   // Selection
   selectable?: boolean;
   selectedRows?: T[];
   onSelectionChange?: (selectedRows: T[]) => void;
-  
+
   // Sorting
   sortable?: boolean;
   defaultSortKey?: string;
   defaultSortOrder?: 'asc' | 'desc';
   onSort?: (key: string, order: 'asc' | 'desc') => void;
-  
+
   // Pagination
   paginated?: boolean;
   pageSize?: number;
@@ -52,22 +52,22 @@ export interface DataTableProps<T = Record<string, any>> {
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
   pageSizeOptions?: number[];
-  
+
   // Search & Filter
   searchable?: boolean;
   searchPlaceholder?: string;
   onSearch?: (query: string) => void;
-  
+
   // Actions
   actions?: React.ReactNode;
   onRefresh?: () => void;
   onExport?: () => void;
-  
+
   // Loading & Empty states
   loading?: boolean;
   emptyMessage?: string;
   emptyIcon?: React.ReactNode;
-  
+
   // Styling
   striped?: boolean;
   hoverable?: boolean;
@@ -82,16 +82,16 @@ export function DataTable<T extends Record<string, any>>({
   data,
   columns,
   keyField,
-  
+
   selectable = false,
   selectedRows = [],
   onSelectionChange,
-  
+
   sortable = true,
   defaultSortKey = '',
   defaultSortOrder = 'asc',
   onSort,
-  
+
   paginated = false,
   pageSize = 10,
   currentPage = 1,
@@ -99,19 +99,19 @@ export function DataTable<T extends Record<string, any>>({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [10, 25, 50, 100],
-  
+
   searchable = false,
   searchPlaceholder = 'Search...',
   onSearch,
-  
+
   actions,
   onRefresh,
   onExport,
-  
+
   loading = false,
   emptyMessage = 'No data available',
   emptyIcon,
-  
+
   striped = true,
   hoverable = true,
   bordered = true,
@@ -124,27 +124,27 @@ export function DataTable<T extends Record<string, any>>({
   const [localSortOrder, setLocalSortOrder] = useState<'asc' | 'desc'>(defaultSortOrder);
   const [searchQuery, setSearchQuery] = useState('');
   const [localSelectedRows, setLocalSelectedRows] = useState<T[]>(selectedRows);
-  
+
   // Use external or local state for selection
   const effectiveSelectedRows = onSelectionChange ? selectedRows : localSelectedRows;
-  const setEffectiveSelectedRows = onSelectionChange 
-    ? onSelectionChange 
+  const setEffectiveSelectedRows = onSelectionChange
+    ? onSelectionChange
     : setLocalSelectedRows;
-  
+
   // Calculate pagination
   const totalPages = Math.ceil((totalItems || data.length) / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  
+
   // Sort data
   const sortedData = useMemo(() => {
     if (!sortable || !localSortKey) return data;
-    
+
     return [...data].sort((a, b) => {
       const column = columns.find(col => col.key === localSortKey);
       const aValue = column?.accessor ? column.accessor(a) : a[localSortKey as keyof T];
       const bValue = column?.accessor ? column.accessor(b) : b[localSortKey as keyof T];
-      
+
       if (aValue === bValue) return 0;
       if (aValue == null || bValue == null) {
         // Handle null/undefined values - put them at the end
@@ -152,16 +152,16 @@ export function DataTable<T extends Record<string, any>>({
         if (aValue == null) return 1;
         return -1;
       }
-      
+
       const comparison = aValue > bValue ? 1 : -1;
       return localSortOrder === 'asc' ? comparison : -comparison;
     });
   }, [data, localSortKey, localSortOrder, columns, sortable]);
-  
+
   // Filter data
   const filteredData = useMemo(() => {
     if (!searchQuery) return sortedData;
-    
+
     return sortedData.filter(row => {
       return columns.some(column => {
         const value = column.accessor ? column.accessor(row) : row[column.key as keyof T];
@@ -169,25 +169,25 @@ export function DataTable<T extends Record<string, any>>({
       });
     });
   }, [sortedData, searchQuery, columns]);
-  
+
   // Paginate data
-  const paginatedData = paginated 
+  const paginatedData = paginated
     ? filteredData.slice(startIndex, endIndex)
     : filteredData;
-  
+
   // Handle sort
   const handleSort = (key: string) => {
     if (!sortable) return;
-    
+
     const newOrder = localSortKey === key && localSortOrder === 'asc' ? 'desc' : 'asc';
     setLocalSortKey(key);
     setLocalSortOrder(newOrder);
-    
+
     if (onSort) {
       onSort(key, newOrder);
     }
   };
-  
+
   // Handle select all
   const handleSelectAll = () => {
     if (effectiveSelectedRows.length === paginatedData.length) {
@@ -196,13 +196,13 @@ export function DataTable<T extends Record<string, any>>({
       setEffectiveSelectedRows(paginatedData);
     }
   };
-  
+
   // Handle row selection
   const handleRowSelect = (row: T) => {
     const isSelected = effectiveSelectedRows.some(
       selected => selected[keyField] === row[keyField]
     );
-    
+
     if (isSelected) {
       setEffectiveSelectedRows(
         effectiveSelectedRows.filter(
@@ -213,18 +213,18 @@ export function DataTable<T extends Record<string, any>>({
       setEffectiveSelectedRows([...effectiveSelectedRows, row]);
     }
   };
-  
+
   // Check if row is selected
   const isRowSelected = (row: T) => {
     return effectiveSelectedRows.some(
       selected => selected[keyField] === row[keyField]
     );
   };
-  
+
   // Render sort icon
   const renderSortIcon = (columnKey: string) => {
     if (!sortable) return null;
-    
+
     if (localSortKey === columnKey) {
       return localSortOrder === 'asc' ? (
         <ChevronUp className="w-4 h-4" />
@@ -232,10 +232,10 @@ export function DataTable<T extends Record<string, any>>({
         <ChevronDown className="w-4 h-4" />
       );
     }
-    
+
     return <ChevronsUpDown className="w-4 h-4 opacity-50" />;
   };
-  
+
   // Cell alignment classes
   const getAlignmentClass = (align?: 'left' | 'center' | 'right') => {
     switch (align) {
@@ -244,26 +244,26 @@ export function DataTable<T extends Record<string, any>>({
       default: return 'text-left';
     }
   };
-  
+
   // Table classes
   const tableClasses = [
     'min-w-full divide-y divide-app-200',
     bordered && 'border border-app-200',
     className,
   ].filter(Boolean).join(' ');
-  
+
   const thClasses = [
     'px-6 py-4 text-xs font-medium text-app-500 uppercase tracking-wider',
     'bg-app-50 border-b border-app-200',
     compact && 'px-4 py-3',
   ].filter(Boolean).join(' ');
-  
+
   const tdClasses = [
     'px-6 py-4 whitespace-nowrap text-sm text-app-700',
     'border-b border-app-100',
     compact && 'px-4 py-3',
   ].filter(Boolean).join(' ');
-  
+
   return (
     <div className="space-y-4">
       {/* Header Actions */}
@@ -282,7 +282,7 @@ export function DataTable<T extends Record<string, any>>({
               />
             </div>
           )}
-          
+
           <div className="flex items-center gap-2">
             {actions}
             {onRefresh && (
@@ -310,7 +310,7 @@ export function DataTable<T extends Record<string, any>>({
           </div>
         </div>
       )}
-      
+
       {/* Table */}
       <div className="overflow-x-auto">
         <table className={tableClasses}>
@@ -329,9 +329,8 @@ export function DataTable<T extends Record<string, any>>({
                 <th
                   key={String(column.key)}
                   scope="col"
-                  className={`${thClasses} ${getAlignmentClass(column.align)} ${
-                    column.sortable !== false && sortable ? 'cursor-pointer select-none' : ''
-                  }`}
+                  className={`${thClasses} ${getAlignmentClass(column.align)} ${column.sortable !== false && sortable ? 'cursor-pointer select-none' : ''
+                    }`}
                   style={{ width: column.width }}
                   onClick={() => column.sortable !== false && handleSort(String(column.key))}
                 >
@@ -343,7 +342,7 @@ export function DataTable<T extends Record<string, any>>({
               ))}
             </tr>
           </thead>
-          
+
           <tbody className={`bg-white divide-y divide-app-100 ${bodyClassName}`}>
             {loading ? (
               <tr>
@@ -384,7 +383,7 @@ export function DataTable<T extends Record<string, any>>({
                   {columns.map((column) => {
                     const value = column.accessor ? column.accessor(row) : row[column.key as keyof T];
                     const cellContent = column.render ? column.render(value, row) : value;
-                    
+
                     return (
                       <td
                         key={String(column.key)}
@@ -400,7 +399,7 @@ export function DataTable<T extends Record<string, any>>({
           </tbody>
         </table>
       </div>
-      
+
       {/* Pagination */}
       {paginated && totalPages > 1 && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -416,7 +415,7 @@ export function DataTable<T extends Record<string, any>>({
             />
             <span className="text-sm text-gray-700">entries</span>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -434,11 +433,11 @@ export function DataTable<T extends Record<string, any>>({
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            
+
             <span className="px-3 text-sm text-gray-700">
               Page {currentPage} of {totalPages}
             </span>
-            
+
             <Button
               variant="outline"
               size="sm"

@@ -27,12 +27,9 @@ export const ReturnCustomerSelector = React.memo<ReturnCustomerSelectorProps>(({
                     <div className="flex-1">
                         <CustomerSearch
                             ref={customerSearchRef}
-                            value={selectedCustomer}
-                            onChange={onCustomerSelect}
+                            value={selectedCustomer as any}
+                            onChange={onCustomerSelect as any}
                             placeholder="Search customer by name, phone, or code... (Ctrl+R)"
-                            size="lg"
-                            autoFocus
-                            showCreateButton={false}
                         />
                     </div>
                     <button
@@ -50,7 +47,7 @@ export const ReturnCustomerSelector = React.memo<ReturnCustomerSelectorProps>(({
                         <div className="grid grid-cols-3 gap-4 text-sm">
                             <div>
                                 <span className="font-medium text-gray-700">Phone:</span>{' '}
-                                <span className="text-gray-900">{selectedCustomer.phone || selectedCustomer.mobile || 'N/A'}</span>
+                                <span className="text-gray-900">{selectedCustomer.phone || selectedCustomer.secondary_phone || 'N/A'}</span>
                             </div>
                             <div>
                                 <span className="font-medium text-gray-700">GST:</span>{' '}
@@ -59,7 +56,7 @@ export const ReturnCustomerSelector = React.memo<ReturnCustomerSelectorProps>(({
                             <div>
                                 <span className="font-medium text-gray-700">Address:</span>{' '}
                                 <span className="text-gray-900">
-                                    {selectedCustomer.address || selectedCustomer.city || 'N/A'}
+                                    {selectedCustomer.address?.city || selectedCustomer.address?.line1 || 'N/A'}
                                 </span>
                             </div>
                         </div>

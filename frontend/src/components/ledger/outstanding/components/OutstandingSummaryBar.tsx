@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { TrendingUp } from 'lucide-react';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency } from '../../../../utils/formatters';
 import type { OutstandingSummaryCardsProps } from '../types/outstanding.types';
 
 export const OutstandingSummaryBar = React.memo<OutstandingSummaryCardsProps>(({
