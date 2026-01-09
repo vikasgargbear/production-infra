@@ -106,3 +106,5 @@ test-results/
 # Development files - not for production
 /dev/
 
+# Local scratch space (experiments, notes, temp files)
+.dev/
