@@ -146,10 +146,12 @@ class InvoiceService:
             # Determine payment_status based on paid_amount vs final_amount
             final_amount = Decimal(str(totals["final_amount"]))
             
-            # CAP paid_amount at final_amount - can't pay more than invoice total
+            # VALIDATION: Reject if payments exceed invoice total
             if paid_amount > final_amount:
-                logger.warning(f"⚠️ Payments ({paid_amount}) exceed invoice total ({final_amount}), capping at invoice total")
-                paid_amount = final_amount
+                raise ValueError(
+                    f"Payment amount (₹{paid_amount}) exceeds invoice total (₹{final_amount}). "
+                    f"Cannot pay more than the invoice amount."
+                )
             
             if paid_amount >= final_amount:
                 payment_status = "paid"
