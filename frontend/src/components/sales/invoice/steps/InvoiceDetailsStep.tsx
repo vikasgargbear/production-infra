@@ -534,7 +534,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 <div className="bg-white border-t border-gray-200 px-6 py-4">
                     {/* Payment Validation Error */}
                     {(() => {
-                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
                         const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
                         const isOverpaid = totalPaid > finalAmount;
 
@@ -565,7 +565,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                         <button
                             onClick={onContinue}
                             disabled={(() => {
-                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
                                 const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
                                 return totalPaid > finalAmount;
                             })()}
