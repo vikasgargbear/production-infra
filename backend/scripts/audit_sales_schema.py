@@ -25,7 +25,7 @@ SALES_SCHEMA = {
         "cancelled_date", "notes", "internal_notes", "terms_and_conditions",
         "bank_account_id", "created_at", "updated_at", "created_by", "posted_by",
         "posted_at", "items_count", "total_quantity", "loyalty_points_used",
-        "loyalty_discount", "credit_amount", "allocated_amount", "unallocated_amount"
+        "loyalty_discount", "credit_amount", "salesperson_id"
     ],
     "invoice_items": [
         "invoice_item_id", "invoice_id", "order_item_id", "product_id", "product_name",

@@ -195,7 +195,7 @@ class InvoiceRepository:
                 round_off_amount, final_amount, amount_in_words,
                 payment_terms, due_date, notes,
                 invoice_status, payment_status, paid_amount,
-                credit_amount, allocated_amount,
+                credit_amount,
                 salesperson_id,
                 created_by, created_at, updated_at
             ) VALUES (
@@ -208,7 +208,7 @@ class InvoiceRepository:
                 :round_off, :final, :amount_in_words,
                 :payment_terms, :due_date, :notes,
                 'posted', :payment_status, :paid_amount,
-                :credit_amount, 0,
+                :credit_amount,
                 :salesperson_id,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
