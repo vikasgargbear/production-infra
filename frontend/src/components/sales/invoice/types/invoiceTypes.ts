@@ -361,8 +361,14 @@ export interface Invoice {
     delivery_type?: string;
     transport_company?: string;
     vehicle_number?: string;
+    driver_phone?: string;
+    lr_number?: string;
     delivery_charges?: number;
     is_same_address?: boolean;
+
+    // Linked challan (auto-created)
+    challan_id?: number;
+    challan_number?: string;
 
     // Addresses
     billing_address?: string;

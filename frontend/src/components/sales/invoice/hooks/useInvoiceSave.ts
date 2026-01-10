@@ -97,7 +97,13 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 gst_type: invoice.gst_type || 'CGST/SGST',
                 total_amount: invoice.final_amount || 0,
                 // M.R. / Salesperson - send to backend
-                salesperson_id: invoice.salesperson_id || null
+                salesperson_id: invoice.salesperson_id || null,
+                // Transport details - for auto-creating challan
+                transport_company: invoice.transport_company || '',
+                vehicle_number: invoice.vehicle_number || '',
+                driver_phone: invoice.driver_phone || '',
+                lr_number: invoice.lr_number || '',
+                eway_bill_number: invoice.eway_bill_number || ''
             };
 
             console.log('[Invoice] Prepared invoice data:', JSON.stringify(invoiceData, null, 2));

@@ -221,6 +221,13 @@ class InvoiceCreateRequest(BaseModel):
     # Other
     notes: Optional[str] = Field(None, max_length=1000)
     gst_type: Optional[str] = Field(default="CGST/SGST")
+    
+    # Transport/Delivery details - for auto-creating challan
+    transport_company: Optional[str] = Field(None, max_length=100, description="Transporter name")
+    vehicle_number: Optional[str] = Field(None, max_length=20, description="Vehicle registration number")
+    driver_phone: Optional[str] = Field(None, max_length=15, description="Driver contact")
+    lr_number: Optional[str] = Field(None, max_length=50, description="LR/Docket number")
+    eway_bill_number: Optional[str] = Field(None, max_length=20, description="E-way bill number")
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
 

@@ -212,6 +212,81 @@ class InvoiceService:
             # 9. Create invoice items
             InvoiceRepository.create_invoice_items_bulk(db, invoice_items_data)
             
+            # 9.1. Auto-create linked challan if transport details provided
+            transport_company = getattr(invoice_data, 'transport_company', None)
+            vehicle_number = getattr(invoice_data, 'vehicle_number', None)
+            challan_id = None
+            challan_number = None
+            
+            # Create challan if any transport info is provided or if delivery type indicates shipping
+            delivery_type = getattr(invoice_data, 'delivery_type', 'PICKUP')
+            should_create_challan = (
+                transport_company or 
+                vehicle_number or 
+                delivery_type in ('DELIVERY', 'COURIER', 'transport', 'courier', 'local')
+            )
+            
+            if should_create_challan:
+                # Generate challan number
+                challan_number = DocumentNumberService.generate_number(db, "challan", org_id)
+                
+                # Create challan linked to this invoice with all available data
+                from sqlalchemy import text
+                challan_date = invoice_data.invoice_date or date.today()
+                total_qty = sum(float(item.get('quantity', 0) or 0) for item in items)
+                
+                challan_result = db.execute(text("""
+                    INSERT INTO sales.delivery_challans (
+                        org_id, branch_id, challan_number, challan_date, challan_type,
+                        order_id, invoice_id, customer_id, 
+                        delivery_address_id, dispatch_address_id,
+                        dispatch_date, transport_mode,
+                        transporter_name, vehicle_number, lr_number, lr_date,
+                        freight_charges, eway_bill_number, eway_bill_date,
+                        total_quantity, total_amount, taxable_amount, gst_amount,
+                        challan_status, delivery_status,
+                        notes, created_by, created_at, updated_at
+                    ) VALUES (
+                        :org_id, :branch_id, :challan_number, :challan_date, 'delivery',
+                        :order_id, :invoice_id, :customer_id,
+                        :delivery_address_id, :dispatch_address_id,
+                        :dispatch_date, :transport_mode,
+                        :transporter_name, :vehicle_number, :lr_number, :lr_date,
+                        :freight_charges, :eway_bill_number, :eway_bill_date,
+                        :total_quantity, :total_amount, :taxable_amount, :gst_amount,
+                        'dispatched', 'in_transit',
+                        :notes, :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    ) RETURNING challan_id
+                """), {
+                    "org_id": org_id,
+                    "branch_id": actual_branch_id,
+                    "challan_number": challan_number,
+                    "challan_date": challan_date,
+                    "order_id": order_id,
+                    "invoice_id": invoice_id,
+                    "customer_id": invoice_data.customer_id,
+                    "delivery_address_id": context.get("shipping_address_id"),
+                    "dispatch_address_id": context.get("billing_address_id"),
+                    "dispatch_date": challan_date,
+                    "transport_mode": "road" if transport_company or vehicle_number else None,
+                    "transporter_name": transport_company or None,
+                    "vehicle_number": vehicle_number or None,
+                    "lr_number": getattr(invoice_data, 'lr_number', None),
+                    "lr_date": challan_date if getattr(invoice_data, 'lr_number', None) else None,
+                    "freight_charges": float(getattr(invoice_data, 'freight_charges', 0) or 0),
+                    "eway_bill_number": getattr(invoice_data, 'eway_bill_number', None),
+                    "eway_bill_date": challan_date if getattr(invoice_data, 'eway_bill_number', None) else None,
+                    "total_quantity": total_qty,
+                    "total_amount": totals["final_amount"],
+                    "taxable_amount": totals.get("taxable_amount", 0),
+                    "gst_amount": totals.get("total_tax_amount", 0),
+                    "notes": f"Auto-created from invoice {invoice_number}",
+                    "created_by": actual_user_id
+                })
+                
+                challan_id = challan_result.scalar()
+                logger.info(f"✅ Auto-created challan {challan_number} (ID: {challan_id}) linked to invoice {invoice_number}")
+            
             # 9.5. Update batch quantities and timestamps (for delta sync)
             batch_deductions = []
             for item in items:
@@ -237,7 +312,9 @@ class InvoiceService:
                 "order_id": order_id,
                 "order_number": order_number,
                 "final_amount": totals["final_amount"],
-                "items_created": len(invoice_items_data)
+                "items_created": len(invoice_items_data),
+                "challan_id": challan_id,
+                "challan_number": challan_number
             }
             
         except Exception as e:
