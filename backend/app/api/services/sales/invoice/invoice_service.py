@@ -12,6 +12,7 @@ from .invoice_repository import InvoiceRepository
 from .invoice_validator import InvoiceValidator
 from ...document_number_service import DocumentNumberService
 from ...inventory.inventory_service import InventoryService
+from ...compliance.gst_service import GSTService
 # Import shared calculator for consistent calculations
 from app.api.shared.calculations import calculate_line_item
 
@@ -63,9 +64,20 @@ class InvoiceService:
             items = [item.model_dump() if hasattr(item, 'model_dump') else item 
                     for item in invoice_data.items]
             
+            # 3.1 Determine GST type (CGST/SGST or IGST) based on states
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=org_id,
+                customer_id=invoice_data.customer_id,
+                delivery_address_id=getattr(invoice_data, 'shipping_address_id', None),
+                billing_address_id=getattr(invoice_data, 'billing_address_id', None)
+            )
+            logger.debug(f"GST type determined: {gst_type}")
+            
             # Use the static calculate_invoice_totals method (eliminates 50+ lines of duplication)
             totals = InvoiceService.calculate_invoice_totals(
                 items=items,
+                gst_type=gst_type,
                 freight_charges=float(getattr(invoice_data, 'freight_charges', 0) or 0),
                 insurance_charges=float(getattr(invoice_data, 'insurance_charges', 0) or 0),
                 other_charges=float(getattr(invoice_data, 'other_charges', 0) or 0),
