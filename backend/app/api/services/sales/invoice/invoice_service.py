@@ -460,7 +460,7 @@ class InvoiceService:
         # Invoice-level discount (scheme_discount)
         if discount_type == 'percentage' and discount_percent > 0:
             scheme_discount = subtotal * (discount_percent / 100)
-        elif discount_type == 'amount' and discount_amount > 0:
+        elif discount_type in ('amount', 'fixed') and discount_amount > 0:
             scheme_discount = discount_amount
         else:
             scheme_discount = 0
