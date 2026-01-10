@@ -377,9 +377,6 @@ class InvoiceService:
         
         This ensures frontend EnterpriseCalculator and backend use the same formulas.
         """
-        if place_of_supply and invoice_state:
-            gst_type = "CGST/SGST" if place_of_supply == invoice_state else "IGST"
-        
         # Calculate each line item
         subtotal = 0
         item_discount = 0
