@@ -297,38 +297,17 @@ class InvoiceService:
                     mfg_date = fifo.get("mfg_date")
                     exp_date = fifo.get("exp_date") or exp_date
             
-            # Get calculated values from frontend or calculate them
+            # Get calculated values from totals (now properly returned)
             calc = line_calculations[i] if i < len(line_calculations) else {}
             
-            # If calc is empty or missing critical fields, calculate them
-            if not calc or not calc.get("line_total"):
-                # Get GST for product
-                gst_percent = product_info.get("gst_percent", item.get("gst_percent", 0))
-                gst_type = item.get("gst_type", "CGST/SGST")  # Get from item or default
-                
-                # Calculate using shared calculation function
-                calc = calculate_line_item(
-                    quantity=float(item.get("quantity", 0)),
-                    unit_price=float(item.get("unit_price", 0)),
-                    discount_percent=float(item.get("discount_percent", 0)),
-                    gst_percent=float(gst_percent),
-                    gst_type=gst_type
-                )
-                logger.debug(f"✓ Calculated line item {i+1}: taxable={calc['taxable_amount']}, tax={calc['total_tax']}, total={calc['line_total']}")
+            # Fallback only for edge cases (shouldn't happen now)
+            if not calc:
+                logger.warning(f"Missing calculation for item {i}, using defaults")
+                calc = {}
             
-            # Calculate total_tax_amount from components if not present
+            # Get values with sensible defaults
             total_tax_amount = calc.get("total_tax_amount", 0) or calc.get("total_tax", 0)
-            if not total_tax_amount:
-                total_tax_amount = (
-                    calc.get("cgst_amount", 0) + 
-                    calc.get("sgst_amount", 0) + 
-                    calc.get("igst_amount", 0)
-                )
-            
-            # Get line_total
             line_total = calc.get("line_total", 0)
-            if not line_total:
-                line_total = calc.get("taxable_amount", 0) + total_tax_amount
             
             invoice_items_data.append({
                 "org_id": org_id,
@@ -398,11 +377,16 @@ class InvoiceService:
         
         This ensures frontend EnterpriseCalculator and backend use the same formulas.
         """
+        if place_of_supply and invoice_state:
+            gst_type = "CGST/SGST" if place_of_supply == invoice_state else "IGST"
+        
+        # Calculate each line item
         subtotal = 0
         item_discount = 0
         cgst = 0
         sgst = 0
         igst = 0
+        calculated_items = []  # Store individual calculations
         
         for item in items:
             # Check if line_total is pre-calculated (from frontend with full calculation)
@@ -412,6 +396,20 @@ class InvoiceService:
                 item_cgst = float(item.get('cgst_amount', 0) or 0)
                 item_sgst = float(item.get('sgst_amount', 0) or 0)
                 item_igst = float(item.get('igst_amount', 0) or 0)
+                
+                # Store the pre-calculated values
+                calculated_items.append({
+                    'line_total': line_total,
+                    'discount_amount': item_disc,
+                    'taxable_amount': float(item.get('taxable_amount', 0) or 0),
+                    'cgst_amount': item_cgst,
+                    'sgst_amount': item_sgst,
+                    'igst_amount': item_igst,
+                    'cgst_percent': float(item.get('cgst_rate', 0) or item.get('cgst_percent', 0) or 0),
+                    'sgst_percent': float(item.get('sgst_rate', 0) or item.get('sgst_percent', 0) or 0),
+                    'igst_percent': float(item.get('igst_rate', 0) or item.get('igst_percent', 0) or 0),
+                    'total_tax_amount': item_cgst + item_sgst + item_igst
+                })
             else:
                 # Use shared calculator for consistent calculations
                 # Same formulas as frontend EnterpriseCalculator.calculateItem()
@@ -434,6 +432,15 @@ class InvoiceService:
                 item_cgst = calculated['cgst_amount']
                 item_sgst = calculated['sgst_amount']
                 item_igst = calculated['igst_amount']
+                
+                # Store calculated values with percent rates
+                calculated_items.append({
+                    **calculated,
+                    'cgst_percent': gst_pct / 2 if gst_type == "CGST/SGST" else 0,
+                    'sgst_percent': gst_pct / 2 if gst_type == "CGST/SGST" else 0,
+                    'igst_percent': gst_pct if gst_type == "IGST" else 0,
+                    'total_tax_amount': calculated['total_tax']
+                })
             
             subtotal += line_total
             item_discount += item_disc
@@ -474,6 +481,7 @@ class InvoiceService:
             'other_charges': other_charges,
             'round_off_amount': round(round_off_amount, 2),
             'final_amount': final_amount,
+            'calculated_items': calculated_items,  # Return individual calculations
         }
     
     @staticmethod
