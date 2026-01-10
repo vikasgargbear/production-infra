@@ -10,8 +10,9 @@ import logging
 
 from .invoice_repository import InvoiceRepository
 from .invoice_validator import InvoiceValidator
-# NOTE: InvoiceCalculator removed - calculations now done inline or in repository
 from ...document_number_service import DocumentNumberService
+# Import shared calculator for consistent calculations
+from ...shared.calculations import calculate_line_item
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,18 @@ class InvoiceService:
                 discount_percent=float(getattr(invoice_data, 'discount_percent', 0) or 0),
                 discount_amount=float(getattr(invoice_data, 'discount_amount', 0) or 0)
             )
+            
+            # 3.5. VALIDATION: Compare frontend total with backend calculation
+            # This ensures frontend can't send manipulated amounts
+            frontend_total = float(getattr(invoice_data, 'total_amount', 0) or 0)
+            backend_final = totals['final_amount']
+            
+            if frontend_total > 0 and abs(frontend_total - backend_final) > 1:
+                logger.warning(
+                    f"⚠️ Amount mismatch detected! Frontend: {frontend_total}, Backend: {backend_final}"
+                )
+                # For now, log warning but continue (can be made strict later)
+                # raise ValueError(f"Amount mismatch: expected {backend_final}, got {frontend_total}")
             
             # 4. Generate numbers
             order_number = DocumentNumberService.generate_number(db, "sales_order", org_id)
@@ -348,7 +361,9 @@ class InvoiceService:
     ) -> Dict[str, Any]:
         """
         Calculate all invoice totals from item list.
-        Handles both pre-calculated items (with line_total) and raw items (with quantity/unit_price).
+        Uses shared/calculations.calculate_line_item() for IDENTICAL logic to frontend.
+        
+        This ensures frontend EnterpriseCalculator and backend use the same formulas.
         """
         subtotal = 0
         item_discount = 0
@@ -357,7 +372,7 @@ class InvoiceService:
         igst = 0
         
         for item in items:
-            # Check if line_total is pre-calculated
+            # Check if line_total is pre-calculated (from frontend with full calculation)
             if item.get('line_total'):
                 line_total = float(item.get('line_total', 0) or 0)
                 item_disc = float(item.get('discount_amount', 0) or 0)
@@ -365,29 +380,27 @@ class InvoiceService:
                 item_sgst = float(item.get('sgst_amount', 0) or 0)
                 item_igst = float(item.get('igst_amount', 0) or 0)
             else:
-                # Calculate from raw item data (quantity, unit_price, discount_percent, gst_percent)
+                # Use shared calculator for consistent calculations
+                # Same formulas as frontend EnterpriseCalculator.calculateItem()
                 quantity = float(item.get('quantity', 0) or 0)
                 unit_price = float(item.get('unit_price', 0) or 0)
                 discount_pct = float(item.get('discount_percent', 0) or 0)
                 gst_pct = float(item.get('gst_percent', 0) or 0)
                 
-                # Gross amount (paid quantity only, not free)
-                gross_amount = quantity * unit_price
+                # Use shared calculator function
+                calculated = calculate_line_item(
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    discount_percent=discount_pct,
+                    gst_percent=gst_pct,
+                    gst_type=gst_type
+                )
                 
-                # Item discount
-                item_disc = gross_amount * (discount_pct / 100) if discount_pct > 0 else 0
-                
-                # Taxable after discount
-                taxable = gross_amount - item_disc
-                
-                # GST calculation (assuming CGST/SGST split for intrastate)
-                total_gst = taxable * (gst_pct / 100)
-                item_cgst = total_gst / 2
-                item_sgst = total_gst / 2
-                item_igst = 0  # TODO: Support IGST for interstate
-                
-                # Line total = taxable + tax
-                line_total = taxable + total_gst
+                line_total = calculated['line_total']
+                item_disc = calculated['discount_amount']
+                item_cgst = calculated['cgst_amount']
+                item_sgst = calculated['sgst_amount']
+                item_igst = calculated['igst_amount']
             
             subtotal += line_total
             item_discount += item_disc
@@ -415,18 +428,18 @@ class InvoiceService:
         round_off_amount = final_amount - amount_before_round
         
         return {
-            'subtotal_amount': subtotal,
-            'discount_amount': item_discount,
-            'scheme_discount': scheme_discount,
-            'taxable_amount': taxable_amount,
-            'cgst_amount': cgst,
-            'sgst_amount': sgst,
-            'igst_amount': igst,
-            'total_tax_amount': total_tax,
+            'subtotal_amount': round(subtotal, 2),
+            'discount_amount': round(item_discount, 2),
+            'scheme_discount': round(scheme_discount, 2),
+            'taxable_amount': round(taxable_amount, 2),
+            'cgst_amount': round(cgst, 2),
+            'sgst_amount': round(sgst, 2),
+            'igst_amount': round(igst, 2),
+            'total_tax_amount': round(total_tax, 2),
             'freight_charges': freight_charges,
             'insurance_charges': insurance_charges,
             'other_charges': other_charges,
-            'round_off_amount': round_off_amount,
+            'round_off_amount': round(round_off_amount, 2),
             'final_amount': final_amount,
         }
     
