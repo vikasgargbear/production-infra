@@ -12,7 +12,7 @@ from .invoice_repository import InvoiceRepository
 from .invoice_validator import InvoiceValidator
 from ...document_number_service import DocumentNumberService
 # Import shared calculator for consistent calculations
-from ...shared.calculations import calculate_line_item
+from app.api.shared.calculations import calculate_line_item
 
 logger = logging.getLogger(__name__)
 
