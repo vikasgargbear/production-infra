@@ -139,3 +139,85 @@ class ChallanRepository:
         
         db.execute(text(bulk_insert_sql), params)
         logger.info(f"✅ Bulk inserted {len(challan_items_data)} challan items")
+    
+    @staticmethod
+    def create_from_invoice(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        challan_number: str,
+        challan_date: Any,
+        invoice_id: int,
+        invoice_number: str,
+        order_id: int | None,
+        customer_id: int,
+        delivery_address_id: int | None,
+        dispatch_address_id: int | None,
+        transport_company: str | None,
+        vehicle_number: str | None,
+        lr_number: str | None,
+        freight_charges: float,
+        eway_bill_number: str | None,
+        total_quantity: float,
+        total_amount: float,
+        taxable_amount: float,
+        gst_amount: float,
+        created_by: int
+    ) -> int:
+        """
+        Create delivery challan linked to an invoice.
+        Used for auto-creating challans when invoices have transport details.
+        Returns challan_id.
+        """
+        result = db.execute(text("""
+            INSERT INTO sales.delivery_challans (
+                org_id, branch_id, challan_number, challan_date, challan_type,
+                order_id, invoice_id, customer_id,
+                delivery_address_id, dispatch_address_id,
+                dispatch_date, transport_mode,
+                transporter_name, vehicle_number, lr_number, lr_date,
+                freight_charges, eway_bill_number, eway_bill_date,
+                total_quantity, total_amount, taxable_amount, gst_amount,
+                challan_status, delivery_status,
+                notes, created_by, created_at, updated_at
+            ) VALUES (
+                :org_id, :branch_id, :challan_number, :challan_date, 'delivery',
+                :order_id, :invoice_id, :customer_id,
+                :delivery_address_id, :dispatch_address_id,
+                :dispatch_date, :transport_mode,
+                :transporter_name, :vehicle_number, :lr_number, :lr_date,
+                :freight_charges, :eway_bill_number, :eway_bill_date,
+                :total_quantity, :total_amount, :taxable_amount, :gst_amount,
+                'dispatched', 'in_transit',
+                :notes, :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING challan_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "challan_number": challan_number,
+            "challan_date": challan_date,
+            "order_id": order_id,
+            "invoice_id": invoice_id,
+            "customer_id": customer_id,
+            "delivery_address_id": delivery_address_id,
+            "dispatch_address_id": dispatch_address_id,
+            "dispatch_date": challan_date,
+            "transport_mode": "road" if transport_company or vehicle_number else None,
+            "transporter_name": transport_company,
+            "vehicle_number": vehicle_number,
+            "lr_number": lr_number,
+            "lr_date": challan_date if lr_number else None,
+            "freight_charges": freight_charges,
+            "eway_bill_number": eway_bill_number,
+            "eway_bill_date": challan_date if eway_bill_number else None,
+            "total_quantity": total_quantity,
+            "total_amount": total_amount,
+            "taxable_amount": taxable_amount,
+            "gst_amount": gst_amount,
+            "notes": f"Auto-created from invoice {invoice_number}",
+            "created_by": created_by
+        })
+        
+        challan_id = result.scalar()
+        logger.info(f"✅ Created challan {challan_number} (ID: {challan_id}) linked to invoice {invoice_number}")
+        return challan_id

@@ -76,6 +76,8 @@ export interface Invoice {
     delivery_type: 'PICKUP' | 'DELIVERY' | 'COURIER';
     transport_company: string;
     vehicle_number: string;
+    driver_phone: string;
+    lr_number: string;
     freight_charges: number;
     discount_amount: number;
     discount_percent: number;
@@ -91,14 +93,18 @@ export interface Invoice {
     ack_no: string;
     ack_date: string;
     qr_code: string;
-    e_way_bill_number: string;
+    eway_bill_number: string;  // DB column name (no underscore between e and way)
     eway_bill_date: string;
     eway_bill_valid_upto: string;
     final_amount: number;
     totals: InvoiceTotals | null;
+    // Linked challan (auto-created with transport details)
+    challan_id?: number;
+    challan_number?: string;
     // Legacy field name support
     net_amount?: number;
     delivery_charges?: number;
+    e_way_bill_number?: string;  // Alias for backwards compatibility
 }
 
 // Re-export shared types for consumers of this hook
@@ -190,6 +196,8 @@ export const useInvoiceLogic = (
         delivery_type: 'PICKUP',
         transport_company: '',
         vehicle_number: '',
+        driver_phone: '',
+        lr_number: '',
         freight_charges: 0,
         discount_amount: 0,
         discount_percent: 0,
@@ -210,7 +218,7 @@ export const useInvoiceLogic = (
         ack_no: '',
         ack_date: '',
         qr_code: '',
-        e_way_bill_number: '',
+        eway_bill_number: '',
         eway_bill_date: '',
         eway_bill_valid_upto: '',
         final_amount: 0,
