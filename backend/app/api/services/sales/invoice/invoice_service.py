@@ -458,12 +458,17 @@ class InvoiceService:
             igst += item_igst
         
         # Invoice-level discount (scheme_discount)
+        # Always calculate both amount and percentage for clarity in reports
         if discount_type == 'percentage' and discount_percent > 0:
             scheme_discount = subtotal * (discount_percent / 100)
+            scheme_discount_percent = discount_percent
         elif discount_type in ('amount', 'fixed') and discount_amount > 0:
             scheme_discount = discount_amount
+            # Calculate equivalent percentage for reports
+            scheme_discount_percent = (discount_amount / subtotal * 100) if subtotal > 0 else 0
         else:
             scheme_discount = 0
+            scheme_discount_percent = 0
         
         # Taxable amount after scheme discount
         taxable_amount = subtotal - scheme_discount
@@ -480,6 +485,7 @@ class InvoiceService:
             'subtotal_amount': round(subtotal, 2),
             'discount_amount': round(item_discount, 2),
             'scheme_discount': round(scheme_discount, 2),
+            'scheme_discount_percent': round(scheme_discount_percent, 2),
             'taxable_amount': round(taxable_amount, 2),
             'cgst_amount': round(cgst, 2),
             'sgst_amount': round(sgst, 2),
