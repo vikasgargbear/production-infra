@@ -82,19 +82,31 @@ class OfflineDatabase {
         this.cache = new CacheManager(getDb);
     }
 
+    /**
+     * Check if the database connection is still valid and usable
+     */
+    private isConnectionValid(): boolean {
+        if (!this.db) return false;
+        try {
+            // Attempt to access objectStoreNames - fails if connection is closing
+            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+            void this.db.objectStoreNames;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     async init(): Promise<IDBPDatabase<OfflineSchema>> {
         // Check if existing connection is still valid
+        if (this.db && this.isConnectionValid()) {
+            return this.db;
+        }
+
+        // Connection is stale or doesn't exist, need to reconnect
         if (this.db) {
-            try {
-                // Quick validation - attempt to get store names (fails if connection is closing)
-                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                void this.db.objectStoreNames;
-                return this.db;
-            } catch (e) {
-                // Connection is stale, need to reconnect
-                console.log(`${LOG_PREFIX} Database connection stale, reconnecting...`);
-                this.db = null;
-            }
+            console.log(`${LOG_PREFIX} Database connection stale, reconnecting...`);
+            this.db = null;
         }
         console.log(`${LOG_PREFIX} Initializing database v${DB_VERSION}...`);
 
