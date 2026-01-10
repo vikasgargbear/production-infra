@@ -297,11 +297,27 @@ class InvoiceService:
                     mfg_date = fifo.get("mfg_date")
                     exp_date = fifo.get("exp_date") or exp_date
             
-            # Get calculated values
+            # Get calculated values from frontend or calculate them
             calc = line_calculations[i] if i < len(line_calculations) else {}
             
+            # If calc is empty or missing critical fields, calculate them
+            if not calc or not calc.get("line_total"):
+                # Get GST for product
+                gst_percent = product_info.get("gst_percent", item.get("gst_percent", 0))
+                gst_type = item.get("gst_type", "CGST/SGST")  # Get from item or default
+                
+                # Calculate using shared calculation function
+                calc = calculate_line_item(
+                    quantity=float(item.get("quantity", 0)),
+                    unit_price=float(item.get("unit_price", 0)),
+                    discount_percent=float(item.get("discount_percent", 0)),
+                    gst_percent=float(gst_percent),
+                    gst_type=gst_type
+                )
+                logger.debug(f"✓ Calculated line item {i+1}: taxable={calc['taxable_amount']}, tax={calc['total_tax']}, total={calc['line_total']}")
+            
             # Calculate total_tax_amount from components if not present
-            total_tax_amount = calc.get("total_tax_amount", 0)
+            total_tax_amount = calc.get("total_tax_amount", 0) or calc.get("total_tax", 0)
             if not total_tax_amount:
                 total_tax_amount = (
                     calc.get("cgst_amount", 0) + 
@@ -309,7 +325,7 @@ class InvoiceService:
                     calc.get("igst_amount", 0)
                 )
             
-            # Calculate line_total if not present
+            # Get line_total
             line_total = calc.get("line_total", 0)
             if not line_total:
                 line_total = calc.get("taxable_amount", 0) + total_tax_amount
