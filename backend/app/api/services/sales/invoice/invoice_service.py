@@ -11,6 +11,7 @@ import logging
 from .invoice_repository import InvoiceRepository
 from .invoice_validator import InvoiceValidator
 from ...document_number_service import DocumentNumberService
+from ...inventory.inventory_service import InventoryService
 # Import shared calculator for consistent calculations
 from app.api.shared.calculations import calculate_line_item
 
@@ -198,6 +199,20 @@ class InvoiceService:
             
             # 9. Create invoice items
             InvoiceRepository.create_invoice_items_bulk(db, invoice_items_data)
+            
+            # 9.5. Update batch quantities and timestamps (for delta sync)
+            batch_deductions = []
+            for item in items:
+                if item.get('batch_id') and item.get('quantity'):
+                    batch_deductions.append({
+                        "batch_id": item['batch_id'],
+                        "quantity": item['quantity']
+                    })
+            
+            if batch_deductions:
+                # This method sets updated_at = CURRENT_TIMESTAMP on batches
+                InventoryService.bulk_update_batch_quantities(db, batch_deductions, org_id)
+                logger.info(f"✅ Updated {len(batch_deductions)} batch quantities for delta sync")
             
             # 10. Commit transaction
             db.commit()
