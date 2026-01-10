@@ -531,19 +531,49 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-                    <button
-                        onClick={onBack}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                    >
-                        ← Back to Items
-                    </button>
-                    <button
-                        onClick={onContinue}
-                        className="inline-flex items-center px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-                    >
-                        Continue to Preview →
-                    </button>
+                <div className="bg-white border-t border-gray-200 px-6 py-4">
+                    {/* Payment Validation Error */}
+                    {(() => {
+                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                        const isOverpaid = totalPaid > finalAmount;
+
+                        if (isOverpaid) {
+                            return (
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <div className="flex items-center text-red-800">
+                                        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-sm font-medium">
+                                            Total payment (₹{totalPaid.toFixed(2)}) exceeds invoice amount (₹{finalAmount.toFixed(2)})
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
+
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={onBack}
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                            ← Back to Items
+                        </button>
+                        <button
+                            onClick={onContinue}
+                            disabled={(() => {
+                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                                const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                                return totalPaid > finalAmount;
+                            })()}
+                            className="inline-flex items-center px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Continue to Preview →
+                        </button>
+                    </div>
                 </div>
 
             </div>
