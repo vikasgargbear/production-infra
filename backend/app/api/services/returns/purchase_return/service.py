@@ -124,6 +124,7 @@ class PurchaseReturnService:
         db.execute(text("""
             UPDATE inventory.batches 
             SET quantity_available = quantity_available - :return_qty,
-                quantity_returned = COALESCE(quantity_returned, 0) + :return_qty
+                quantity_returned = COALESCE(quantity_returned, 0) + :return_qty,
+                updated_at = CURRENT_TIMESTAMP
             WHERE batch_id = :batch_id AND quantity_available >= :return_qty
         """), {"return_qty": return_qty, "batch_id": batch_id})

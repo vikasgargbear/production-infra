@@ -703,7 +703,8 @@ class ReturnService:
                 db.execute(text("""
                     UPDATE inventory.batches 
                     SET quantity_available = quantity_available - :quantity,
-                        quantity_returned = quantity_returned - :quantity
+                        quantity_returned = quantity_returned - :quantity,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE batch_id = :batch_id
                 """), {"quantity": item.return_quantity, "batch_id": item.batch_id})
         
@@ -900,7 +901,8 @@ class ReturnService:
                 db.execute(text("""
                     UPDATE inventory.batches 
                     SET quantity_available = quantity_available + :saleable_qty,
-                        quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
+                        quantity_returned = COALESCE(quantity_returned, 0) + :total_qty,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE batch_id = :batch_id
                 """), {
                     "saleable_qty": saleable_qty,
