@@ -348,11 +348,52 @@ class InvoiceService:
     ) -> Dict[str, Any]:
         """
         Calculate all invoice totals from item list.
-        TODO: Call shared/calculations.py API endpoint instead.
+        Handles both pre-calculated items (with line_total) and raw items (with quantity/unit_price).
         """
-        # Item-level totals
-        subtotal = sum(float(item.get('line_total', 0) or 0) for item in items)
-        item_discount = sum(float(item.get('discount_amount', 0) or 0) for item in items)
+        subtotal = 0
+        item_discount = 0
+        cgst = 0
+        sgst = 0
+        igst = 0
+        
+        for item in items:
+            # Check if line_total is pre-calculated
+            if item.get('line_total'):
+                line_total = float(item.get('line_total', 0) or 0)
+                item_disc = float(item.get('discount_amount', 0) or 0)
+                item_cgst = float(item.get('cgst_amount', 0) or 0)
+                item_sgst = float(item.get('sgst_amount', 0) or 0)
+                item_igst = float(item.get('igst_amount', 0) or 0)
+            else:
+                # Calculate from raw item data (quantity, unit_price, discount_percent, gst_percent)
+                quantity = float(item.get('quantity', 0) or 0)
+                unit_price = float(item.get('unit_price', 0) or 0)
+                discount_pct = float(item.get('discount_percent', 0) or 0)
+                gst_pct = float(item.get('gst_percent', 0) or 0)
+                
+                # Gross amount (paid quantity only, not free)
+                gross_amount = quantity * unit_price
+                
+                # Item discount
+                item_disc = gross_amount * (discount_pct / 100) if discount_pct > 0 else 0
+                
+                # Taxable after discount
+                taxable = gross_amount - item_disc
+                
+                # GST calculation (assuming CGST/SGST split for intrastate)
+                total_gst = taxable * (gst_pct / 100)
+                item_cgst = total_gst / 2
+                item_sgst = total_gst / 2
+                item_igst = 0  # TODO: Support IGST for interstate
+                
+                # Line total = taxable + tax
+                line_total = taxable + total_gst
+            
+            subtotal += line_total
+            item_discount += item_disc
+            cgst += item_cgst
+            sgst += item_sgst
+            igst += item_igst
         
         # Invoice-level discount (scheme_discount)
         if discount_type == 'percentage' and discount_percent > 0:
@@ -364,15 +405,10 @@ class InvoiceService:
         
         # Taxable amount after scheme discount
         taxable_amount = subtotal - scheme_discount
-        
-        # GST calculation
-        cgst = sum(float(item.get('cgst_amount', 0) or 0) for item in items)
-        sgst = sum(float(item.get('sgst_amount', 0) or 0) for item in items)
-        igst = sum(float(item.get('igst_amount', 0) or 0) for item in items)
         total_tax = cgst + sgst + igst
         
         # Amount before rounding
-        amount_before_round = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
+        amount_before_round = taxable_amount + freight_charges + insurance_charges + other_charges
         
         # Round to nearest integer (Indian practice)
         final_amount = round(amount_before_round)
