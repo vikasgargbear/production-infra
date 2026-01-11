@@ -170,6 +170,7 @@ export interface CustomerFormData {
 /** Employee/Sales person information */
 export interface Employee {
     employee_id: number | string;
+    user_id?: number | null;  // Links to org_users - used as salesperson_id
     full_name: string;
     employee_code?: string;
     designation?: string;

@@ -198,7 +198,11 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                         const employeeId = parseInt(e.target.value);
                                         const employee = employees.find(emp => emp.employee_id === employeeId);
                                         setSelectedMR(employee || null);
-                                        setInvoice(prev => ({ ...prev, salesperson_id: employeeId || null }));
+                                        // Use employee.user_id as salesperson_id (FK to org_users)
+                                        // Fall back to employee_id if user_id not linked yet
+                                        const userId = employee?.user_id ?? null;
+                                        const empId = typeof employee?.employee_id === 'number' ? employee.employee_id : null;
+                                        setInvoice(prev => ({ ...prev, salesperson_id: userId || empId }));
                                     }}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     tabIndex={3}
