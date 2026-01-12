@@ -236,8 +236,11 @@ class InvoiceService:
                 challan_date = invoice_data.invoice_date or date.today()
                 total_qty = sum(float(item.get('quantity', 0) or 0) for item in items)
                 
-                # Log values for debugging
-                logger.info(f"📦 Auto-challan amounts - taxable: {totals.get('taxable_amount', 0)}, gst: {totals.get('total_tax_amount', 0)}, final: {totals['final_amount']}")
+                # Log values for debugging - explicitly show what's being passed
+                _taxable = totals.get('taxable_amount', 0)
+                _gst = totals.get('total_tax_amount', 0)
+                _final = totals['final_amount']
+                logger.info(f"📦 CHALLAN VALUES TO INSERT: taxable_amount={_taxable}, gst_amount={_gst}, final_amount={_final}")
                 
                 challan_id = ChallanRepository.create_from_invoice(
                     db=db,
@@ -257,9 +260,9 @@ class InvoiceService:
                     freight_charges=float(getattr(invoice_data, 'freight_charges', 0) or 0),
                     eway_bill_number=getattr(invoice_data, 'eway_bill_number', None),
                     total_quantity=total_qty,
-                    total_amount=totals["final_amount"],
-                    taxable_amount=totals.get("taxable_amount", 0),
-                    gst_amount=totals.get("total_tax_amount", 0),
+                    total_amount=_final,
+                    taxable_amount=_taxable,
+                    gst_amount=_gst,
                     created_by=actual_user_id
                 )
                 
