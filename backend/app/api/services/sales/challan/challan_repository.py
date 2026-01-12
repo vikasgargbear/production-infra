@@ -169,8 +169,8 @@ class ChallanRepository:
         Used for auto-creating challans when invoices have transport details.
         Returns challan_id.
         """
-        # Log values being inserted
-        logger.info(f"📊 Challan INSERT values - taxable_amount={taxable_amount}, gst_amount={gst_amount}, total_amount={total_amount}")
+        # Log values being inserted with type info for debugging
+        logger.info(f"📊 Challan INSERT - taxable_amount={taxable_amount} (type={type(taxable_amount).__name__}), gst_amount={gst_amount} (type={type(gst_amount).__name__}), total_amount={total_amount}")
         
         result = db.execute(text("""
             INSERT INTO sales.delivery_challans (
