@@ -189,6 +189,11 @@ export function mergeProductAndBatch(product: Product, batch: ProductBatch) {
         unit_price: batch.sale_price_per_unit,
         sale_price: batch.sale_price_per_unit,
 
+        // Pack info from batch
+        units_per_pack: batch.units_per_pack,
+        packages_per_box: batch.packages_per_box,
+        pack_type: batch.pack_type,
+
         // Keep product tax
         gst_percent: product.gst_percent
     };
