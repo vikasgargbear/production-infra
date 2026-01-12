@@ -87,7 +87,22 @@ async def get_org_context(
     
     Security Fix (Nov 30, 2025): Removed X-Org-Id header fallback
     Multi-tenant SaaS requires server-verified org_id from JWT, not client headers
+    
+    TEST MODE: Set TEST_MODE=true env var to bypass auth (for automated testing only!)
     """
+    import os
+    
+    # TEST MODE: Bypass auth for automated testing
+    if os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
+        logger.warning("⚠️ TEST_MODE enabled - bypassing authentication")
+        # Return default test context - adjust org_id to match your test org
+        test_org_id = os.getenv("TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a")
+        return OrgContext(
+            org_id=UUID(test_org_id),
+            user_id=8,  # Default test user
+            branch_scope=BranchScope.ALL,
+            branch_ids=[]
+        )
     
     if not credentials:
         raise HTTPException(
