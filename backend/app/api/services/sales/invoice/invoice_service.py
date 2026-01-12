@@ -235,6 +235,9 @@ class InvoiceService:
                 challan_date = invoice_data.invoice_date or date.today()
                 total_qty = sum(float(item.get('quantity', 0) or 0) for item in items)
                 
+                # Log values for debugging
+                logger.info(f"📦 Auto-challan amounts - taxable: {totals.get('taxable_amount', 0)}, gst: {totals.get('total_tax_amount', 0)}, final: {totals['final_amount']}")
+                
                 challan_id = ChallanRepository.create_from_invoice(
                     db=db,
                     org_id=org_id,
