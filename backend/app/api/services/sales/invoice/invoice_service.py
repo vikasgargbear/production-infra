@@ -3,6 +3,7 @@ Invoice Service - Orchestrates invoice operations
 Delegates to repository, validator, and calculator
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import Dict, Any, List
 from datetime import date, timedelta
 from decimal import Decimal
