@@ -126,6 +126,13 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         available_quantity: availableQty,
         gst_percent: parseFloat(String(product.gst_percent || product.tax_rate || 0)),
         hsn_code: product.hsn_code || '',
-        discount_percent: parseFloat(String(product.discount_percent || 0))
+        discount_percent: parseFloat(String(product.discount_percent || 0)),
+        // Pack info - from batch or product
+        units_per_pack: parseInt(String(
+            bestBatch?.units_per_pack || product.units_per_pack || 1
+        )),
+        packages_per_box: parseInt(String(
+            bestBatch?.packages_per_box || product.packages_per_box || 1
+        ))
     } as unknown as T;
 };
