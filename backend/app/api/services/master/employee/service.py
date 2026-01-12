@@ -28,7 +28,7 @@ class EmployeeService:
         # Main query
         query = text("""
             SELECT 
-                e.employee_id, e.employee_code, e.full_name, e.first_name, e.last_name,
+                e.employee_id, e.user_id, e.employee_code, e.full_name, e.first_name, e.last_name,
                 e.designation, e.department_id, d.department_name, e.branch_id, b.branch_name,
                 e.joining_date, e.personal_mobile, e.personal_email, e.date_of_birth, e.gender,
                 e.pan_number, e.aadhar_number, e.current_address, e.permanent_address,
