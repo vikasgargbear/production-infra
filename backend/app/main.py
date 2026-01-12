@@ -83,6 +83,7 @@ from .api.routes import metadata
 from .api.routes.loyalty import router as loyalty_router
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
+from .api.routes import test_routes  # TEST MODE verification
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -215,6 +216,7 @@ api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 # api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])  # REMOVED: Moved to shared
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
+api.include_router(test_routes.router, tags=["Testing"])  # TEST MODE verification endpoint
 # api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
 # api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
 
