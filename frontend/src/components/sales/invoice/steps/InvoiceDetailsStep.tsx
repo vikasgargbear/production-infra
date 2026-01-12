@@ -456,7 +456,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     `₹${(
                                                         invoice.discount_type === 'fixed'
                                                             ? invoice.discount_amount || 0
-                                                            : (parseFloat(String(invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
+                                                            : (parseFloat(String(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
                                                     ).toFixed(2)}` :
                                                     '₹0'
                                                 }
