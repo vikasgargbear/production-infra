@@ -228,7 +228,7 @@ class InvoiceService:
             
             if should_create_challan:
                 # Generate challan number
-                challan_number = DocumentNumberService.generate_number(db, "challan", org_id)
+                challan_number = DocumentNumberService.generate_number(db, "delivery_challan", org_id)
                 
                 # Use repository pattern for challan creation
                 from ..challan.challan_repository import ChallanRepository
