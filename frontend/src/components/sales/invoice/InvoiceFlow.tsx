@@ -319,8 +319,6 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}
-                    sameAsShipping={sameAsShipping}
-                    setSameAsShipping={setSameAsShipping}
                     onClose={onClose as any}
                     onContinue={handleContinueFromStep2}
                     onBack={handleBackFromStep2}

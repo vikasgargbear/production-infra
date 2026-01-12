@@ -11,8 +11,6 @@ interface InvoiceDetailsStepProps {
     invoice: Invoice;
     setInvoice: React.Dispatch<React.SetStateAction<Invoice>>;
     selectedCustomer: Customer | null;
-    sameAsShipping: boolean;
-    setSameAsShipping: React.Dispatch<React.SetStateAction<boolean>>;
     onClose: () => void;
     onContinue: () => void;
     onBack: () => void;
@@ -27,8 +25,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     invoice,
     setInvoice,
     selectedCustomer,
-    sameAsShipping,
-    setSameAsShipping,
     onClose,
     onContinue,
     onBack,
@@ -135,44 +131,34 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
                                         <span className="text-sm font-bold text-green-600">2</span>
                                     </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Address Details</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800">Delivery Address</h3>
                                 </div>
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                        <AddressForm
-                                            title="Billing Address"
-                                            addressType="billing"
-                                            customer={selectedCustomer}
-                                            readonly={false}
-                                            className=""
-                                            onChange={(address: string) => {
-                                                console.log('[Invoice] Billing address changed:', address);
-                                                setInvoice(prev => ({ ...prev, billing_address: address }));
-                                            }}
-                                            onSave={(addressData: unknown) => {
-                                                console.log('[Invoice] Billing address saved:', addressData);
-                                                setInvoice(prev => ({ ...prev, billing_address_data: addressData } as Invoice));
-                                            }}
-                                        />
-                                        <AddressForm
-                                            title="Shipping Address"
-                                            addressType="shipping"
-                                            customer={selectedCustomer}
-                                            sameAsBilling={sameAsShipping}
-                                            onSameAsBillingChange={(same: boolean) => {
-                                                setSameAsShipping(same);
-                                                if (same) {
-                                                    setInvoice(prev => ({
-                                                        ...prev,
-                                                        shipping_address: prev.billing_address,
-                                                        shipping_address_data: prev.billing_address_data
-                                                    }));
-                                                }
-                                            }}
-                                            onChange={(address: string) => setInvoice(prev => ({ ...prev, shipping_address: address }))}
-                                            onSave={(addressData: unknown) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData } as Invoice))}
-                                        />
-                                    </div>
+                                    <AddressForm
+                                        title="Shipping Address"
+                                        addressType="shipping"
+                                        customer={selectedCustomer}
+                                        readonly={false}
+                                        className=""
+                                        onChange={(address: string) => {
+                                            console.log('[Invoice] Address changed:', address);
+                                            // Auto-sync: Same address for both billing and shipping
+                                            setInvoice(prev => ({
+                                                ...prev,
+                                                shipping_address: address,
+                                                billing_address: address // Auto-sync billing = shipping
+                                            }));
+                                        }}
+                                        onSave={(addressData: unknown) => {
+                                            console.log('[Invoice] Address saved:', addressData);
+                                            // Auto-sync: Same address data for both
+                                            setInvoice(prev => ({
+                                                ...prev,
+                                                shipping_address_data: addressData,
+                                                billing_address_data: addressData  // Auto-sync billing = shipping
+                                            } as Invoice));
+                                        }}
+                                    />
                                 </div>
                             </div>
                         )}
