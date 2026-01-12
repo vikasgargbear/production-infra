@@ -258,6 +258,15 @@ class InvoiceService:
                     gst_amount=totals.get("total_tax_amount", 0),
                     created_by=actual_user_id
                 )
+                
+                # Update invoice with challan_id reference
+                if challan_id:
+                    db.execute(text("""
+                        UPDATE sales.invoices 
+                        SET challan_ids = ARRAY[:challan_id]::INTEGER[],
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE invoice_id = :invoice_id
+                    """), {"challan_id": challan_id, "invoice_id": invoice_id})
             
             # 9.5. Update batch quantities and timestamps (for delta sync)
             batch_deductions = []
