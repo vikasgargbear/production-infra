@@ -206,12 +206,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     payment_status: 'pending'
                                                 }));
                                             } else {
-                                                // Enable split - Start with cash and card
+                                                // Enable split - Start with UPI and Credit
                                                 setInvoice(prev => ({
                                                     ...prev,
                                                     payments: [
-                                                        { id: '1', method: 'cash', amount: Math.floor(totalAmount / 2), reference: '' },
-                                                        { id: '2', method: 'card', amount: totalAmount - Math.floor(totalAmount / 2), reference: '' }
+                                                        { id: '1', method: 'upi', amount: Math.floor(totalAmount / 2), reference: '' },
+                                                        { id: '2', method: 'credit', amount: totalAmount - Math.floor(totalAmount / 2), reference: '' }
                                                     ],
                                                     payment_mode: 'split',
                                                     payment_status: 'partial'
@@ -419,8 +419,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     discount_percent: prev.discount_percent || 0
                                                 }))}
                                                 className={`px-3 py-1.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-white text-gray-600 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 %
@@ -433,8 +433,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     discount_amount: prev.discount_amount || 0
                                                 }))}
                                                 className={`px-3 py-1.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-white text-gray-600 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 ₹
