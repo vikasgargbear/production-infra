@@ -744,14 +744,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 <div className="pr-8">
                     {/* Address content */}
                     {/* First line: Name, Phone */}
-                    <div className="flex items-center flex-wrap">
+                    <div className="flex items-center flex-wrap gap-1">
                         <span className="font-semibold text-gray-900">
                             {customer?.name || customer?.customer_name || 'Customer'}
-                            {(formData.mobile || customer?.phone || customer?.mobile) && ', '}
                         </span>
                         {(formData.mobile || customer?.phone || customer?.mobile) && (
                             <span className="font-semibold text-gray-900">
-                                {formData.mobile || customer?.phone || customer?.mobile}
+                                , {formData.mobile || customer?.phone || customer?.mobile}
                             </span>
                         )}
                     </div>

@@ -65,89 +65,31 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 <div className="flex-1 overflow-y-auto bg-blue-50">
                     <div className="w-full max-w-5xl mx-auto px-8 py-6">
 
-                        {/* 1. Delivery Details - First Priority */}
+                        {/* 1. Delivery - Address first, then options */}
                         <div className="mb-6">
-                            <div className="flex items-center mb-4">
-                                <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full mr-3">
-                                    <span className="text-sm font-bold text-blue-600">1</span>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center">
+                                    <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full mr-3">
+                                        <span className="text-sm font-bold text-blue-600">1</span>
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-gray-800">Delivery</h3>
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-800">Delivery Details</h3>
-                            </div>
-                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Type</label>
-                                        <select
-                                            ref={deliveryTypeRef}
-                                            value={invoice.delivery_type || 'PICKUP'}
-                                            onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
-                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                        >
-                                            <option value="PICKUP">Pickup</option>
-                                            <option value="SAME_DAY">Same Day</option>
-                                            <option value="NEXT_DAY">Next Day</option>
-                                            <option value="EXPRESS">Express</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Transport Company</label>
-                                        <input
-                                            ref={transportRef}
-                                            type="text"
-                                            value={invoice.transport_company || ''}
-                                            onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
-                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                            placeholder="Transport company"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Number</label>
-                                        <input
-                                            ref={vehicleRef}
-                                            type="text"
-                                            value={invoice.vehicle_number || ''}
-                                            onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
-                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                            placeholder="MH-01-AB-1234"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Charges</label>
-                                        <input
-                                            ref={deliveryChargesRef}
-                                            type="number"
-                                            value={invoice.freight_charges || ''}
-                                            onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
-                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                            placeholder="₹0"
-                                            min="0"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 2. Address Details - Second Priority */}
-                        {selectedCustomer && (
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center">
-                                        <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
-                                            <span className="text-sm font-bold text-green-600">2</span>
-                                        </div>
-                                        <h3 className="text-lg font-semibold text-gray-800">Delivery Address</h3>
-                                    </div>
+                                {selectedCustomer && (
                                     <button
                                         onClick={() => setAddAddressMode(true)}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5"
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1"
                                     >
-                                        <Plus className="w-4 h-4" />
-                                        Add Address
+                                        <Plus className="w-3.5 h-3.5" />
+                                        New Address
                                     </button>
-                                </div>
-                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                                )}
+                            </div>
+                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
+
+                                {/* Delivery Address - First Priority */}
+                                {selectedCustomer ? (
                                     <AddressForm
-                                        title="Shipping Address"
+                                        title="Delivery Address"
                                         addressType="shipping"
                                         customer={selectedCustomer}
                                         readonly={false}
@@ -156,36 +98,92 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         onExitAddMode={() => setAddAddressMode(false)}
                                         onChange={(address: string) => {
                                             console.log('[Invoice] Address changed:', address);
-                                            // Auto-sync: Same address for both billing and shipping
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address: address,
-                                                billing_address: address // Auto-sync billing = shipping
+                                                billing_address: address
                                             }));
                                         }}
                                         onSave={(addressData: unknown) => {
                                             console.log('[Invoice] Address saved:', addressData);
-                                            setAddAddressMode(false);  // Exit add mode after save
-                                            // Auto-sync: Same address data for both
+                                            setAddAddressMode(false);
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,
-                                                billing_address_data: addressData  // Auto-sync billing = shipping
+                                                billing_address_data: addressData
                                             } as Invoice));
                                         }}
                                     />
+                                ) : (
+                                    <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+                                        Select a customer to choose delivery address
+                                    </div>
+                                )}
+
+                                {/* Delivery Options - Compact row */}
+                                <div className="border-t border-gray-100 pt-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">Delivery Type</label>
+                                            <select
+                                                ref={deliveryTypeRef}
+                                                value={invoice.delivery_type || 'PICKUP'}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
+                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                            >
+                                                <option value="PICKUP">Pickup</option>
+                                                <option value="SAME_DAY">Same Day</option>
+                                                <option value="NEXT_DAY">Next Day</option>
+                                                <option value="EXPRESS">Express</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">Transport</label>
+                                            <input
+                                                ref={transportRef}
+                                                type="text"
+                                                value={invoice.transport_company || ''}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
+                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                placeholder="Company name"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle</label>
+                                            <input
+                                                ref={vehicleRef}
+                                                type="text"
+                                                value={invoice.vehicle_number || ''}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
+                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                placeholder="MH-01-AB-1234"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">Charges ₹</label>
+                                            <input
+                                                ref={deliveryChargesRef}
+                                                type="number"
+                                                value={invoice.freight_charges || ''}
+                                                onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
+                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                placeholder="0"
+                                                min="0"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
 
-                        {/* 3. Payment Details - Clean & Compact */}
+                        {/* 2. Payment & Discount */}
                         <div className="mb-6">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center">
-                                    <div className="flex items-center justify-center w-8 h-8 bg-indigo-100 rounded-full mr-3">
-                                        <span className="text-sm font-bold text-indigo-600">3</span>
+                                    <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
+                                        <span className="text-sm font-bold text-green-600">2</span>
                                     </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Payment Details</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800">Payment & Discount</h3>
                                 </div>
 
                                 {/* Split Payment Toggle - Outside tile for better UX */}
@@ -406,38 +404,53 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     )}
                                 </div>
 
-                                {/* Invoice Discount Section */}
+                                {/* Compact Discount Row */}
                                 <div className="border-t border-gray-100 pt-4 mb-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Discount Type</label>
-                                            <select
-                                                value={invoice.discount_type || 'percentage'}
-                                                onChange={(e) => {
-                                                    const type = e.target.value as 'percentage' | 'fixed';
-                                                    setInvoice(prev => ({
-                                                        ...prev,
-                                                        discount_type: type,
-                                                        discount_amount: 0,
-                                                        discount_percent: 0
-                                                    }));
-                                                }}
-                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    <div className="flex items-center gap-4 flex-wrap">
+                                        <span className="text-sm font-medium text-gray-700">Overall Discount:</span>
+
+                                        {/* Toggle: % vs ₹ */}
+                                        <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                            <button
+                                                onClick={() => setInvoice(prev => ({
+                                                    ...prev,
+                                                    discount_type: 'percentage',
+                                                    discount_amount: 0,
+                                                    discount_percent: prev.discount_percent || 0
+                                                }))}
+                                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                    }`}
                                             >
-                                                <option value="percentage">% Discount</option>
-                                                <option value="fixed">₹ Amount</option>
-                                            </select>
+                                                %
+                                            </button>
+                                            <button
+                                                onClick={() => setInvoice(prev => ({
+                                                    ...prev,
+                                                    discount_type: 'fixed',
+                                                    discount_percent: 0,
+                                                    discount_amount: prev.discount_amount || 0
+                                                }))}
+                                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                ₹
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                {invoice.discount_type === 'fixed' ? 'Discount Amount' : 'Discount Percentage'}
-                                            </label>
+
+                                        {/* Value input */}
+                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="number"
                                                 min="0"
-                                                max={invoice.discount_type === 'percentage' ? 100 : undefined}
-                                                step={invoice.discount_type === 'percentage' ? 0.1 : 0.01}
-                                                value={invoice.discount_type === 'fixed' ? (invoice.discount_amount === 0 ? '' : invoice.discount_amount) : (invoice.discount_percent === 0 ? '' : invoice.discount_percent)}
+                                                max={invoice.discount_type === 'percentage' || !invoice.discount_type ? 100 : undefined}
+                                                step={invoice.discount_type === 'percentage' || !invoice.discount_type ? 0.1 : 0.01}
+                                                value={invoice.discount_type === 'fixed'
+                                                    ? (invoice.discount_amount || '')
+                                                    : (invoice.discount_percent || '')}
                                                 onChange={(e) => {
                                                     const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
                                                     if (invoice.discount_type === 'fixed') {
@@ -446,23 +459,24 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         setInvoice(prev => ({ ...prev, discount_percent: value }));
                                                     }
                                                 }}
-                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder={invoice.discount_type === 'fixed' ? '₹0' : '0.0'}
+                                                className="w-20 px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder={invoice.discount_type === 'fixed' ? '0' : '0'}
                                             />
+                                            <span className="text-sm text-gray-500">
+                                                {invoice.discount_type === 'fixed' ? '₹' : '%'}
+                                            </span>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">You Save</label>
-                                            <div className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-green-50 text-green-700 font-medium">
-                                                {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) ?
-                                                    `₹${(
-                                                        invoice.discount_type === 'fixed'
-                                                            ? invoice.discount_amount || 0
-                                                            : (parseFloat(String(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
-                                                    ).toFixed(2)}` :
-                                                    '₹0'
-                                                }
-                                            </div>
-                                        </div>
+
+                                        {/* Savings display */}
+                                        {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) && (
+                                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                                Saves ₹{(
+                                                    invoice.discount_type === 'fixed'
+                                                        ? invoice.discount_amount || 0
+                                                        : (parseFloat(String(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
+                                                ).toFixed(2)}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
