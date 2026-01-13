@@ -418,7 +418,22 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         // Local update already applied
                     }
                 } else {
-                    console.log('[AddressForm] Local pending address updated, will sync when online');
+                    // Update the IndexedDB record so sync queue sends edited data
+                    try {
+                        const db = await offlineDB.init();
+                        const existingRecord = await db.get('customer_addresses', addressIdStr);
+                        if (existingRecord) {
+                            const updatedRecord = {
+                                ...existingRecord,
+                                ...addressPayload,
+                                updated_at: new Date().toISOString()
+                            };
+                            await db.put('customer_addresses', updatedRecord);
+                            console.log('[AddressForm] Updated IndexedDB record for pending address:', addressIdStr);
+                        }
+                    } catch (dbError) {
+                        console.warn('[AddressForm] Failed to update IndexedDB record:', dbError);
+                    }
                 }
             } catch (error) {
                 console.error('[AddressForm] Failed to update address:', error);
