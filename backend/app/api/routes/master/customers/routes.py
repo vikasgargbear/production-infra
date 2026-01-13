@@ -390,7 +390,7 @@ async def list_customers(
         raise handle_error(e, "list customers")
     # FIXED: No manual session closing needed - handled by tenant service dependency
 
-@router.get("/{customer_id}", response_model=CustomerResponse)
+@router.get("/{customer_id}")
 @with_tenant_context
 async def get_customer(
     customer_id: int,
@@ -409,7 +409,7 @@ async def get_customer(
         if not customer_dict:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
         
-        # Get statistics
+        # Get statistics and merge
         stats = CustomerService.get_customer_statistics(db, customer_id)
         
         # Parse addresses JSON if needed
@@ -422,7 +422,12 @@ async def get_customer(
         # Add computed statistics from service
         customer_dict.update(stats)
         
-        return CustomerResponse(**customer_dict)
+        # Convert org_id to string for JSON serialization
+        if "org_id" in customer_dict and customer_dict["org_id"]:
+            customer_dict["org_id"] = str(customer_dict["org_id"])
+        
+        # Return the dict directly (avoids Pydantic validation issues)
+        return customer_dict
         
     except HTTPException:
         raise
