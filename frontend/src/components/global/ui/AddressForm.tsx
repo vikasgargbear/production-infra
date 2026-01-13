@@ -379,55 +379,37 @@ const AddressForm: React.FC<AddressFormProps> = ({
     }
 
     return (
-        <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 relative ${className}`}>
-            <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700 flex items-center">
-                    <MapPin className="w-4 h-4 mr-2 text-gray-500" />
-                    {addressType === 'billing' ? 'Billing Address' : 'Shipping Address'}
-                </h3>
+        <div className={`bg-gray-50 border border-gray-200 rounded-lg p-3 relative ${className}`}>
+            {/* Edit button only - no redundant title since parent has section header */}
+            <div className="flex items-center justify-end absolute top-2 right-2 z-10">
+                {!isEditing && !isAddingNew && (
+                    <button
+                        onClick={handleEdit}
+                        className="text-blue-600 hover:text-blue-700 p-1"
+                        title="Select or edit address"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                )}
 
-                <div className="flex items-center gap-2">
-                    {addressType === 'shipping' && onSameAsBillingChange && (
-                        <label className="flex items-center text-sm mr-3">
-                            <input
-                                type="checkbox"
-                                checked={sameAsBilling}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => onSameAsBillingChange(e.target.checked)}
-                                className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            Same as billing
-                        </label>
-                    )}
-
-                    {!isEditing && !isAddingNew && (
+                {(isEditing || isAddingNew) && (
+                    <div className="flex gap-1">
                         <button
-                            onClick={handleEdit}
-                            className="text-blue-600 hover:text-blue-700 p-1"
-                            title="Select or edit address"
+                            onClick={handleSave}
+                            className="text-green-600 hover:text-green-700 p-1"
+                            title="Save address"
                         >
-                            <Edit2 className="w-4 h-4" />
+                            <Check className="w-4 h-4" />
                         </button>
-                    )}
-
-                    {(isEditing || isAddingNew) && (
-                        <div className="flex gap-1">
-                            <button
-                                onClick={handleSave}
-                                className="text-green-600 hover:text-green-700 p-1"
-                                title="Save address"
-                            >
-                                <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={handleCancel}
-                                className="text-red-600 hover:text-red-700 p-1"
-                                title="Cancel"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                    )}
-                </div>
+                        <button
+                            onClick={handleCancel}
+                            className="text-red-600 hover:text-red-700 p-1"
+                            title="Cancel"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
             </div>
 
             {showDropdown && !isEditing && !isAddingNew && (
@@ -485,98 +467,106 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         </>
                     )}
                 </div>
-            )}
+            )
+            }
 
-            {(isEditing || isAddingNew) ? (
-                <div className="space-y-3">
-                    {isAddingNew && (
-                        <div className="bg-blue-50 text-blue-700 text-xs p-2 rounded">
-                            Adding new {addressType} address
-                        </div>
-                    )}
+            {
+                (isEditing || isAddingNew) ? (
+                    <div className="space-y-3">
+                        {isAddingNew && (
+                            <div className="bg-blue-50 text-blue-700 text-xs p-2 rounded">
+                                Adding new {addressType} address
+                            </div>
+                        )}
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2">
-                            <input
-                                type="text"
-                                value={formData.address_line1}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line1', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="Address Line 1 *"
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <input
-                                type="text"
-                                value={formData.address_line2}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line2', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="Address Line 2 (Optional)"
-                            />
-                        </div>
-
-                        <div>
-                            <input
-                                type="text"
-                                value={formData.landmark}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('landmark', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="Landmark"
-                            />
-                        </div>
-
-                        <div>
-                            <input
-                                type="text"
-                                value={formData.city}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('city', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="City *"
-                            />
-                        </div>
-
-                        <div>
-                            <input
-                                type="text"
-                                value={formData.state}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('state', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="State *"
-                            />
-                        </div>
-
-                        <div>
-                            <input
-                                type="text"
-                                value={formData.pincode}
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('pincode', e.target.value)}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                placeholder="Pincode *"
-                                maxLength={6}
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <div className="relative">
-                                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
                                 <input
-                                    type="tel"
-                                    value={formData.mobile}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('mobile', e.target.value)}
-                                    className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                    placeholder="Mobile Number *"
-                                    maxLength={10}
+                                    type="text"
+                                    value={formData.address_line1}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line1', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Address Line 1 *"
                                 />
+                            </div>
+
+                            <div className="col-span-2">
+                                <input
+                                    type="text"
+                                    value={formData.address_line2}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line2', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Address Line 2 (Optional)"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="text"
+                                    value={formData.landmark}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('landmark', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Landmark"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="text"
+                                    value={formData.city}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('city', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="City *"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="text"
+                                    value={formData.state}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('state', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="State *"
+                                />
+                            </div>
+
+                            <div>
+                                <input
+                                    type="text"
+                                    value={formData.pincode}
+                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('pincode', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Pincode *"
+                                    maxLength={6}
+                                />
+                            </div>
+
+                            <div className="col-span-2">
+                                <div className="relative">
+                                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input
+                                        type="tel"
+                                        value={formData.mobile}
+                                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('mobile', e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                        placeholder="Mobile Number *"
+                                        maxLength={10}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            ) : (
-                <div className="text-sm text-gray-700">
-                    {buildAddressString(formData)}
-                </div>
-            )}
+                ) : (
+                    <div className="text-sm text-gray-700 pr-6">
+                        <div>{buildAddressString(formData).replace(/,\s*Ph:.*$/, '')}</div>
+                        {formData.mobile && (
+                            <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                                <Phone className="w-3 h-3" />
+                                {formData.mobile}
+                            </div>
+                        )}
+                    </div>
+                )}
         </div>
     );
 };
