@@ -340,65 +340,93 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
     const handleSave = async (): Promise<void> => {
         const addressString = buildAddressString(formData);
+        const customerId = customer?.customer_id;
 
-        if (isAddingNew && customer?.customer_id) {
-            const addressPayload = {
-                address_line1: formData.address_line1,
-                address_line2: formData.address_line2,
-                city: formData.city,
-                state: formData.state,  // Backend maps this to state_name
-                pincode: formData.pincode,
-                mobile: formData.mobile,
-                landmark: formData.landmark,
-                address_type: addressType,
-                is_default: isDefault || savedAddresses.length === 0  // Use checkbox or first address
-            };
+        if (!customerId) {
+            console.error('[AddressForm] No customer ID');
+            return;
+        }
 
+        const addressPayload = {
+            address_line1: formData.address_line1,
+            address_line2: formData.address_line2,
+            city: formData.city,
+            state: formData.state,
+            pincode: formData.pincode,
+            mobile: formData.mobile,
+            landmark: formData.landmark,
+            address_type: addressType,
+            is_default: isDefault
+        };
+
+        if (isAddingNew) {
+            // ADDING NEW ADDRESS
             try {
                 // OFFLINE-FIRST: Save to IndexedDB immediately
-                const tempId = await offlineDB.saveCustomerAddress(customer.customer_id, addressPayload);
-                console.log('[AddressForm] Saved address offline:', tempId);
+                const tempId = await offlineDB.saveCustomerAddress(customerId, addressPayload);
+                console.log('[AddressForm] Saved new address offline:', tempId);
 
-                // Add to local state immediately so dropdown shows it
-                const newAddr = {
-                    id: tempId,
-                    ...addressPayload,
-                    sync_status: 'pending'
-                };
+                // Add to local state immediately
+                const newAddr = { id: tempId, ...addressPayload, sync_status: 'pending' };
                 setSavedAddresses(prev => [...prev, newAddr as any]);
 
                 // Try to sync to API (non-blocking)
                 try {
-                    const response = await apiClient.post(`/customers/${customer.customer_id}/addresses`, addressPayload);
+                    const response = await apiClient.post(`/customers/${customerId}/addresses`, addressPayload);
                     if (response.data?.success) {
-                        // Mark as synced in IndexedDB
                         await offlineDB.markAddressSynced(tempId, response.data.address_id);
-                        console.log('[AddressForm] Address synced to server:', response.data.address_id);
+                        console.log('[AddressForm] New address synced:', response.data.address_id);
 
-                        // Clear cache and refresh
-                        const cacheKey = `customer_addresses_${customer.customer_id}`;
+                        // Refresh list
+                        const cacheKey = `customer_addresses_${customerId}`;
                         localStorage.removeItem(cacheKey);
-                        localStorage.removeItem(`${cacheKey}_time`);
-                        await fetchCustomerAddresses(customer.customer_id);
+                        await fetchCustomerAddresses(customerId);
                     }
                 } catch (syncError) {
                     console.warn('[AddressForm] API sync failed, will retry later:', syncError);
-                    // Address is saved locally, will sync when online
                 }
             } catch (error) {
-                console.error('[AddressForm] Failed to save address offline:', error);
+                console.error('[AddressForm] Failed to save address:', error);
+            }
+        } else if (isEditing && selectedAddressId) {
+            // EDITING EXISTING ADDRESS
+            try {
+                // Update local state immediately
+                setSavedAddresses(prev => prev.map(addr =>
+                    (addr.id === selectedAddressId || addr.address_id === selectedAddressId)
+                        ? { ...addr, ...addressPayload }
+                        : addr
+                ));
+                console.log('[AddressForm] Updated address locally:', selectedAddressId);
+
+                // Try to sync to API (non-blocking) - Note: PUT endpoint may not exist yet
+                try {
+                    await apiClient.put(`/customers/${customerId}/addresses/${selectedAddressId}`, addressPayload);
+                    console.log('[AddressForm] Address update synced to server');
+
+                    // Refresh list
+                    const cacheKey = `customer_addresses_${customerId}`;
+                    localStorage.removeItem(cacheKey);
+                    await fetchCustomerAddresses(customerId);
+                } catch (syncError) {
+                    console.warn('[AddressForm] Address update sync failed:', syncError);
+                    // Local update already applied, will work offline
+                }
+            } catch (error) {
+                console.error('[AddressForm] Failed to update address:', error);
             }
         }
 
         setIsEditing(false);
         setIsAddingNew(false);
+        setIsDefault(false);
 
         if (onChange) {
             onChange(addressString);
         }
 
         if (onSave) {
-            onSave(formData);
+            onSave({ ...formData, is_default: isDefault });
         }
     };
 

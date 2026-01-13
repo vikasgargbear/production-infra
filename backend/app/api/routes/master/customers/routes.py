@@ -663,6 +663,112 @@ async def create_customer_address(
         db.rollback()
         raise handle_error(e, "create customer address", customer_id)
 
+
+@router.put("/{customer_id}/addresses/{address_id}")
+@with_tenant_context
+async def update_customer_address(
+    customer_id: int,
+    address_id: int,
+    address_data: dict = Body(...),
+    _: dict = Depends(PermissionChecker("master", "edit")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Update an existing customer address
+    
+    - address_line1: Street address
+    - address_line2: Additional address
+    - city: City name
+    - state: State name
+    - pincode: 6-digit Indian pincode
+    - mobile: Contact phone
+    - is_default: Set as default address
+    """
+    try:
+        # Check if customer exists
+        if not CustomerService.customer_exists(db, customer_id):
+            raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+        
+        # Validate pincode if provided
+        pincode = str(address_data.get('pincode', '')).strip()
+        if pincode and (not pincode.isdigit() or len(pincode) != 6):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid pincode '{pincode}'. Indian pincodes must be exactly 6 digits."
+            )
+        
+        # Get state code from state name
+        state_name = address_data.get('state', '')
+        state_code = get_state_code(state_name)
+        
+        # Build update query
+        update_fields = []
+        params = {"address_id": address_id, "customer_id": customer_id}
+        
+        if address_data.get('address_line1'):
+            update_fields.append("address_line1 = :address_line1")
+            params["address_line1"] = address_data['address_line1']
+        
+        if 'address_line2' in address_data:
+            update_fields.append("address_line2 = :address_line2")
+            params["address_line2"] = address_data.get('address_line2', '')
+            
+        if 'landmark' in address_data:
+            update_fields.append("landmark = :landmark")
+            params["landmark"] = address_data.get('landmark', '')
+        
+        if address_data.get('city'):
+            update_fields.append("city = :city")
+            params["city"] = address_data['city']
+        
+        if state_name:
+            update_fields.append("state_code = :state_code")
+            update_fields.append("state_name = :state_name")
+            params["state_code"] = state_code
+            params["state_name"] = state_name
+        
+        if pincode:
+            update_fields.append("pincode = :pincode")
+            params["pincode"] = pincode
+        
+        if 'mobile' in address_data:
+            update_fields.append("contact_number = :mobile")
+            params["mobile"] = address_data.get('mobile', '')
+        
+        if 'is_default' in address_data:
+            update_fields.append("is_default = :is_default")
+            params["is_default"] = address_data.get('is_default', False)
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        # Execute update
+        db.execute(text(f"""
+            UPDATE master.addresses 
+            SET {', '.join(update_fields)}
+            WHERE address_id = :address_id 
+            AND entity_type = 'customer'
+            AND entity_id = :customer_id
+        """), params)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "address_id": address_id,
+            "customer_id": customer_id,
+            "message": "Address updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise handle_error(e, "update customer address", address_id)
+
 @router.delete("/{customer_id}")
 @with_tenant_context
 async def delete_customer(
