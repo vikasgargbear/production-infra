@@ -561,16 +561,41 @@ const AddressForm: React.FC<AddressFormProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="pr-8">
-                    <p className="text-sm text-gray-800 leading-relaxed">
-                        {buildAddressString(formData).replace(/,\s*Ph:.*$/, '')}
-                    </p>
-                    {formData.mobile && (
-                        <p className="flex items-center gap-1.5 text-sm text-gray-600 mt-1">
-                            <Phone className="w-3.5 h-3.5" />
-                            {formData.mobile}
+                <div className="flex items-start gap-3">
+                    {/* Radio button indicator */}
+                    <div className="flex-shrink-0 mt-0.5">
+                        <div className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center">
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
+                        </div>
+                    </div>
+
+                    {/* Address content */}
+                    <div className="flex-1 pr-8">
+                        {/* First line: Name + Phone */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-gray-900">
+                                {customer?.name || customer?.customer_name || 'Customer'}
+                            </span>
+                            {(formData.mobile || customer?.phone || customer?.mobile) && (
+                                <span className="font-semibold text-gray-900">
+                                    {formData.mobile || customer?.phone || customer?.mobile}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Second line: Address with pincode in bold */}
+                        <p className="text-sm text-gray-600 mt-1.5">
+                            {[
+                                formData.address_line1,
+                                formData.address_line2,
+                                formData.city,
+                                formData.state
+                            ].filter(Boolean).join(', ')}
+                            {formData.pincode && (
+                                <span className="font-semibold text-gray-900"> - {formData.pincode}</span>
+                            )}
                         </p>
-                    )}
+                    </div>
                 </div>
             )}
         </div>
