@@ -399,18 +399,26 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 ));
                 console.log('[AddressForm] Updated address locally:', selectedAddressId);
 
-                // Try to sync to API (non-blocking) - Note: PUT endpoint may not exist yet
-                try {
-                    await apiClient.put(`/customers/${customerId}/addresses/${selectedAddressId}`, addressPayload);
-                    console.log('[AddressForm] Address update synced to server');
+                // Only sync to API if it's a real database address (not a temp local one)
+                const addressIdStr = String(selectedAddressId);
+                const isLocalPending = addressIdStr.startsWith('temp_addr_');
 
-                    // Refresh list
-                    const cacheKey = `customer_addresses_${customerId}`;
-                    localStorage.removeItem(cacheKey);
-                    await fetchCustomerAddresses(customerId);
-                } catch (syncError) {
-                    console.warn('[AddressForm] Address update sync failed:', syncError);
-                    // Local update already applied, will work offline
+                if (!isLocalPending) {
+                    // Try to sync to API (non-blocking)
+                    try {
+                        await apiClient.put(`/customers/${customerId}/addresses/${selectedAddressId}`, addressPayload);
+                        console.log('[AddressForm] Address update synced to server');
+
+                        // Refresh list
+                        const cacheKey = `customer_addresses_${customerId}`;
+                        localStorage.removeItem(cacheKey);
+                        await fetchCustomerAddresses(customerId);
+                    } catch (syncError) {
+                        console.warn('[AddressForm] Address update sync failed:', syncError);
+                        // Local update already applied
+                    }
+                } else {
+                    console.log('[AddressForm] Local pending address updated, will sync when online');
                 }
             } catch (error) {
                 console.error('[AddressForm] Failed to update address:', error);
