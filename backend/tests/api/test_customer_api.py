@@ -43,7 +43,7 @@ def create_test_customer_payload():
         "customer_type": "wholesale",
         
         # Business details
-        "business_type": "retailer",
+        "business_type": "pharmacy",  # Matches frontend: Pharmacy option
         "gst_number": generate_random_gstin(),
         "pan_number": f"{''.join(random.choices(string.ascii_uppercase, k=5))}{''.join(random.choices(string.digits, k=4))}{''.join(random.choices(string.ascii_uppercase, k=1))}",
         
@@ -114,12 +114,30 @@ def test_create_customer():
     
     payload = create_test_customer_payload()
     
-    print(f"\nPayload summary:")
-    print(f"  Customer Name: {payload['customer_name']}")
-    print(f"  Phone: {payload['primary_phone']}")
-    print(f"  GST: {payload['gst_number']}")
-    print(f"  Credit Limit: ₹{payload['credit_limit']}")
-    print(f"  Address: {payload['city']}, {payload['state']}")
+    print(f"\n--- FULL PAYLOAD (matching frontend form) ---")
+    print(f"  [Basic Information]")
+    print(f"    customer_name:      {payload['customer_name']}")
+    print(f"    primary_phone:      {payload['primary_phone']}")
+    print(f"    whatsapp_number:    {payload['whatsapp_number']}")
+    print(f"    primary_email:      {payload['primary_email']}")
+    print(f"  [Address Information]")
+    print(f"    address_line1:      {payload['address_line1']}")
+    print(f"    address_line2:      {payload['address_line2']}")
+    print(f"    city:               {payload['city']}")
+    print(f"    state:              {payload['state']}")
+    print(f"    pincode:            {payload['pincode']}")
+    print(f"  [Business Type]")
+    print(f"    customer_type:      {payload['customer_type']}")
+    print(f"    business_type:      {payload['business_type']}")
+    print(f"  [Compliance Information]")
+    print(f"    drug_license_number: {payload['drug_license_number']}")
+    print(f"    drug_license_validity: {payload['drug_license_validity']}")
+    print(f"    gst_number:         {payload['gst_number']}")
+    print(f"    pan_number:         {payload['pan_number']}")
+    print(f"  [Credit Management]")
+    print(f"    credit_rating:      {payload['credit_rating']}")
+    print(f"    credit_limit:       ₹{payload['credit_limit']}")
+    print(f"    credit_days:        {payload['credit_days']}")
     
     headers = {"Content-Type": "application/json"}
     
