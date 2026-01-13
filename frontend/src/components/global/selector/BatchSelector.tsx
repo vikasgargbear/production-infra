@@ -51,6 +51,10 @@ interface Batch {
     product_id?: number | string;
     product_name: string;
     gst_percent: number;
+    // Pack info
+    units_per_pack?: number;
+    packages_per_box?: number;
+    pack_type?: string;
 }
 
 interface ProductWithBatch extends Product {
@@ -252,7 +256,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 has_pending_sync: false,
                 product_id: batch.product_id || product?.product_id,
                 product_name: batch.product_name || product?.product_name || '',
-                gst_percent: batch.gst_percent || product?.gst_percent || 0
+                gst_percent: batch.gst_percent || product?.gst_percent || 0,
+                // Pack info - essential for display
+                units_per_pack: parseInt(batch.units_per_pack || 1),
+                packages_per_box: parseInt(batch.packages_per_box || 1),
+                pack_type: batch.pack_type || 'Unit'
             };
 
             // DEBUG: Log processed batch pricing

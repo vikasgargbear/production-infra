@@ -64,6 +64,23 @@ const AddressForm: React.FC<AddressFormProps> = ({
     const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
     const [loadingAddresses, setLoadingAddresses] = useState<boolean>(false);
 
+    const customerIdRef = useRef<string | number | null>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Click outside to close dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+
+        if (showDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showDropdown]);
+
     const [formData, setFormData] = useState<AddressData>({
         address_line1: '',
         address_line2: '',
@@ -74,8 +91,6 @@ const AddressForm: React.FC<AddressFormProps> = ({
         mobile: '',
         landmark: ''
     });
-
-    const customerIdRef = useRef<string | number | null>(null);
 
     useEffect(() => {
         const currentCustomerId = customer?.customer_id;
@@ -558,21 +573,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="text-sm text-gray-600">
-                    <div className="space-y-1">
-                        {formData.address_line1 && <p>{formData.address_line1}</p>}
-                        {formData.address_line2 && <p>{formData.address_line2}</p>}
-                        {formData.landmark && <p className="text-xs text-gray-500">Near {formData.landmark}</p>}
-                        <p>
-                            {[formData.city, formData.state, formData.pincode].filter(Boolean).join(', ')}
-                        </p>
-                        {formData.mobile && (
-                            <p className="flex items-center gap-1 text-xs text-gray-700 font-medium">
-                                <Phone className="w-3 h-3" />
-                                {formData.mobile}
-                            </p>
-                        )}
-                    </div>
+                <div className="text-sm text-gray-700">
+                    {buildAddressString(formData)}
                 </div>
             )}
         </div>
@@ -583,3 +585,4 @@ export default AddressForm;
 
 // Re-export types for external use
 export type { AddressData, SavedAddress, Customer };
+
