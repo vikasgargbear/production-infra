@@ -422,13 +422,16 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                     addressType === 'billing' ? 'Billing Address' : 'Shipping Address');
 
                                         return (
-                                            <button
+                                            <div
                                                 key={String(addr.id || addr.address_id)}
-                                                onClick={() => selectAddress(addr)}
-                                                className={`w-full text-left p-3 hover:bg-gray-50 rounded-lg transition-colors ${selectedAddressId === (addr.id || addr.address_id) ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                                                className={`flex items-start gap-2 p-3 hover:bg-gray-50 rounded-lg transition-colors ${selectedAddressId === (addr.id || addr.address_id) ? 'bg-blue-50 border-l-2 border-blue-500' : ''
                                                     }`}
                                             >
-                                                <div className="flex items-start gap-2">
+                                                {/* Select button (main click area) */}
+                                                <button
+                                                    onClick={() => selectAddress(addr)}
+                                                    className="flex-1 text-left flex items-start gap-2"
+                                                >
                                                     <Icon className="w-4 h-4 text-gray-400 mt-0.5" />
                                                     <div className="flex-1">
                                                         <div className="font-medium text-sm text-gray-900">
@@ -441,8 +444,32 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                             {buildAddressString(addr)}
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </button>
+                                                </button>
+
+                                                {/* Edit button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // Load this address into form for editing
+                                                        setFormData({
+                                                            address_line1: addr.address_line1 || '',
+                                                            address_line2: addr.address_line2 || '',
+                                                            landmark: addr.landmark || '',
+                                                            city: addr.city || '',
+                                                            state: addr.state || '',
+                                                            pincode: addr.pincode || '',
+                                                            mobile: addr.mobile || addr.phone || ''
+                                                        });
+                                                        setSelectedAddressId(addr.id || addr.address_id || null);
+                                                        setShowDropdown(false);
+                                                        setIsEditing(true);
+                                                    }}
+                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                    title="Edit this address"
+                                                >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
                                         );
                                     })}
                                 </div>
@@ -577,9 +604,12 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                 {customer?.name || customer?.customer_name || 'Customer'}
                             </span>
                             {(formData.mobile || customer?.phone || customer?.mobile) && (
-                                <span className="font-semibold text-gray-900">
-                                    {formData.mobile || customer?.phone || customer?.mobile}
-                                </span>
+                                <>
+                                    <span className="text-gray-400">,</span>
+                                    <span className="font-semibold text-gray-900">
+                                        {formData.mobile || customer?.phone || customer?.mobile}
+                                    </span>
+                                </>
                             )}
                         </div>
 
