@@ -379,7 +379,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
     }
 
     return (
-        <div className={`bg-gray-50 border border-gray-200 rounded-lg p-3 relative ${className}`}>
+        <div className={`relative ${className}`}>
             {/* Edit button only - no redundant title since parent has section header */}
             <div className="flex items-center justify-end absolute top-2 right-2 z-10">
                 {!isEditing && !isAddingNew && (
@@ -557,13 +557,15 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="text-sm text-gray-700 pr-6">
-                        <div>{buildAddressString(formData).replace(/,\s*Ph:.*$/, '')}</div>
+                    <div className="pr-8">
+                        <p className="text-sm text-gray-800 leading-relaxed">
+                            {buildAddressString(formData).replace(/,\s*Ph:.*$/, '')}
+                        </p>
                         {formData.mobile && (
-                            <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                                <Phone className="w-3 h-3" />
+                            <p className="flex items-center gap-1.5 text-sm text-gray-600 mt-1">
+                                <Phone className="w-3.5 h-3.5" />
                                 {formData.mobile}
-                            </div>
+                            </p>
                         )}
                     </div>
                 )}
