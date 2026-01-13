@@ -568,6 +568,88 @@ async def get_customer_addresses(
     except Exception as e:
         raise handle_error(e, "get customer addresses", customer_id)
 
+
+@router.post("/{customer_id}/addresses")
+@with_tenant_context
+async def create_customer_address(
+    customer_id: int,
+    address_data: dict,
+    _: dict = Depends(PermissionChecker("master", "create")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Create a new address for a customer.
+    
+    Required fields:
+    - address_line1: Street address
+    - city: City name
+    - state: State name (auto-converts to state code)
+    - pincode: PIN code
+    
+    Optional fields:
+    - address_line2: Additional address line
+    - landmark: Nearby landmark
+    - address_type: 'billing' or 'shipping' (default: 'shipping')
+    - is_default: Set as default address
+    - mobile: Contact phone for this address
+    """
+    try:
+        # Check if customer exists
+        if not CustomerService.customer_exists(db, customer_id):
+            raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+        
+        # Validate required fields
+        required_fields = ['address_line1', 'city', 'pincode']
+        missing = [f for f in required_fields if not address_data.get(f)]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required fields: {', '.join(missing)}"
+            )
+        
+        # Get state code from state name
+        state_name = address_data.get('state', '')
+        state_code = get_state_code(state_name)
+        
+        # Prepare address data for insertion
+        insert_data = {
+            "address_type": address_data.get("address_type", "shipping"),
+            "address_line1": address_data.get("address_line1", ""),
+            "address_line2": address_data.get("address_line2", ""),
+            "landmark": address_data.get("landmark", ""),
+            "city": address_data.get("city", ""),
+            "state_code": state_code,
+            "state_name": state_name or "Maharashtra",
+            "pincode": address_data.get("pincode", ""),
+            "country": address_data.get("country", "India"),
+            "is_default": address_data.get("is_default", False),
+            "mobile": address_data.get("mobile", "")
+        }
+        
+        # Insert address using service
+        address_id = CustomerService.insert_address(
+            db=db,
+            org_id=str(context.org_id),
+            customer_id=customer_id,
+            address_data=insert_data
+        )
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "address_id": address_id,
+            "customer_id": customer_id,
+            "message": "Address created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise handle_error(e, "create customer address", customer_id)
+
 @router.delete("/{customer_id}")
 @with_tenant_context
 async def delete_customer(

@@ -299,6 +299,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 });
 
                 if (response.data?.success) {
+                    // Clear cache so dropdown shows the new address
+                    const cacheKey = `customer_addresses_${customer.customer_id}`;
+                    localStorage.removeItem(cacheKey);
+                    localStorage.removeItem(`${cacheKey}_time`);
+
                     await fetchCustomerAddresses(customer.customer_id);
                 }
             } catch (error) {
@@ -585,42 +590,33 @@ const AddressForm: React.FC<AddressFormProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="flex items-start gap-3">
-                    {/* Radio button indicator */}
-                    <div className="flex-shrink-0 mt-0.5">
-                        <div className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center">
-                            <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
-                        </div>
-                    </div>
-
+                <div className="pr-8">
                     {/* Address content */}
-                    <div className="flex-1 pr-8">
-                        {/* First line: Name, Phone */}
-                        <div className="flex items-center flex-wrap">
+                    {/* First line: Name, Phone */}
+                    <div className="flex items-center flex-wrap">
+                        <span className="font-semibold text-gray-900">
+                            {customer?.name || customer?.customer_name || 'Customer'}
+                            {(formData.mobile || customer?.phone || customer?.mobile) && ', '}
+                        </span>
+                        {(formData.mobile || customer?.phone || customer?.mobile) && (
                             <span className="font-semibold text-gray-900">
-                                {customer?.name || customer?.customer_name || 'Customer'}
-                                {(formData.mobile || customer?.phone || customer?.mobile) && ', '}
+                                {formData.mobile || customer?.phone || customer?.mobile}
                             </span>
-                            {(formData.mobile || customer?.phone || customer?.mobile) && (
-                                <span className="font-semibold text-gray-900">
-                                    {formData.mobile || customer?.phone || customer?.mobile}
-                                </span>
-                            )}
-                        </div>
-
-                        {/* Second line: Address with pincode in bold */}
-                        <p className="text-sm text-gray-600 mt-1.5">
-                            {[
-                                formData.address_line1,
-                                formData.address_line2,
-                                formData.city,
-                                formData.state
-                            ].filter(Boolean).join(', ')}
-                            {formData.pincode && (
-                                <span className="font-semibold text-gray-900"> - {formData.pincode}</span>
-                            )}
-                        </p>
+                        )}
                     </div>
+
+                    {/* Second line: Address with pincode in bold */}
+                    <p className="text-sm text-gray-600 mt-1.5">
+                        {[
+                            formData.address_line1,
+                            formData.address_line2,
+                            formData.city,
+                            formData.state
+                        ].filter(Boolean).join(', ')}
+                        {formData.pincode && (
+                            <span className="font-semibold text-gray-900"> - {formData.pincode}</span>
+                        )}
+                    </p>
                 </div>
             )}
         </div>
