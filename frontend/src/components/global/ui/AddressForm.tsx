@@ -109,6 +109,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
     const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
     const [selectedAddressId, setSelectedAddressId] = useState<string | number | null>(null);
     const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
+    const [isDefault, setIsDefault] = useState<boolean>(false);
     const [loadingAddresses, setLoadingAddresses] = useState<boolean>(false);
 
     const customerIdRef = useRef<string | number | null>(null);
@@ -266,12 +267,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
             address_line1: address.address_line1 || address.address || '',
             address_line2: address.address_line2 || address.address2 || '',
             city: address.city || '',
-            state: address.state || address.state || '',
-            pincode: address.pincode || address.pincode || address.pincode || '',
-            country: address.country || '',
+            state: address.state || (address as any).state_name || '',
+            pincode: address.pincode || '',
+            country: address.country || 'India',
             mobile: mobileNumber,
             landmark: address.landmark || ''
         });
+        setIsDefault(address.is_default || false);
 
         const addressString = buildAddressString(address);
         if (onChange) {
@@ -341,9 +343,15 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
         if (isAddingNew && customer?.customer_id) {
             const addressPayload = {
-                ...formData,
+                address_line1: formData.address_line1,
+                address_line2: formData.address_line2,
+                city: formData.city,
+                state: formData.state,  // Backend maps this to state_name
+                pincode: formData.pincode,
+                mobile: formData.mobile,
+                landmark: formData.landmark,
                 address_type: addressType,
-                is_default: savedAddresses.length === 0
+                is_default: isDefault || savedAddresses.length === 0  // Use checkbox or first address
             };
 
             try {
@@ -529,7 +537,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                             address_line2: addr.address_line2 || '',
                                                             landmark: addr.landmark || '',
                                                             city: addr.city || '',
-                                                            state: addr.state || '',
+                                                            state: addr.state || (addr as any).state_name || '',
                                                             pincode: addr.pincode || '',
                                                             mobile: addr.mobile || addr.phone || ''
                                                         });
@@ -632,6 +640,21 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                 maxLength={6}
                             />
                         </div>
+
+                        {/* Make Default checkbox - only show when adding new */}
+                        {isAddingNew && (
+                            <div className="col-span-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={isDefault}
+                                        onChange={(e) => setIsDefault(e.target.checked)}
+                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">Make this my default delivery address</span>
+                                </label>
+                            </div>
+                        )}
 
                         <div className="col-span-2">
                             <div className="relative">
