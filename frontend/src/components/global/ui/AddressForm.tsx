@@ -380,13 +380,21 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
     return (
         <div className={`relative ${className}`}>
-            {/* Edit button only shown when not editing */}
+            {/* Action buttons shown when not editing */}
             {!isEditing && !isAddingNew && (
-                <div className="flex items-center justify-end absolute top-0 right-0 z-10">
+                <div className="flex items-center gap-1 absolute top-0 right-0 z-10">
+                    <button
+                        onClick={handleAddNew}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                        title="Add new address"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add New
+                    </button>
                     <button
                         onClick={handleEdit}
-                        className="text-blue-600 hover:text-blue-700 p-1.5 hover:bg-blue-50 rounded-md transition-colors"
-                        title="Select or edit address"
+                        className="text-gray-500 hover:text-gray-700 p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                        title="Select from saved addresses"
                     >
                         <Edit2 className="w-4 h-4" />
                     </button>

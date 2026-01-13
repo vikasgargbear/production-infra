@@ -127,11 +127,13 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                         {/* 2. Address Details - Second Priority */}
                         {selectedCustomer && (
                             <div className="mb-6">
-                                <div className="flex items-center mb-4">
-                                    <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
-                                        <span className="text-sm font-bold text-green-600">2</span>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center">
+                                        <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
+                                            <span className="text-sm font-bold text-green-600">2</span>
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-gray-800">Delivery Address</h3>
                                     </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Delivery Address</h3>
                                 </div>
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                                     <AddressForm
