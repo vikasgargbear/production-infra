@@ -176,14 +176,14 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                             </div>
                         </div>
 
-                        {/* 2. Payment & Discount */}
+                        {/* 2. Payment */}
                         <div className="mb-6">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center">
                                     <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
                                         <span className="text-sm font-bold text-green-600">2</span>
                                     </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Payment & Discount</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800">Payment</h3>
                                 </div>
 
                                 {/* Split Payment Toggle - Outside tile for better UX */}
@@ -206,12 +206,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     payment_status: 'pending'
                                                 }));
                                             } else {
-                                                // Enable split - Start with UPI and Credit
+                                                // Enable split - UPI gets full amount, Credit starts at 0 (user can edit)
                                                 setInvoice(prev => ({
                                                     ...prev,
                                                     payments: [
-                                                        { id: '1', method: 'upi', amount: Math.floor(totalAmount / 2), reference: '' },
-                                                        { id: '2', method: 'credit', amount: totalAmount - Math.floor(totalAmount / 2), reference: '' }
+                                                        { id: '1', method: 'upi', amount: totalAmount, reference: '' },
+                                                        { id: '2', method: 'credit', amount: 0, reference: '' }
                                                     ],
                                                     payment_mode: 'split',
                                                     payment_status: 'partial'
