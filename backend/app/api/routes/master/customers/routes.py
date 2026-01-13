@@ -613,6 +613,14 @@ async def create_customer_address(
                 detail=f"Missing required fields: {', '.join(missing)}"
             )
         
+        # Validate pincode format (6 digits for India)
+        pincode = str(address_data.get('pincode', '')).strip()
+        if not pincode.isdigit() or len(pincode) != 6:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid pincode '{pincode}'. Indian pincodes must be exactly 6 digits."
+            )
+        
         # Get state code from state name
         state_name = address_data.get('state', '')
         state_code = get_state_code(state_name)
@@ -626,8 +634,8 @@ async def create_customer_address(
             "city": address_data.get("city", ""),
             "state_code": state_code,
             "state_name": state_name or "Maharashtra",
-            "pincode": address_data.get("pincode", ""),
-            "country": address_data.get("country", "India"),
+            "pincode": pincode,
+            "country": address_data.get("country", "India") or "India",
             "is_default": address_data.get("is_default", False),
             "mobile": address_data.get("mobile", "")
         }
