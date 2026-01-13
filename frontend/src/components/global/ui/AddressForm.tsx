@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { MapPin, Edit2, Check, X, Plus, Phone, Building2, Home, LucideIcon } from 'lucide-react';
 import { apiClient } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
 
 // Imports from centralized types
 import type {
@@ -148,44 +149,51 @@ const AddressForm: React.FC<AddressFormProps> = ({
             const cacheTime = localStorage.getItem(`${cacheKey}_time`);
             const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime) : Infinity;
 
+            let syncedAddresses: SavedAddress[] = [];
+
+            // Try to get from cache or API
             if (cached && cacheAge < 5 * 60 * 1000) {
-                const addresses: SavedAddress[] = JSON.parse(cached);
-                const filteredAddresses = addresses.filter(addr =>
-                    !addr.address_type || addr.address_type === addressType || addr.is_default
-                );
-                setSavedAddresses(filteredAddresses.length > 0 ? filteredAddresses : addresses);
-
-                const defaultAddr = filteredAddresses.find(addr =>
-                    addr.address_type === addressType && addr.is_default
-                ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
-
-                if (defaultAddr) {
-                    selectAddress(defaultAddr);
+                syncedAddresses = JSON.parse(cached);
+            } else {
+                try {
+                    const response = await apiClient.get(`/customers/${customerId}/addresses`);
+                    if (response.data?.success && response.data.data) {
+                        syncedAddresses = response.data.data;
+                        localStorage.setItem(cacheKey, JSON.stringify(syncedAddresses));
+                        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+                    }
+                } catch (apiError) {
+                    console.warn('[AddressForm] API fetch failed, using local data:', apiError);
+                    // Continue with local data only
                 }
-                setLoadingAddresses(false);
-                return;
             }
 
-            const response = await apiClient.get(`/customers/${customerId}/addresses`);
-
-            if (response.data?.success && response.data.data) {
-                const addresses: SavedAddress[] = response.data.data;
-
-                localStorage.setItem(cacheKey, JSON.stringify(addresses));
-                localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-
-                const filteredAddresses = addresses.filter(addr =>
-                    !addr.address_type || addr.address_type === addressType || addr.is_default
+            // OFFLINE-FIRST: Get locally pending addresses from IndexedDB
+            let pendingAddresses: SavedAddress[] = [];
+            try {
+                pendingAddresses = await offlineDB.getCustomerAddresses(customerId);
+                // Filter to only pending (not-yet-synced) addresses
+                pendingAddresses = pendingAddresses.filter((a: any) =>
+                    a.sync_status === 'pending' && String(a.id).startsWith('temp_addr_')
                 );
-                setSavedAddresses(filteredAddresses.length > 0 ? filteredAddresses : addresses);
+            } catch (e) {
+                console.warn('[AddressForm] Error getting local addresses:', e);
+            }
 
-                const defaultAddr = filteredAddresses.find(addr =>
-                    addr.address_type === addressType && addr.is_default
-                ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
+            // Merge synced + pending addresses
+            const allAddresses = [...syncedAddresses, ...pendingAddresses];
 
-                if (defaultAddr) {
-                    selectAddress(defaultAddr);
-                }
+            const filteredAddresses = allAddresses.filter(addr =>
+                !addr.address_type || addr.address_type === addressType || addr.is_default
+            );
+            setSavedAddresses(filteredAddresses.length > 0 ? filteredAddresses : allAddresses);
+
+            const defaultAddr = filteredAddresses.find(addr =>
+                addr.address_type === addressType && addr.is_default
+            ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
+
+            if (defaultAddr) {
+                selectAddress(defaultAddr);
             }
         } catch (error) {
             console.error('[AddressForm] Failed to fetch addresses:', error);
@@ -291,23 +299,45 @@ const AddressForm: React.FC<AddressFormProps> = ({
         const addressString = buildAddressString(formData);
 
         if (isAddingNew && customer?.customer_id) {
+            const addressPayload = {
+                ...formData,
+                address_type: addressType,
+                is_default: savedAddresses.length === 0
+            };
+
             try {
-                const response = await apiClient.post(`/customers/${customer.customer_id}/addresses`, {
-                    ...formData,
-                    address_type: addressType,
-                    is_default: savedAddresses.length === 0
-                });
+                // OFFLINE-FIRST: Save to IndexedDB immediately
+                const tempId = await offlineDB.saveCustomerAddress(customer.customer_id, addressPayload);
+                console.log('[AddressForm] Saved address offline:', tempId);
 
-                if (response.data?.success) {
-                    // Clear cache so dropdown shows the new address
-                    const cacheKey = `customer_addresses_${customer.customer_id}`;
-                    localStorage.removeItem(cacheKey);
-                    localStorage.removeItem(`${cacheKey}_time`);
+                // Add to local state immediately so dropdown shows it
+                const newAddr = {
+                    id: tempId,
+                    ...addressPayload,
+                    sync_status: 'pending'
+                };
+                setSavedAddresses(prev => [...prev, newAddr as any]);
 
-                    await fetchCustomerAddresses(customer.customer_id);
+                // Try to sync to API (non-blocking)
+                try {
+                    const response = await apiClient.post(`/customers/${customer.customer_id}/addresses`, addressPayload);
+                    if (response.data?.success) {
+                        // Mark as synced in IndexedDB
+                        await offlineDB.markAddressSynced(tempId, response.data.address_id);
+                        console.log('[AddressForm] Address synced to server:', response.data.address_id);
+
+                        // Clear cache and refresh
+                        const cacheKey = `customer_addresses_${customer.customer_id}`;
+                        localStorage.removeItem(cacheKey);
+                        localStorage.removeItem(`${cacheKey}_time`);
+                        await fetchCustomerAddresses(customer.customer_id);
+                    }
+                } catch (syncError) {
+                    console.warn('[AddressForm] API sync failed, will retry later:', syncError);
+                    // Address is saved locally, will sync when online
                 }
             } catch (error) {
-                console.error('[AddressForm] Failed to save address:', error);
+                console.error('[AddressForm] Failed to save address offline:', error);
             }
         }
 

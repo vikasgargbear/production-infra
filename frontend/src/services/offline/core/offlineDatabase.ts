@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 8;
+const DB_VERSION = 9;  // Bumped for customer_addresses store
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -67,6 +67,11 @@ export interface OfflineSchema extends DBSchema {
     app_cache: {
         key: string;
         value: { key: string; data: any; timestamp: number };
+    };
+    customer_addresses: {
+        key: string;  // address_id or temp_addr_xxx for offline-created
+        value: any;
+        indexes: { 'customer_id': string; 'sync_status': string; 'address_type': string };
     };
 }
 
@@ -204,6 +209,14 @@ class OfflineDatabase {
                 // App Cache store (Generic Key-Value for consolidation)
                 if (!db.objectStoreNames.contains('app_cache')) {
                     db.createObjectStore('app_cache', { keyPath: 'key' });
+                }
+
+                // Customer Addresses store (for offline-first address creation)
+                if (!db.objectStoreNames.contains('customer_addresses')) {
+                    const addrStore = db.createObjectStore('customer_addresses', { keyPath: 'id' });
+                    addrStore.createIndex('customer_id', 'customer_id');
+                    addrStore.createIndex('sync_status', 'sync_status');
+                    addrStore.createIndex('address_type', 'address_type');
                 }
             },
         });
@@ -698,6 +711,97 @@ class OfflineDatabase {
         if (batch) {
             batch.quantity_available = newQuantity;
             await this.update('products', product);
+        }
+    }
+
+    // ==================== CUSTOMER ADDRESS METHODS ====================
+
+    /**
+     * Save a customer address locally (offline-first)
+     * Returns the temp_id for the new address
+     */
+    async saveCustomerAddress(customerId: string | number, addressData: any): Promise<string> {
+        const db = await this.init();
+        const tempId = `temp_addr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const addressRecord = {
+            id: tempId,
+            customer_id: String(customerId),
+            ...addressData,
+            sync_status: SYNC_STATUS.PENDING,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        await db.put('customer_addresses', addressRecord);
+
+        // Add to sync queue for background upload
+        await this.syncQueue.addToSyncQueue(
+            'customer_address',
+            tempId,
+            'create',
+            addressRecord
+        );
+
+        console.log(`${LOG_PREFIX} Saved address ${tempId} for customer ${customerId} (pending sync)`);
+        return tempId;
+    }
+
+    /**
+     * Get all addresses for a customer (merges synced + pending)
+     */
+    async getCustomerAddresses(customerId: string | number): Promise<any[]> {
+        const db = await this.init();
+        const customerIdStr = String(customerId);
+
+        // Get pending addresses from IndexedDB
+        let pendingAddresses: any[] = [];
+        try {
+            const index = db.transaction('customer_addresses', 'readonly').store.index('customer_id');
+            pendingAddresses = await index.getAll(customerIdStr);
+        } catch (e) {
+            console.warn(`${LOG_PREFIX} Error reading customer_addresses store:`, e);
+        }
+
+        // Get synced addresses embedded in customer record
+        let syncedAddresses: any[] = [];
+        try {
+            const customer = await this.get('customers', customerIdStr);
+            syncedAddresses = customer?.addresses || [];
+        } catch (e) {
+            console.warn(`${LOG_PREFIX} Error reading customer addresses:`, e);
+        }
+
+        // Merge: synced addresses + pending addresses (no duplicates)
+        const syncedIds = new Set(syncedAddresses.map((a: any) => String(a.address_id || a.id)));
+        const uniquePending = pendingAddresses.filter(a => !syncedIds.has(String(a.id)));
+
+        console.log(`${LOG_PREFIX} Customer ${customerId}: ${syncedAddresses.length} synced, ${uniquePending.length} pending addresses`);
+
+        return [...syncedAddresses, ...uniquePending];
+    }
+
+    /**
+     * Mark a pending address as synced (after successful API upload)
+     */
+    async markAddressSynced(tempId: string, realAddressId: number): Promise<void> {
+        const db = await this.init();
+
+        try {
+            const addr = await db.get('customer_addresses', tempId);
+            if (addr) {
+                // Update with real ID and synced status
+                await db.delete('customer_addresses', tempId);
+                addr.id = String(realAddressId);
+                addr.address_id = realAddressId;
+                addr.sync_status = SYNC_STATUS.SYNCED;
+                addr.synced_at = new Date().toISOString();
+                await db.put('customer_addresses', addr);
+
+                console.log(`${LOG_PREFIX} Address ${tempId} synced as ${realAddressId}`);
+            }
+        } catch (e) {
+            console.error(`${LOG_PREFIX} Error marking address synced:`, e);
         }
     }
 }
