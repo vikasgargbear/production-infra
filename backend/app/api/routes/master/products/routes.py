@@ -731,6 +731,47 @@ async def update_product(
         db.rollback()
         raise handle_error(e, "update product", product_id)
 
+
+@router.get("/{product_id}/batches")
+@with_tenant_context
+async def get_product_batches(
+    product_id: int,
+    include_expired: bool = Query(False, description="Include expired batches"),
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Get all batches for a specific product.
+    
+    This is the primary endpoint for fetching batches by product ID.
+    Used by the frontend BatchSelector when cached data isn't available.
+    """
+    try:
+        batches = ProductService.get_batches_for_products(
+            db=db,
+            product_ids=[product_id],
+            include_expired=include_expired
+        )
+        
+        # Format decimals for JSON
+        for batch in batches:
+            batch["mrp_per_unit"] = float(batch.get("mrp_per_unit") or 0)
+            batch["sale_price_per_unit"] = float(batch.get("sale_price_per_unit") or 0)
+            batch["cost_per_unit"] = float(batch.get("cost_per_unit") or 0)
+            batch["expiry_date"] = str(batch["expiry_date"]) if batch.get("expiry_date") else None
+            batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch.get("manufacturing_date") else None
+        
+        return {
+            "product_id": product_id,
+            "batches": batches,
+            "count": len(batches)
+        }
+        
+    except Exception as e:
+        raise handle_error(e, "get product batches", product_id)
+
+
 @router.put("/batches/product/{product_id}")
 @with_tenant_context
 async def update_product_batches(
