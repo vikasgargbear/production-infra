@@ -6,7 +6,7 @@ PRODUCTION-READY: All endpoints use TenantAwareSession for AI-agent safety
 """
 from typing import Optional
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy import text
 import logging
 import json
