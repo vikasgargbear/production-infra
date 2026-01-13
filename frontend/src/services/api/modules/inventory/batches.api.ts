@@ -36,7 +36,7 @@ export interface BatchData {
 
 const ENDPOINTS = {
     BASE: '/batches',
-    BY_PRODUCT: (id: number) => `/batches/product/${id}`,
+    BY_PRODUCT: (id: number) => `/inventory/movements/product/${id}/batches`,
     EXPIRING: '/batches/expiring',
     EXPIRED: '/batches/expired'
 } as const;
