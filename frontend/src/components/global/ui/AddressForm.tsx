@@ -641,8 +641,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             />
                         </div>
 
-                        {/* Make Default checkbox - only show when adding new */}
-                        {isAddingNew && (
+                        {/* Make Default checkbox - show when adding new or editing */}
+                        {(isAddingNew || isEditing) && (
                             <div className="col-span-2">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input
@@ -651,7 +651,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                         onChange={(e) => setIsDefault(e.target.checked)}
                                         className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-gray-700">Make this my default delivery address</span>
+                                    <span className="text-sm text-gray-700">Set as default delivery address</span>
                                 </label>
                             </div>
                         )}
