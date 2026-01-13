@@ -559,11 +559,38 @@ class OfflineDatabase {
     // These methods provide a consistent API for components
 
     /**
-     * Get batches for a product (from embedded product.batches)
+     * Get batches for a product
+     * Checks both:
+     * 1. The 'batches' store (from full/delta sync)
+     * 2. Embedded product.batches (from search-with-batches API)
      */
     async getBatchesByProduct(productId: string | number): Promise<any[]> {
-        const product = await this.get('products', String(productId));
-        return product?.batches || [];
+        const db = await this.init();
+        const productIdStr = String(productId);
+
+        // Source 1: Batches store (from sync)
+        let batchesFromStore: any[] = [];
+        try {
+            const index = db.transaction('batches', 'readonly').store.index('product_id');
+            batchesFromStore = await index.getAll(productIdStr);
+        } catch (e) {
+            console.warn(`${LOG_PREFIX} Error reading batches store:`, e);
+        }
+
+        // Source 2: Embedded batches in product (from search-with-batches)
+        let embeddedBatches: any[] = [];
+        try {
+            const product = await this.get('products', productIdStr);
+            embeddedBatches = product?.batches || [];
+        } catch (e) {
+            console.warn(`${LOG_PREFIX} Error reading product batches:`, e);
+        }
+
+        // Merge both sources, preferring batches store (more recent from sync)
+        if (batchesFromStore.length > 0) {
+            return batchesFromStore;
+        }
+        return embeddedBatches;
     }
 
     /**
