@@ -575,6 +575,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 <div className="space-y-4">
 
                     <div className="grid grid-cols-2 gap-3">
+                        {/* Row 1: Address Line 1 */}
                         <div className="col-span-2">
                             <input
                                 type="text"
@@ -585,13 +586,14 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             />
                         </div>
 
-                        <div className="col-span-2">
+                        {/* Row 2: Address Line 2 | Landmark */}
+                        <div>
                             <input
                                 type="text"
                                 value={formData.address_line2}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line2', e.target.value)}
                                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                placeholder="Address Line 2 (Optional)"
+                                placeholder="Address Line 2"
                             />
                         </div>
 
@@ -605,6 +607,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             />
                         </div>
 
+                        {/* Row 3: City | State */}
                         <div>
                             <input
                                 type="text"
@@ -630,6 +633,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             </select>
                         </div>
 
+                        {/* Row 4: Pincode | Mobile */}
                         <div>
                             <input
                                 type="text"
@@ -641,51 +645,48 @@ const AddressForm: React.FC<AddressFormProps> = ({
                             />
                         </div>
 
-                        {/* Make Default checkbox - show when adding new or editing */}
-                        {(isAddingNew || isEditing) && (
-                            <div className="col-span-2">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={isDefault}
-                                        onChange={(e) => setIsDefault(e.target.checked)}
-                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                    />
-                                    <span className="text-sm text-gray-700">Set as default delivery address</span>
-                                </label>
-                            </div>
-                        )}
-
-                        <div className="col-span-2">
-                            <div className="relative">
-                                <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                <input
-                                    type="tel"
-                                    value={formData.mobile}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('mobile', e.target.value)}
-                                    className="w-full pl-11 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                    placeholder="Mobile Number *"
-                                    maxLength={10}
-                                />
-                            </div>
+                        <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="tel"
+                                value={formData.mobile}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('mobile', e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                placeholder="Mobile *"
+                                maxLength={10}
+                            />
                         </div>
                     </div>
 
-                    {/* Action buttons at bottom of form */}
-                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-                        <button
-                            onClick={handleCancel}
-                            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5"
-                        >
-                            <Check className="w-4 h-4" />
-                            Save Address
-                        </button>
+                    {/* Action row: Checkbox | Cancel | Save */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        {/* Default checkbox on left */}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={isDefault}
+                                onChange={(e) => setIsDefault(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-600">Default address</span>
+                        </label>
+
+                        {/* Buttons on right */}
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleCancel}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5"
+                            >
+                                <Check className="w-4 h-4" />
+                                Save
+                            </button>
+                        </div>
                     </div>
                 </div>
             ) : (
