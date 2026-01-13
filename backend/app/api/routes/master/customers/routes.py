@@ -574,7 +574,7 @@ async def get_customer_addresses(
         raise handle_error(e, "get customer addresses", customer_id)
 
 
-@router.post("/{customer_id}/addresses")
+@router.post("/{customer_id}/addresses/")
 @with_tenant_context
 async def create_customer_address(
     customer_id: int,
