@@ -411,15 +411,12 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         <div className="p-4 text-center text-gray-500">Loading addresses...</div>
                     ) : (
                         <>
-                            {savedAddresses.length > 0 && (
+                            {/* Filter to only shipping addresses for Indian GST compliance - billing comes from backend */}
+                            {savedAddresses.filter(a => a.address_type !== 'billing').length > 0 && (
                                 <div className="p-2">
                                     <div className="text-xs text-gray-500 uppercase px-2 py-1">Saved Addresses</div>
-                                    {savedAddresses.map((addr) => {
-                                        const Icon = getAddressIcon(addr.address_type || addressType);
-                                        const displayLabel = addr.label ||
-                                            (addr.address_type === 'billing' ? 'Billing Address' :
-                                                addr.address_type === 'shipping' ? 'Shipping Address' :
-                                                    addressType === 'billing' ? 'Billing Address' : 'Shipping Address');
+                                    {savedAddresses.filter(a => a.address_type !== 'billing').map((addr) => {
+                                        const Icon = getAddressIcon('shipping');
 
                                         return (
                                             <div
@@ -435,7 +432,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                     <Icon className="w-4 h-4 text-gray-400 mt-0.5" />
                                                     <div className="flex-1">
                                                         <div className="font-medium text-sm text-gray-900">
-                                                            {displayLabel}
+                                                            {addr.label || 'Delivery Address'}
                                                             {addr.is_default && (
                                                                 <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Default</span>
                                                             )}
@@ -598,18 +595,16 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
                     {/* Address content */}
                     <div className="flex-1 pr-8">
-                        {/* First line: Name + Phone */}
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* First line: Name, Phone */}
+                        <div className="flex items-center flex-wrap">
                             <span className="font-semibold text-gray-900">
                                 {customer?.name || customer?.customer_name || 'Customer'}
+                                {(formData.mobile || customer?.phone || customer?.mobile) && ', '}
                             </span>
                             {(formData.mobile || customer?.phone || customer?.mobile) && (
-                                <>
-                                    <span className="text-gray-400">,</span>
-                                    <span className="font-semibold text-gray-900">
-                                        {formData.mobile || customer?.phone || customer?.mobile}
-                                    </span>
-                                </>
+                                <span className="font-semibold text-gray-900">
+                                    {formData.mobile || customer?.phone || customer?.mobile}
+                                </span>
                             )}
                         </div>
 
