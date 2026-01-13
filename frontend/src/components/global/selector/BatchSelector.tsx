@@ -307,9 +307,9 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
         setBatches(processedBatches);
 
-        if (processedBatches.length === 0 && allowCreateDefault && product) {
-            const defaultBatch = createDefaultBatch(product);
-            setBatches([defaultBatch]);
+        // If no batches available, show a clear message instead of creating a fake default
+        if (processedBatches.length === 0) {
+            setError('No batches available for this product (may be expired or out of stock)');
         }
     };
 
