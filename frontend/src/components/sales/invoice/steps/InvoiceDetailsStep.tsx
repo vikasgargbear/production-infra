@@ -1,5 +1,5 @@
-import React, { RefObject } from 'react';
-import { FileText } from 'lucide-react';
+import React, { RefObject, useState } from 'react';
+import { FileText, Plus } from 'lucide-react';
 
 // Global Components
 import { ModuleHeader, AddressForm } from '../../../global';
@@ -34,6 +34,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     vehicleRef,
     deliveryChargesRef,
 }) => {
+    // State for controlling AddressForm add mode externally
+    const [addAddressMode, setAddAddressMode] = useState(false);
+
     return (
         <div className="h-full bg-blue-50">
             <div className="h-full flex flex-col">
@@ -134,6 +137,13 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
                                         <h3 className="text-lg font-semibold text-gray-800">Delivery Address</h3>
                                     </div>
+                                    <button
+                                        onClick={() => setAddAddressMode(true)}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add Address
+                                    </button>
                                 </div>
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                                     <AddressForm
@@ -142,6 +152,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         customer={selectedCustomer}
                                         readonly={false}
                                         className=""
+                                        isAddMode={addAddressMode}
+                                        onExitAddMode={() => setAddAddressMode(false)}
                                         onChange={(address: string) => {
                                             console.log('[Invoice] Address changed:', address);
                                             // Auto-sync: Same address for both billing and shipping
@@ -153,6 +165,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         }}
                                         onSave={(addressData: unknown) => {
                                             console.log('[Invoice] Address saved:', addressData);
+                                            setAddAddressMode(false);  // Exit add mode after save
                                             // Auto-sync: Same address data for both
                                             setInvoice(prev => ({
                                                 ...prev,

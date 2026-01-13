@@ -42,6 +42,9 @@ export interface AddressFormProps {
     className?: string;
     title?: string;
     readonly?: boolean;
+    // External control props
+    isAddMode?: boolean;  // Externally trigger add mode
+    onExitAddMode?: () => void;  // Callback when exiting add mode
 }
 
 // ==================== COMPONENT ====================
@@ -55,7 +58,9 @@ const AddressForm: React.FC<AddressFormProps> = ({
     sameAsBilling = false,
     onSameAsBillingChange,
     billingAddressData = null,
-    className = ''
+    className = '',
+    isAddMode = false,
+    onExitAddMode
 }) => {
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [showDropdown, setShowDropdown] = useState<boolean>(false);
@@ -80,6 +85,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
     }, [showDropdown]);
+
+    // Handle external trigger to enter add mode
+    useEffect(() => {
+        if (isAddMode && !isAddingNew) {
+            handleAddNew();
+        }
+    }, [isAddMode]);
 
     const [formData, setFormData] = useState<AddressData>({
         address_line1: '',
@@ -380,21 +392,13 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
     return (
         <div className={`relative ${className}`}>
-            {/* Action buttons shown when not editing */}
+            {/* Edit button shown when not editing - edits current address */}
             {!isEditing && !isAddingNew && (
                 <div className="flex items-center gap-1 absolute top-0 right-0 z-10">
                     <button
-                        onClick={handleAddNew}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-                        title="Add new address"
-                    >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add New
-                    </button>
-                    <button
                         onClick={handleEdit}
-                        className="text-gray-500 hover:text-gray-700 p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-                        title="Select from saved addresses"
+                        className="text-blue-600 hover:text-blue-700 p-1.5 hover:bg-blue-50 rounded-md transition-colors"
+                        title="Edit address or select from saved"
                     >
                         <Edit2 className="w-4 h-4" />
                     </button>
