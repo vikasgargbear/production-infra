@@ -69,6 +69,12 @@ export const customersApi = {
     return apiHelpers.delete(ENDPOINTS.DETAILS(id));
   },
 
+  // Create customer address (for offline sync)
+  createAddress: (customerId: string, addressData: any) => {
+    const cleanedData = cleanData(addressData);
+    return apiHelpers.post(`${ENDPOINTS.DETAILS(customerId)}/addresses`, cleanedData);
+  },
+
   // =========================================================================
   // SEARCH & FILTERS
   // =========================================================================

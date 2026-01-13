@@ -60,6 +60,20 @@ interface PaymentData {
     [key: string]: unknown;
 }
 
+interface CustomerAddressData {
+    customer_id?: string | number;
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    mobile?: string;
+    landmark?: string;
+    address_type?: string;
+    is_default?: boolean;
+    [key: string]: unknown;
+}
+
 interface ConflictDetails {
     type?: string;
     productId?: number;
@@ -362,6 +376,11 @@ class SyncEngine {
                     response = await this.syncPayment(item.data as PaymentData);
                     break;
 
+                case 'customer_address':
+                case 'customer_addresses':
+                    response = await this.syncCustomerAddress(item.data as CustomerAddressData);
+                    break;
+
                 default:
                     throw new Error(`Unknown sync type: ${item.entity_type || item.type}`);
             }
@@ -551,6 +570,25 @@ class SyncEngine {
         } else {
             return await paymentsApi.create(cleanedPayment);
         }
+    }
+
+    /**
+     * Sync customer address
+     */
+    async syncCustomerAddress(addressData: CustomerAddressData): Promise<AxiosResponse> {
+        const { customer_id, ...address } = addressData;
+
+        if (!customer_id) {
+            throw new Error('Customer ID required for address sync');
+        }
+
+        const cleanedAddress = cleanData(address);
+
+        // Use the customers API to create address
+        const response = await customersApi.createAddress(String(customer_id), cleanedAddress);
+
+        console.log('[SyncEngine] Customer address synced:', response.data);
+        return response;
     }
 
     /**
