@@ -112,6 +112,8 @@ export const API_CONFIG: APIConfig = {
       DRAFTS: 'invoices/drafts/',
       PDF: (id) => `invoices/${id}/pdf/`,
       WHATSAPP: (id) => `invoices/${id}/whatsapp/`,
+      CANCEL: (id) => `invoices/${id}/cancel/`,
+      EMAIL: (id) => `invoices/${id}/email/`,
     },
 
     // Challans (implemented as Orders with order_type='challan')
