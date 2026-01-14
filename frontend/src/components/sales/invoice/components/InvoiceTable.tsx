@@ -16,6 +16,7 @@ interface InvoiceTableProps {
     onDownload: (invoice: Invoice) => void;
     onWhatsApp: (invoice: Invoice) => void;
     onMore: (invoice: Invoice) => void;
+    onCancel?: (invoice: Invoice) => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -54,6 +55,7 @@ const InvoiceRow = React.memo<{
     onDownload: (invoice: Invoice) => void;
     onWhatsApp: (invoice: Invoice) => void;
     onMore: (invoice: Invoice) => void;
+    onCancel?: (invoice: Invoice) => void;
 }>(({
     invoice,
     isSelected,
@@ -63,7 +65,8 @@ const InvoiceRow = React.memo<{
     onPrint,
     onDownload,
     onWhatsApp,
-    onMore
+    onMore,
+    onCancel
 }) => {
     return (
         <tr className="hover:bg-gray-50 transition-colors">
@@ -116,6 +119,7 @@ const InvoiceRow = React.memo<{
                     onDownload={onDownload}
                     onWhatsApp={onWhatsApp}
                     onMore={onMore}
+                    onCancel={onCancel}
                 />
             </td>
         </tr>
@@ -134,7 +138,8 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
     onPrint,
     onDownload,
     onWhatsApp,
-    onMore
+    onMore,
+    onCancel
 }) => {
     const parentRef = useRef<HTMLDivElement>(null);
     const isAllSelected = invoices.length > 0 && invoices.every(invoice => selectedIds.has(invoice.id));
@@ -229,6 +234,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                                                         onDownload={onDownload}
                                                         onWhatsApp={onWhatsApp}
                                                         onMore={onMore}
+                                                        onCancel={onCancel}
                                                     />
                                                 </tbody>
                                             </table>

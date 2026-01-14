@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RefreshCw, Download, Plus, Calendar } from 'lucide-react';
 import { Button, Pagination } from '../../global';
+import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 import {
     InvoiceFilters,
     InvoiceTable,
@@ -11,6 +12,7 @@ import {
     useInvoiceFilters,
     useInvoiceActions
 } from './hooks';
+import type { Invoice } from './types/invoiceTypes';
 
 interface InvoiceListProps {
     onClose?: () => void;
@@ -53,6 +55,28 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         handleDownloadInvoice,
         handleMoreOptions
     } = useInvoiceActions();
+
+    // Cancel modal state
+    const [cancelModalOpen, setCancelModalOpen] = useState(false);
+    const [invoiceToCancel, setInvoiceToCancel] = useState<any>(null);
+
+    const handleCancelInvoice = (invoice: Invoice) => {
+        setInvoiceToCancel({
+            invoice_id: invoice.invoice_id || invoice.id,
+            invoice_number: invoice.invoice_number,
+            customer_name: invoice.customer_name || '',
+            total_amount: invoice.final_amount || 0,
+            amount_paid: invoice.amount_paid || 0,
+            invoice_status: invoice.invoice_status || ''
+        });
+        setCancelModalOpen(true);
+    };
+
+    const handleCancelSuccess = () => {
+        setCancelModalOpen(false);
+        setInvoiceToCancel(null);
+        handleRefresh();
+    };
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -217,6 +241,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                             setTimeout(() => whatsappSelected(invoices), 0);
                         }}
                         onMore={handleMoreOptions}
+                        onCancel={handleCancelInvoice}
                     />
                 )}
             </div>
@@ -244,6 +269,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                     <span><kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded">Alt+A</kbd> Select All</span>
                 </div>
             </div>
+
+            {/* Cancel Invoice Modal */}
+            <CancelInvoiceModal
+                isOpen={cancelModalOpen}
+                onClose={() => { setCancelModalOpen(false); setInvoiceToCancel(null); }}
+                invoice={invoiceToCancel}
+                onCancelled={handleCancelSuccess}
+            />
         </div>
     );
 };
