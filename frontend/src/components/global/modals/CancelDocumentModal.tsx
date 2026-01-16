@@ -1,45 +1,120 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
-import { invoicesApi } from '../../../services/api';
+import { ordersApi } from '../../../services/api';
 
-// Flexible interface to work with different invoice shapes
-interface CancelInvoiceData {
-    invoice_id?: number | string;
-    id?: number | string;
-    invoice_number?: string;
+// Document types that can be cancelled
+export type CancellableDocumentType = 'order' | 'challan' | 'payment' | 'credit_note' | 'debit_note' | 'return';
+
+interface CancelDocumentData {
+    id: number | string;
+    document_number?: string;
     customer_name?: string;
-    total_amount?: number;
-    final_amount?: number;
-    amount_paid?: number;
-    invoice_status?: string;
+    supplier_name?: string;
+    amount?: number;
+    status?: string;
 }
 
-interface CancelInvoiceModalProps {
+interface CancelDocumentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    invoice: CancelInvoiceData | null;
+    documentType: CancellableDocumentType;
+    document: CancelDocumentData | null;
     onCancelled?: () => void;
 }
 
-const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
+// Document type configurations
+const DOCUMENT_CONFIG: Record<CancellableDocumentType, {
+    title: string;
+    labelField: string;
+    partyLabel: string;
+    apiEndpoint: string;
+    warnings: string[];
+}> = {
+    order: {
+        title: 'Cancel Order',
+        labelField: 'Order #',
+        partyLabel: 'Customer',
+        apiEndpoint: '/orders/{id}/cancel/',
+        warnings: [
+            'Mark the order as cancelled',
+            'Release any reserved inventory',
+            'Cannot convert to invoice after cancellation'
+        ]
+    },
+    challan: {
+        title: 'Cancel Challan',
+        labelField: 'Challan #',
+        partyLabel: 'Customer',
+        apiEndpoint: '/orders/{id}/cancel/',
+        warnings: [
+            'Mark the challan as cancelled',
+            'Cannot convert to invoice after cancellation'
+        ]
+    },
+    payment: {
+        title: 'Cancel Payment',
+        labelField: 'Payment #',
+        partyLabel: 'Party',
+        apiEndpoint: '/payments/{id}/cancel/',
+        warnings: [
+            'Mark the payment as cancelled',
+            'Update invoice/bill outstanding amount',
+            'Reverse ledger entries'
+        ]
+    },
+    credit_note: {
+        title: 'Cancel Credit Note',
+        labelField: 'Credit Note #',
+        partyLabel: 'Customer',
+        apiEndpoint: '/credit-notes/{id}/cancel/',
+        warnings: [
+            'Mark the credit note as cancelled',
+            'Reverse customer credit balance',
+            'Update ledger entries'
+        ]
+    },
+    debit_note: {
+        title: 'Cancel Debit Note',
+        labelField: 'Debit Note #',
+        partyLabel: 'Supplier',
+        apiEndpoint: '/debit-notes/{id}/cancel/',
+        warnings: [
+            'Mark the debit note as cancelled',
+            'Reverse supplier debit balance',
+            'Update ledger entries'
+        ]
+    },
+    return: {
+        title: 'Cancel Return',
+        labelField: 'Return #',
+        partyLabel: 'Customer',
+        apiEndpoint: '/returns/{id}/cancel/',
+        warnings: [
+            'Mark the return as cancelled',
+            'Reverse inventory movements',
+            'Update customer account'
+        ]
+    }
+};
+
+const CancelDocumentModal: React.FC<CancelDocumentModalProps> = ({
     isOpen,
     onClose,
-    invoice,
+    documentType,
+    document,
     onCancelled
 }) => {
     const [reason, setReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [error, setError] = useState('');
-    const [generateCreditNote, setGenerateCreditNote] = useState(false);
 
-    // Check if invoice is posted (needs credit note for GST)
-    const isPosted = invoice?.invoice_status === 'posted';
+    const config = DOCUMENT_CONFIG[documentType];
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
 
-        if (!invoice) return;
+        if (!document) return;
 
         if (!reason.trim()) {
             setError('Please provide a reason for cancellation');
@@ -48,17 +123,26 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
 
         setCancelling(true);
         try {
-            await invoicesApi.cancel(invoice.invoice_id || invoice.id!, reason.trim(), generateCreditNote);
+            // Call appropriate API based on document type
+            const endpoint = config.apiEndpoint.replace('{id}', String(document.id));
+
+            // Use the appropriate API - for now using ordersApi for orders/challans
+            if (documentType === 'order' || documentType === 'challan') {
+                await ordersApi.cancel(document.id, reason.trim());
+            } else {
+                // Generic POST for other types - would need specific APIs
+                const { apiHelpers } = await import('../../../services/api/apiClient');
+                await apiHelpers.post(endpoint, { reason: reason.trim() });
+            }
 
             setReason('');
-            setGenerateCreditNote(false);
             onClose();
 
             if (onCancelled) {
                 onCancelled();
             }
         } catch (error: any) {
-            let errorMessage = 'Failed to cancel invoice';
+            let errorMessage = `Failed to cancel ${documentType}`;
             if (error.response?.data?.detail) {
                 if (typeof error.response.data.detail === 'string') {
                     errorMessage = error.response.data.detail;
@@ -78,9 +162,9 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
         }
     };
 
-    if (!isOpen || !invoice) return null;
+    if (!isOpen || !document) return null;
 
-    const hasPaidAmount = (invoice.amount_paid || 0) > 0;
+    const partyName = document.customer_name || document.supplier_name || 'N/A';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -89,7 +173,7 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
                 <div className="flex items-center justify-between p-4 border-b bg-red-50">
                     <h3 className="text-lg font-semibold flex items-center gap-2 text-red-700">
                         <AlertTriangle className="w-5 h-5" />
-                        Cancel Invoice
+                        {config.title}
                     </h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                         <X className="w-5 h-5" />
@@ -98,20 +182,22 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
 
                 {/* Content */}
                 <form onSubmit={handleSubmit} className="p-4">
-                    {/* Invoice Summary */}
+                    {/* Document Summary */}
                     <div className="bg-gray-50 rounded-lg p-3 mb-4">
                         <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm text-gray-600">Invoice #</span>
-                            <span className="font-medium">{invoice.invoice_number}</span>
+                            <span className="text-sm text-gray-600">{config.labelField}</span>
+                            <span className="font-medium">{document.document_number || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm text-gray-600">Customer</span>
-                            <span className="font-medium">{invoice.customer_name}</span>
+                            <span className="text-sm text-gray-600">{config.partyLabel}</span>
+                            <span className="font-medium">{partyName}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Amount</span>
-                            <span className="font-medium">₹{(invoice.total_amount || invoice.final_amount || 0).toFixed(2)}</span>
-                        </div>
+                        {document.amount !== undefined && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Amount</span>
+                                <span className="font-medium">₹{(document.amount || 0).toFixed(2)}</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Warning */}
@@ -120,23 +206,15 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
                             <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm text-yellow-800">
                                 <p className="font-medium">This action cannot be undone!</p>
-                                <p className="mt-1">Cancelling this invoice will:</p>
+                                <p className="mt-1">Cancelling will:</p>
                                 <ul className="list-disc list-inside mt-1 text-yellow-700">
-                                    <li>Mark the invoice as cancelled</li>
-                                    <li>Restore inventory stock (if posted)</li>
-                                    <li>Remove from customer outstanding</li>
+                                    {config.warnings.map((warning, idx) => (
+                                        <li key={idx}>{warning}</li>
+                                    ))}
                                 </ul>
                             </div>
                         </div>
                     </div>
-
-                    {/* Error if paid */}
-                    {hasPaidAmount && (
-                        <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-lg text-sm">
-                            <strong>Cannot cancel:</strong> This invoice has ₹{(invoice.amount_paid || 0).toFixed(2)} in payments.
-                            Please reverse all payments first.
-                        </div>
-                    )}
 
                     {/* Error Message */}
                     {error && (
@@ -156,33 +234,9 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
                             className="px-3 py-2 w-full border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             rows={3}
                             placeholder="Enter reason for cancellation..."
-                            disabled={hasPaidAmount}
                             required
                         />
                     </div>
-
-                    {/* Credit Note Option - only for posted invoices */}
-                    {isPosted && !hasPaidAmount && (
-                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <label className="flex items-start gap-3 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={generateCreditNote}
-                                    onChange={(e) => setGenerateCreditNote(e.target.checked)}
-                                    className="mt-1 w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <div>
-                                    <span className="text-sm font-medium text-blue-800">
-                                        Generate Credit Note
-                                    </span>
-                                    <p className="text-xs text-blue-600 mt-0.5">
-                                        Use this if invoice was already filed in GST returns.
-                                        Creates a formal accounting reversal document.
-                                    </p>
-                                </div>
-                            </label>
-                        </div>
-                    )}
                 </form>
 
                 {/* Footer */}
@@ -191,14 +245,14 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
                         onClick={onClose}
                         className="px-4 py-2 text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
                     >
-                        Keep Invoice
+                        Keep {documentType.replace('_', ' ')}
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={cancelling || !reason.trim() || hasPaidAmount}
+                        disabled={cancelling || !reason.trim()}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
-                        {cancelling ? 'Cancelling...' : 'Cancel Invoice'}
+                        {cancelling ? 'Cancelling...' : `Cancel ${documentType.replace('_', ' ')}`}
                     </button>
                 </div>
             </div>
@@ -206,4 +260,4 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
     );
 };
 
-export default CancelInvoiceModal;
+export default CancelDocumentModal;

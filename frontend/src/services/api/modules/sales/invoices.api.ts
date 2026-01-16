@@ -111,8 +111,8 @@ export const invoicesApi = {
     },
 
     /** Cancel invoice */
-    cancel: (id: number | string, reason: string) => {
-        return apiHelpers.post(ENDPOINTS.CANCEL(id), { reason });
+    cancel: (id: number | string, reason: string, createCreditNote: boolean = false) => {
+        return apiHelpers.post(ENDPOINTS.CANCEL(id), { reason, create_credit_note: createCreditNote });
     },
 
     /** Get invoice PDF */

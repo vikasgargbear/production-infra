@@ -295,7 +295,7 @@ async def update_invoice(
 @with_tenant_context
 async def cancel_invoice(
     invoice_id: int,
-    reason: str = None,
+    request: InvoiceCancelRequest,
     _: dict = Depends(PermissionChecker("sales", "delete")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -306,6 +306,7 @@ async def cancel_invoice(
     - For draft invoices: Simply marks as cancelled
     - For posted invoices: Creates reversal entries
     - Cannot cancel invoices with payments (must reverse payments first)
+    - Optionally generates a Credit Note for GST compliance
     """
     try:
         org_id = str(context.org_id)
@@ -335,18 +336,46 @@ async def cancel_invoice(
             invoice_id=invoice_id,
             org_id=org_id,
             cancelled_by=context.user_id,
-            reason=reason,
+            reason=request.reason,
             reverse_inventory=(invoice_status == 'posted')
         )
         
+        credit_note_id = None
+        credit_note_number = None
+        
+        # Generate Credit Note if requested (for GST compliance)
+        if request.create_credit_note and invoice_status == 'posted':
+            try:
+                from ....services.finance.credit_note.credit_note_service import CreditNoteService
+                
+                credit_note_result = CreditNoteService.create_from_cancelled_invoice(
+                    db=db,
+                    invoice_id=invoice_id,
+                    org_id=org_id,
+                    created_by=context.user_id,
+                    reason=request.reason or "Invoice cancelled"
+                )
+                credit_note_id = credit_note_result.get("credit_note_id")
+                credit_note_number = credit_note_result.get("credit_note_number")
+            except Exception as cn_error:
+                # Log but don't fail - invoice is already cancelled
+                logger.warning(f"Failed to generate credit note for invoice {invoice_id}: {cn_error}")
+        
         db.commit()
         
-        return {
+        response = {
             "success": True,
             "message": "Invoice cancelled successfully",
             "invoice_id": invoice_id,
             "previous_status": invoice_status
         }
+        
+        if credit_note_id:
+            response["credit_note_id"] = credit_note_id
+            response["credit_note_number"] = credit_note_number
+            response["message"] = f"Invoice cancelled and Credit Note {credit_note_number} generated"
+        
+        return response
         
     except HTTPException:
         raise

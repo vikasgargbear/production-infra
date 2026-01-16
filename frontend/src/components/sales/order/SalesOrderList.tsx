@@ -1,10 +1,11 @@
 import React, { useState, useEffect, ReactElement } from 'react';
 import {
     FileText, Truck, Search,
-    Eye, Download, Printer, Calendar, ChevronDown, MessageCircle
+    Eye, Download, Printer, Calendar, ChevronDown, MessageCircle, XCircle
 } from 'lucide-react';
 import { salesOrdersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
+import CancelDocumentModal from '../../global/modals/CancelDocumentModal';
 import jsPDF from 'jspdf';
 import type { Order } from '../../../types/models';
 
@@ -38,6 +39,21 @@ const OrderList: React.FC = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [dateFilter, setDateFilter] = useState('all');
     const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+
+    // Cancel modal state
+    const [cancelModalOpen, setCancelModalOpen] = useState(false);
+    const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+
+    const handleCancelOrder = (order: Order) => {
+        setOrderToCancel(order);
+        setCancelModalOpen(true);
+    };
+
+    const handleCancelSuccess = () => {
+        setCancelModalOpen(false);
+        setOrderToCancel(null);
+        loadOrders();
+    };
 
     useEffect(() => {
         loadOrders();
@@ -466,6 +482,17 @@ const OrderList: React.FC = () => {
                                                 Challan
                                             </button>
                                         )}
+
+                                        {/* Cancel Order Button */}
+                                        {order.order_status !== 'cancelled' && order.order_status !== 'completed' && !order.invoice_created && (
+                                            <button
+                                                onClick={() => handleCancelOrder(order)}
+                                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Cancel Order"
+                                            >
+                                                <XCircle className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -479,6 +506,20 @@ const OrderList: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Cancel Order Modal */}
+            <CancelDocumentModal
+                isOpen={cancelModalOpen}
+                onClose={() => { setCancelModalOpen(false); setOrderToCancel(null); }}
+                documentType="order"
+                document={orderToCancel ? {
+                    id: orderToCancel.order_id,
+                    document_number: orderToCancel.order_number || `ORD-${orderToCancel.order_id}`,
+                    customer_name: orderToCancel.customer_name,
+                    amount: orderToCancel.final_amount
+                } : null}
+                onCancelled={handleCancelSuccess}
+            />
         </div>
     );
 };
