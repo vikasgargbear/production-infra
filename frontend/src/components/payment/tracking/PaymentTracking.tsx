@@ -5,7 +5,7 @@
  * Now uses usePaymentTracking hook for all logic.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Search,
     Download,
@@ -22,6 +22,7 @@ import {
     XCircle
 } from 'lucide-react';
 import { usePaymentTracking } from '../hooks/usePaymentTracking';
+import CancelDocumentModal from '../../global/modals/CancelDocumentModal';
 
 const PaymentTracking: React.FC = () => {
     const {
@@ -50,6 +51,21 @@ const PaymentTracking: React.FC = () => {
         getPaymentModeIcon,
         getPaymentModeColor
     } = usePaymentTracking();
+
+    // Cancel modal state
+    const [cancelModalOpen, setCancelModalOpen] = useState(false);
+    const [paymentToCancel, setPaymentToCancel] = useState<any>(null);
+
+    const handleCancelPayment = (payment: any) => {
+        setPaymentToCancel(payment);
+        setCancelModalOpen(true);
+    };
+
+    const handleCancelSuccess = () => {
+        setCancelModalOpen(false);
+        setPaymentToCancel(null);
+        handleRefresh();
+    };
 
     if (loading) {
         return (
@@ -283,9 +299,16 @@ const PaymentTracking: React.FC = () => {
                                                     <button className="text-gray-600 hover:text-gray-900">
                                                         <Edit className="h-4 w-4" />
                                                     </button>
-                                                    <button className="text-red-600 hover:text-red-900">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                    {/* Cancel button - only for non-cancelled payments */}
+                                                    {(payment.status as string) !== 'cancelled' && (
+                                                        <button
+                                                            onClick={() => handleCancelPayment(payment)}
+                                                            className="text-red-600 hover:text-red-900"
+                                                            title="Cancel Payment"
+                                                        >
+                                                            <XCircle className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -334,6 +357,20 @@ const PaymentTracking: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Cancel Payment Modal */}
+            <CancelDocumentModal
+                isOpen={cancelModalOpen}
+                onClose={() => { setCancelModalOpen(false); setPaymentToCancel(null); }}
+                documentType="payment"
+                document={paymentToCancel ? {
+                    id: paymentToCancel.id,
+                    document_number: paymentToCancel.invoiceNumber || `PAY-${paymentToCancel.id}`,
+                    customer_name: paymentToCancel.customerName,
+                    amount: paymentToCancel.paymentAmount
+                } : null}
+                onCancelled={handleCancelSuccess}
+            />
         </div>
     );
 };

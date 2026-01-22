@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Download, Eye, Edit, Printer,
   MoreHorizontal, Package, RotateCcw,
-  X, Check, AlertCircle, RefreshCw
+  X, Check, AlertCircle, RefreshCw, XCircle
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
 import { returnsApi } from '../../services/api';
+import CancelDocumentModal from '../global/modals/CancelDocumentModal';
 
 interface ReturnsListHistoryProps {
   onClose?: () => void;
@@ -82,6 +83,21 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   // State for real data
   const [returns, setReturns] = useState<Return[]>([]);
 
+  // Cancel modal state
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [returnToCancel, setReturnToCancel] = useState<Return | null>(null);
+
+  const handleCancelReturn = (returnItem: Return) => {
+    setReturnToCancel(returnItem);
+    setCancelModalOpen(true);
+  };
+
+  const handleCancelSuccess = () => {
+    setCancelModalOpen(false);
+    setReturnToCancel(null);
+    fetchReturns(pagination.page);
+  };
+
   // ESC key handler for better UX
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +150,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const fetchReturns = async (page = 1, filters: any = {}) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Prepare search parameters
       const searchParams: any = {
@@ -142,26 +158,26 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         offset: (page - 1) * pagination.per_page,
         ...filters
       };
-      
+
       // If there's a search query, add it to the filters
       if (filters.search && filters.search.trim()) {
         searchParams.search = filters.search.trim();
       }
-      
+
       // Fetch both sales and purchase returns
       // Using Promise.allSettled to handle if one endpoint fails
       const [salesResult, purchaseResult] = await Promise.allSettled([
         returnsApi.getCustomerReturns(searchParams),
         returnsApi.getSupplierReturns(searchParams)
       ]);
-      
+
       // Handle responses based on their status
       const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : null;
       const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : null;
 
       const salesReturnsList = salesResponse?.data?.returns || [];
       const purchaseReturnsList = purchaseResponse?.data?.data || [];
-      
+
       const salesReturns: Return[] = (Array.isArray(salesReturnsList) ? salesReturnsList : []).map((ret: any) => ({
         id: ret.return_id || ret.id,  // Backend uses return_id
         return_no: ret.return_number || ret.return_no || ret.sales_return_no || `SR-${ret.return_id || ret.id}`,
@@ -194,7 +210,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
       // Combine and filter based on type filter if specified
       let allReturns = [...salesReturns, ...purchaseReturns];
-      
+
       if (filters.return_type && filters.return_type !== 'all') {
         allReturns = allReturns.filter(ret => ret.return_type === filters.return_type);
       }
@@ -206,7 +222,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         per_page: pagination.per_page,
         total_pages: Math.ceil(allReturns.length / pagination.per_page)
       });
-      
+
       // If both endpoints failed, show a message
       if (salesResult.status === 'rejected' && purchaseResult.status === 'rejected') {
         setError('Returns feature is currently being deployed. Please try again later.');
@@ -242,7 +258,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     const timeoutId = setTimeout(() => {
       fetchReturns(1, { search: query });
     }, 300);
-    
+
     return () => clearTimeout(timeoutId);
   };
 
@@ -296,7 +312,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       'canceled': 'Cancelled', // Handle US spelling
       'draft': 'Draft',
       'sent': 'Sent',
-      
+
       // Common uppercase variations
       'PENDING': 'Pending',
       'APPROVED': 'Approved',
@@ -306,12 +322,12 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       'CANCELED': 'Cancelled',
       'DRAFT': 'Draft',
       'SENT': 'Sent',
-      
+
       // Handle null/undefined cases
       'null': 'Unknown',
       'undefined': 'Unknown',
       '': 'Unknown',
-      
+
       // Handle numeric statuses if backend uses them
       '0': 'Draft',
       '1': 'Pending',
@@ -320,14 +336,14 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       '4': 'Completed',
       '5': 'Cancelled'
     };
-    
+
     const normalizedStatus = status.toString().toLowerCase().trim();
     const mappedStatus = statusMap[normalizedStatus];
-    
+
     if (mappedStatus) {
       return mappedStatus;
     }
-    
+
     // If no mapping found, log it and return the original value
     // No status mapping found, returning original value
     return status;
@@ -366,7 +382,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       header: 'Customer/Supplier',
       render: (value: string, returnItem: Return) => (
         <div className="text-gray-900">
-          {returnItem.return_type === 'sales' 
+          {returnItem.return_type === 'sales'
             ? returnItem.customer_name || 'Unknown Customer'
             : returnItem.supplier_name || 'Unknown Supplier'
           }
@@ -407,8 +423,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         const statusText = getStatusText(returnItem.status);
         // Status column render
         return (
-          <StatusBadge 
-            status={statusText} 
+          <StatusBadge
+            status={statusText}
             variant="light"
           />
         );
@@ -420,8 +436,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       header: 'Actions',
       render: (value: any, returnItem: Return) => (
         <div className="flex items-center space-x-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => handleViewReturn(returnItem)}
             title="View Return"
@@ -429,8 +445,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           >
             <Eye className="w-5 h-5 text-blue-600" />
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => handleEditReturn(returnItem)}
             title="Edit Return"
@@ -438,8 +454,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           >
             <Edit className="w-5 h-5 text-green-600" />
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => handlePrintReturn(returnItem)}
             title="Print Return"
@@ -447,8 +463,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           >
             <Printer className="w-5 h-5 text-purple-600" />
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => handleMoreOptions(returnItem)}
             title="More Options"
@@ -456,6 +472,18 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           >
             <MoreHorizontal className="w-5 h-5 text-gray-600" />
           </Button>
+          {/* Cancel button - only for non-cancelled, non-completed returns */}
+          {returnItem.status !== 'cancelled' && returnItem.status !== 'completed' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleCancelReturn(returnItem)}
+              title="Cancel Return"
+              className="h-10 w-10 p-0 hover:bg-red-50"
+            >
+              <XCircle className="w-5 h-5 text-red-500" />
+            </Button>
+          )}
         </div>
       ),
       width: '180px',
@@ -465,7 +493,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   return (
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Returns History"
@@ -476,7 +504,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           onClose={onClose}
           historyType="return"
           showSaveDraft={false}
-          onSaveDraft={() => {}}
+          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: "Refresh",
@@ -496,7 +524,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
-            
+
             {/* Global Inline Filter Panel */}
             <div className="mb-6">
               <InlineFilterPanel
@@ -522,9 +550,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedReturns.length}
-              onApprove={() => {/* TODO: Implement approve selected */}}
-              onReject={() => {/* TODO: Implement reject selected */}}
-              onExport={() => {/* TODO: Implement export selected */}}
+              onApprove={() => {/* TODO: Implement approve selected */ }}
+              onReject={() => {/* TODO: Implement reject selected */ }}
+              onExport={() => {/* TODO: Implement export selected */ }}
               onClear={() => setSelectedReturns([])}
             />
 
@@ -544,16 +572,16 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                     {searchQuery ? `No returns found matching "${searchQuery}"` : 'No returns found'}
                   </p>
                   <p className="text-sm text-gray-400">
-                    {error ? 'There was an error loading returns' : 
-                     searchQuery ? 'Try adjusting your search terms or filters' : 'No returns match your criteria'}
+                    {error ? 'There was an error loading returns' :
+                      searchQuery ? 'Try adjusting your search terms or filters' : 'No returns match your criteria'}
                   </p>
                   {searchQuery && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setSearchQuery('');
                         fetchReturns(1);
-                      }} 
+                      }}
                       className="mt-4"
                     >
                       Clear Search
@@ -572,7 +600,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                   paginated={false}
                   pageSize={pagination.per_page}
                 />
-                
+
                 {/* Pagination Controls */}
                 {pagination.total_pages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
@@ -607,6 +635,21 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
+
+      {/* Cancel Return Modal */}
+      <CancelDocumentModal
+        isOpen={cancelModalOpen}
+        onClose={() => { setCancelModalOpen(false); setReturnToCancel(null); }}
+        documentType="return"
+        document={returnToCancel ? {
+          id: returnToCancel.id,
+          document_number: returnToCancel.return_no,
+          customer_name: returnToCancel.customer_name,
+          supplier_name: returnToCancel.supplier_name,
+          amount: returnToCancel.total_amount
+        } : null}
+        onCancelled={handleCancelSuccess}
+      />
     </div>
   );
 };
