@@ -477,12 +477,16 @@ export interface CompanyInfo {
     name?: string;
     address?: string;
     gst_number?: string;
+    gst?: string;  // Alternative from CompanyContext
     phone?: string;
     email?: string;
     logo?: string;
     drugLicense?: string;
+    drug_license_no?: string;  // Alternative from CompanyContext
+    state?: string;
     upiId?: string;
     bankAccounts?: BankAccount[];
+    paymentQR?: string;
 }
 
 // ==================== PRODUCT INPUT ====================

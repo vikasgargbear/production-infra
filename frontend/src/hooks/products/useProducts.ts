@@ -37,22 +37,20 @@ export function useProductSearch(
   },
   options?: UseQueryOptions<ApiResponse<Product[]>, unknown, ApiResponse<Product[]>>
 ) {
-  return useQuery<ApiResponse<Product[]>>(
-    productKeys.search(query, params),
-    async () => {
+  return useQuery<ApiResponse<Product[]>>({
+    queryKey: productKeys.search(query, params),
+    queryFn: async () => {
       const response = await productsApi.search(query, {
         limit: params?.limit || 50,
         category: params?.category
       });
       return (response as any).data || response;
     },
-    {
-      enabled: query.length >= 2, // Only search with 2+ characters
-      staleTime: 1 * 60 * 1000, // 1 minute
-      keepPreviousData: true,
-      ...options,
-    }
-  );
+    enabled: query.length >= 2, // Only search with 2+ characters
+    staleTime: 1 * 60 * 1000, // 1 minute
+    placeholderData: (previousData) => previousData,
+    ...options,
+  });
 }
 
 /**
@@ -62,18 +60,16 @@ export function useProduct(
   productId: string,
   options?: UseQueryOptions<ApiResponse<Product>, unknown, ApiResponse<Product>>
 ) {
-  return useQuery<ApiResponse<Product>>(
-    productKeys.detail(productId),
-    async () => {
+  return useQuery<ApiResponse<Product>>({
+    queryKey: productKeys.detail(productId),
+    queryFn: async () => {
       const response = await productsApi.getById(productId);
       return (response as any).data || response;
     },
-    {
-      enabled: !!productId,
-      staleTime: 5 * 60 * 1000,
-      ...options,
-    }
-  );
+    enabled: !!productId,
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
 }
 
 /**
@@ -84,19 +80,17 @@ export function useCreateProduct(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (data: ProductCreateInput) => {
+  return useMutation({
+    mutationFn: async (data: ProductCreateInput) => {
       const response = await productsApi.create(data);
       return (response as any).data || response;
     },
-    {
-      onSuccess: (response) => {
-        // Invalidate product queries
-        queryClient.invalidateQueries(productKeys.all);
-      },
-      ...options,
-    }
-  );
+    onSuccess: (response) => {
+      // Invalidate product queries
+      queryClient.invalidateQueries({ queryKey: productKeys.all });
+    },
+    ...options,
+  });
 }
 
 /**
@@ -106,16 +100,14 @@ export function useProductBatches(
   productId: string,
   options?: any
 ) {
-  return useQuery(
-    productKeys.batches(productId),
-    async () => {
+  return useQuery({
+    queryKey: productKeys.batches(productId),
+    queryFn: async () => {
       const response = await batchesApi.getByProduct(parseInt(productId));
       return (response as any).data || response;
     },
-    {
-      enabled: !!productId,
-      staleTime: 2 * 60 * 1000, // 2 minutes
-      ...options,
-    }
-  );
+    enabled: !!productId,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
 }

@@ -133,9 +133,9 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
     });
 
     // Fetch outstanding data
-    const { data, isLoading, refetch, error } = useQuery(
-        ['outstanding-data', partyType, filters],
-        async () => {
+    const { data, isLoading, refetch, error } = useQuery({
+        queryKey: ['outstanding-data', partyType, filters],
+        queryFn: async () => {
             try {
                 const response = await apiClient.get('/sales/outstanding', { params: {} });
                 const responseData = response.data || {};
@@ -258,8 +258,10 @@ export function useOutstanding({ partyType = 'customer' }: UseOutstandingProps =
                 return { parties: [], summary: defaultSummary };
             }
         },
-        { keepPreviousData: true, enabled: partyType === 'customer', retry: 1 }
-    );
+        placeholderData: (previousData) => previousData,
+        enabled: partyType === 'customer',
+        retry: 1
+    });
 
     const parties = data?.parties || [];
     const summary = data?.summary || defaultSummary;

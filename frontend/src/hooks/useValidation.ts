@@ -52,45 +52,41 @@ export const useInvoiceValidation = (options: ValidationOptions = {}) => {
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
     const [validationWarnings, setValidationWarnings] = useState<ValidationWarning[]>([]);
 
-    const validateMutation = useMutation(
-        (invoiceData: unknown) => ValidationApiService.validateInvoice(invoiceData),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    setValidationErrors(data.data?.errors || []);
-                    setValidationWarnings(data.data?.warnings || []);
-                    onSuccess?.(data.data);
-                } else {
-                    setValidationErrors([{ code: 'ERROR', message: data.error || 'Validation failed' }]);
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                setValidationErrors([{ code: 'VALIDATION_ERROR', message: 'Validation service unavailable' }]);
-                onError?.(error);
+    const validateMutation = useMutation({
+        mutationFn: (invoiceData: unknown) => ValidationApiService.validateInvoice(invoiceData),
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                setValidationErrors(data.data?.errors || []);
+                setValidationWarnings(data.data?.warnings || []);
+                onSuccess?.(data.data);
+            } else {
+                setValidationErrors([{ code: 'ERROR', message: data.error || 'Validation failed' }]);
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            setValidationErrors([{ code: 'VALIDATION_ERROR', message: 'Validation service unavailable' }]);
+            onError?.(error);
         }
-    );
+    });
 
-    const comprehensiveValidateMutation = useMutation(
-        (invoiceData: unknown) => ValidationApiService.comprehensiveInvoiceValidation(invoiceData),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    setValidationErrors(data.data?.errors || []);
-                    setValidationWarnings(data.data?.warnings || []);
-                    onSuccess?.(data.data);
-                } else {
-                    setValidationErrors([{ code: 'ERROR', message: data.error || 'Validation failed' }]);
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                setValidationErrors([{ code: 'VALIDATION_ERROR', message: 'Validation service unavailable' }]);
-                onError?.(error);
+    const comprehensiveValidateMutation = useMutation({
+        mutationFn: (invoiceData: unknown) => ValidationApiService.comprehensiveInvoiceValidation(invoiceData),
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                setValidationErrors(data.data?.errors || []);
+                setValidationWarnings(data.data?.warnings || []);
+                onSuccess?.(data.data);
+            } else {
+                setValidationErrors([{ code: 'ERROR', message: data.error || 'Validation failed' }]);
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            setValidationErrors([{ code: 'VALIDATION_ERROR', message: 'Validation service unavailable' }]);
+            onError?.(error);
         }
-    );
+    });
 
     const clearValidation = useCallback(() => {
         setValidationErrors([]);
@@ -103,7 +99,7 @@ export const useInvoiceValidation = (options: ValidationOptions = {}) => {
         validate: validateMutation.mutate,
         validateComprehensive: comprehensiveValidateMutation.mutate,
         clearValidation,
-        isValidating: validateMutation.isLoading || comprehensiveValidateMutation.isLoading,
+        isValidating: validateMutation.isPending || comprehensiveValidateMutation.isPending,
         validationErrors,
         validationWarnings,
         isValid: validationErrors.length === 0,
@@ -121,25 +117,23 @@ export const useInvoiceValidation = (options: ValidationOptions = {}) => {
 export const useCustomerValidation = (options: ValidationOptions = {}) => {
     const { onSuccess, onError } = options;
 
-    const validateMutation = useMutation(
-        (customerData: unknown) => ValidationApiService.validateCustomer(customerData),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    onSuccess?.(data.data);
-                } else {
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                onError?.(error);
+    const validateMutation = useMutation({
+        mutationFn: (customerData: unknown) => ValidationApiService.validateCustomer(customerData),
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                onSuccess?.(data.data);
+            } else {
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            onError?.(error);
         }
-    );
+    });
 
     return {
         validateCustomer: validateMutation.mutate,
-        isValidating: validateMutation.isLoading,
+        isValidating: validateMutation.isPending,
         validationData: validateMutation.data?.data,
         validationError: validateMutation.error,
         isValid: validateMutation.isSuccess && validateMutation.data?.success,
@@ -151,25 +145,23 @@ export const useCustomerValidation = (options: ValidationOptions = {}) => {
 export const useProductValidation = (options: ValidationOptions = {}) => {
     const { onSuccess, onError } = options;
 
-    const validateMutation = useMutation(
-        (productData: unknown) => ValidationApiService.validateProduct(productData),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    onSuccess?.(data.data);
-                } else {
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                onError?.(error);
+    const validateMutation = useMutation({
+        mutationFn: (productData: unknown) => ValidationApiService.validateProduct(productData),
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                onSuccess?.(data.data);
+            } else {
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            onError?.(error);
         }
-    );
+    });
 
     return {
         validateProduct: validateMutation.mutate,
-        isValidating: validateMutation.isLoading,
+        isValidating: validateMutation.isPending,
         validationData: validateMutation.data?.data,
         validationError: validateMutation.error,
         isValid: validateMutation.isSuccess && validateMutation.data?.success,
@@ -181,25 +173,23 @@ export const useProductValidation = (options: ValidationOptions = {}) => {
 export const useStockValidation = (options: ValidationOptions = {}) => {
     const { onSuccess, onError } = options;
 
-    const validateMutation = useMutation(
-        (items: unknown) => ValidationApiService.validateStockAvailability(items),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    onSuccess?.(data.data);
-                } else {
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                onError?.(error);
+    const validateMutation = useMutation({
+        mutationFn: (items: unknown) => ValidationApiService.validateStockAvailability(items),
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                onSuccess?.(data.data);
+            } else {
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            onError?.(error);
         }
-    );
+    });
 
     return {
         validateStock: validateMutation.mutate,
-        isValidating: validateMutation.isLoading,
+        isValidating: validateMutation.isPending,
         stockData: validateMutation.data?.data,
         stockErrors: (validateMutation.data?.data?.errors as ValidationError[]) || [],
         hasStockIssues: ((validateMutation.data?.data?.errors as ValidationError[])?.length || 0) > 0,
@@ -216,26 +206,24 @@ interface CreditValidationParams {
 export const useCreditValidation = (options: ValidationOptions = {}) => {
     const { onSuccess, onError } = options;
 
-    const validateMutation = useMutation(
-        ({ customerId, amount }: CreditValidationParams) =>
+    const validateMutation = useMutation({
+        mutationFn: ({ customerId, amount }: CreditValidationParams) =>
             ValidationApiService.validateCustomerCredit(customerId, amount),
-        {
-            onSuccess: (data: ValidationResult) => {
-                if (data.success) {
-                    onSuccess?.(data.data);
-                } else {
-                    onError?.(data.error);
-                }
-            },
-            onError: (error: unknown) => {
-                onError?.(error);
+        onSuccess: (data: ValidationResult) => {
+            if (data.success) {
+                onSuccess?.(data.data);
+            } else {
+                onError?.(data.error);
             }
+        },
+        onError: (error: unknown) => {
+            onError?.(error);
         }
-    );
+    });
 
     return {
         validateCredit: validateMutation.mutate,
-        isValidating: validateMutation.isLoading,
+        isValidating: validateMutation.isPending,
         creditData: validateMutation.data?.data,
         creditAvailable: validateMutation.data?.data?.credit_available as boolean | undefined,
         creditWarnings: (validateMutation.data?.data?.warnings as ValidationWarning[]) || [],
@@ -246,15 +234,13 @@ export const useCreditValidation = (options: ValidationOptions = {}) => {
 
 // Validation Rules Hook
 export const useValidationRules = (entityType: string) => {
-    const { data: rulesData, isLoading, error, refetch } = useQuery(
-        ['validation-rules', entityType],
-        () => ValidationApiService.getValidationRules(entityType),
-        {
-            enabled: !!entityType,
-            staleTime: 10 * 60 * 1000,
-            cacheTime: 30 * 60 * 1000
-        }
-    );
+    const { data: rulesData, isLoading, error, refetch } = useQuery({
+        queryKey: ['validation-rules', entityType],
+        queryFn: () => ValidationApiService.getValidationRules(entityType),
+        enabled: !!entityType,
+        staleTime: 10 * 60 * 1000,
+        gcTime: 30 * 60 * 1000
+    });
 
     return {
         rules: rulesData?.data || {},
@@ -299,28 +285,26 @@ export const useRealTimeValidation = (options: RealTimeValidationOptions = {}) =
         }
     }, []);
 
-    const validateMutation = useMutation(
-        ({ type, data }: { type: string; data: unknown }) => getValidationService(type, data),
-        {
-            onSuccess: (data: ValidationResult) => {
-                setLastValidation({
-                    timestamp: Date.now(),
-                    result: data,
-                    success: data.success
-                });
-                onSuccess?.(data.data);
-            },
-            onError: (error: unknown) => {
-                setLastValidation({
-                    timestamp: Date.now(),
-                    result: null,
-                    success: false,
-                    error
-                });
-                onError?.(error);
-            }
+    const validateMutation = useMutation({
+        mutationFn: ({ type, data }: { type: string; data: unknown }) => getValidationService(type, data),
+        onSuccess: (data: ValidationResult) => {
+            setLastValidation({
+                timestamp: Date.now(),
+                result: data,
+                success: data.success
+            });
+            onSuccess?.(data.data);
+        },
+        onError: (error: unknown) => {
+            setLastValidation({
+                timestamp: Date.now(),
+                result: null,
+                success: false,
+                error
+            });
+            onError?.(error);
         }
-    );
+    });
 
     const triggerValidation = useCallback((type: string, data: unknown) => {
         const validationId = Date.now();
@@ -340,7 +324,7 @@ export const useRealTimeValidation = (options: RealTimeValidationOptions = {}) =
 
     return {
         validate: triggerValidation,
-        isValidating: validateMutation.isLoading,
+        isValidating: validateMutation.isPending,
         lastValidation,
         isValid: lastValidation?.success === true,
         hasErrors: lastValidation?.success === false,

@@ -101,9 +101,9 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<CollectionItem | null>(null);
 
   // Fetch collection data using the WORKING sales/outstanding endpoint
-  const { data, isLoading, refetch } = useQuery(
-    ['collection-center', filters],
-    async () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['collection-center', filters],
+    queryFn: async () => {
       try {
         // Use the sales/outstanding endpoint which we KNOW works
         const response = await apiClient.get('/sales/outstanding', {
@@ -111,9 +111,9 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             // Get all customers with outstanding
           }
         });
-        
+
         const invoices = response.data?.invoices || [];
-        
+
         // Get unique customer IDs to fetch their details
         const customerIds = [...new Set(invoices.map((inv: any) => inv.customer_id))];
 
@@ -147,10 +147,10 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         } catch (error) {
           console.log('Could not fetch customer details:', error);
         }
-        
+
         // Group by customer for collection view
         const customerMap = new Map();
-        
+
         invoices.forEach((invoice: any) => {
           const customerId = invoice.customer_id;
           const customerName = invoice.customer_name || `Customer ${customerId}`;
@@ -181,30 +181,30 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
               payment_behavior: 'regular'
             });
           }
-          
+
           const customer = customerMap.get(customerId);
-          
+
           // Calculate outstanding like Outstanding component does
           const finalAmount = parseFloat(invoice.final_amount || 0);
           const paidAmount = parseFloat(invoice.paid_amount || 0);
           const outstandingAmount = finalAmount - paidAmount;
-          
+
           customer.total_outstanding += outstandingAmount;
-          
+
           // Calculate overdue
           const dueDate = invoice.due_date ? new Date(invoice.due_date) : new Date(invoice.invoice_date);
           const daysOverdue = differenceInDays(new Date(), dueDate);
-          
+
           if (daysOverdue > 0) {
             customer.overdue_amount += outstandingAmount;
             customer.days_overdue = Math.max(customer.days_overdue, daysOverdue);
           }
-          
+
           // Update oldest invoice date
           if (new Date(invoice.invoice_date) < new Date(customer.oldest_invoice_date)) {
             customer.oldest_invoice_date = invoice.invoice_date;
           }
-          
+
           // Track last payment as proxy for last contact
           if (paidAmount > 0 && invoice.last_payment_date) {
             if (!customer.last_payment_date || new Date(invoice.last_payment_date) > new Date(customer.last_payment_date)) {
@@ -213,7 +213,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
               customer.contact_attempts = 1; // At least one payment was made
             }
           }
-          
+
           // Set priority based on days overdue and amount
           if (customer.days_overdue > 90 || customer.total_outstanding > 100000) {
             customer.priority = 'critical';
@@ -228,15 +228,15 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             customer.priority = 'low';
             customer.collection_status = 'pending';
           }
-          
+
           customer.invoices.push(invoice);
         });
-        
+
         const collections = Array.from(customerMap.values());
-        
+
         // Apply filters
         let filteredData = [...collections];
-        
+
         if (filters.status !== 'all') {
           if (filters.status === 'overdue') {
             filteredData = filteredData.filter(c => c.days_overdue > 0);
@@ -244,11 +244,11 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             filteredData = filteredData.filter(c => c.collection_status === filters.status);
           }
         }
-        
+
         if (filters.priority !== 'all') {
           filteredData = filteredData.filter(c => c.priority === filters.priority);
         }
-        
+
         // Fetch real metrics from backend
         let realMetrics = null;
         try {
@@ -315,10 +315,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         };
       }
     },
-    {
-      refetchInterval: 60000 // Refresh every minute
-    }
-  );
+    refetchInterval: 60000 // Refresh every minute
+  });
 
   const collections = data?.collections || [];
   const stats: CollectionStats = data?.stats || {
@@ -336,7 +334,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   // Filter collections
   const filteredCollections = useMemo(() => {
     let filtered = [...collections];
-    
+
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((item: CollectionItem) =>
@@ -346,7 +344,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         item.notes?.toLowerCase().includes(query)
       );
     }
-    
+
     return filtered;
   }, [collections, filters.searchQuery]);
 
@@ -427,7 +425,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     try {
       // Export as CSV
       const csvContent = 'Customer,Phone,Email,Outstanding,Overdue,Days Overdue,Priority,Status\n' +
-        filteredCollections.map((c: CollectionItem) => 
+        filteredCollections.map((c: CollectionItem) =>
           `"${c.customer_name}",${c.customer_phone},${c.customer_email},${c.total_outstanding},${c.overdue_amount},${c.days_overdue},${c.priority},${c.collection_status}`
         ).join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -482,7 +480,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             iconColor="text-green-600"
             onClose={onClose}
             historyType="collection"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: "Export",
@@ -498,7 +496,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
               }
             ] as any}
           />
-          
+
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
               {/* Professional KPI Dashboard */}
@@ -615,33 +613,30 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setFilters({ ...filters, status: filters.status === 'overdue' ? 'all' : 'overdue' })}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          filters.status === 'overdue'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.status === 'overdue'
                             ? 'bg-red-100 text-red-700 border border-red-300'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         <AlertCircle className="w-4 h-4 inline mr-1" />
                         Overdue
                       </button>
                       <button
                         onClick={() => setFilters({ ...filters, priority: filters.priority === 'critical' ? 'all' : 'critical' })}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          filters.priority === 'critical'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.priority === 'critical'
                             ? 'bg-orange-100 text-orange-700 border border-orange-300'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         <Zap className="w-4 h-4 inline mr-1" />
                         Critical
                       </button>
                       <button
                         onClick={() => setFilters({ ...filters, status: filters.status === 'promised' ? 'all' : 'promised' })}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          filters.status === 'promised'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.status === 'promised'
                             ? 'bg-purple-100 text-purple-700 border border-purple-300'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         <Clock className="w-4 h-4 inline mr-1" />
                         Promised
@@ -663,14 +658,14 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
                   {/* Bulk Actions */}
                   <div className="flex items-center space-x-2">
-                    <button 
+                    <button
                       onClick={handleBulkWhatsApp}
                       className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center"
                     >
                       <MessageCircle className="w-4 h-4 mr-1" />
                       Bulk WhatsApp
                     </button>
-                    <button 
+                    <button
                       onClick={handleBulkEmail}
                       className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center"
                     >
@@ -712,7 +707,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       {filteredCollections.map((item: CollectionItem) => {
                         const daysOverdue = item.days_overdue || 0;
                         const isOverdue = daysOverdue > 0;
-                        
+
                         return (
                           <tr key={item.customer_id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4">
@@ -747,9 +742,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                               )}
                             </td>
                             <td className="px-6 py-4">
-                              <div className={`text-sm font-medium ${
-                                isOverdue ? 'text-red-600' : 'text-gray-600'
-                              }`}>
+                              <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-gray-600'
+                                }`}>
                                 {isOverdue ? `${daysOverdue} days overdue` : 'Current'}
                               </div>
                               <div className="mt-1">
@@ -758,8 +752,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm text-gray-600">
-                                {item.last_contact_date ? 
-                                  format(parseISO(item.last_contact_date), 'dd MMM, HH:mm') : 
+                                {item.last_contact_date ?
+                                  format(parseISO(item.last_contact_date), 'dd MMM, HH:mm') :
                                   'Never'
                                 }
                               </div>
@@ -787,7 +781,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                 >
                                   <WhatsAppIcon className="w-4 h-4" />
                                 </button>
-                                
+
                                 {/* Email */}
                                 <button
                                   onClick={() => sendEmail(item)}
@@ -796,7 +790,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                 >
                                   <Mail className="w-4 h-4" />
                                 </button>
-                                
+
                                 {/* Call */}
                                 <button
                                   onClick={() => makeCall(item)}
@@ -805,7 +799,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                 >
                                   <PhoneCall className="w-4 h-4" />
                                 </button>
-                                
+
                                 {/* SMS */}
                                 <button
                                   onClick={() => sendSMS(item)}
@@ -814,7 +808,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                 >
                                   <MessageSquare className="w-4 h-4" />
                                 </button>
-                                
+
                                 {/* Schedule Reminder */}
                                 <button
                                   onClick={() => scheduleReminder(item)}
@@ -823,7 +817,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                 >
                                   <Bell className="w-4 h-4" />
                                 </button>
-                                
+
                                 {/* View Details */}
                                 <button
                                   onClick={() => onCustomerClick?.(item)}
@@ -839,7 +833,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       })}
                     </tbody>
                   </table>
-                  
+
                   {(!filteredCollections || filteredCollections.length === 0) && !isLoading && (
                     <div className="text-center py-12">
                       <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -847,7 +841,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       <p className="text-sm text-gray-400 mt-1">Adjust your filters or search to see results</p>
                     </div>
                   )}
-                  
+
                   {isLoading && (
                     <div className="text-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />

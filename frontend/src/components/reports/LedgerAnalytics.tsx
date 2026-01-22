@@ -94,17 +94,15 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   const [refreshing, setRefreshing] = useState(false);
 
   // Fetch dashboard stats
-  const { data: stats } = useQuery(
-    ['ledger-stats', filters],
-    () => ledgerApi.getDashboardStats({
+  const { data: stats } = useQuery({
+    queryKey: ['ledger-stats', filters],
+    queryFn: () => ledgerApi.getDashboardStats({
       date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       party_type: filters.partyType !== 'all' ? filters.partyType : undefined
     } as any),
-    {
-      refetchInterval: 300000 // Refresh every 5 minutes
-    }
-  );
+    refetchInterval: 300000
+  });
 
   useEffect(() => {
     // Load initial data if needed
@@ -133,9 +131,9 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
   };
 
   // Fetch report data based on selected report
-  const { data: reportData, isLoading: reportLoading } = useQuery(
-    ['ledger-report', selectedReport, filters],
-    () => {
+  const { data: reportData, isLoading: reportLoading } = useQuery({
+    queryKey: ['ledger-report', selectedReport, filters],
+    queryFn: () => {
       switch (selectedReport) {
         case 'aging':
           return ledgerApi.getAgingReport(filters as any);
@@ -151,7 +149,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           return ledgerApi.getOverviewReport(filters as any);
       }
     }
-  );
+  });
 
   const dashboardStats: DashboardStats = (stats ? {
     ...(stats as any),

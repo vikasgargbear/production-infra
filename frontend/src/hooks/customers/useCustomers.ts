@@ -32,9 +32,9 @@ export const customerKeys = {
  * Now with local-first approach for instant results
  */
 export function useCustomerSearch(query: string) {
-  return useQuery(
-    customerKeys.search(query),
-    async () => {
+  return useQuery({
+    queryKey: customerKeys.search(query),
+    queryFn: async () => {
       // Use local-first service for instant results
       const results = await localSearchService.searchCustomers(query, { limit: 20 });
       return {
@@ -42,12 +42,10 @@ export function useCustomerSearch(query: string) {
         data: results
       };
     },
-    {
-      enabled: query.length >= 2, // Only search with 2+ characters
-      staleTime: 1 * 60 * 1000, // 1 minute
-      keepPreviousData: true,
-    }
-  );
+    enabled: query.length >= 2, // Only search with 2+ characters
+    staleTime: 1 * 60 * 1000, // 1 minute
+    placeholderData: (previousData) => previousData,
+  });
 }
 
 /**
@@ -57,18 +55,16 @@ export function useCustomer(
   customerId: string,
   options?: UseQueryOptions<ApiResponse<Customer>, unknown, ApiResponse<Customer>>
 ) {
-  return useQuery<ApiResponse<Customer>>(
-    customerKeys.detail(parseInt(customerId)),
-    async () => {
+  return useQuery<ApiResponse<Customer>>({
+    queryKey: customerKeys.detail(parseInt(customerId)),
+    queryFn: async () => {
       const response = await customersApi.getById(customerId);
       return (response as any).data || response;
     },
-    {
-      enabled: !!customerId,
-      staleTime: 5 * 60 * 1000,
-      ...options,
-    }
-  );
+    enabled: !!customerId,
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
 }
 
 /**
@@ -79,17 +75,15 @@ export function useCreateCustomer(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation(
-    async (data: CustomerCreateInput) => {
+  return useMutation({
+    mutationFn: async (data: CustomerCreateInput) => {
       const response = await customersApi.create(data);
       return (response as any).data || response;
     },
-    {
-      onSuccess: (response) => {
-        // Invalidate customer queries
-        queryClient.invalidateQueries(customerKeys.all);
-      },
-      ...options,
-    }
-  );
+    onSuccess: (response) => {
+      // Invalidate customer queries
+      queryClient.invalidateQueries({ queryKey: customerKeys.all });
+    },
+    ...options,
+  });
 }

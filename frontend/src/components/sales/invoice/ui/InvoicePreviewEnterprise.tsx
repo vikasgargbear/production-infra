@@ -156,14 +156,14 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     />
                   ) : (
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                      <span className="text-3xl font-bold text-white">A</span>
+                      <span className="text-3xl font-bold text-white">{(companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
                     </div>
                   )}
                   <div className="flex-1">
                     <h2 className="text-xl font-bold text-gray-900">{companyInfo?.name || 'Your Company Name'}</h2>
                     <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || 'Company Address'}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || ''}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drugLicense || ''}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || companyInfo?.gst || ''}</p>
+                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drugLicense || companyInfo?.drug_license_no || ''}</p>
                   </div>
                 </div>
               </div>
@@ -257,19 +257,21 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
           </div>
         </div>
 
-        {/* Customer & Transport Section - Professional Compact Design */}
+        {/* Customer & Transport Section - Simplified for Indian Pharma */}
         {showAddresses && (
           <div className="mb-4">
-            {/* Combined Customer & Transport Table - All in One Professional Block */}
+            {/* 2-Column Layout: Customer | Transport */}
             <div className="border border-gray-800 print-border">
               <table className="w-full">
                 <tbody>
                   <tr className="border-b border-gray-800">
-                    {/* Bill To */}
-                    <td className="border-r border-gray-800 p-3 align-top w-1/3">
-                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Bill To</div>
-                      <div className="font-semibold text-gray-900 text-xs mb-1">{invoice.customer_name}</div>
-                      {typeof invoice.billing_address === 'string' ? (
+                    {/* Customer Details - Single Address (Indian GST standard) */}
+                    <td className="border-r border-gray-800 p-3 align-top w-2/3">
+                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Customer Details</div>
+                      <div className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</div>
+
+                      {/* Address - Check multiple sources */}
+                      {typeof invoice.billing_address === 'string' && invoice.billing_address ? (
                         <div className="text-xs text-gray-700 leading-relaxed">{invoice.billing_address}</div>
                       ) : invoice.billing_address && typeof invoice.billing_address === 'object' ? (
                         <div className="text-xs text-gray-700 leading-relaxed">
@@ -282,66 +284,48 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                             (invoice.billing_address as any).pincode
                           ].filter(Boolean).join(', ')}
                         </div>
-                      ) : invoice.customer_details ? (
-                        <>
-                          <div className="text-xs text-gray-700 leading-relaxed">
-                            {typeof invoice.customer_details.address === 'string'
-                              ? invoice.customer_details.address
-                              : invoice.customer_details.address && typeof invoice.customer_details.address === 'object'
-                                ? [
-                                  (invoice.customer_details.address as any).address_line1,
-                                  (invoice.customer_details.address as any).address_line2,
-                                  (invoice.customer_details.address as any).street,
-                                  (invoice.customer_details.address as any).city,
-                                  (invoice.customer_details.address as any).state
-                                ].filter(Boolean).join(', ')
-                                : ''}
-                          </div>
-                          {invoice.customer_details.city && invoice.customer_details.state && (
-                            <div className="text-xs text-gray-700">{invoice.customer_details.city}, {invoice.customer_details.state}</div>
-                          )}
-                        </>
+                      ) : invoice.customer_details?.address ? (
+                        <div className="text-xs text-gray-700 leading-relaxed">
+                          {typeof invoice.customer_details.address === 'string'
+                            ? invoice.customer_details.address
+                            : [
+                              (invoice.customer_details.address as any).address_line1,
+                              (invoice.customer_details.address as any).address_line2,
+                              (invoice.customer_details.address as any).street,
+                              (invoice.customer_details.address as any).city,
+                              (invoice.customer_details.address as any).state,
+                              (invoice.customer_details.address as any).pincode
+                            ].filter(Boolean).join(', ')
+                          }
+                        </div>
                       ) : null}
-                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                        <div className="text-xs text-gray-700 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</div>
-                      )}
-                      {invoice.customer_details?.gst_number && (
-                        <div className="text-xs text-gray-700 font-medium">GST: {invoice.customer_details.gst_number}</div>
-                      )}
-                    </td>
 
-                    {/* Ship To */}
-                    <td className="border-r border-gray-800 p-3 align-top w-1/3">
-                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Ship To</div>
-                      {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
-                        <>
-                          <div className="text-xs text-gray-600 mb-1 italic">Same as billing address</div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="font-semibold text-gray-900 text-xs mb-1">{invoice.shipping_contact_name || invoice.customer_name}</div>
-                          {invoice.shipping_address && (
-                            <div className="text-xs text-gray-700 leading-relaxed">{invoice.shipping_address}</div>
-                          )}
-                          {(invoice.shipping_phone || invoice.customer_details?.phone) && (
-                            <div className="text-xs text-gray-700 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone}</div>
-                          )}
-                        </>
-                      )}
+                      {/* Contact & GST Info - Inline */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-700">
+                        {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                          <span>📱 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
+                        )}
+                        {invoice.customer_details?.gst_number && (
+                          <span className="font-medium">GST: {invoice.customer_details.gst_number}</span>
+                        )}
+                        {invoice.customer_details?.drug_license_number && (
+                          <span>DL: {invoice.customer_details.drug_license_number}</span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Transport Details */}
                     <td className="p-3 align-top w-1/3">
-                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Transport</div>
+                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Delivery / Transport</div>
                       <div className="space-y-1">
                         {invoice.delivery_type && (
                           <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Type:</span> <span className="font-medium">{invoice.delivery_type}</span>
+                            <span className="text-gray-600">Mode:</span> <span className="font-medium">{invoice.delivery_type}</span>
                           </div>
                         )}
                         {invoice.transport_company && (
                           <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Company:</span> {invoice.transport_company}
+                            <span className="text-gray-600">Transport:</span> {invoice.transport_company}
                           </div>
                         )}
                         {invoice.vehicle_number && (
@@ -354,14 +338,15 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                             <span className="text-gray-600">Charges:</span> <span className="font-medium">{formatCurrency(invoice.delivery_charges ?? 0)}</span>
                           </div>
                         )}
+                        {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && (
+                          <div className="text-xs text-gray-500 italic">Self pickup / Local delivery</div>
+                        )}
                       </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-
-
           </div>
         )}
 

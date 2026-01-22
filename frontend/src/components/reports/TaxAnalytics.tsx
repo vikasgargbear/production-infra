@@ -50,9 +50,9 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
   const [selectedReport, setSelectedReport] = useState('overview');
 
   // Fetch tax summary data from real API
-  const { data: taxSummary, isLoading, refetch } = useQuery(
-    ['tax-summary', filters],
-    async () => {
+  const { data: taxSummary, isLoading, refetch } = useQuery({
+    queryKey: ['tax-summary', filters],
+    queryFn: async () => {
       const response = await apiClient.get('/tax-entries/analytics/summary', {
         params: {
           date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
@@ -77,12 +77,12 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         compliance_score: data.compliance_score || 100
       };
     }
-  );
+  });
 
   // Fetch monthly tax trends from real API
-  const { data: taxTrends } = useQuery(
-    ['tax-trends', filters],
-    async () => {
+  const { data: taxTrends } = useQuery({
+    queryKey: ['tax-trends', filters],
+    queryFn: async () => {
       const response = await apiClient.get('/tax-entries/gstr1/summary', {
         params: {
           date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
@@ -102,7 +102,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
         ]
       };
     }
-  );
+  });
 
   const renderSummaryCards = () => (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -369,7 +369,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
             iconColor="text-orange-600"
             onClose={onClose}
             historyType="report"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: 'Refresh',
@@ -380,7 +380,7 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
               {
                 label: 'Export',
                 icon: Download,
-                onClick: () => {},
+                onClick: () => { },
                 variant: 'secondary'
               }
             ] as any}
@@ -423,31 +423,28 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, view: 'summary' }))}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                      filters.view === 'summary'
+                    className={`px-4 py-2 text-sm font-medium rounded-lg ${filters.view === 'summary'
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     Summary
                   </button>
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, view: 'detailed' }))}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                      filters.view === 'detailed'
+                    className={`px-4 py-2 text-sm font-medium rounded-lg ${filters.view === 'detailed'
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     Detailed
                   </button>
                   <button
                     onClick={() => setFilters(prev => ({ ...prev, view: 'comparison' }))}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg ${
-                      filters.view === 'comparison'
+                    className={`px-4 py-2 text-sm font-medium rounded-lg ${filters.view === 'comparison'
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     Comparison
                   </button>

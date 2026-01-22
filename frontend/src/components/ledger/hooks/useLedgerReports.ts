@@ -109,60 +109,52 @@ export function useLedgerReports() {
     // API Queries
     // ============================================
 
-    const { data: dashboardStats, isLoading: loadingStats, refetch: refetchStats } = useQuery(
-        ['ledger-dashboard-stats', filters.dateRange],
-        async () => {
+    const { data: dashboardStats, isLoading: loadingStats, refetch: refetchStats } = useQuery({
+        queryKey: ['ledger-dashboard-stats', filters.dateRange],
+        queryFn: async () => {
             const stats = await ledgerApi.getDashboardStats({
                 as_of_date: filters.dateRange.to?.toISOString().split('T')[0]
             });
             return stats as DashboardStats;
         },
-        {
-            staleTime: 5 * 60 * 1000,
-            initialData: defaultStats
-        }
-    );
+        staleTime: 5 * 60 * 1000,
+        initialData: defaultStats
+    });
 
-    const { data: agingData, isLoading: loadingAging, refetch: refetchAging } = useQuery(
-        ['ledger-aging', filters.partyType],
-        async () => {
+    const { data: agingData, isLoading: loadingAging, refetch: refetchAging } = useQuery({
+        queryKey: ['ledger-aging', filters.partyType],
+        queryFn: async () => {
             const response = await ledgerApi.getAgingAnalysis({
                 party_type: filters.partyType === 'all' ? undefined : filters.partyType
             });
             return response.data?.aging_data || [];
         },
-        {
-            enabled: filters.reportType === 'aging' || filters.reportType === 'overview'
-        }
-    );
+        enabled: filters.reportType === 'aging' || filters.reportType === 'overview'
+    });
 
-    const { data: cashFlowData, isLoading: loadingCashFlow, refetch: refetchCashFlow } = useQuery(
-        ['ledger-cashflow', filters.dateRange, filters.groupBy],
-        async () => {
+    const { data: cashFlowData, isLoading: loadingCashFlow, refetch: refetchCashFlow } = useQuery({
+        queryKey: ['ledger-cashflow', filters.dateRange, filters.groupBy],
+        queryFn: async () => {
             const response = await ledgerApi.getCashFlowReport({
                 from_date: filters.dateRange.from?.toISOString().split('T')[0],
                 to_date: filters.dateRange.to?.toISOString().split('T')[0]
             });
             return response.data || [];
         },
-        {
-            enabled: filters.reportType === 'cashflow'
-        }
-    );
+        enabled: filters.reportType === 'cashflow'
+    });
 
-    const { data: trendData, isLoading: loadingTrends, refetch: refetchTrends } = useQuery(
-        ['ledger-trends', filters.dateRange, filters.groupBy],
-        async () => {
+    const { data: trendData, isLoading: loadingTrends, refetch: refetchTrends } = useQuery({
+        queryKey: ['ledger-trends', filters.dateRange, filters.groupBy],
+        queryFn: async () => {
             const response = await ledgerApi.getTrendAnalysis({
                 from_date: filters.dateRange.from?.toISOString().split('T')[0],
                 to_date: filters.dateRange.to?.toISOString().split('T')[0]
             });
             return response.data || [];
         },
-        {
-            enabled: filters.reportType === 'trends'
-        }
-    );
+        enabled: filters.reportType === 'trends'
+    });
 
     // ============================================
     // Computed Values

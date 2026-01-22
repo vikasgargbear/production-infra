@@ -572,51 +572,32 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                 {/* Footer */}
                 <div className="bg-white border-t border-gray-200 px-6 py-4">
-                    {/* Payment Allocation Status - Splitwise style (for split payments) */}
-                    {invoice.payments && invoice.payments.length > 1 && (() => {
-                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                        const remaining = finalAmount - totalPaid;
+                    <div className="flex items-center justify-between">
+                        {/* Left side - Remaining amount (inline, bold) */}
+                        <div className="text-sm">
+                            {(() => {
+                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+                                const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                                const remaining = finalAmount - totalPaid;
 
-                        if (remaining !== 0) {
-                            return (
-                                <div className={`mb-4 flex items-center justify-between py-3 px-4 rounded-lg ${remaining > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'}`}>
-                                    <span className="text-sm font-medium text-gray-700">
-                                        {remaining > 0 ? 'Remaining to allocate' : 'Over-allocated by'}
-                                    </span>
-                                    <span className={`text-base font-bold ${remaining > 0 ? 'text-amber-700' : 'text-red-700'}`}>
-                                        ₹{Math.abs(remaining).toFixed(2)}
-                                    </span>
-                                </div>
-                            );
-                        }
-                        return null;
-                    })()}
-
-                    {/* Payment Validation Error */}
-                    {(() => {
-                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                        const isOverpaid = totalPaid > finalAmount;
-
-                        if (isOverpaid) {
-                            return (
-                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                    <div className="flex items-center text-red-800">
-                                        <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm font-medium">
-                                            Total payment (₹{totalPaid.toFixed(2)}) exceeds invoice amount (₹{finalAmount.toFixed(2)})
+                                if (remaining > 0) {
+                                    return (
+                                        <span className="text-amber-600 font-semibold">
+                                            Remaining: ₹{remaining.toFixed(2)} (Credit)
                                         </span>
-                                    </div>
-                                </div>
-                            );
-                        }
-                        return null;
-                    })()}
+                                    );
+                                } else if (remaining < 0) {
+                                    return (
+                                        <span className="text-red-600 font-semibold">
+                                            Over-allocated: ₹{Math.abs(remaining).toFixed(2)}
+                                        </span>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </div>
 
-                    <div className="flex items-center justify-end">
+                        {/* Right side - Continue button */}
                         <button
                             onClick={onContinue}
                             disabled={(() => {
