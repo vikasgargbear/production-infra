@@ -391,31 +391,35 @@ const AddressForm: React.FC<AddressFormProps> = ({
         } else if (isEditing && selectedAddressId) {
             // EDITING EXISTING ADDRESS
             try {
-                // Update local state immediately
+                // Update local state immediately with new formData (including mobile)
+                const updatedAddress = { ...addressPayload, id: selectedAddressId, address_id: selectedAddressId };
                 setSavedAddresses(prev => prev.map(addr =>
                     (addr.id === selectedAddressId || addr.address_id === selectedAddressId)
-                        ? { ...addr, ...addressPayload }
+                        ? { ...addr, ...updatedAddress }
                         : addr
                 ));
-                console.log('[AddressForm] Updated address locally:', selectedAddressId);
+
+                // Also update formData to ensure display reflects changes immediately
+                setFormData(prev => ({ ...prev, ...addressPayload }));
+                console.log('[AddressForm] Updated address locally with mobile:', addressPayload.mobile);
 
                 // Only sync to API if it's a real database address (not a temp local one)
                 const addressIdStr = String(selectedAddressId);
                 const isLocalPending = addressIdStr.startsWith('temp_addr_');
 
                 if (!isLocalPending) {
-                    // Try to sync to API (non-blocking)
+                    // Try to sync to API (non-blocking) - don't refetch to avoid overwriting local state
                     try {
                         await apiClient.put(`/customers/${customerId}/addresses/${selectedAddressId}`, addressPayload);
                         console.log('[AddressForm] Address update synced to server');
 
-                        // Refresh list
+                        // Clear cache so next full page load gets fresh data
                         const cacheKey = `customer_addresses_${customerId}`;
                         localStorage.removeItem(cacheKey);
-                        await fetchCustomerAddresses(customerId);
+                        // NOTE: Not calling fetchCustomerAddresses here to preserve local state with updated mobile
                     } catch (syncError) {
                         console.warn('[AddressForm] Address update sync failed:', syncError);
-                        // Local update already applied
+                        // Local update already applied - user sees correct data
                     }
                 } else {
                     // Update the IndexedDB record so sync queue sends edited data

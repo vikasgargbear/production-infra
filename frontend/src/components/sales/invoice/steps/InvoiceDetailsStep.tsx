@@ -404,79 +404,108 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     )}
                                 </div>
 
-                                {/* Compact Discount Row */}
-                                <div className="border-t border-gray-100 pt-4 mb-4">
-                                    <div className="flex items-center gap-4 flex-wrap">
-                                        <span className="text-sm font-medium text-gray-700">Overall Discount:</span>
-
-                                        {/* Toggle: % vs ₹ */}
-                                        <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                                            <button
-                                                onClick={() => setInvoice(prev => ({
-                                                    ...prev,
-                                                    discount_type: 'percentage',
-                                                    discount_amount: 0,
-                                                    discount_percent: prev.discount_percent || 0
-                                                }))}
-                                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                %
-                                            </button>
-                                            <button
-                                                onClick={() => setInvoice(prev => ({
-                                                    ...prev,
-                                                    discount_type: 'fixed',
-                                                    discount_percent: 0,
-                                                    discount_amount: prev.discount_amount || 0
-                                                }))}
-                                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                ₹
-                                            </button>
-                                        </div>
-
-                                        {/* Value input */}
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max={invoice.discount_type === 'percentage' || !invoice.discount_type ? 100 : undefined}
-                                                step={invoice.discount_type === 'percentage' || !invoice.discount_type ? 0.1 : 0.01}
-                                                value={invoice.discount_type === 'fixed'
-                                                    ? (invoice.discount_amount || '')
-                                                    : (invoice.discount_percent || '')}
-                                                onChange={(e) => {
-                                                    const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
-                                                    if (invoice.discount_type === 'fixed') {
-                                                        setInvoice(prev => ({ ...prev, discount_amount: value }));
-                                                    } else {
-                                                        setInvoice(prev => ({ ...prev, discount_percent: value }));
-                                                    }
-                                                }}
-                                                className="w-20 px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder={invoice.discount_type === 'fixed' ? '0' : '0'}
-                                            />
-                                            <span className="text-sm text-gray-500">
-                                                {invoice.discount_type === 'fixed' ? '₹' : '%'}
-                                            </span>
-                                        </div>
-
-                                        {/* Savings display */}
+                                {/* Expanded Bill Discount Section */}
+                                <div className="border-t border-gray-100 pt-5 mb-4">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <h4 className="text-sm font-semibold text-gray-700">Bill Discount</h4>
                                         {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) && (
                                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
                                                 Saves ₹{(
                                                     invoice.discount_type === 'fixed'
                                                         ? invoice.discount_amount || 0
                                                         : (parseFloat(String(invoice.totals?.taxable_before_scheme || invoice.totals?.taxable_amount || 0)) * (invoice.discount_percent || 0)) / 100
-                                                ).toFixed(2)}
+                                                ).toFixed(0)}
                                             </span>
                                         )}
+                                    </div>
+
+                                    <div className="grid grid-cols-12 gap-4 items-end">
+                                        {/* Discount Type */}
+                                        <div className="col-span-4">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                                            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                                <button
+                                                    onClick={() => setInvoice(prev => ({
+                                                        ...prev,
+                                                        discount_type: 'percentage',
+                                                        discount_amount: 0,
+                                                        discount_percent: prev.discount_percent || 0
+                                                    }))}
+                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    Percentage (%)
+                                                </button>
+                                                <button
+                                                    onClick={() => setInvoice(prev => ({
+                                                        ...prev,
+                                                        discount_type: 'fixed',
+                                                        discount_percent: 0,
+                                                        discount_amount: prev.discount_amount || 0
+                                                    }))}
+                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    Fixed (₹)
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Discount Value */}
+                                        <div className="col-span-4">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                {invoice.discount_type === 'fixed' ? 'Amount' : 'Percentage'}
+                                            </label>
+                                            <div className="relative">
+                                                {invoice.discount_type === 'fixed' && (
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                                                )}
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={invoice.discount_type === 'percentage' || !invoice.discount_type ? 100 : undefined}
+                                                    step={invoice.discount_type === 'percentage' || !invoice.discount_type ? 0.5 : 1}
+                                                    value={invoice.discount_type === 'fixed'
+                                                        ? (invoice.discount_amount || '')
+                                                        : (invoice.discount_percent || '')}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                                                        if (invoice.discount_type === 'fixed') {
+                                                            setInvoice(prev => ({ ...prev, discount_amount: value }));
+                                                        } else {
+                                                            setInvoice(prev => ({ ...prev, discount_percent: value }));
+                                                        }
+                                                    }}
+                                                    className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                                                    placeholder="0"
+                                                />
+                                                {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Clear Button */}
+                                        <div className="col-span-4">
+                                            {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) ? (
+                                                <button
+                                                    onClick={() => setInvoice(prev => ({
+                                                        ...prev,
+                                                        discount_percent: 0,
+                                                        discount_amount: 0
+                                                    }))}
+                                                    className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-gray-300"
+                                                >
+                                                    Clear Discount
+                                                </button>
+                                            ) : (
+                                                <div className="h-[42px]"></div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

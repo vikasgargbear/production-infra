@@ -3,8 +3,7 @@
  * Streamlined party ledger with integrated filters and better print/export
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation } from 'react-query';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar,
   Download,
@@ -152,23 +151,38 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
   // Get party ID from selectedParty object
   const partyId = initialPartyId || selectedParty?.customer_id || selectedParty?.supplier_id || selectedParty?.id;
 
+  // State for data fetching (replacing react-query)
+  const [partyDetails, setPartyDetails] = useState<any>(null);
+  const [ledgerData, setLedgerData] = useState<any>(null);
+  const [loadingParty, setLoadingParty] = useState(false);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+  const [partyError, setPartyError] = useState<Error | null>(null);
+  const [ledgerError, setLedgerError] = useState<Error | null>(null);
+
   // Fetch party details
-  const { data: partyDetails, isLoading: loadingParty, error: partyError } = useQuery(
-    ['party-details', partyId, partyType],
-    () => partyLedgerApi.getBalance(partyId, partyType),
-    {
-      enabled: !!partyId,
-      retry: 1,
-      onError: (error: any) => {
-        console.error('Failed to fetch party details:', error);
-      }
-    }
-  );
+  useEffect(() => {
+    if (!partyId) return;
+
+    setLoadingParty(true);
+    setPartyError(null);
+
+    partyLedgerApi.getBalance(partyId, partyType)
+      .then(data => setPartyDetails(data))
+      .catch(err => {
+        console.error('Failed to fetch party details:', err);
+        setPartyError(err);
+      })
+      .finally(() => setLoadingParty(false));
+  }, [partyId, partyType]);
 
   // Fetch ledger entries
-  const { data: ledgerData, isLoading: loadingLedger, error: ledgerError, refetch } = useQuery(
-    ['party-ledger', partyId, partyType, dateRange],
-    async () => {
+  const fetchLedgerData = useCallback(async () => {
+    if (!partyId) return;
+
+    setLoadingLedger(true);
+    setLedgerError(null);
+
+    try {
       const response = await partyLedgerApi.getStatement(
         partyId,
         partyType,
@@ -177,13 +191,22 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
           date_to: format(dateRange.to, 'yyyy-MM-dd')
         }
       );
-      return response;
-    },
-    {
-      enabled: !!partyId,
-      retry: 1
+      setLedgerData(response);
+    } catch (err: any) {
+      console.error('Failed to fetch ledger:', err);
+      setLedgerError(err);
+    } finally {
+      setLoadingLedger(false);
     }
-  );
+  }, [partyId, partyType, dateRange]);
+
+  // Fetch ledger when party or date range changes
+  useEffect(() => {
+    fetchLedgerData();
+  }, [fetchLedgerData]);
+
+  // Refetch function (for refresh button)
+  const refetch = fetchLedgerData;
 
   const filteredEntries = useMemo(() => {
     // Handle both API response formats
@@ -244,7 +267,7 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
     });
   }, [dateRange, quickDateRange]);
 
-  const errorMessage = (partyError as any)?.message || (ledgerError as any)?.message;
+  const errorMessage = partyError?.message || ledgerError?.message;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -575,7 +598,7 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
             iconColor="text-blue-600"
             onClose={onClose}
             historyType="ledger"
-            onSaveDraft={() => {}}
+            onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: refreshing ? "Refreshing..." : "Refresh",
@@ -688,11 +711,10 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
                     </div>
                     <div className="bg-purple-50 rounded-md px-3 py-2 flex justify-between items-center">
                       <span className="text-xs text-gray-600">Net Balance</span>
-                      <span className={`text-sm font-bold ${
-                        filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance >= 0
-                          ? 'text-green-600'
-                          : 'text-red-600'
-                      }`}>
+                      <span className={`text-sm font-bold ${filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance >= 0
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                        }`}>
                         ₹{filteredEntries.length > 0 ? Math.abs(filteredEntries[filteredEntries.length - 1]?.balance || 0).toFixed(2) : '0.00'}
                         {filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance < 0 ? ' (Dr)' : ''}
                       </span>
@@ -723,11 +745,10 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
                         <button
                           key={range.value}
                           onClick={() => handleQuickDateRange(range.value)}
-                          className={`px-3 py-1 rounded-md text-sm ${
-                            quickDateRange === range.value
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                          className={`px-3 py-1 rounded-md text-sm ${quickDateRange === range.value
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
                         >
                           {range.label}
                         </button>
@@ -889,11 +910,10 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
                               <button
                                 key={idx}
                                 onClick={() => setCurrentPage(pageNum)}
-                                className={`px-3 py-1 rounded text-sm ${
-                                  currentPage === pageNum
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                                }`}
+                                className={`px-3 py-1 rounded text-sm ${currentPage === pageNum
+                                  ? 'bg-blue-600 text-white'
+                                  : 'text-gray-700 hover:bg-gray-100'
+                                  }`}
                               >
                                 {pageNum}
                               </button>
