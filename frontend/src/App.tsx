@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { QueryClientProvider } from 'react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import queryClient from './queryClient';
 import { useAuth } from './contexts/AuthContext';
 import LoginPage from './components/auth/LoginPage';

@@ -6,7 +6,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../../services/api/apiClient';
 import { formatCurrency } from '../../../utils/formatters';
 

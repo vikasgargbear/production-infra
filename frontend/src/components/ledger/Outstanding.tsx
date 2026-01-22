@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft,
   IndianRupee,
@@ -44,9 +44,9 @@ const Outstanding: React.FC<OutstandingProps> = ({
   const { state, dispatch, filters, ui, selectedParty, allocationModal } = useOutstandingState();
 
   // Fetch outstanding data using the sales API
-  const { data, isLoading, refetch, error } = useQuery(
-    ['outstanding-data', partyType, filters],
-    async () => {
+  const { data, isLoading, refetch, error } = useQuery({
+    queryKey: ['outstanding-data', partyType, filters],
+    queryFn: async () => {
       try {
         // Use the sales/outstanding endpoint
         const response = await apiClient.get('/sales/outstanding', {
@@ -217,12 +217,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
         };
       }
     },
-    {
-      keepPreviousData: true,
-      enabled: partyType === 'customer',
-      retry: 1
-    }
-  );
+    placeholderData: (previousData) => previousData,
+    enabled: partyType === 'customer',
+    retry: 1
+  });
 
   const parties = data?.parties || [];
   const summary = data?.summary || {

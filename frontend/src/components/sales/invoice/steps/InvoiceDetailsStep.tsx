@@ -404,7 +404,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     )}
                                 </div>
 
-                                {/* Expanded Bill Discount Section */}
+                                {/* Bill Discount - Expanded Grid (no Type label) */}
                                 <div className="border-t border-gray-100 pt-5 mb-4">
                                     <div className="flex items-center gap-3 mb-4">
                                         <h4 className="text-sm font-semibold text-gray-700">Bill Discount</h4>
@@ -420,9 +420,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                     </div>
 
                                     <div className="grid grid-cols-12 gap-4 items-end">
-                                        {/* Discount Type */}
+                                        {/* Discount Type Toggle - No label */}
                                         <div className="col-span-4">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                                             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
@@ -457,9 +456,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                                         {/* Discount Value */}
                                         <div className="col-span-4">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                {invoice.discount_type === 'fixed' ? 'Amount' : 'Percentage'}
-                                            </label>
                                             <div className="relative">
                                                 {invoice.discount_type === 'fixed' && (
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
@@ -481,7 +477,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         }
                                                     }}
                                                     className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
-                                                    placeholder="0"
+                                                    placeholder="Enter value"
                                                 />
                                                 {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
@@ -576,6 +572,27 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                 {/* Footer */}
                 <div className="bg-white border-t border-gray-200 px-6 py-4">
+                    {/* Payment Allocation Status - Splitwise style (for split payments) */}
+                    {invoice.payments && invoice.payments.length > 1 && (() => {
+                        const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                        const remaining = finalAmount - totalPaid;
+
+                        if (remaining !== 0) {
+                            return (
+                                <div className={`mb-4 flex items-center justify-between py-3 px-4 rounded-lg ${remaining > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'}`}>
+                                    <span className="text-sm font-medium text-gray-700">
+                                        {remaining > 0 ? 'Remaining to allocate' : 'Over-allocated by'}
+                                    </span>
+                                    <span className={`text-base font-bold ${remaining > 0 ? 'text-amber-700' : 'text-red-700'}`}>
+                                        ₹{Math.abs(remaining).toFixed(2)}
+                                    </span>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
+
                     {/* Payment Validation Error */}
                     {(() => {
                         const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);

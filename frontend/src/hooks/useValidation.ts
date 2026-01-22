@@ -3,7 +3,7 @@
  * Provides server-side validation capabilities for forms and data
  */
 
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 // import ValidationApiService from '../services/validationApiService'; // TODO: Module doesn't exist - using local stubs
 const ValidationApiService = {

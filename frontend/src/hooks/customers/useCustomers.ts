@@ -3,7 +3,7 @@
  * Type-safe data fetching with caching and optimistic updates
  */
 
-import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
+import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import { customersApi as customersApi } from '../../services/api';
 import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, IndianRupee, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
-import { useQuery, useMutation } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import apiClient from '../../../services/api/apiClient';
 import { formatCurrency } from '../../../utils/formatters';
 import { format } from 'date-fns';
@@ -59,21 +59,21 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch unallocated payments
-  const { data: paymentsData, isLoading: loadingPayments } = useQuery(
-    ['unallocated-payments', customerId],
-    async () => {
+  const { data: paymentsData, isLoading: loadingPayments } = useQuery({
+    queryKey: ['unallocated-payments', customerId],
+    queryFn: async () => {
       const response = await apiClient.get('/payment-allocation/unallocated-payments', {
         params: { party_id: customerId }
       });
       return response.data.payments || [];
     },
-    { enabled: isOpen }
-  );
+    enabled: isOpen
+  });
 
   // Use prop invoices if available, otherwise fetch from API
-  const { data: invoicesData, isLoading: loadingInvoices } = useQuery(
-    ['unpaid-invoices', customerId],
-    async () => {
+  const { data: invoicesData, isLoading: loadingInvoices } = useQuery({
+    queryKey: ['unpaid-invoices', customerId],
+    queryFn: async () => {
       if (propInvoices && propInvoices.length > 0) {
         // Convert prop invoices to the expected format
         return propInvoices.map(invoice => ({
@@ -91,12 +91,12 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
       });
       return response.data.invoices || [];
     },
-    { enabled: isOpen }
-  );
+    enabled: isOpen
+  });
 
   // Allocation mutation
-  const allocationMutation = useMutation(
-    async (allocations: Array<{ invoice_id: number; amount: number }>) => {
+  const allocationMutation = useMutation({
+    mutationFn: async (allocations: Array<{ invoice_id: number; amount: number }>) => {
       if (!selectedPayment) throw new Error('No payment selected');
 
       const response = await apiClient.post('/payment-allocation/allocate-bulk', {
@@ -105,17 +105,15 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
       });
       return response.data;
     },
-    {
-      onSuccess: () => {
-        setError(null);
-        if (onAllocationComplete) onAllocationComplete();
-        onClose();
-      },
-      onError: (err: any) => {
-        setError(err.response?.data?.detail || 'Failed to allocate payment');
-      }
+    onSuccess: () => {
+      setError(null);
+      if (onAllocationComplete) onAllocationComplete();
+      onClose();
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.detail || 'Failed to allocate payment');
     }
-  );
+  });
 
   // Calculate total allocated amount
   const totalAllocated = Array.from(invoiceAllocations.values()).reduce((sum, amount) => sum + amount, 0);
@@ -226,8 +224,8 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
                     key={payment.payment_id}
                     onClick={() => setSelectedPayment(payment)}
                     className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedPayment?.payment_id === payment.payment_id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
                       }`}
                   >
                     <div className="flex items-center justify-between">
@@ -358,10 +356,10 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={!selectedPayment || totalAllocated <= 0 || remainingUnallocated < 0 || allocationMutation.isLoading}
+            disabled={!selectedPayment || totalAllocated <= 0 || remainingUnallocated < 0 || allocationMutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
-            {allocationMutation.isLoading ? (
+            {allocationMutation.isPending ? (
               <>Loading...</>
             ) : (
               <>

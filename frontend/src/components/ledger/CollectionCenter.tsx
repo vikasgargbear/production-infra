@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Users,
   Phone,
