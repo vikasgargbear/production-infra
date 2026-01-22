@@ -52,14 +52,47 @@ interface CompanyProviderProps {
     children: ReactNode;
 }
 
+// DEV MODE configuration
+const DEV_MODE = process.env.NODE_ENV === 'development' && true;
+
+const DEV_COMPANY_INFO: CompanyInfo = {
+    name: 'AASO Pharma Distributors',
+    address: '123 MG Road, Jaipur, Rajasthan 302001',
+    phone: '9876543210',
+    email: 'info@aasopharma.com',
+    gst: '08AABCU9603R1ZM',
+    drugLicense: 'DL-RAJ-2024-12345',
+    state: 'Rajasthan',
+    logo: null,
+    bankAccounts: [
+        {
+            id: 1,
+            bank_name: 'HDFC Bank',
+            account_number: '50100123456789',
+            ifsc_code: 'HDFC0001234',
+            branch_name: 'MI Road, Jaipur'
+        }
+    ],
+    paymentQR: null
+};
+
 export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) => {
-    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-    const [orgId, setOrgId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    // DEV MODE: Start with mock company data
+    const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(
+        DEV_MODE ? DEV_COMPANY_INFO : null
+    );
+    const [orgId, setOrgId] = useState<string | null>(DEV_MODE ? '1' : null);
+    const [loading, setLoading] = useState(!DEV_MODE);
     const [error, setError] = useState<Error | null>(null);
 
     // Load company data on mount
     useEffect(() => {
+        // DEV MODE: Skip API loading
+        if (DEV_MODE) {
+            console.log('🏢 [DEV MODE] Using mock company data');
+            return;
+        }
+
         const timer = setTimeout(() => {
             loadCompanyData();
         }, 100);

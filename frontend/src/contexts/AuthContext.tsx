@@ -392,6 +392,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      */
     useEffect(() => {
         const initAuth = async () => {
+            // DEV MODE: Skip auth initialization - already authenticated
+            if (DEV_MODE) {
+                console.log('🚀 [DEV MODE] Skipping auth initialization - already authenticated');
+                return;
+            }
+
             // Check for OAuth callback
             const hash = window.location.hash;
             if (hash && hash.includes('access_token')) {

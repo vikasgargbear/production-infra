@@ -257,95 +257,88 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
           </div>
         </div>
 
-        {/* Customer & Transport Section - Simplified for Indian Pharma */}
+        {/* Customer & Transport Section - Modern Card Design */}
         {showAddresses && (
           <div className="mb-4">
-            {/* 2-Column Layout: Customer | Transport */}
-            <div className="border border-gray-800 print-border">
-              <table className="w-full">
-                <tbody>
-                  <tr className="border-b border-gray-800">
-                    {/* Customer Details - Single Address (Indian GST standard) */}
-                    <td className="border-r border-gray-800 p-3 align-top w-2/3">
-                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Customer Details</div>
-                      <div className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</div>
+            <div className="grid grid-cols-3 gap-3">
+              {/* Customer Details - Takes 2 columns */}
+              <div className="col-span-2">
+                <div className="bg-white rounded-xl p-4 border border-gray-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Customer Details</div>
+                  <div className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</div>
 
-                      {/* Address - Check multiple sources */}
-                      {typeof invoice.billing_address === 'string' && invoice.billing_address ? (
-                        <div className="text-xs text-gray-700 leading-relaxed">{invoice.billing_address}</div>
-                      ) : invoice.billing_address && typeof invoice.billing_address === 'object' ? (
-                        <div className="text-xs text-gray-700 leading-relaxed">
-                          {[
-                            (invoice.billing_address as any).address_line1,
-                            (invoice.billing_address as any).address_line2,
-                            (invoice.billing_address as any).street,
-                            (invoice.billing_address as any).city,
-                            (invoice.billing_address as any).state,
-                            (invoice.billing_address as any).pincode
-                          ].filter(Boolean).join(', ')}
-                        </div>
-                      ) : invoice.customer_details?.address ? (
-                        <div className="text-xs text-gray-700 leading-relaxed">
-                          {typeof invoice.customer_details.address === 'string'
-                            ? invoice.customer_details.address
-                            : [
-                              (invoice.customer_details.address as any).address_line1,
-                              (invoice.customer_details.address as any).address_line2,
-                              (invoice.customer_details.address as any).street,
-                              (invoice.customer_details.address as any).city,
-                              (invoice.customer_details.address as any).state,
-                              (invoice.customer_details.address as any).pincode
-                            ].filter(Boolean).join(', ')
-                          }
-                        </div>
-                      ) : null}
+                  {/* Address */}
+                  <div className="text-xs text-gray-600 mt-1 leading-relaxed">
+                    {typeof invoice.billing_address === 'string' && invoice.billing_address ? (
+                      invoice.billing_address
+                    ) : invoice.billing_address && typeof invoice.billing_address === 'object' ? (
+                      [
+                        (invoice.billing_address as any).address_line1,
+                        (invoice.billing_address as any).address_line2,
+                        (invoice.billing_address as any).street,
+                        (invoice.billing_address as any).city,
+                        (invoice.billing_address as any).state,
+                        (invoice.billing_address as any).pincode
+                      ].filter(Boolean).join(', ')
+                    ) : invoice.customer_details?.address ? (
+                      typeof invoice.customer_details.address === 'string'
+                        ? invoice.customer_details.address
+                        : [
+                          (invoice.customer_details.address as any).address_line1,
+                          (invoice.customer_details.address as any).street,
+                          (invoice.customer_details.address as any).city,
+                          (invoice.customer_details.address as any).state,
+                          (invoice.customer_details.address as any).pincode
+                        ].filter(Boolean).join(', ')
+                    ) : null}
+                  </div>
 
-                      {/* Contact & GST Info - Inline */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-700">
-                        {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                          <span>📱 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
-                        )}
-                        {invoice.customer_details?.gst_number && (
-                          <span className="font-medium">GST: {invoice.customer_details.gst_number}</span>
-                        )}
-                        {invoice.customer_details?.drug_license_number && (
-                          <span>DL: {invoice.customer_details.drug_license_number}</span>
-                        )}
+                  {/* Contact & Compliance Info */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs">
+                    {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                      <span className="text-gray-600">📞 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
+                    )}
+                    {invoice.customer_details?.gst_number && (
+                      <span className="font-medium text-gray-700">GST: {invoice.customer_details.gst_number}</span>
+                    )}
+                    {invoice.customer_details?.drug_license_number && (
+                      <span className="text-gray-600">DL: {invoice.customer_details.drug_license_number}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery/Transport - 1 column */}
+              <div>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Delivery</div>
+                  <div className="space-y-1.5">
+                    {invoice.delivery_type && (
+                      <div className="text-xs">
+                        <span className="text-gray-500">Mode:</span> <span className="font-medium text-gray-800">{invoice.delivery_type}</span>
                       </div>
-                    </td>
-
-                    {/* Transport Details */}
-                    <td className="p-3 align-top w-1/3">
-                      <div className="text-xs font-bold text-gray-900 mb-2 uppercase">Delivery / Transport</div>
-                      <div className="space-y-1">
-                        {invoice.delivery_type && (
-                          <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Mode:</span> <span className="font-medium">{invoice.delivery_type}</span>
-                          </div>
-                        )}
-                        {invoice.transport_company && (
-                          <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Transport:</span> {invoice.transport_company}
-                          </div>
-                        )}
-                        {invoice.vehicle_number && (
-                          <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Vehicle:</span> {invoice.vehicle_number}
-                          </div>
-                        )}
-                        {(invoice.delivery_charges ?? 0) > 0 && (
-                          <div className="text-xs text-gray-700">
-                            <span className="text-gray-600">Charges:</span> <span className="font-medium">{formatCurrency(invoice.delivery_charges ?? 0)}</span>
-                          </div>
-                        )}
-                        {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && (
-                          <div className="text-xs text-gray-500 italic">Self pickup / Local delivery</div>
-                        )}
+                    )}
+                    {invoice.transport_company && (
+                      <div className="text-xs">
+                        <span className="text-gray-500">Transport:</span> <span className="text-gray-700">{invoice.transport_company}</span>
                       </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    )}
+                    {invoice.vehicle_number && (
+                      <div className="text-xs">
+                        <span className="text-gray-500">Vehicle:</span> <span className="text-gray-700">{invoice.vehicle_number}</span>
+                      </div>
+                    )}
+                    {(invoice.delivery_charges ?? 0) > 0 && (
+                      <div className="text-xs">
+                        <span className="text-gray-500">Charges:</span> <span className="font-medium text-gray-800">{formatCurrency(invoice.delivery_charges ?? 0)}</span>
+                      </div>
+                    )}
+                    {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && (
+                      <div className="text-xs text-gray-500">Self pickup / Local</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

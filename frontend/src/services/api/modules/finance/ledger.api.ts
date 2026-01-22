@@ -67,14 +67,15 @@ const ENDPOINTS = {
     RECONCILE: '/ledger/reconcile',
     COLLECTIONS: '/ledger/collections',
     REPORTS: '/ledger/reports',
-    PARTY_V2_BASE: '/party-ledger-v2',
-    PARTY_BALANCE: (id: number) => `/party-ledger-v2/balance/${id}`,
-    PARTY_STATEMENT: (id: number) => `/party-ledger-v2/statement/${id}`,
-    PARTY_OUTSTANDING: (id: number) => `/party-ledger-v2/outstanding-bills/${id}`,
-    PARTY_AGING: '/party-ledger-v2/aging-analysis',
-    PARTY_ENTRY: '/party-ledger-v2/entry',
-    PARTY_RECONCILE: (id: number) => `/party-ledger-v2/reconcile/${id}`,
-    PARTY_REMINDERS: '/party-ledger-v2/reminders/pending'
+    // Party-specific endpoints (now match backend /ledger/* routes)
+    PARTY_V2_BASE: '/ledger',
+    PARTY_BALANCE: (id: number) => `/ledger/balance/${id}`,
+    PARTY_STATEMENT: (id: number) => `/ledger/statement/${id}`,
+    PARTY_OUTSTANDING: (id: number) => `/ledger/outstanding/${id}`,
+    PARTY_AGING: '/ledger/aging',
+    PARTY_ENTRY: '/ledger/entry',
+    PARTY_RECONCILE: (id: number) => `/ledger/reconcile/${id}`,
+    PARTY_REMINDERS: '/ledger/reminders/pending'
 } as const;
 
 // ============================================
