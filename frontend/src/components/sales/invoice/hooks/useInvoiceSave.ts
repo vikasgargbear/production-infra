@@ -139,8 +139,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                     invoiceId: tempId,
                     invoiceNumber: offlineInvoiceNo,
                     customerName: selectedCustomer.customer_name,
-                    customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || (selectedCustomer as any).mobile || '',
-                    customerEmail: selectedCustomer.email || '',
+                    customerPhone: selectedCustomer.primary_phone || '',
+                    customerEmail: selectedCustomer.primary_email || '',
                     totalAmount: invoiceData.total_amount,
                     items: invoice.items,
                     isOffline: true
@@ -185,8 +185,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 invoiceId: tempId,
                 invoiceNumber: localInvoiceNo,
                 customerName: selectedCustomer.customer_name,
-                customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || (selectedCustomer as any).mobile || '',
-                customerEmail: selectedCustomer.email || '',
+                customerPhone: selectedCustomer.primary_phone || '',
+                customerEmail: selectedCustomer.primary_email || '',
                 totalAmount: invoiceData.total_amount,
                 items: invoice.items,
                 isOffline: false
@@ -293,8 +293,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                         invoiceId: tempId,
                         invoiceNumber: offlineInvoiceNo,
                         customerName: selectedCustomer?.customer_name || '',
-                        customerPhone: selectedCustomer?.phone || selectedCustomer?.primary_phone || (selectedCustomer as any)?.mobile || '',
-                        customerEmail: selectedCustomer?.email || '',
+                        customerPhone: selectedCustomer?.primary_phone || '',
+                        customerEmail: selectedCustomer?.primary_email || '',
                         totalAmount: invoice.final_amount || 0,
                         items: invoice.items,
                         isOffline: true
