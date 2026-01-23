@@ -1,10 +1,62 @@
 /**
  * GST Calculations Utilities
  * 
- * Shared calculation logic for GST reports
+ * Shared calculation logic for GST reports and tax type determination
  */
 
 import type { GSTSummary, B2BInvoice, B2CData, InputTaxCredit } from '../types';
+
+// =============================================================================
+// GST TYPE DETERMINATION
+// =============================================================================
+
+/**
+ * GST Type: IGST for inter-state, CGST/SGST for intra-state
+ */
+export type GstType = 'IGST' | 'CGST/SGST';
+
+/**
+ * Determine GST Type based on company state vs customer/supplier state.
+ * 
+ * Indian GST Rules:
+ * - IGST (Integrated GST) = Inter-state transactions (different states)
+ * - CGST/SGST (Central + State GST) = Intra-state transactions (same state)
+ * 
+ * @param companyState - The seller's/company's state
+ * @param partyState - The buyer's/customer's/supplier's state  
+ * @returns 'IGST' for inter-state, 'CGST/SGST' for intra-state
+ * 
+ * @example
+ * // Inter-state: Rajasthan → Haryana
+ * determineGstType('Rajasthan', 'Haryana') // Returns 'IGST'
+ * 
+ * // Intra-state: Rajasthan → Rajasthan  
+ * determineGstType('Rajasthan', 'Rajasthan') // Returns 'CGST/SGST'
+ */
+export function determineGstType(
+    companyState: string | undefined | null,
+    partyState: string | undefined | null
+): GstType {
+    // Normalize states for comparison (lowercase, trimmed)
+    const normalizedCompanyState = companyState?.toLowerCase().trim();
+    const normalizedPartyState = partyState?.toLowerCase().trim();
+
+    // If either state is missing, default to intra-state (safer for compliance)
+    if (!normalizedCompanyState || !normalizedPartyState) {
+        console.log('[GST] Missing state info, defaulting to CGST/SGST');
+        return 'CGST/SGST';
+    }
+
+    const isInterState = normalizedCompanyState !== normalizedPartyState;
+    const gstType: GstType = isInterState ? 'IGST' : 'CGST/SGST';
+
+    console.log(`[GST] Company: ${normalizedCompanyState}, Party: ${normalizedPartyState} → ${gstType}`);
+    return gstType;
+}
+
+// =============================================================================
+// TAX CALCULATIONS
+// =============================================================================
 
 /**
  * Calculate total tax from CGST, SGST, and IGST
