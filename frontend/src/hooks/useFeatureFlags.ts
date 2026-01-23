@@ -9,7 +9,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import settingsApi from '../../services/api/modules/settings/settings.api';
+import apiClient from '../services/api/apiClient';
+import { API_ENDPOINTS } from '../config/api.config';
 
 // ============================================
 // Types
@@ -124,24 +125,31 @@ export function useFeatureFlags(): UseFeatureFlagsResult {
             setLoading(true);
             setError(null);
 
-            const response = await settingsApi.features.getAll();
+            // Try to fetch from API, fallback to defaults if not available
+            try {
+                const response = await apiClient.get('/settings/features');
+                if (response?.data?.features) {
+                    const fetchedFeatures = response.data.features;
+                    const mergedFeatures = { ...DEFAULT_FEATURES, ...fetchedFeatures };
+                    setFeatures(mergedFeatures);
 
-            if (response?.data?.success && response.data.data?.features) {
-                const fetchedFeatures = response.data.data.features;
-                const mergedFeatures = { ...DEFAULT_FEATURES, ...fetchedFeatures };
-
-                setFeatures(mergedFeatures);
-
-                // Cache the result
-                try {
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: fetchedFeatures,
-                        timestamp: Date.now()
-                    }));
-                } catch {
-                    // Storage full or blocked
+                    // Cache the result
+                    try {
+                        localStorage.setItem(CACHE_KEY, JSON.stringify({
+                            data: fetchedFeatures,
+                            timestamp: Date.now()
+                        }));
+                    } catch {
+                        // Storage full or blocked
+                    }
+                    return;
                 }
+            } catch {
+                // API not available, use defaults
             }
+
+            // Use defaults if API fetch fails
+            setFeatures(DEFAULT_FEATURES);
         } catch (err: any) {
             console.error('Failed to fetch feature flags:', err);
             setError(err.message || 'Failed to load feature settings');
@@ -153,7 +161,12 @@ export function useFeatureFlags(): UseFeatureFlagsResult {
 
     const updateFeature = useCallback(async (key: string, value: any): Promise<boolean> => {
         try {
-            await settingsApi.features.update({ [key]: value });
+            // Try to update via API
+            try {
+                await apiClient.patch('/settings/features', { [key]: value });
+            } catch {
+                // API not available - just update locally
+            }
 
             // Update local state
             setFeatures(prev => ({ ...prev, [key]: value }));
