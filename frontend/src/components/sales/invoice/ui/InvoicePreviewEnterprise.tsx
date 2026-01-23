@@ -238,19 +238,17 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             <div className="grid grid-cols-3 gap-3">
               {/* Customer Details */}
               <div>
-                <div className="bg-white rounded-xl p-4 border border-gray-200 h-full">
-                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Customer Details</div>
+                <div className="bg-white rounded-xl p-3 border border-gray-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Customer Details</div>
                   <div className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</div>
 
-                  {/* Address */}
-                  <div className="text-xs text-gray-600 mt-1 leading-relaxed">
+                  {/* Address - compact */}
+                  <div className="text-xs text-gray-600 mt-1">
                     {typeof invoice.billing_address === 'string' && invoice.billing_address ? (
                       invoice.billing_address
                     ) : invoice.billing_address && typeof invoice.billing_address === 'object' ? (
                       [
                         (invoice.billing_address as any).address_line1,
-                        (invoice.billing_address as any).address_line2,
-                        (invoice.billing_address as any).street,
                         (invoice.billing_address as any).city,
                         (invoice.billing_address as any).state,
                         (invoice.billing_address as any).pincode
@@ -260,7 +258,6 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                         ? invoice.customer_details.address
                         : [
                           (invoice.customer_details.address as any).address_line1,
-                          (invoice.customer_details.address as any).street,
                           (invoice.customer_details.address as any).city,
                           (invoice.customer_details.address as any).state,
                           (invoice.customer_details.address as any).pincode
@@ -268,16 +265,16 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     ) : null}
                   </div>
 
-                  {/* Contact & Compliance Info */}
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
+                  {/* Structured Details - Each on its own line */}
+                  <div className="mt-2 space-y-0.5 text-xs">
                     {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                      <span className="text-gray-600">📞 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
+                      <div className="text-gray-600">📞 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</div>
                     )}
                     {invoice.customer_details?.gst_number && (
-                      <span className="font-medium text-gray-700">GST: {invoice.customer_details.gst_number}</span>
+                      <div><span className="text-gray-500">GST:</span> <span className="font-medium text-gray-800">{invoice.customer_details.gst_number}</span></div>
                     )}
                     {invoice.customer_details?.drug_license_number && (
-                      <span className="text-gray-600">DL: {invoice.customer_details.drug_license_number}</span>
+                      <div><span className="text-gray-500">DL:</span> <span className="text-gray-700">{invoice.customer_details.drug_license_number}</span></div>
                     )}
                   </div>
                 </div>
@@ -285,9 +282,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
               {/* Delivery/Transport */}
               <div>
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 h-full">
-                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Delivery</div>
-                  <div className="space-y-1.5">
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Delivery</div>
+                  <div className="space-y-0.5">
                     {invoice.delivery_type && (
                       <div className="text-xs">
                         <span className="text-gray-500">Mode:</span> <span className="font-medium text-gray-800">{invoice.delivery_type}</span>
@@ -315,22 +312,21 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 </div>
               </div>
 
-              {/* Scan QR to Pay */}
+              {/* QR Code */}
               <div>
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200 h-full">
-                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2 text-center">Scan to Pay</div>
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1 text-center">Scan to Pay</div>
                   <div className="flex flex-col items-center">
-                    <div className="w-20 h-20 bg-white rounded-lg border-2 border-green-300 flex items-center justify-center shadow-sm">
+                    <div className="w-16 h-16 bg-white rounded-lg border border-gray-300 flex items-center justify-center">
                       {companyInfo?.paymentQR ? (
-                        <img src={companyInfo.paymentQR} alt="Payment QR" className="w-18 h-18 object-contain" />
+                        <img src={companyInfo.paymentQR} alt="Payment QR" className="w-14 h-14 object-contain" />
                       ) : (
-                        <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                         </svg>
                       )}
                     </div>
-                    <p className="text-xs text-green-700 mt-2 font-medium">{companyInfo?.upiId || 'aasopharma@paytm'}</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">UPI / PhonePe / GPay</p>
+                    <p className="text-xs text-gray-600 mt-1 font-medium">{companyInfo?.upiId || 'aasopharma@paytm'}</p>
                   </div>
                 </div>
               </div>
