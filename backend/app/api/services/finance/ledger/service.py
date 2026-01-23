@@ -81,8 +81,8 @@ class LedgerService:
                         p.payment_amount as credit,
                         2 as sort_order
                     FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = :customer_type
-                    AND p.payment_status != :cancelled_payment
+                    WHERE p.party_id = :party_id AND UPPER(p.party_type) = UPPER(:customer_type)
+                    AND UPPER(p.payment_status) != UPPER(:cancelled_payment)
                     AND (:from_date IS NULL OR p.payment_date >= :from_date)
                     AND (:to_date IS NULL OR p.payment_date <= :to_date)
                 )
@@ -129,8 +129,8 @@ class LedgerService:
                     0::numeric as credit,
                     1 as sort_order
                 FROM financial.payments p
-                WHERE p.party_id = :party_id AND p.party_type = :supplier_type
-                AND p.payment_status != :cancelled_payment
+                WHERE p.party_id = :party_id AND UPPER(p.party_type) = UPPER(:supplier_type)
+                AND UPPER(p.payment_status) != UPPER(:cancelled_payment)
                 AND (:from_date IS NULL OR p.payment_date >= :from_date)
                 AND (:to_date IS NULL OR p.payment_date <= :to_date)
                 ORDER BY p.payment_date DESC
