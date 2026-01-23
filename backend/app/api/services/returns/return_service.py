@@ -646,13 +646,17 @@ class ReturnService:
         if not sale_return:
             return None
         
+        # Note: sales_return_items doesn't have org_id column.
+        # Avoid JOIN with products/batches (which have org_id) to prevent TenantAwareSession ambiguity.
+        # Product/batch names are returned via separate queries if needed, or fetched from batch_id.
         items = db.execute(text("""
-            SELECT sri.*, p.product_name, p.hsn_code,
-                   b.batch_number, b.expiry_date
+            SELECT sri.*, 
+                   (SELECT product_name FROM inventory.products WHERE product_id = sri.product_id LIMIT 1) as product_name,
+                   (SELECT hsn_code FROM inventory.products WHERE product_id = sri.product_id LIMIT 1) as hsn_code,
+                   (SELECT batch_number FROM inventory.batches WHERE batch_id = sri.batch_id LIMIT 1) as batch_number,
+                   (SELECT expiry_date FROM inventory.batches WHERE batch_id = sri.batch_id LIMIT 1) as expiry_date
             FROM sales.sales_return_items sri
-            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON sri.batch_id = b.batch_id
-            WHERE sri.return_id = :return_id
+            WHERE sri.return_id = :return_id AND sri.return_item_id = sri.return_item_id
         """), {"return_id": return_id}).fetchall()
         
         result = dict(sale_return._mapping)
