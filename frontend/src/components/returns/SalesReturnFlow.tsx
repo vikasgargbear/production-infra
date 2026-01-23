@@ -192,21 +192,31 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     return {
       ...item,
-      return_quantity: totalQty,
-      selected: true,
+      // Original invoice quantities
+      quantity: totalQty,
       paid_quantity: paidQty,
       free_quantity: freeQty,
-      quantity: totalQty,
+      // Return quantities (editable) - default to full return
+      return_quantity: totalQty,
+      return_paid_qty: paidQty,
+      return_free_qty: freeQty,
+      // Pricing
       unit_price: item.unit_price || 0,
       discount_percent: item.discount_percent || 0,
       tax_percent: gstPercent,
+      // Limits
       max_returnable_qty: totalQty,
+      max_paid_qty: paidQty,
+      max_free_qty: freeQty,
+      // References
+      selected: true,
       batch_id: item.batch_id,
       batch_number: item.batch_number,
       manufacturing_date: item.manufacturing_date,
       expiry_date: item.expiry_date,
       invoice_item_id: item.invoice_item_id,
-      disposition: 'RESTOCK'
+      disposition: 'RESTOCK',
+      is_manual: false
     };
   };
 
