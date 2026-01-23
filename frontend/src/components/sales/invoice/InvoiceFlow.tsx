@@ -161,8 +161,19 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             toast.error('No phone number available for WhatsApp');
             return;
         }
+        // Clean phone number - remove all non-digits
+        let cleanPhone = phone.replace(/[^0-9]/g, '');
+
+        // Add India country code (91) if not present
+        if (cleanPhone.length === 10) {
+            cleanPhone = '91' + cleanPhone;
+        } else if (cleanPhone.startsWith('0')) {
+            // Remove leading 0 and add 91
+            cleanPhone = '91' + cleanPhone.substring(1);
+        }
+
         const whatsappMessage = `Your invoice is ready! Invoice #${invoice.invoice_number}`;
-        const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(whatsappMessage)}`;
+        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank');
     }, [invoice.invoice_number]);
 
