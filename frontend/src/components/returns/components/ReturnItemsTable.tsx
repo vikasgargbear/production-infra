@@ -1,12 +1,12 @@
 /**
  * ReturnItemsTable Component
  * Table for selecting and managing return items
- * Matches invoice items table style with editable inputs
+ * Matches invoice items table styling exactly
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import { Trash2, Package } from 'lucide-react';
-import { ProductSearch } from '../../global';
+import { ProductSearch, EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
 
 export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
@@ -23,20 +23,76 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
         [items]
     );
 
+    // Editable fields for keyboard navigation
+    const EDITABLE_FIELDS = ['return_paid_qty', 'return_free_qty', 'unit_price', 'discount_percent'];
+    const fieldRefs = useRef<Record<string, any>>({});
+
+    const setFieldRef = (rowIndex: number, fieldName: string, element: any): void => {
+        const key = `${rowIndex}-${fieldName}`;
+        fieldRefs.current[key] = element;
+    };
+
+    const focusField = (rowIndex: number, fieldName: string): void => {
+        const key = `${rowIndex}-${fieldName}`;
+        const fieldRef = fieldRefs.current[key];
+        if (fieldRef?.focus) {
+            setTimeout(() => fieldRef.focus(), 0);
+        }
+    };
+
+    const handleNavigate = useCallback((currentRow: number, currentField: string, direction: string): void => {
+        const currentFieldIndex = EDITABLE_FIELDS.indexOf(currentField);
+
+        switch (direction) {
+            case 'right':
+            case 'next':
+                if (currentFieldIndex < EDITABLE_FIELDS.length - 1) {
+                    focusField(currentRow, EDITABLE_FIELDS[currentFieldIndex + 1]);
+                } else if (currentRow < items.length - 1) {
+                    focusField(currentRow + 1, EDITABLE_FIELDS[0]);
+                }
+                break;
+            case 'left':
+                if (currentFieldIndex > 0) {
+                    focusField(currentRow, EDITABLE_FIELDS[currentFieldIndex - 1]);
+                } else if (currentRow > 0) {
+                    focusField(currentRow - 1, EDITABLE_FIELDS[EDITABLE_FIELDS.length - 1]);
+                }
+                break;
+            case 'down':
+                if (currentRow < items.length - 1) {
+                    focusField(currentRow + 1, currentField);
+                }
+                break;
+            case 'up':
+                if (currentRow > 0) {
+                    focusField(currentRow - 1, currentField);
+                }
+                break;
+        }
+    }, [items.length]);
+
     // Calculate totals for an item
-    const calculateItemTotal = (item: any) => {
+    const calculateItemTotal = (item: any): number => {
         const paidQty = parseFloat(String(item.return_paid_qty || item.return_quantity || 0));
-        const freeQty = parseFloat(String(item.return_free_qty || 0));
         const rate = parseFloat(String(item.unit_price || 0));
         const discPercent = parseFloat(String(item.discount_percent || 0));
         const taxPercent = parseFloat(String(item.tax_percent || 0));
 
-        // Only paid qty contributes to value (free qty has no value)
         const grossAmount = paidQty * rate;
         const discountAmount = (grossAmount * discPercent) / 100;
         const taxableAmount = grossAmount - discountAmount;
         const taxAmount = (taxableAmount * taxPercent) / 100;
         return taxableAmount + taxAmount;
+    };
+
+    const formatExpiry = (dateStr: string | undefined): string => {
+        if (!dateStr) return '-';
+        try {
+            return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+        } catch {
+            return '-';
+        }
     };
 
     return (
@@ -46,9 +102,6 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
                     <Package className="w-4 h-4 mr-2" />
                     RETURN ITEMS ({selectedItems.length})
-                    <span className="ml-2 text-xs text-gray-500 normal-case font-normal">
-                        (Use Tab/Enter for quick data entry)
-                    </span>
                 </h3>
             </div>
 
@@ -64,127 +117,155 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
             )}
 
             {items.length > 0 ? (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+                <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-700 uppercase w-48">Product</th>
+                            <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
+                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry</th>
                                 {selectedInvoice && (
-                                    <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Original</th>
+                                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                        Original
+                                        <div className="text-[10px] font-normal text-gray-500">Paid + Free</div>
+                                    </th>
                                 )}
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase">
-                                    QTY<br /><span className="text-[10px] text-gray-500">(Paid/Free)</span>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                    Return Qty
+                                    <div className="text-[10px] font-normal text-gray-500">Enter/Tab →</div>
                                 </th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700 uppercase">Rate</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Disc %</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Tax %</th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700 uppercase">Total</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Action</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Free</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Disc %</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Tax %</th>
+                                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {items.map((row, index) => {
                                 const originalPaidQty = parseFloat(String(row.paid_quantity || 0));
                                 const originalFreeQty = parseFloat(String(row.free_quantity || 0));
-                                const returnPaidQty = parseFloat(String(row.return_paid_qty ?? row.return_quantity ?? 0));
-                                const returnFreeQty = parseFloat(String(row.return_free_qty ?? 0));
+                                const isFromInvoice = !row.is_manual && !!selectedInvoice;
                                 const total = calculateItemTotal(row);
 
                                 return (
-                                    <tr key={index} className="border-b border-gray-100 hover:bg-blue-50/30">
+                                    <tr
+                                        key={index}
+                                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                                    >
+                                        {/* Row Number */}
+                                        <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
+
                                         {/* Product Info */}
-                                        <td className="px-2 py-2">
-                                            <div className="font-medium text-gray-900 text-sm">{row.product_name}</div>
-                                            <div className="text-xs text-gray-500">
-                                                {row.batch_number || 'N/A'} | HSN: {row.hsn_code || 'N/A'}
-                                            </div>
+                                        <td className="px-3 py-2">
+                                            <div className="text-sm font-medium text-gray-900">{row.product_name}</div>
+                                            <div className="text-xs text-gray-500">{row.batch_number || 'No Batch'}</div>
                                         </td>
 
-                                        {/* Original Qty (invoice-driven only) */}
+                                        {/* Expiry */}
+                                        <td className="px-3 py-2 text-center">
+                                            <div className="text-xs text-gray-600">{formatExpiry(row.expiry_date)}</div>
+                                        </td>
+
+                                        {/* Original Qty (invoice only) */}
                                         {selectedInvoice && (
-                                            <td className="px-2 py-2 text-center text-sm">
-                                                <div className="text-xs">
-                                                    <span className="font-medium">{originalPaidQty}</span>
+                                            <td className="px-3 py-2 text-center">
+                                                <div className="text-sm text-gray-900 font-medium">
+                                                    {originalPaidQty}
                                                     {originalFreeQty > 0 && (
-                                                        <span className="text-green-600">+{originalFreeQty}F</span>
+                                                        <span className="text-green-600 ml-1">+{originalFreeQty}</span>
                                                     )}
                                                 </div>
                                             </td>
                                         )}
 
-                                        {/* Return Qty: Paid + Free */}
-                                        <td className="px-2 py-2">
-                                            <div className="flex items-center justify-center gap-1">
-                                                <input
-                                                    type="number"
-                                                    value={returnPaidQty}
-                                                    onChange={(e) => onUpdateItem(index, 'return_paid_qty', parseFloat(e.target.value) || 0)}
-                                                    className="w-14 px-1 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    min={0}
-                                                    max={selectedInvoice ? originalPaidQty : 9999}
-                                                    placeholder="Paid"
-                                                />
-                                                <span className="text-gray-400 text-xs">/</span>
-                                                <input
-                                                    type="number"
-                                                    value={returnFreeQty}
-                                                    onChange={(e) => onUpdateItem(index, 'return_free_qty', parseFloat(e.target.value) || 0)}
-                                                    className="w-12 px-1 py-1 border border-gray-300 rounded text-center text-sm text-green-600 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                    min={0}
-                                                    max={selectedInvoice ? originalFreeQty : 9999}
-                                                    placeholder="Free"
-                                                />
-                                            </div>
+                                        {/* Return Qty (Paid) */}
+                                        <td className="px-3 py-2">
+                                            <EditableCell
+                                                ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
+                                                value={row.return_paid_qty ?? row.return_quantity ?? 0}
+                                                type="number"
+                                                min={0}
+                                                max={isFromInvoice ? originalPaidQty : undefined}
+                                                step={1}
+                                                decimalPlaces={0}
+                                                onSave={(val: number) => onUpdateItem(index, 'return_paid_qty', val)}
+                                                onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
+                                                selectOnFocus={true}
+                                                className="w-16"
+                                            />
+                                        </td>
+
+                                        {/* Free Qty */}
+                                        <td className="px-3 py-2">
+                                            <EditableCell
+                                                ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
+                                                value={row.return_free_qty ?? 0}
+                                                type="number"
+                                                min={0}
+                                                max={isFromInvoice ? originalFreeQty : undefined}
+                                                step={1}
+                                                decimalPlaces={0}
+                                                onSave={(val: number) => onUpdateItem(index, 'return_free_qty', val)}
+                                                onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
+                                                selectOnFocus={true}
+                                                className="w-14"
+                                            />
                                         </td>
 
                                         {/* Rate */}
-                                        <td className="px-2 py-2">
-                                            <div className="flex items-center justify-end">
-                                                <span className="text-gray-500 text-sm mr-1">₹</span>
-                                                <input
-                                                    type="number"
-                                                    value={row.unit_price || 0}
-                                                    onChange={(e) => onUpdateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                                                    className="w-20 px-1 py-1 border border-gray-300 rounded text-right text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    min={0}
-                                                    step={0.01}
-                                                    disabled={!row.is_manual && !!selectedInvoice}
-                                                />
-                                            </div>
+                                        <td className="px-3 py-2">
+                                            <EditableCell
+                                                ref={(el: any) => setFieldRef(index, 'unit_price', el)}
+                                                value={row.unit_price || 0}
+                                                type="number"
+                                                min={0}
+                                                decimalPlaces={2}
+                                                prefix="₹"
+                                                onSave={(val: number) => onUpdateItem(index, 'unit_price', val)}
+                                                onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
+                                                readOnly={isFromInvoice}
+                                                selectOnFocus={true}
+                                                className="w-20"
+                                            />
                                         </td>
 
                                         {/* Discount % */}
-                                        <td className="px-2 py-2">
-                                            <div className="flex items-center justify-center">
-                                                <input
-                                                    type="number"
-                                                    value={row.discount_percent || 0}
-                                                    onChange={(e) => onUpdateItem(index, 'discount_percent', parseFloat(e.target.value) || 0)}
-                                                    className="w-14 px-1 py-1 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    min={0}
-                                                    max={100}
-                                                    step={0.1}
-                                                    disabled={!row.is_manual && !!selectedInvoice}
-                                                />
-                                                <span className="text-gray-500 text-xs ml-1">%</span>
-                                            </div>
+                                        <td className="px-3 py-2">
+                                            <EditableCell
+                                                ref={(el: any) => setFieldRef(index, 'discount_percent', el)}
+                                                value={row.discount_percent || 0}
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                decimalPlaces={2}
+                                                suffix="%"
+                                                onSave={(val: number) => onUpdateItem(index, 'discount_percent', val)}
+                                                onNavigate={(dir: string) => handleNavigate(index, 'discount_percent', dir)}
+                                                readOnly={isFromInvoice}
+                                                selectOnFocus={true}
+                                                className="w-16"
+                                            />
                                         </td>
 
                                         {/* Tax % (read-only) */}
-                                        <td className="px-2 py-2 text-center text-sm text-gray-600">
-                                            {row.tax_percent || 0}%
+                                        <td className="px-3 py-2 text-center">
+                                            <span className="text-sm text-gray-900 font-medium" title="Tax from product (read-only)">
+                                                {row.tax_percent || 0}%
+                                            </span>
                                         </td>
 
                                         {/* Total */}
-                                        <td className="px-2 py-2 text-right text-sm font-semibold text-gray-900">
-                                            ₹{total.toFixed(2)}
+                                        <td className="px-3 py-2 text-right">
+                                            <div className="text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</div>
                                         </td>
 
                                         {/* Actions */}
-                                        <td className="px-2 py-2 text-center">
+                                        <td className="px-3 py-2 text-center">
                                             <button
                                                 onClick={() => onRemoveItem(row.id ?? index)}
-                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                                                 title="Remove item"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -196,22 +277,26 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         </tbody>
                     </table>
 
-                    {/* Help text */}
-                    <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
-                        <strong>Keyboard Navigation:</strong> Tab → Next field | Shift+Tab → Previous | Enter → Save & next row | ↑↓ → Navigate rows
+                    {/* Keyboard Navigation Help */}
+                    <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-gray-600">
+                        <strong className="text-blue-700">Keyboard Navigation:</strong>
+                        <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field •
+                        <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next •
+                        <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">↓↑</kbd> Navigate rows •
+                        <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Esc</kbd> Cancel
                     </div>
                 </div>
             ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200 p-6">
                     <div className="text-center py-8 text-gray-500">
                         <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                        <p>No items added yet</p>
+                        <p className="text-sm">No items added yet</p>
                         {selectedInvoice ? (
-                            <p className="text-sm mt-1">Invoice items will appear here</p>
+                            <p className="text-xs text-gray-400 mt-1">Invoice items will appear here</p>
                         ) : showManualEntry ? (
-                            <p className="text-sm mt-1">Search and add products manually</p>
+                            <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
                         ) : (
-                            <p className="text-sm mt-1">Select an invoice or use manual entry</p>
+                            <p className="text-xs text-gray-400 mt-1">Select an invoice or use manual entry</p>
                         )}
                     </div>
                 </div>
