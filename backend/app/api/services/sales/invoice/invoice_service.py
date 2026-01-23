@@ -575,6 +575,7 @@ class InvoiceService:
     @staticmethod
     def list_invoices(
         db: Session,
+        org_id: str = None,
         limit: int = 50,
         offset: int = 0,
         customer_id: int = None,
@@ -599,12 +600,12 @@ class InvoiceService:
                 i.igst_amount, i.total_tax_amount, i.taxable_amount,
                 i.subtotal_amount
             FROM sales.invoices i
-            WHERE 1=1
+            WHERE i.org_id = :org_id
         """
         
-        params = {"limit": limit, "offset": offset}
+        params = {"limit": limit, "offset": offset, "org_id": org_id}
         count_conditions = ""
-        count_params = {}
+        count_params = {"org_id": org_id}
 
         if customer_id:
             query += " AND i.customer_id = :customer_id"
@@ -645,7 +646,7 @@ class InvoiceService:
         invoices = [dict(row._mapping) for row in result]
         
         # Get total count
-        count_query = f"SELECT COUNT(*) FROM sales.invoices WHERE 1=1{count_conditions}"
+        count_query = f"SELECT COUNT(*) FROM sales.invoices WHERE org_id = :org_id{count_conditions}"
         total = db.execute(text(count_query), count_params).scalar()
         
         return {

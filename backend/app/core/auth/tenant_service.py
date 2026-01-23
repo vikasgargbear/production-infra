@@ -507,9 +507,24 @@ class TenantAwareSession:
             return self._execute_sqlalchemy_statement(statement, parameters)
         
         # Apply tenant filtering to the SQL string
-        safe_query, safe_params = TenantQueryBuilder.build_safe_query(
-            statement_str, parameters
-        )
+        try:
+            safe_query, safe_params = TenantQueryBuilder.build_safe_query(
+                statement_str, parameters
+            )
+            
+            # SECURITY LOG: Always log when org_id filter is injected
+            if '_tenant_org_id' in safe_params:
+                logger.info(f"[SECURITY] Query #{self._query_count} filtered by org_id={safe_params['_tenant_org_id'][:8]}...")
+            else:
+                # CRITICAL: Query running WITHOUT org_id filter - potential data leak
+                query_preview = statement_str[:100].replace('\n', ' ')
+                logger.warning(f"[SECURITY] ⚠️ Query #{self._query_count} has NO org_id filter: {query_preview}...")
+                
+        except SecurityError as e:
+            # No tenant context - this is a CRITICAL security issue
+            logger.error(f"[SECURITY] ❌ CRITICAL: No tenant context for query: {statement_str[:100]}...")
+            raise
+        
         logger.debug(f"Tenant query #{self._query_count}: {safe_query[:100]}...")
         return self.session.execute(text(safe_query), safe_params)
     

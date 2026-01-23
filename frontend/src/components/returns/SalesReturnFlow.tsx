@@ -284,20 +284,23 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Fetch batches
   const fetchBatchesForProduct = useCallback(async (productId: number) => {
     try {
+      const token = localStorage.getItem('pharma_token') || sessionStorage.getItem('pharma_token') || '';
       const response = await fetch(
-        `${API_BASE_URL}/api/inventory/batches/product/${productId}`,
+        `${API_BASE_URL}/api/stock-movements/product/${productId}/batches`,
         {
           headers: {
-            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id') || ''
+            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id') || '',
+            'Authorization': token ? `Bearer ${token}` : ''
           }
         }
       );
       if (response.ok) {
-        const batches = await response.json();
+        const data = await response.json();
+        const batches = data.batches || data || [];
         dispatch({
           type: 'SET_AVAILABLE_BATCHES',
           productId,
-          batches: batches.filter((b: any) => b.quantity_available > 0)
+          batches: Array.isArray(batches) ? batches.filter((b: any) => b.quantity_available > 0) : []
         });
       }
     } catch (error) {

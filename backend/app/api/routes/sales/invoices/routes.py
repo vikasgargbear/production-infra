@@ -204,6 +204,7 @@ async def get_invoices(
         # Use service method for all list logic with filters
         return InvoiceService.list_invoices(
             db=db,
+            org_id=str(context.org_id),
             limit=limit,
             offset=offset,
             customer_id=customer_id,
