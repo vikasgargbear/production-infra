@@ -16,7 +16,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     availableBatches,
     onUpdateItem,
     onAddManualItem,
-    onRemoveItem
+    onRemoveItem,
+    onBackToInvoice
 }) => {
     const selectedItems = useMemo(() =>
         items.filter(item => item.selected),
@@ -103,6 +104,14 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     <Package className="w-4 h-4 mr-2" />
                     RETURN ITEMS ({selectedItems.length})
                 </h3>
+                {onBackToInvoice && (
+                    <button
+                        onClick={onBackToInvoice}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
+                    >
+                        ← Back to Invoice Selection
+                    </button>
+                )}
             </div>
 
             {/* Product Search for Manual Entry */}

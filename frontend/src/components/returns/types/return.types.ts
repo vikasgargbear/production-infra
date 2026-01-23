@@ -99,6 +99,7 @@ export interface ReturnItemsTableProps {
     onUpdateItem: (indexOrId: string | number, field: string, value: any) => void;
     onAddManualItem: (product: any) => void;
     onRemoveItem: (itemId: string | number) => void;
+    onBackToInvoice?: () => void;
 }
 
 export interface ReturnReviewPanelProps {

@@ -630,21 +630,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 />
               </div>
 
-              {/* Invoice Selection - or back button in manual mode */}
-              {!ui.showInvoiceSection && ui.showManualEntry && selectedCustomer && (
-                <div className="mb-4">
-                  <button
-                    onClick={() => {
-                      dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
-                      dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
-                      dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
-                    }}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                  >
-                    ← Back to Invoice Selection
-                  </button>
-                </div>
-              )}
               <ReturnInvoiceSelector
                 selectedCustomer={selectedCustomer}
                 selectedInvoice={selectedInvoice}
@@ -663,6 +648,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 onUpdateItem={handleUpdateItem}
                 onAddManualItem={handleAddManualItem}
                 onRemoveItem={handleRemoveItem}
+                onBackToInvoice={ui.showManualEntry && !ui.showInvoiceSection ? () => {
+                  dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+                  dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
+                  dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
+                } : undefined}
               />
             </div>
           </div>
