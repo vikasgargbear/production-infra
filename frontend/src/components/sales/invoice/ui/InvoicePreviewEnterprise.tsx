@@ -151,19 +151,19 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   {companyInfo?.logo ? (
                     <img
                       src={companyInfo?.logo}
-                      alt={companyInfo?.name || 'Company'}
+                      alt={companyInfo?.company_name || companyInfo?.name || 'Company'}
                       className="w-20 h-20 object-contain rounded-lg flex-shrink-0"
                     />
                   ) : (
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                      <span className="text-3xl font-bold text-white">{(companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
+                      <span className="text-3xl font-bold text-white">{(companyInfo?.company_name || companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
                     </div>
                   )}
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">{companyInfo?.name || 'Your Company Name'}</h2>
-                    <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || 'Company Address'}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || companyInfo?.gst || ''}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drugLicense || companyInfo?.drug_license_no || ''}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{companyInfo?.company_name || companyInfo?.name || 'Your Company Name'}</h2>
+                    <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || ''}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst || companyInfo?.gst_number || ''}</p>
+                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drug_license_no || companyInfo?.drugLicense || ''}</p>
                   </div>
                 </div>
               </div>
@@ -178,9 +178,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
                     {(() => {
                       // Get selected bank account from invoice or use default
-                      const selectedBank = invoice.bank_account_id && companyInfo?.bankAccounts
-                        ? companyInfo.bankAccounts.find(acc => acc.id === invoice.bank_account_id)
-                        : companyInfo?.bankAccounts?.[0]; // Default to first account
+                      // Support both camelCase and snake_case field names
+                      const bankAccounts = companyInfo?.bank_accounts || companyInfo?.bankAccounts;
+                      const selectedBank = invoice.bank_account_id && bankAccounts
+                        ? bankAccounts.find((acc: any) => acc.id === invoice.bank_account_id)
+                        : bankAccounts?.[0]; // Default to first account
 
                       if (selectedBank) {
                         return (
@@ -260,9 +262,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
         {/* Customer & Transport Section - Modern Card Design */}
         {showAddresses && (
           <div className="mb-4">
-            <div className="grid grid-cols-3 gap-3">
-              {/* Customer Details - Takes 2 columns */}
-              <div className="col-span-2">
+            <div className="grid grid-cols-2 gap-3">
+              {/* Customer Details - 1 column (50%) */}
+              <div>
                 <div className="bg-white rounded-xl p-4 border border-gray-200 h-full">
                   <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Customer Details</div>
                   <div className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</div>
