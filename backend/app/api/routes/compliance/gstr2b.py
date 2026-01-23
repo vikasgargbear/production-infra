@@ -12,9 +12,8 @@ import json
 import uuid
 import logging
 
-from ....db.session import get_tenant_aware_db, TenantAwareSession
-from ....core.context import get_org_context, OrgContext
-from ....core.decorators.tenant import with_tenant_context
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession, with_tenant_context
+from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 
 router = APIRouter(tags=["GSTR-2B Reconciliation"])
