@@ -169,65 +169,38 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               </div>
             </div>
 
-            {/* Bank & Payment Details - Merged into one tile */}
+            {/* Bank Details */}
             <div>
               <div className="bg-gray-50 rounded-xl p-3 h-full print-border print-bg-gray">
-                <div className="flex justify-between items-start">
-                  {/* Bank Details on left */}
-                  <div className="flex-1">
-                    <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
-                    {(() => {
-                      // Get selected bank account from invoice or use default
-                      // Support both camelCase and snake_case field names
-                      const bankAccounts = companyInfo?.bank_accounts || companyInfo?.bankAccounts;
-                      const selectedBank = invoice.bank_account_id && bankAccounts
-                        ? bankAccounts.find((acc: any) => acc.id === invoice.bank_account_id)
-                        : bankAccounts?.[0]; // Default to first account
+                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
+                {(() => {
+                  // Get selected bank account from invoice or use default
+                  // Support both camelCase and snake_case field names
+                  const bankAccounts = companyInfo?.bank_accounts || companyInfo?.bankAccounts;
+                  const selectedBank = invoice.bank_account_id && bankAccounts
+                    ? bankAccounts.find((acc: any) => acc.id === invoice.bank_account_id)
+                    : bankAccounts?.[0]; // Default to first account
 
-                      if (selectedBank) {
-                        return (
-                          <div className="text-sm text-gray-600 space-y-1">
-                            <p className="font-semibold text-gray-900">{selectedBank.bank_name}</p>
-                            <p>A/C: {selectedBank.account_number}</p>
-                            <p>IFSC: {selectedBank.ifsc_code}</p>
-                            {selectedBank.branch_name && (
-                              <p className="text-xs">Branch: {selectedBank.branch_name}</p>
-                            )}
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="text-sm text-gray-500 italic">
-                            <p>No bank account configured</p>
-                            <p className="text-xs mt-1">Please add bank details in company settings</p>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                  {/* QR Code on right */}
-                  <div className="text-center ml-3">
-                    <h3 className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                      {invoice.payment_mode === 'UPI' ? 'UPI' : 'Pay QR'}
-                    </h3>
-                    {invoice.payment_mode === 'UPI' || invoice.payment_mode === 'BANK_TRANSFER' ? (
-                      <>
-                        <div className="w-16 h-16 bg-white rounded border border-gray-300 flex items-center justify-center">
-                          <div className="text-xs text-gray-400">
-                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                            </svg>
-                          </div>
-                        </div>
-                        <p className="text-[9px] text-gray-600 mt-1">{companyInfo?.upiId || 'aasopharma@paytm'}</p>
-                      </>
-                    ) : (
-                      <div className="h-16 flex items-center justify-center">
-                        <p className="text-[10px] text-gray-400">N/A</p>
+                  if (selectedBank) {
+                    return (
+                      <div className="text-sm text-gray-600 space-y-1">
+                        <p className="font-semibold text-gray-900">{selectedBank.bank_name}</p>
+                        <p>A/C: {selectedBank.account_number}</p>
+                        <p>IFSC: {selectedBank.ifsc_code}</p>
+                        {selectedBank.branch_name && (
+                          <p className="text-xs">Branch: {selectedBank.branch_name}</p>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    );
+                  } else {
+                    return (
+                      <div className="text-sm text-gray-500 italic">
+                        <p>No bank account configured</p>
+                        <p className="text-xs mt-1">Please add bank details in company settings</p>
+                      </div>
+                    );
+                  }
+                })()}
               </div>
             </div>
 
@@ -259,11 +232,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
           </div>
         </div>
 
-        {/* Customer & Transport Section - Modern Card Design */}
+        {/* Customer, Delivery & QR Section - 3 Column Grid */}
         {showAddresses && (
           <div className="mb-4">
-            <div className="grid grid-cols-2 gap-3">
-              {/* Customer Details - 1 column (50%) */}
+            <div className="grid grid-cols-3 gap-3">
+              {/* Customer Details */}
               <div>
                 <div className="bg-white rounded-xl p-4 border border-gray-200 h-full">
                   <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Customer Details</div>
@@ -296,7 +269,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   </div>
 
                   {/* Contact & Compliance Info */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
                     {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
                       <span className="text-gray-600">📞 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</span>
                     )}
@@ -310,7 +283,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 </div>
               </div>
 
-              {/* Delivery/Transport - 1 column */}
+              {/* Delivery/Transport */}
               <div>
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 h-full">
                   <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Delivery</div>
@@ -338,6 +311,26 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && (
                       <div className="text-xs text-gray-500">Self pickup / Local</div>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Scan QR to Pay */}
+              <div>
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200 h-full">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2 text-center">Scan to Pay</div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-20 h-20 bg-white rounded-lg border-2 border-green-300 flex items-center justify-center shadow-sm">
+                      {companyInfo?.paymentQR ? (
+                        <img src={companyInfo.paymentQR} alt="Payment QR" className="w-18 h-18 object-contain" />
+                      ) : (
+                        <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        </svg>
+                      )}
+                    </div>
+                    <p className="text-xs text-green-700 mt-2 font-medium">{companyInfo?.upiId || 'aasopharma@paytm'}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">UPI / PhonePe / GPay</p>
                   </div>
                 </div>
               </div>
