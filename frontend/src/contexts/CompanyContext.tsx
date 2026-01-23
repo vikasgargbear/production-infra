@@ -80,7 +80,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
         setError(null);
 
         try {
-            // Load from localStorage first (for offline support)
+            // PRIMARY: Load from localStorage immediately (synced during login)
             const cachedCompanyInfo: CompanyInfo = {
                 name: localStorage.getItem('companyName') || '',
                 address: localStorage.getItem('companyAddress') || '',
@@ -97,10 +97,14 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
 
             const cachedOrgId = localStorage.getItem('orgId');
 
-            setCompanyInfo(cachedCompanyInfo);
-            setOrgId(cachedOrgId);
+            // Set cached data immediately - this enables offline-first behavior
+            if (cachedCompanyInfo.name) {
+                setCompanyInfo(cachedCompanyInfo);
+                setOrgId(cachedOrgId);
+                setLoading(false); // Unblock UI immediately with cached data
+            }
 
-            // ALWAYS try to fetch latest data from API (don't gate on org_id)
+            // BACKGROUND: Try to refresh from API (don't block on this)
             try {
                 const response = await companyApi.getCompanyProfile();
                 const rawResponse = (response as any).data || response;
