@@ -259,34 +259,16 @@ class LedgerService:
                 "pending": "pending",
                 "cancelled": InvoiceStatus.CANCELLED.value
             })
+            bills = [dict(row._mapping) for row in result]
         else:
-            result = db.execute(text("""
-                SELECT 
-                    si.invoice_id, si.invoice_number, si.invoice_date, si.due_date,
-                    si.final_amount, COALESCE(si.paid_amount, 0) as paid_amount,
-                    (si.final_amount - COALESCE(si.paid_amount, 0)) as outstanding_amount,
-                    si.payment_status,
-                    GREATEST(0, CURRENT_DATE - si.due_date) as days_overdue
-                FROM purchases.supplier_invoices si
-                WHERE si.supplier_id = :party_id
-                AND si.payment_status IN (:unpaid, :partial, :pending)
-                AND si.invoice_status != :cancelled
-                ORDER BY si.due_date
-            """), {
-                "party_id": party_id,
-                "unpaid": InvoicePaymentStatus.UNPAID.value,
-                "partial": InvoicePaymentStatus.PARTIAL.value,
-                "pending": "pending",
-                "cancelled": InvoiceStatus.CANCELLED.value
-            })
-        
-        bills = [dict(row._mapping) for row in result]
+            # Supplier invoices table doesn't exist - return empty list
+            bills = []
         
         return {
             "party_id": party_id,
             "party_type": party_type,
             "outstanding_bills": bills,
-            "total_outstanding": sum(float(b["outstanding_amount"]) for b in bills),
+            "total_outstanding": sum(float(b["outstanding_amount"]) for b in bills) if bills else 0,
             "bill_count": len(bills)
         }
     
@@ -324,34 +306,12 @@ class LedgerService:
                 "paid": InvoicePaymentStatus.PAID.value,
                 "cancelled": InvoiceStatus.CANCELLED.value
             })
+            aging_data = [dict(row._mapping) for row in result]
             total_key = "total_outstanding"
         else:
-            result = db.execute(text("""
-                SELECT
-                    s.supplier_id, s.supplier_name, s.primary_phone as phone,
-                    COUNT(si.invoice_id) as invoice_count,
-                    COALESCE(SUM(si.final_amount - COALESCE(si.paid_amount, 0)), 0) as total_payable,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date <= 30 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as current,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date BETWEEN 31 AND 60 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as days_31_60,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date BETWEEN 61 AND 90 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as days_61_90,
-                    COALESCE(SUM(CASE WHEN CURRENT_DATE - si.invoice_date > 90 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as over_90
-                FROM purchases.supplier_invoices si
-                JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
-                WHERE si.payment_status != :paid AND si.invoice_status != :cancelled
-                AND si.final_amount > COALESCE(si.paid_amount, 0)
-                GROUP BY s.supplier_id, s.supplier_name, s.primary_phone
-                ORDER BY total_payable DESC
-            """), {
-                "paid": InvoicePaymentStatus.PAID.value,
-                "cancelled": InvoiceStatus.CANCELLED.value
-            })
+            # Supplier invoices table doesn't exist - return empty data
+            aging_data = []
             total_key = "total_payable"
-        
-        aging_data = [dict(row._mapping) for row in result]
         
         return {
             "party_type": party_type,
@@ -413,31 +373,20 @@ class LedgerService:
                 ) if total_receivable > 0 else 100
             }
         else:
+            # Supplier invoices table doesn't exist - return basic data from suppliers table only
             result = db.execute(text("""
-                SELECT
-                    COUNT(DISTINCT s.supplier_id) as total_parties,
-                    COUNT(DISTINCT CASE WHEN si.payment_status != :paid THEN s.supplier_id END) as parties_with_dues,
-                    COALESCE(SUM(si.final_amount - COALESCE(si.paid_amount, 0)), 0) as total_payable,
-                    COALESCE(SUM(CASE WHEN si.due_date < CURRENT_DATE 
-                        THEN si.final_amount - COALESCE(si.paid_amount, 0) ELSE 0 END), 0) as total_overdue,
-                    COUNT(DISTINCT si.invoice_id) as total_pending_invoices
+                SELECT COUNT(*) as total_parties
                 FROM parties.suppliers s
-                LEFT JOIN purchases.supplier_invoices si ON s.supplier_id = si.supplier_id 
-                    AND si.invoice_status != :cancelled
-                    AND si.payment_status != :paid
                 WHERE s.is_active = true
-            """), {
-                "paid": InvoicePaymentStatus.PAID.value,
-                "cancelled": InvoiceStatus.CANCELLED.value
-            }).fetchone()
+            """)).fetchone()
             
             return {
                 "party_type": party_type,
-                "total_parties": result.total_parties or 0,
-                "parties_with_dues": result.parties_with_dues or 0,
-                "total_payable": float(result.total_payable or 0),
-                "total_overdue": float(result.total_overdue or 0),
-                "pending_invoices": result.total_pending_invoices or 0
+                "total_parties": result.total_parties if result else 0,
+                "parties_with_dues": 0,
+                "total_payable": 0,
+                "total_overdue": 0,
+                "pending_invoices": 0
             }
     
     @staticmethod

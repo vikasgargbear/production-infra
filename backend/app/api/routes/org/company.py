@@ -84,15 +84,34 @@ async def get_company_info(
                 except:
                     business_settings = {}
             
-            # Get default bank account if exists
+            # Get ALL bank accounts for the organization
             bank_query = """
-                SELECT account_name, account_number, bank_name, branch_name, ifsc_code, account_type
+                SELECT bank_account_id, account_name, account_number, bank_name, 
+                       branch_name, ifsc_code, account_type, is_default_account
                 FROM master.org_bank_accounts
-                WHERE org_id = :org_id AND is_default_account = true AND is_active = true
-                LIMIT 1
+                WHERE org_id = :org_id AND is_active = true
+                ORDER BY is_default_account DESC, created_at ASC
             """
             bank_result = db.execute(text(bank_query), {"org_id": str(context.org_id)})
-            bank_data = bank_result.first()
+            bank_rows = bank_result.fetchall()
+            
+            # Build bank_accounts array for frontend
+            bank_accounts = []
+            default_bank = None
+            for bank in bank_rows:
+                bank_obj = {
+                    "id": bank.bank_account_id,
+                    "account_name": bank.account_name or "",
+                    "account_number": bank.account_number or "",
+                    "bank_name": bank.bank_name or "",
+                    "branch_name": bank.branch_name or "",
+                    "ifsc_code": bank.ifsc_code or "",
+                    "account_type": bank.account_type or "CURRENT",
+                    "is_default": bank.is_default_account or False
+                }
+                bank_accounts.append(bank_obj)
+                if bank.is_default_account and not default_bank:
+                    default_bank = bank_obj
             
             # Get company logo if exists
             logo_query = """
@@ -138,18 +157,20 @@ async def get_company_info(
                 "print_format": business_settings.get("print_format", "A4"),
                 "show_signature": business_settings.get("show_signature", True),
                 "show_logo": business_settings.get("show_logo", True),
-                "show_bank_details": business_settings.get("show_bank_details", True)
+                "show_bank_details": business_settings.get("show_bank_details", True),
+                # ALL bank accounts as array (frontend expects this)
+                "bank_accounts": bank_accounts
             }
             
-            # Add bank details if found
-            if bank_data:
+            # Add default bank details as flat fields for backward compatibility
+            if default_bank:
                 response.update({
-                    "bank_name": bank_data.bank_name or "",
-                    "account_number": bank_data.account_number or "",
-                    "account_name": bank_data.account_name or "",
-                    "ifsc_code": bank_data.ifsc_code or "",
-                    "branch_name": bank_data.branch_name or "",
-                    "account_type": bank_data.account_type or ""
+                    "bank_name": default_bank.get("bank_name", ""),
+                    "account_number": default_bank.get("account_number", ""),
+                    "account_name": default_bank.get("account_name", ""),
+                    "ifsc_code": default_bank.get("ifsc_code", ""),
+                    "branch_name": default_bank.get("branch_name", ""),
+                    "account_type": default_bank.get("account_type", "")
                 })
             else:
                 response.update({
