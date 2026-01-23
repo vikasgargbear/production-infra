@@ -156,7 +156,7 @@ class PurchaseReturnService:
                 pr.notes,
                 pr.created_at,
                 s.supplier_name as party_name,
-                (SELECT COUNT(*) FROM procurement.purchase_return_items pri WHERE pri.return_id = pr.return_id) as item_count
+                (SELECT COUNT(*) FROM procurement.purchase_return_items pri WHERE pri.org_id = pr.org_id AND pri.return_id = pr.return_id) as item_count
             FROM procurement.purchase_returns pr
             LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
             WHERE 1=1
