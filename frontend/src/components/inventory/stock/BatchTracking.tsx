@@ -399,35 +399,24 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
   }, []);
   */
 
-  // Define columns for DataTable
+  // Define columns for DataTable - Streamlined for no horizontal scroll
   const columns = [
     {
-      header: 'Select',
-      key: 'select',
-      render: (value: any, row: any) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(row.batch_id || row.id)}
-          onChange={() => toggleSelect(row.batch_id || row.id)}
-          className="w-4 h-4 rounded border-gray-300"
-        />
-      ),
-      width: '50px',
-    },
-    {
-      header: 'Expiry Date',
+      header: 'Expiry',
       key: 'expiry_date',
       sortable: true,
-      render: (value) => new Date(value).toLocaleDateString(),
+      render: (value) => (
+        <div className="text-sm">{new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
+      ),
     },
     {
-      header: 'Batch Details',
+      header: 'Batch',
       key: 'batch_number',
       sortable: true,
       render: (value, batch) => (
         <div>
-          <div className="font-medium text-gray-900">{batch.batch_number}</div>
-          <div className="text-sm text-gray-500">{batch.supplier_name}</div>
+          <div className="font-medium text-gray-900 text-sm">{batch.batch_number}</div>
+          {batch.supplier_name && <div className="text-xs text-gray-400 truncate max-w-[120px]">{batch.supplier_name}</div>}
         </div>
       ),
     },
@@ -435,117 +424,58 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       header: 'Product',
       key: 'product_name',
       sortable: true,
-      render: (value, batch) => (
-        <div>
-          <div className="text-gray-900 font-medium">{value}</div>
-          {batch.manufacturer && <div className="text-xs text-gray-400">{batch.manufacturer}</div>}
-        </div>
+      render: (value) => (
+        <div className="text-gray-900 font-medium text-sm truncate max-w-[180px]" title={value}>{value}</div>
       ),
     },
     {
-      header: 'Available Stock',
+      header: 'Qty',
       key: 'quantity_available',
       align: 'center' as const,
       sortable: true,
-      render: (value, batch) => (
-        <div>
-          <div className="font-medium text-lg">{value || 0}</div>
-          <div className="text-xs text-gray-400">MRP: ₹{batch.mrp || 0}</div>
-        </div>
+      render: (value) => (
+        <div className="font-semibold">{value || 0}</div>
       ),
-    },
-    {
-      header: 'Value',
-      key: 'total_value',
-      align: 'right' as const,
-      sortable: true,
-      render: (value, batch) => formatCurrency((batch.quantity_available || 0) * (batch.cost_per_unit || 0)),
-    },
-    {
-      header: 'Days to Expiry',
-      key: 'days_to_expiry',
-      align: 'center' as const,
-      sortable: true,
-      render: (value, batch) => {
-        const days = Math.floor((new Date(batch.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-        return (
-          <span className={`font-medium ${days < 0 ? 'text-red-600' :
-            days <= 30 ? 'text-orange-600' :
-              days <= 60 ? 'text-yellow-600' : 'text-green-600'
-            }`}>
-            {days < 0 ? 'Expired' : `${days} days`}
-          </span>
-        );
-      },
     },
     {
       header: 'Status',
       key: 'status',
       align: 'center' as const,
-      render: (_value: any, batch: any) => (
-        <StatusBadge
-          status={getBatchStatusColor(batch)}
-          label={getBatchStatusText(batch)}
-        />
-      ),
+      render: (_value: any, batch: any) => {
+        const days = Math.floor((new Date(batch.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        const statusText = getBatchStatusText(batch);
+        const daysText = days < 0 ? 'Expired' : `${days}d`;
+
+        return (
+          <div className="text-center">
+            <StatusBadge status={getBatchStatusColor(batch)} label={statusText} />
+            <div className="text-xs text-gray-400 mt-0.5">{daysText}</div>
+          </div>
+        );
+      },
     },
     {
-      header: 'Actions',
+      header: '',
       key: 'actions',
       align: 'center' as const,
       sortable: false,
       render: (_: any, batch: any) => (
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center justify-center gap-1">
           <button
             onClick={() => handleBatchSelect(batch)}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
             title="View Movements"
           >
             <Eye className="w-4 h-4" />
           </button>
-
           <button
-            onClick={() => {
-              setSelectedIds(new Set([batch.batch_id || batch.id]));
-              setTimeout(() => printSelected(), 0);
-            }}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Print"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              setSelectedIds(new Set([batch.batch_id || batch.id]));
-              setTimeout(() => exportSelectedPDF(), 0);
-            }}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Download PDF"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              setSelectedIds(new Set([batch.batch_id || batch.id]));
-              setTimeout(() => whatsappSelected(), 0);
-            }}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Send WhatsApp"
-          >
-            <MessageCircle className="w-4 h-4" />
-          </button>
-
-          <button
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:bg-gray-50 rounded transition-colors"
             title="Edit"
           >
             <Edit className="w-4 h-4" />
           </button>
         </div>
       ),
-      width: '180px',
     }
   ];
 
