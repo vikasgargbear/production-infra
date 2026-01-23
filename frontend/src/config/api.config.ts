@@ -169,10 +169,20 @@ export const API_CONFIG: APIConfig = {
       BASE: '/returns/',  // Restored trailing slash for proper Django URL handling
       APPROVE: (id) => `/returns/${id}/approve/`,  // Restored trailing slash
       REJECT: (id) => `/returns/${id}/reject/`,  // Restored trailing slash
-      CUSTOMER_RETURNS: '/returns/customer/',  // Restored trailing slash
-      SUPPLIER_RETURNS: '/returns/supplier/',  // Restored trailing slash
-      REASONS: '/returns/reasons/',  // Added explicit endpoint for reasons
-      RETURNABLE_ITEMS: '/returns/returnable/',  // Added explicit endpoint for returnable items
+      // Sales returns (from customers)
+      SALES: '/sale-returns/',  // Matches backend: sales_returns_router prefix
+      SALES_BY_ID: (id) => `/sale-returns/${id}/`,
+      SALES_RETURNABLE_INVOICES: '/sale-returns/returnable-invoices/',
+      SALES_INVOICE_ITEMS: (invoiceId) => `/sale-returns/invoice/${invoiceId}/items/`,
+      SALES_RETURNABLE_ITEMS: (invoiceId) => `/sale-returns/invoice/${invoiceId}/returnable-items/`,
+      // Purchase returns (to suppliers)
+      PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
+      PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
+      // Legacy aliases for backward compatibility
+      CUSTOMER_RETURNS: '/sale-returns/',  // Alias for SALES
+      SUPPLIER_RETURNS: '/purchase-returns/',  // Alias for PURCHASE
+      REASONS: '/metadata/return-reasons/',  // Use metadata endpoint
+      RETURNABLE_ITEMS: '/sale-returns/returnable-invoices/',  // Redirect to correct endpoint
     },
 
     // Party Ledger
