@@ -42,8 +42,8 @@ export interface PurchaseOrderItem {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/purchases',
-    ORDERS: '/purchases',
+    BASE: '/purchases/',
+    ORDERS: '/purchases/',
     BY_SUPPLIER: (id: number) => `/purchases/supplier/${id}`,
     APPROVE: (id: number) => `/purchases/${id}/approve`,
     RECEIVE: (id: number) => `/purchases/${id}/receive`
