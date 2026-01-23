@@ -39,7 +39,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     <ProductSearch
                         onAddItem={onAddManualItem}
                         placeholder="Search products by name, code, or HSN..."
-                        showBatchSelection={false}
+                        showBatchSelection={true}
                     />
                 </div>
             )}
@@ -50,7 +50,9 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                                 <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Product</th>
-                                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Invoice Qty</th>
+                                {selectedInvoice && (
+                                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Original Qty</th>
+                                )}
                                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Return Qty</th>
                                 <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700 uppercase">Unit Price</th>
                                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Tax %</th>
@@ -80,24 +82,37 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 Batch: {row.batch_number || 'N/A'} | HSN: {row.hsn_code || 'N/A'}
                                             </div>
                                         </td>
-                                        <td className="px-3 py-2 text-center text-sm">
-                                            <div>Total: {row.quantity}</div>
-                                            <div className="text-gray-500">
-                                                Paid: {row.paid_quantity} | Free: {row.free_quantity}
-                                            </div>
-                                        </td>
+                                        {selectedInvoice && (
+                                            <td className="px-3 py-2 text-center text-sm">
+                                                <div>Total: {row.quantity}</div>
+                                                <div className="text-gray-500">
+                                                    Paid: {row.paid_quantity} | Free: {row.free_quantity}
+                                                </div>
+                                            </td>
+                                        )}
                                         <td className="px-3 py-2 text-center">
                                             <NumberInput
                                                 value={row.return_quantity}
                                                 onChange={(val) => onUpdateItem(index, 'return_quantity', val)}
                                                 min={0}
-                                                max={row.max_returnable_qty}
+                                                max={row.max_returnable_qty || 9999}
                                                 size="sm"
                                                 className="w-24"
                                             />
                                         </td>
                                         <td className="px-3 py-2 text-right text-sm">
-                                            ₹{(row.unit_price || 0).toFixed(2)}
+                                            {row.is_manual ? (
+                                                <input
+                                                    type="number"
+                                                    value={row.unit_price || 0}
+                                                    onChange={(e) => onUpdateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                                    className="w-20 px-2 py-1 border border-gray-300 rounded text-right text-sm"
+                                                    min={0}
+                                                    step={0.01}
+                                                />
+                                            ) : (
+                                                <span>₹{(row.unit_price || 0).toFixed(2)}</span>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-center text-sm">
                                             {row.tax_percent || 0}%

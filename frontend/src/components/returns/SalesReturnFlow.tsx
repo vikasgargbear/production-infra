@@ -160,22 +160,26 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       }
     });
 
-    // Load invoice items
-    if (!invoice.items || invoice.items.length === 0) {
-      try {
-        const response = await invoicesApi.getById((invoice as any).id || (invoice as any).invoice_id);
-        const fullInvoice = response?.data || response;
-        if (fullInvoice.success && fullInvoice.data) {
-          const items = fullInvoice.data.items || [];
-          const mappedItems = items.map((item: any) => mapInvoiceItemToReturnItem(item));
-          dispatch({ type: 'SET_RETURN_DATA', data: { items: mappedItems } });
-        }
-      } catch (error) {
-        toast.error('Failed to load invoice items');
+    // Load invoice items from API
+    try {
+      const response = await invoicesApi.getById((invoice as any).id || (invoice as any).invoice_id);
+      // API returns invoice directly (not wrapped in {success, data})
+      const fullInvoice = response?.data || response;
+      const items = fullInvoice?.items || [];
+
+      if (items.length > 0) {
+        const mappedItems = items.map((item: any) => mapInvoiceItemToReturnItem(item));
+        dispatch({ type: 'SET_RETURN_DATA', data: { items: mappedItems } });
+        toast.success(`Loaded ${items.length} items from invoice`);
+      } else {
+        toast.warning('No items found in this invoice');
       }
-    } else {
-      const mappedItems = invoice.items.map((item: any) => mapInvoiceItemToReturnItem(item));
-      dispatch({ type: 'SET_RETURN_DATA', data: { items: mappedItems } });
+
+      // Hide invoice section after selection
+      dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: false });
+    } catch (error) {
+      console.error('Failed to load invoice items:', error);
+      toast.error('Failed to load invoice items');
     }
   }, [dispatch, toast]);
 
