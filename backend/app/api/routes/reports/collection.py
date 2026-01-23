@@ -33,7 +33,7 @@ async def get_aging_data(
     Returns party-wise outstanding with aging buckets and risk scoring
     """
     try:
-        # Get aging buckets summary
+        # Get aging buckets summary - using sales.invoices table
         aging_query = text("""
             WITH customer_outstanding AS (
                 SELECT 
@@ -43,46 +43,46 @@ async def get_aging_data(
                     c.primary_email,
                     c.credit_limit,
                     c.credit_days,
-                    COALESCE(SUM(bd.outstanding_amount), 0) as outstanding_amount,
-                    MIN(bd.due_date) as oldest_due_date,
-                    MAX(COALESCE(bd.overdue_days, 0)) as max_overdue_days,
-                    COUNT(bd.bill_id) as outstanding_bills_count,
-                    -- Calculate aging buckets
-                    SUM(CASE WHEN COALESCE(bd.overdue_days, 0) BETWEEN 0 AND 30 
-                        THEN bd.outstanding_amount ELSE 0 END) as bucket_0_30,
-                    SUM(CASE WHEN bd.overdue_days BETWEEN 31 AND 60 
-                        THEN bd.outstanding_amount ELSE 0 END) as bucket_31_60,
-                    SUM(CASE WHEN bd.overdue_days BETWEEN 61 AND 90 
-                        THEN bd.outstanding_amount ELSE 0 END) as bucket_61_90,
-                    SUM(CASE WHEN bd.overdue_days BETWEEN 91 AND 120 
-                        THEN bd.outstanding_amount ELSE 0 END) as bucket_91_120,
-                    SUM(CASE WHEN bd.overdue_days > 120 
-                        THEN bd.outstanding_amount ELSE 0 END) as bucket_120_plus,
+                    COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as outstanding_amount,
+                    MIN(i.due_date) as oldest_due_date,
+                    MAX(GREATEST(0, CURRENT_DATE - i.due_date)) as max_overdue_days,
+                    COUNT(i.invoice_id) as outstanding_bills_count,
+                    -- Calculate aging buckets based on days overdue
+                    SUM(CASE WHEN GREATEST(0, CURRENT_DATE - i.due_date) BETWEEN 0 AND 30 
+                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END) as bucket_0_30,
+                    SUM(CASE WHEN GREATEST(0, CURRENT_DATE - i.due_date) BETWEEN 31 AND 60 
+                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END) as bucket_31_60,
+                    SUM(CASE WHEN GREATEST(0, CURRENT_DATE - i.due_date) BETWEEN 61 AND 90 
+                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END) as bucket_61_90,
+                    SUM(CASE WHEN GREATEST(0, CURRENT_DATE - i.due_date) BETWEEN 91 AND 120 
+                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END) as bucket_91_120,
+                    SUM(CASE WHEN GREATEST(0, CURRENT_DATE - i.due_date) > 120 
+                        THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END) as bucket_120_plus,
                     -- Risk scoring factors
-                    AVG(COALESCE(bd.overdue_days, 0)) as avg_overdue_days,
-                    (COALESCE(SUM(bd.outstanding_amount), 0) / NULLIF(c.credit_limit, 0) * 100) as credit_utilization
+                    AVG(GREATEST(0, CURRENT_DATE - i.due_date)) as avg_overdue_days,
+                    (COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) / NULLIF(c.credit_limit, 0) * 100) as credit_utilization
                 FROM parties.customers c
-                LEFT JOIN bill_details bd ON c.customer_id = bd.ledger_id 
-                    AND bd.status IN ('Outstanding', 'Partial')
-                    AND bd.org_id = c.org_id
+                LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id 
+                    AND i.payment_status IN ('unpaid', 'partial', 'UNPAID', 'PARTIAL')
+                    AND i.org_id = c.org_id
+                    AND (i.final_amount - COALESCE(i.paid_amount, 0)) > 0
                 WHERE c.org_id = :org_id 
                     AND c.is_active = true
-                    AND COALESCE(SUM(bd.outstanding_amount), 0) > 0
                 GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email, 
                          c.credit_limit, c.credit_days
-                HAVING COALESCE(SUM(bd.outstanding_amount), 0) > 0
+                HAVING COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) > 0
             ),
             payment_history AS (
                 SELECT 
-                    customer_id,
+                    party_id as customer_id,
                     COUNT(*) as payment_count_30d,
-                    AVG(EXTRACT(DAYS FROM (payment_date - due_date))) as avg_payment_delay,
-                    COUNT(CASE WHEN payment_date > due_date THEN 1 END)::float / 
-                        NULLIF(COUNT(*), 0) * 100 as late_payment_percentage
-                FROM payments p
+                    0 as avg_payment_delay,
+                    0 as late_payment_percentage
+                FROM financial.payments p
                 WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
                     AND org_id = :org_id
-                GROUP BY customer_id
+                    AND UPPER(party_type) = 'CUSTOMER'
+                GROUP BY party_id
             )
             SELECT 
                 co.*,

@@ -31,7 +31,8 @@ import {
   Printer,
   ChevronDown,
   User,
-  Building
+  Building,
+  X
 } from 'lucide-react';
 import { format, parseISO, subMonths, subDays, differenceInDays, isWithinInterval } from 'date-fns';
 import { partyLedgerApi } from '../../services/api';
@@ -293,7 +294,6 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5;">Date</th>
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5;">Type</th>
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5;">Reference</th>
-            <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5;">Description</th>
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5; text-align: right;">Debit</th>
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5; text-align: right;">Credit</th>
             <th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5; text-align: right;">Balance</th>
@@ -305,7 +305,6 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
               <td style="border: 1px solid #ddd; padding: 8px;">${entry.date || '-'}</td>
               <td style="border: 1px solid #ddd; padding: 8px;">${entry.transaction_type || entry.type || '-'}</td>
               <td style="border: 1px solid #ddd; padding: 8px;">${entry.reference_number || entry.reference || '-'}</td>
-              <td style="border: 1px solid #ddd; padding: 8px;">${entry.description || '-'}</td>
               <td style="border: 1px solid #ddd; padding: 8px; text-align: right; color: #dc2626;">
                 ${entry.debit ? `₹${entry.debit.toFixed(2)}` : '-'}
               </td>
@@ -318,20 +317,6 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
             </tr>
           `).join('')}
         </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4" style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Total</td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: right; font-weight: bold; color: #dc2626;">
-              ₹${ledgerEntries.reduce((sum, e) => sum + (e.debit || 0), 0).toFixed(2)}
-            </td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: right; font-weight: bold; color: #16a34a;">
-              ₹${ledgerEntries.reduce((sum, e) => sum + (e.credit || 0), 0).toFixed(2)}
-            </td>
-            <td style="border: 1px solid #ddd; padding: 8px; text-align: right; font-weight: bold;">
-              ${ledgerEntries.length > 0 ? `₹${Math.abs(ledgerEntries[ledgerEntries.length - 1]?.balance || 0).toFixed(2)}` : '₹0.00'}
-            </td>
-          </tr>
-        </tfoot>
       </table>
     `;
 
@@ -493,12 +478,11 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
     if (exportFormat === 'excel') {
       // Generate CSV
       const csvContent = [
-        ['Date', 'Type', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
+        ['Date', 'Type', 'Reference', 'Debit', 'Credit', 'Balance'],
         ...ledgerEntries.map(entry => [
           entry.date,
           entry.transaction_type || entry.type || '',
           entry.reference_number || entry.reference || '',
-          entry.description || '',
           entry.debit || 0,
           entry.credit || 0,
           entry.running_balance || entry.balance || 0
@@ -552,11 +536,6 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
       render: (value: any, entry: any) => entry?.reference_number || entry?.reference || '-'
     },
     {
-      key: 'description',
-      header: 'Description',
-      render: (value: any, entry: any) => entry?.description || '-'
-    },
-    {
       key: 'debit',
       header: 'Debit',
       render: (value: any, entry: any) => {
@@ -597,26 +576,23 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
-            historyType="ledger"
             onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: refreshing ? "Refreshing..." : "Refresh",
                 onClick: handleRefresh,
                 variant: "primary",
-                icon: RefreshCw,
-                disabled: refreshing,
-                className: refreshing ? "animate-spin" : ""
+                disabled: refreshing
               }
             ] as any}
           />
 
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              {/* Party Selection - Embedded in page background like invoice */}
-              {!initialPartyId && (
+              {/* Party Selection - Only show if no party is selected */}
+              {!initialPartyId && !selectedParty && (
                 <div className="mb-6">
-                  {/* Header with icon - matching invoice */}
+                  {/* Outer label like Supplier search */}
                   <div className="flex items-center gap-2 mb-3">
                     {partyType === 'customer' ? (
                       <>
@@ -631,187 +607,205 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
                     )}
                   </div>
 
-                  {/* Search field - no background, embedded in page */}
-                  {partyType === 'customer' ? (
-                    <CustomerSearch
-                      value={selectedParty}
-                      onChange={setSelectedParty}
-                      placeholder="Search customer by name, phone, or code..."
-                      displayMode="inline"
-                      clearable={true}
-                    />
-                  ) : (
-                    <SupplierSearch
-                      onChange={setSelectedParty}
-                      placeholder="Search supplier by name or ID..."
-                      displayMode="inline"
-                      clearable={true}
-                    />
-                  )}
+                  {/* Search field with light background container */}
+                  <div className={`rounded-xl p-4 ${partyType === 'customer' ? 'bg-blue-50' : 'bg-green-50'}`}>
+                    {partyType === 'customer' ? (
+                      <CustomerSearch
+                        value={selectedParty}
+                        onChange={setSelectedParty}
+                        placeholder="Search customer by name, phone, or code..."
+                        displayMode="compact"
+                        clearable={true}
+                      />
+                    ) : (
+                      <SupplierSearch
+                        onChange={setSelectedParty}
+                        placeholder="Search supplier by name or ID..."
+                        displayMode="compact"
+                        clearable={true}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Summary and Filters - Show when party is selected */}
               {partyId && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                  {/* Show selected party info */}
-                  {selectedParty && (
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Unknown Party'}
-                        </h3>
-                        {(selectedParty?.phone || selectedParty?.gst_number) && (
-                          <div className="flex items-center gap-4 mt-1">
-                            {selectedParty?.phone && (
-                              <span className="text-sm text-gray-600">
-                                📱 {selectedParty.phone}
-                              </span>
-                            )}
-                            {selectedParty?.gst_number && (
-                              <span className="text-sm text-gray-600">
-                                GST: {selectedParty.gst_number}
-                              </span>
-                            )}
+                  {/* Show selected party info - Compact tile */}
+                  {selectedParty && (() => {
+                    // Get phone from multiple possible field names
+                    const partyPhone = selectedParty?.phone ||
+                      (selectedParty as any)?.primary_phone ||
+                      (selectedParty as any)?.contact_person_phone ||
+                      selectedParty?.contact_info?.primary_phone || '';
+                    const partyCity = (selectedParty as any)?.billing_address?.city ||
+                      (selectedParty as any)?.city || '';
+                    return (
+                      <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 font-semibold text-sm">
+                              {(selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'U').charAt(0).toUpperCase()}
+                            </span>
                           </div>
-                        )}
+                          <div>
+                            <h3 className="text-base font-semibold text-gray-900">
+                              {selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Unknown Party'}
+                            </h3>
+                            <div className="text-xs text-gray-500 space-y-0.5">
+                              {selectedParty?.gst_number && (
+                                <div>GST: {selectedParty.gst_number}</div>
+                              )}
+                              {(partyPhone || partyCity) && (
+                                <div className="flex items-center gap-3">
+                                  {partyPhone && <span>📞 {partyPhone}</span>}
+                                  {partyCity && <span>📍 {partyCity}</span>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Delete button only - WhatsApp/Email moved to action row */}
+                          <button
+                            onClick={() => setSelectedParty(null)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                            title="Clear selection"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
-                      {selectedParty?.phone && (
-                        <button
-                          onClick={() => {
-                            let phone = selectedParty.phone.replace(/\D/g, '');
-                            if (!phone.startsWith('91') && phone.length === 10) {
-                              phone = '91' + phone;
-                            }
-                            const message = encodeURIComponent(`Hello ${selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Customer'}, please find your ledger statement attached.`);
-                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-                          }}
-                          className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-1"
-                        >
-                          <WhatsAppIcon className="w-4 h-4" />
-                          WhatsApp
-                        </button>
-                      )}
-                    </div>
-                  )}
+                    );
+                  })()}
 
-                  {/* Summary Cards - Compact */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div className="bg-blue-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Total Debit</span>
-                      <span className="text-sm font-bold text-blue-600">
+                  {/* Summary Cards - Dark with stacked layout */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-gray-900 rounded-lg px-4 py-3">
+                      <span className="text-xs text-gray-400 block mb-1">Total Debit</span>
+                      <span className="text-lg font-bold text-white">
                         ₹{filteredEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0).toFixed(2)}
                       </span>
                     </div>
-                    <div className="bg-green-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Total Credit</span>
-                      <span className="text-sm font-bold text-green-600">
+                    <div className="bg-gray-900 rounded-lg px-4 py-3">
+                      <span className="text-xs text-gray-400 block mb-1">Total Credit</span>
+                      <span className="text-lg font-bold text-white">
                         ₹{filteredEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0).toFixed(2)}
                       </span>
                     </div>
-                    <div className="bg-purple-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Net Balance</span>
-                      <span className={`text-sm font-bold ${filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance >= 0
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                        }`}>
+                    <div className="bg-gray-900 rounded-lg px-4 py-3">
+                      <span className="text-xs text-gray-400 block mb-1">Net Balance</span>
+                      <span className="text-lg font-bold text-white">
                         ₹{filteredEntries.length > 0 ? Math.abs(filteredEntries[filteredEntries.length - 1]?.balance || 0).toFixed(2) : '0.00'}
                         {filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance < 0 ? ' (Dr)' : ''}
                       </span>
                     </div>
-                    <div className="bg-orange-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Transactions</span>
-                      <span className="text-sm font-bold text-orange-600">
+                    <div className="bg-gray-900 rounded-lg px-4 py-3">
+                      <span className="text-xs text-gray-400 block mb-1">Transactions</span>
+                      <span className="text-lg font-bold text-white">
                         {filteredEntries.length}
                       </span>
                     </div>
                   </div>
+                </div>
+              )}
 
-                  {/* Filters */}
-                  <div className="space-y-4">
-                    {/* Quick Date Range Buttons */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-gray-600">Quick Select:</span>
-                      {[
-                        { value: 'today', label: 'Today' },
-                        { value: 'yesterday', label: 'Yesterday' },
-                        { value: 'last7days', label: 'Last 7 Days' },
-                        { value: 'last30days', label: 'Last 30 Days' },
-                        { value: 'last3months', label: 'Last 3 Months' },
-                        { value: 'last6months', label: 'Last 6 Months' },
-                        { value: 'lastyear', label: 'Last Year' },
-                        { value: 'all', label: 'All Time' }
-                      ].map(range => (
-                        <button
-                          key={range.value}
-                          onClick={() => handleQuickDateRange(range.value)}
-                          className={`px-3 py-1 rounded-md text-sm ${quickDateRange === range.value
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                        >
-                          {range.label}
-                        </button>
-                      ))}
-                    </div>
+              {/* Filters - Outside the white tile */}
+              {partyId && (
+                <div className="flex items-center gap-3 flex-wrap mb-6">
+                  {/* Quick Date Range Dropdown */}
+                  <select
+                    value={quickDateRange}
+                    onChange={(e) => handleQuickDateRange(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
+                  >
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="last7days">Last 7 Days</option>
+                    <option value="last30days">Last 30 Days</option>
+                    <option value="last3months">Last 3 Months</option>
+                    <option value="last6months">Last 6 Months</option>
+                    <option value="lastyear">Last Year</option>
+                    <option value="all">All Time</option>
+                  </select>
 
-                    {/* Date Range, Filter and Actions in one row */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <input
-                          type="date"
-                          value={format(dateRange.from, 'yyyy-MM-dd')}
-                          onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
-                          className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-gray-500 text-sm">to</span>
-                        <input
-                          type="date"
-                          value={format(dateRange.to, 'yyyy-MM-dd')}
-                          onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
-                          className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-
-                      <select
-                        value={filterType}
-                        onChange={(e) => setFilterType(e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="all">All Types</option>
-                        <option value="invoice">Invoices</option>
-                        <option value="payment">Payments</option>
-                        <option value="credit_note">Credit Notes</option>
-                        <option value="debit_note">Debit Notes</option>
-                      </select>
-
-                      <div className="flex-1"></div>
-
-                      {/* Action Buttons inline */}
-                      <button
-                        onClick={() => handleExport('pdf')}
-                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center gap-1"
-                      >
-                        <FileDown className="w-4 h-4" />
-                        PDF
-                      </button>
-                      <button
-                        onClick={() => handleExport('excel')}
-                        className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-1"
-                      >
-                        <FileSpreadsheet className="w-4 h-4" />
-                        Excel
-                      </button>
-                      <button
-                        onClick={handlePrint}
-                        className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm flex items-center gap-1"
-                      >
-                        <Printer className="w-4 h-4" />
-                        Print
-                      </button>
-                    </div>
+                  {/* Date Range Inputs */}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-gray-500" />
+                    <input
+                      type="date"
+                      value={format(dateRange.from, 'yyyy-MM-dd')}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-gray-500 text-sm">to</span>
+                    <input
+                      type="date"
+                      value={format(dateRange.to, 'yyyy-MM-dd')}
+                      onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
+
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="invoice">Invoices</option>
+                    <option value="payment">Payments</option>
+                    <option value="credit_note">Credit Notes</option>
+                    <option value="debit_note">Debit Notes</option>
+                  </select>
+
+                  <div className="flex-1"></div>
+
+                  {/* Action Buttons - WhatsApp with proper phone detection */}
+                  {(() => {
+                    const actionPhone = selectedParty?.phone ||
+                      (selectedParty as any)?.primary_phone ||
+                      (selectedParty as any)?.contact_person_phone ||
+                      selectedParty?.contact_info?.primary_phone || '';
+                    return actionPhone ? (
+                      <button
+                        onClick={() => {
+                          let phone = actionPhone.replace(/\D/g, '');
+                          if (!phone.startsWith('91') && phone.length === 10) {
+                            phone = '91' + phone;
+                          }
+                          const message = encodeURIComponent(`Hello ${selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Customer'}, please find your ledger statement.`);
+                          window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                        }}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-1"
+                      >
+                        <WhatsAppIcon className="w-4 h-4" />
+                        WhatsApp
+                      </button>
+                    ) : null;
+                  })()}
+                  <button
+                    onClick={() => handleExport('pdf')}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center gap-1"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    PDF
+                  </button>
+                  <button
+                    onClick={() => handleExport('excel')}
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm flex items-center gap-1"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Excel
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="px-3 py-1.5 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm flex items-center gap-1"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print
+                  </button>
                 </div>
               )}
 

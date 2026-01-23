@@ -100,139 +100,61 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CollectionItem | null>(null);
 
-  // Fetch collection data using the WORKING sales/outstanding endpoint
+  // Fetch collection data using the collection aging-data endpoint
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['collection-center', filters],
     queryFn: async () => {
       try {
-        // Use the sales/outstanding endpoint which we KNOW works
-        const response = await apiClient.get('/sales/outstanding', {
-          params: {
-            // Get all customers with outstanding
+        // Use the collection aging-data endpoint - single efficient API call
+        const response = await apiClient.get('/collection-center/collection/aging-data');
+
+        const agingData = response.data || {};
+        const parties = agingData.parties || [];
+        const summary = agingData.summary || {};
+
+        // Transform parties data to collection items
+        const collections: CollectionItem[] = parties.map((party: any) => {
+          // Determine priority based on risk score
+          let priority: 'low' | 'medium' | 'high' | 'critical' = 'low';
+          let collectionStatus: CollectionItem['collection_status'] = 'pending';
+
+          if (party.riskScore > 80 || party.daysOverdue > 90) {
+            priority = 'critical';
+            collectionStatus = 'dispute';
+          } else if (party.riskScore > 60 || party.daysOverdue > 60) {
+            priority = 'high';
+            collectionStatus = 'promised';
+          } else if (party.riskScore > 40 || party.daysOverdue > 30) {
+            priority = 'medium';
+            collectionStatus = 'contacted';
+          } else if (party.daysOverdue > 0) {
+            priority = 'low';
+            collectionStatus = 'pending';
           }
+
+          return {
+            customer_id: String(party.id),
+            customer_name: party.name || 'Unknown',
+            customer_phone: party.phone || '',
+            customer_email: party.email || '',
+            customer_address: party.location || '',
+            total_outstanding: party.outstandingAmount || 0,
+            overdue_amount: party.outstandingAmount || 0,
+            days_overdue: party.daysOverdue || 0,
+            oldest_invoice_date: party.lastPayment || new Date().toISOString(),
+            last_payment_date: party.lastPayment,
+            last_contact_date: party.lastFollowUp,
+            contact_attempts: 0,
+            collection_status: collectionStatus,
+            priority: priority,
+            assigned_to: party.assignedAgent,
+            next_follow_up: party.lastFollowUp,
+            promise_date: party.promiseDate,
+            promise_amount: 0,
+            notes: undefined,
+            payment_behavior: party.paymentHistory === 'Good' ? 'regular' : party.paymentHistory === 'Average' ? 'delayed' : 'defaulter'
+          } as CollectionItem;
         });
-
-        const invoices = response.data?.invoices || [];
-
-        // Get unique customer IDs to fetch their details
-        const customerIds = [...new Set(invoices.map((inv: any) => inv.customer_id))];
-
-        // Fetch customer details for phone/email
-        const customerDetailsMap = new Map();
-
-        // Try to get customer details from customers API
-        try {
-          const customerPromises = customerIds.map(async (customerId) => {
-            try {
-              const customerResponse = await apiClient.get(`/customers/${customerId}`);
-              if (customerResponse.data) {
-                return customerResponse.data;
-              }
-            } catch (e) {
-              console.log(`Could not fetch customer ${customerId} details`);
-            }
-            return null;
-          });
-
-          const customerDetails = await Promise.all(customerPromises);
-          customerDetails.forEach((customer) => {
-            if (customer) {
-              customerDetailsMap.set(customer.customer_id, {
-                phone: customer.primary_phone || customer.phone || customer.mobile || '',
-                email: customer.email || '',
-                address: customer.address_line1 || ''
-              });
-            }
-          });
-        } catch (error) {
-          console.log('Could not fetch customer details:', error);
-        }
-
-        // Group by customer for collection view
-        const customerMap = new Map();
-
-        invoices.forEach((invoice: any) => {
-          const customerId = invoice.customer_id;
-          const customerName = invoice.customer_name || `Customer ${customerId}`;
-          const customerDetails = customerDetailsMap.get(customerId) || {};
-
-          if (!customerMap.has(customerId)) {
-            customerMap.set(customerId, {
-              customer_id: String(customerId),
-              customer_name: customerName,
-              customer_phone: customerDetails.phone || invoice.customer_phone || invoice.customer_mobile || '', // Prefer fetched details
-              customer_email: customerDetails.email || invoice.customer_email || '', // Prefer fetched details
-              customer_address: customerDetails.address || invoice.customer_address || invoice.billing_address || '', // Prefer fetched details
-              total_outstanding: 0,
-              overdue_amount: 0,
-              days_overdue: 0,
-              oldest_invoice_date: invoice.invoice_date,
-              last_payment_date: null,
-              invoices: [],
-              collection_status: 'pending',
-              priority: 'low',
-              assigned_to: null,
-              last_contact_date: null,
-              contact_attempts: 0,
-              next_follow_up: null,
-              promise_date: null,
-              promise_amount: 0,
-              notes: null,
-              payment_behavior: 'regular'
-            });
-          }
-
-          const customer = customerMap.get(customerId);
-
-          // Calculate outstanding like Outstanding component does
-          const finalAmount = parseFloat(invoice.final_amount || 0);
-          const paidAmount = parseFloat(invoice.paid_amount || 0);
-          const outstandingAmount = finalAmount - paidAmount;
-
-          customer.total_outstanding += outstandingAmount;
-
-          // Calculate overdue
-          const dueDate = invoice.due_date ? new Date(invoice.due_date) : new Date(invoice.invoice_date);
-          const daysOverdue = differenceInDays(new Date(), dueDate);
-
-          if (daysOverdue > 0) {
-            customer.overdue_amount += outstandingAmount;
-            customer.days_overdue = Math.max(customer.days_overdue, daysOverdue);
-          }
-
-          // Update oldest invoice date
-          if (new Date(invoice.invoice_date) < new Date(customer.oldest_invoice_date)) {
-            customer.oldest_invoice_date = invoice.invoice_date;
-          }
-
-          // Track last payment as proxy for last contact
-          if (paidAmount > 0 && invoice.last_payment_date) {
-            if (!customer.last_payment_date || new Date(invoice.last_payment_date) > new Date(customer.last_payment_date)) {
-              customer.last_payment_date = invoice.last_payment_date;
-              customer.last_contact_date = invoice.last_payment_date;
-              customer.contact_attempts = 1; // At least one payment was made
-            }
-          }
-
-          // Set priority based on days overdue and amount
-          if (customer.days_overdue > 90 || customer.total_outstanding > 100000) {
-            customer.priority = 'critical';
-            customer.collection_status = 'dispute';
-          } else if (customer.days_overdue > 60 || customer.total_outstanding > 50000) {
-            customer.priority = 'high';
-            customer.collection_status = 'promised';
-          } else if (customer.days_overdue > 30 || customer.total_outstanding > 20000) {
-            customer.priority = 'medium';
-            customer.collection_status = 'contacted';
-          } else if (customer.days_overdue > 7) {
-            customer.priority = 'low';
-            customer.collection_status = 'pending';
-          }
-
-          customer.invoices.push(invoice);
-        });
-
-        const collections = Array.from(customerMap.values());
 
         // Apply filters
         let filteredData = [...collections];
@@ -249,55 +171,25 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           filteredData = filteredData.filter(c => c.priority === filters.priority);
         }
 
-        // Fetch real metrics from backend
-        let realMetrics = null;
-        try {
-          console.log('Fetching real collection metrics...');
-          const metricsResponse = await apiClient.get('/customer-outstanding/collection-metrics');
-          console.log('Metrics API response:', metricsResponse.data);
-
-          if (metricsResponse.data?.success) {
-            realMetrics = metricsResponse.data.metrics;
-            console.log('Using real metrics:', realMetrics);
-          } else if (metricsResponse.data?.metrics) {
-            // Handle case where success flag might be missing
-            realMetrics = metricsResponse.data.metrics;
-            console.log('Using real metrics (no success flag):', realMetrics);
-          }
-        } catch (metricsError) {
-          console.error('Failed to fetch real metrics, using fallback:', (metricsError as any)?.response?.data || (metricsError as any)?.message);
-        }
-
-        // Calculate stats - use real metrics if available, otherwise use calculated values
-        const backendTotalOutstanding = (realMetrics as any)?.total_outstanding || (response.data as any)?.total_outstanding;
-        const totalOutstanding = backendTotalOutstanding !== undefined ?
-          backendTotalOutstanding :
-          collections.reduce((sum, c) => sum + c.total_outstanding, 0);
-
-        const overdueAmount = (realMetrics as any)?.total_overdue || collections.reduce((sum, c) => sum + c.overdue_amount, 0);
-        const criticalCount = (realMetrics as any)?.high_risk_accounts || collections.filter(c => c.priority === 'critical').length;
-
-        // Only count customers who actually owe money (positive net position)
-        const actualOwingCustomers = (realMetrics as any)?.customers_with_outstanding ||
-          (response.data?.customer_summaries ?
-            Object.values(response.data.customer_summaries as any).filter((c: any) => c.net_position > 0).length :
-            collections.length);
+        // Calculate stats from summary
+        const criticalCount = collections.filter(c => c.priority === 'critical').length;
 
         return {
           collections: filteredData,
           stats: {
-            total_outstanding: totalOutstanding,
-            total_overdue: overdueAmount,
-            collections_today: (realMetrics as any)?.daily_revenue || 0, // Real data or 0, NO MOCK
-            collections_mtd: (realMetrics as any)?.mtd_collections || 0, // Real data or 0, NO MOCK
-            promise_amount: (realMetrics as any)?.pipeline_value || 0, // Real data or 0, NO MOCK
-            customers_count: actualOwingCustomers,
+            total_outstanding: summary.totalOutstanding || 0,
+            total_overdue: summary.overdueAmount || 0,
+            collections_today: summary.currentWeekCollections || 0,
+            collections_mtd: summary.currentWeekCollections || 0,
+            promise_amount: 0,
+            customers_count: collections.length,
             critical_accounts: criticalCount,
-            success_rate: (realMetrics as any)?.collection_efficiency || 0, // Real data or 0, NO MOCK
-            collection_change: (realMetrics as any)?.collection_change || 0 // Real data or 0, NO MOCK
+            success_rate: summary.collectionEfficiency || 0,
+            collection_change: 0
           }
         };
       } catch (error) {
+        console.error('Collection Center API error:', error);
         // Return empty structure on error
         return {
           collections: [],
@@ -479,18 +371,15 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             icon={Target}
             iconColor="text-green-600"
             onClose={onClose}
-            historyType="collection"
             onSaveDraft={() => { }}
             additionalActions={[
               {
                 label: "Export",
-                icon: Download,
                 onClick: handleExport,
                 variant: "default"
               },
               {
                 label: "Refresh",
-                icon: RefreshCw,
                 onClick: () => refetch(),
                 variant: "primary"
               }
@@ -499,109 +388,54 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              {/* Professional KPI Dashboard */}
-              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-lg border border-gray-300 p-8 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-                  {/* Total Receivables */}
-                  <div className="relative">
-                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-blue-500 rounded-full"></div>
-                    <div className="pl-4">
-                      <div className="flex items-center mb-2">
-                        <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Total Outstanding</p>
-                      </div>
-                      <p className="text-2xl font-bold text-gray-900 mb-1">
-                        ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
-                      </p>
-                      <p className="text-xs text-gray-500 font-medium">
-                        {stats.customers_count} {stats.customers_count === 1 ? 'Customer Owes' : 'Customers Owe'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Collection Performance */}
-                  <div className="relative">
-                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-green-500 rounded-full"></div>
-                    <div className="pl-4">
-                      <div className="flex items-center mb-2">
-                        <TrendingUp className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Daily Revenue</p>
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-2xl font-bold text-gray-900">
-                          ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
-                        </p>
-                        {stats.collection_change && (
-                          <span className={`text-xs font-semibold ${stats.collection_change > 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
-                            {stats.collection_change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                            {Math.abs(stats.collection_change || 0)}%
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 font-medium">
-                        MTD Target: ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Committed Pipeline */}
-                  <div className="relative">
-                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-purple-500 rounded-full"></div>
-                    <div className="pl-4">
-                      <div className="flex items-center mb-2">
-                        <Clock className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Pipeline Value</p>
-                      </div>
-                      <p className="text-2xl font-bold text-gray-900 mb-1">
-                        ₹{(stats.promise_amount || 0).toLocaleString('en-IN')}
-                      </p>
-                      <p className="text-xs text-gray-500 font-medium">
-                        Committed Payments
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Risk Exposure */}
-                  <div className="relative">
-                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-orange-500 rounded-full"></div>
-                    <div className="pl-4">
-                      <div className="flex items-center mb-2">
-                        <AlertCircle className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Risk Exposure</p>
-                      </div>
-                      <p className="text-2xl font-bold text-gray-900 mb-1">
-                        {stats.critical_accounts || 0}
-                      </p>
-                      <p className="text-xs text-gray-500 font-medium">
-                        High Priority Accounts
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Efficiency Metrics */}
-                  <div className="relative">
-                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-indigo-500 rounded-full"></div>
-                    <div className="pl-4">
-                      <div className="flex items-center mb-2">
-                        <Activity className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">DSO Metrics</p>
-                      </div>
-                      <div className="flex items-baseline gap-3">
-                        <p className="text-2xl font-bold text-gray-900">
-                          {Math.round(stats.success_rate || 0)}%
-                        </p>
-                        <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all duration-300"
-                            style={{ width: `${stats.success_rate || 0}%` }}
-                          />
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-500 font-medium">
-                        Collection Efficiency
-                      </p>
-                    </div>
-                  </div>
+              {/* Summary Cards - Dark with stacked layout (matching Party Ledger) */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                <div className="bg-slate-800 rounded-lg px-4 py-3">
+                  <span className="text-xs text-gray-400 block mb-1">Total Outstanding</span>
+                  <span className="text-lg font-bold text-white">
+                    ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs text-gray-500 block mt-1">
+                    {stats.customers_count} Customers
+                  </span>
+                </div>
+                <div className="bg-slate-800 rounded-lg px-4 py-3">
+                  <span className="text-xs text-gray-400 block mb-1">Daily Revenue</span>
+                  <span className="text-lg font-bold text-white">
+                    ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
+                  </span>
+                  {stats.collection_change && (
+                    <span className={`text-xs ${stats.collection_change > 0 ? 'text-green-400' : 'text-red-400'} block mt-1`}>
+                      {stats.collection_change > 0 ? '↑' : '↓'} {Math.abs(stats.collection_change || 0)}%
+                    </span>
+                  )}
+                </div>
+                <div className="bg-slate-800 rounded-lg px-4 py-3">
+                  <span className="text-xs text-gray-400 block mb-1">MTD Collections</span>
+                  <span className="text-lg font-bold text-white">
+                    ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs text-gray-500 block mt-1">
+                    This Month
+                  </span>
+                </div>
+                <div className="bg-slate-800 rounded-lg px-4 py-3">
+                  <span className="text-xs text-gray-400 block mb-1">Critical Accounts</span>
+                  <span className="text-lg font-bold text-white">
+                    {stats.critical_accounts || 0}
+                  </span>
+                  <span className="text-xs text-orange-400 block mt-1">
+                    High Priority
+                  </span>
+                </div>
+                <div className="bg-slate-800 rounded-lg px-4 py-3">
+                  <span className="text-xs text-gray-400 block mb-1">Collection Efficiency</span>
+                  <span className="text-lg font-bold text-white">
+                    {Math.round(stats.success_rate || 0)}%
+                  </span>
+                  <span className="text-xs text-gray-500 block mt-1">
+                    Success Rate
+                  </span>
                 </div>
               </div>
 
@@ -614,8 +448,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       <button
                         onClick={() => setFilters({ ...filters, status: filters.status === 'overdue' ? 'all' : 'overdue' })}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.status === 'overdue'
-                            ? 'bg-red-100 text-red-700 border border-red-300'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          ? 'bg-red-100 text-red-700 border border-red-300'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                       >
                         <AlertCircle className="w-4 h-4 inline mr-1" />
@@ -624,8 +458,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       <button
                         onClick={() => setFilters({ ...filters, priority: filters.priority === 'critical' ? 'all' : 'critical' })}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.priority === 'critical'
-                            ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                       >
                         <Zap className="w-4 h-4 inline mr-1" />
@@ -634,8 +468,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       <button
                         onClick={() => setFilters({ ...filters, status: filters.status === 'promised' ? 'all' : 'promised' })}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filters.status === 'promised'
-                            ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                       >
                         <Clock className="w-4 h-4 inline mr-1" />
@@ -662,7 +496,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       onClick={handleBulkWhatsApp}
                       className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center"
                     >
-                      <MessageCircle className="w-4 h-4 mr-1" />
+                      <WhatsAppIcon className="w-4 h-4 mr-1" />
                       Bulk WhatsApp
                     </button>
                     <button
