@@ -4,6 +4,7 @@ import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import { employeesApi } from '../../../../services/api';
 import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { useCompany } from '../../../../contexts/CompanyContext';
 import { getTodayBusinessDate, getDaysFromToday } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 
@@ -182,6 +183,31 @@ export const useInvoiceLogic = (
 ): UseInvoiceLogicReturn => {
     // Network Status
     const { isOnline } = useNetworkStatus();
+
+    // Company Info (for GST type determination)
+    const { companyInfo } = useCompany();
+
+    /**
+     * Determine GST Type based on company vs customer state
+     * IGST = Inter-state (different states)
+     * CGST/SGST = Intra-state (same state)
+     */
+    const determineGstType = useCallback((customerState: string | undefined): GstType => {
+        const companyState = companyInfo?.state?.toLowerCase().trim();
+        const custState = customerState?.toLowerCase().trim();
+
+        // If either state is missing, default to CGST/SGST
+        if (!companyState || !custState) {
+            console.log('[GST] Missing state info, defaulting to CGST/SGST');
+            return 'CGST/SGST';
+        }
+
+        const isInterState = companyState !== custState;
+        const gstType: GstType = isInterState ? 'IGST' : 'CGST/SGST';
+
+        console.log(`[GST] Company: ${companyState}, Customer: ${custState} → ${gstType}`);
+        return gstType;
+    }, [companyInfo?.state]);
 
     // Core State - using canonical backend names
     const [invoice, setInvoice] = useState<Invoice>({
@@ -430,12 +456,22 @@ export const useInvoiceLogic = (
                 ...prev,
                 customer_details: null,
                 billing_address: '',
-                shipping_address: ''
+                shipping_address: '',
+                gst_type: 'CGST/SGST' // Reset to default when no customer
             }));
             return;
         }
 
         setSelectedCustomer(customer);
+
+        // Determine GST type based on customer's state vs company's state
+        // CRITICAL: This affects tax calculation (IGST for inter-state, CGST/SGST for intra-state)
+        const customerState = customer.state ||
+            customer.billing_address?.state ||
+            customer.address_info?.billing_state ||
+            (customer as any).address_line1?.split(',').pop()?.trim(); // Fallback
+        const gstType = determineGstType(customerState);
+
         const billingAddress =
             (customer.address_info?.billing_address ||
                 customer.billing_address?.street ||
@@ -447,11 +483,12 @@ export const useInvoiceLogic = (
             ...prev,
             customer_details: customer,
             billing_address: billingAddress,
-            shipping_address: sameAsShipping ? billingAddress : prev.shipping_address
+            shipping_address: sameAsShipping ? billingAddress : prev.shipping_address,
+            gst_type: gstType // CRITICAL: Set GST type based on state comparison
         }));
 
         // Note: Toast removed to prevent duplicates (parent component may also show selection feedback)
-    }, [sameAsShipping]);
+    }, [sameAsShipping, determineGstType]);
 
     const handleAddItem = useCallback(async (product: ProductInput) => {
         if (!product) return;

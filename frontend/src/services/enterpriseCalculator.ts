@@ -188,8 +188,16 @@ class EnterpriseCalculator {
     // you'd need to proportionally reduce each item's taxable amount.
     const effectiveGstRate = taxableAmount > 0 ? (totalGst / taxableAmount) : 0;
     const adjustedGst = taxableAfterSchemeDiscount * effectiveGstRate;
-    const adjustedCgst = adjustedGst / 2;
-    const adjustedSgst = adjustedGst / 2;
+
+    // CRITICAL: Determine CGST/SGST vs IGST based on gst_type option
+    // IGST = Inter-state (full tax to IGST)
+    // CGST/SGST = Intra-state (split 50/50)
+    const gstType = options.gst_type || 'CGST/SGST';
+    const isIGST = gstType === 'IGST';
+
+    const adjustedCgst = isIGST ? 0 : adjustedGst / 2;
+    const adjustedSgst = isIGST ? 0 : adjustedGst / 2;
+    const adjustedIgst = isIGST ? adjustedGst : 0;
 
     // Final calculations
     const netAmount = taxableAfterSchemeDiscount + adjustedGst + freightCharges;
@@ -210,9 +218,9 @@ class EnterpriseCalculator {
 
         taxable_amount: taxableAfterSchemeDiscount,             // DB: taxable_amount (AFTER all discounts)
         total_tax_amount: adjustedGst,                          // DB: total_tax_amount
-        cgst_amount: adjustedCgst,                              // DB: cgst_amount
-        sgst_amount: adjustedSgst,                              // DB: sgst_amount
-        igst_amount: igstTotal > 0 ? adjustedGst : 0,           // DB: igst_amount
+        cgst_amount: adjustedCgst,                              // DB: cgst_amount (0 if IGST)
+        sgst_amount: adjustedSgst,                              // DB: sgst_amount (0 if IGST)
+        igst_amount: adjustedIgst,                              // DB: igst_amount (full GST if IGST)
         freight_charges: freightCharges,                        // DB: freight_charges
         round_off_amount: this.round(roundOff),                 // DB: round_off_amount (keep 2 decimal precision)
         final_amount: finalAmount                               // DB: final_amount (ONLY this is rounded)
