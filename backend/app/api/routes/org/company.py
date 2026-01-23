@@ -257,13 +257,14 @@ async def update_company_info(
         
         if exists:
             # Update existing organization
+            # Note: Using ::jsonb instead of CAST for better compatibility
             update_query = """
                 UPDATE master.organizations
                 SET 
                     org_name = :name,
-                    registered_address = CAST(:registered_address AS jsonb),
-                    contact_numbers = CAST(:contact_numbers AS jsonb),
-                    email_addresses = CAST(:email_addresses AS jsonb),
+                    registered_address = :registered_address::jsonb,
+                    contact_numbers = :contact_numbers::jsonb,
+                    email_addresses = :email_addresses::jsonb,
                     website = :website,
                     gst_number = :gst,
                     pan_number = :pan,
@@ -373,7 +374,7 @@ async def update_company_info(
         # Update business_settings column
         db.execute(text("""
             UPDATE master.organizations
-            SET business_settings = CAST(:business_settings AS jsonb)
+            SET business_settings = :business_settings::jsonb
             WHERE org_id = :org_id
         """), {
             "org_id": str(context.org_id),
