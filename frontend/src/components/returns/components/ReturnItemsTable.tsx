@@ -155,7 +155,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                                     >
                                         {/* Row Number */}
-                                        <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
+                                        <td className="px-3 py-2 text-sm text-gray-600 text-left">{index + 1}</td>
 
                                         {/* Product Info */}
                                         <td className="px-3 py-2">
@@ -181,7 +181,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         )}
 
                                         {/* Return Qty (Paid) */}
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             <EditableCell
                                                 ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
                                                 value={row.return_paid_qty ?? row.return_quantity ?? 0}
@@ -198,7 +198,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         </td>
 
                                         {/* Free Qty */}
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             <EditableCell
                                                 ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
                                                 value={row.return_free_qty ?? 0}
@@ -215,7 +215,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         </td>
 
                                         {/* Rate */}
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             <EditableCell
                                                 ref={(el: any) => setFieldRef(index, 'unit_price', el)}
                                                 value={row.unit_price || 0}
