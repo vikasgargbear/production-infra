@@ -792,8 +792,8 @@ class InventoryService:
     def get_product_batches_with_stock(db: Session, org_id: str, product_id: int) -> List[dict]:
         """Get available batches for a product."""
         result = db.execute(text("""
-            SELECT batch_number, expiry_date, quantity_available as current_stock,
-                   cost_price as purchase_price, selling_price, mrp
+            SELECT batch_id, batch_number, expiry_date, quantity_available,
+                   cost_per_unit as purchase_price, ptr as selling_price, mrp
             FROM inventory.batches
             WHERE org_id = :org_id AND product_id = :product_id AND quantity_available > 0
             ORDER BY expiry_date ASC, batch_number

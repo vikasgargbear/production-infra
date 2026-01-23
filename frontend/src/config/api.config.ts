@@ -105,7 +105,7 @@ export const API_CONFIG: APIConfig = {
       CREATE: 'invoices/',
       UPDATE: (id) => `invoices/${id}/`,
       DELETE: (id) => `invoices/${id}/`,
-      DETAILS: (id) => `invoices/${id}/`,
+      DETAILS: (id) => `invoices/${id}`,
       CALCULATE: 'invoices/calculate-live/',
       VALIDATE: 'invoices/validate/',
       GENERATE_NUMBER: 'invoices/generate-number/',
