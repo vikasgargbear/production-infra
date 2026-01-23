@@ -283,6 +283,13 @@ async def update_company_info(
         
         # Execute the update - accept both 'name' and 'company_name' for consistency with GET
         org_name = company_data.get("name") or company_data.get("company_name") or ""
+        
+        # Use None instead of empty string for fields with check constraints
+        gst_value = company_data.get("gst") or company_data.get("gstin") or None
+        pan_value = company_data.get("pan") or None
+        drug_license_value = company_data.get("drug_license_no") or None
+        fssai_value = company_data.get("fssai_no") or None
+        
         result = db.execute(text(update_query), {
             "org_id": str(context.org_id),
             "name": org_name,
@@ -290,10 +297,10 @@ async def update_company_info(
             "contact_numbers": contact_numbers,
             "email_addresses": email_addresses,
             "website": company_data.get("website") or "",
-            "gst": company_data.get("gst") or company_data.get("gstin") or "",
-            "pan": company_data.get("pan") or "",
-            "drug_license_no": company_data.get("drug_license_no") or "",
-            "fssai_no": company_data.get("fssai_no") or ""
+            "gst": gst_value,
+            "pan": pan_value,
+            "drug_license_no": drug_license_value,
+            "fssai_no": fssai_value
         })
         
         # TenantAwareSession auto-commits
