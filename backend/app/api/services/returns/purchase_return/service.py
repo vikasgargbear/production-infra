@@ -217,7 +217,7 @@ class PurchaseReturnService:
                 "item_count": item_counts.get(ret.return_id, 0)
             })
         
-        count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE 1=1{count_conditions}"
+        count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE pr.org_id = pr.org_id{count_conditions}"
         total = db.execute(text(count_query), params).scalar()
         
         return {"total": total, "returns": result}
@@ -228,8 +228,8 @@ class PurchaseReturnService:
         purchase_return = db.execute(text("""
             SELECT pr.*, s.supplier_name as party_name, s.gst_number as party_gst
             FROM procurement.purchase_returns pr
-            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.return_id = :return_id
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id AND s.org_id = pr.org_id
+            WHERE pr.org_id = pr.org_id AND pr.return_id = :return_id
         """), {"return_id": return_id}).first()
         
         if not purchase_return:

@@ -140,7 +140,7 @@ def test_sales_return_detail(return_id: int) -> bool:
     
     success, data = make_request(
         "GET", 
-        f"/sale-returns/{return_id}/"
+        f"/sale-returns/{return_id}"
     )
     
     if success and data:
@@ -168,7 +168,7 @@ def test_returnable_invoices(customer_id: Optional[int] = None) -> bool:
     
     success, data = make_request(
         "GET", 
-        "/sale-returns/returnable-invoices/",
+        "/sale-returns/returnable-invoices",
         params=params
     )
     
@@ -229,7 +229,7 @@ def test_purchase_return_detail(return_id: int) -> bool:
     
     success, data = make_request(
         "GET", 
-        f"/purchase-returns/{return_id}/"
+        f"/purchase-returns/{return_id}"
     )
     
     if success and data:

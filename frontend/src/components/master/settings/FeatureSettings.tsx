@@ -3,7 +3,7 @@ import {
   Cog, ToggleLeft, ToggleRight, Info,
   Package, CreditCard, RotateCcw, FileText,
   AlertTriangle, Save, Truck, Shield,
-  Loader2, AlertCircle
+  Loader2, AlertCircle, Building, User, Users
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
 
@@ -68,7 +68,13 @@ const FeatureSettings = ({ open, onClose }) => {
     purchaseWorkflow: true,
     salesWorkflow: false,
     paymentApproval: true,
-    returnApproval: true
+    returnApproval: true,
+
+    // Business Mode Configuration
+    customer_mode: 'b2b' as 'b2b' | 'b2c' | 'hybrid',
+    default_customer_type: 'pharmacy',
+    require_drug_license: true,
+    require_gst_for_b2b: false
   });
 
   // Fetch feature settings on mount
@@ -205,6 +211,110 @@ const FeatureSettings = ({ open, onClose }) => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-5xl mx-auto space-y-6">
+
+          {/* Business Mode Configuration - NEW */}
+          <div className="bg-white rounded-lg border border-blue-200 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Users className="w-5 h-5 mr-2 text-blue-600" />
+              Business Mode Configuration
+              <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">Important</span>
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Configure whether your business sells to other businesses (B2B), individual consumers (B2C), or both.
+            </p>
+
+            <div className="space-y-4">
+              {/* Customer Mode Selector */}
+              <div className="py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start space-x-3">
+                    <Building className="w-5 h-5 text-gray-500 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">Customer Mode</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Determines what types of customers can be created</p>
+                    </div>
+                  </div>
+                  <select
+                    value={features.customer_mode}
+                    onChange={(e) => handleInputChange('customer_mode', e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm min-w-[160px]"
+                  >
+                    <option value="b2b">B2B Only (Business)</option>
+                    <option value="b2c">B2C Only (Individual)</option>
+                    <option value="hybrid">Hybrid (Both)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Default Customer Type - Only show for B2B or Hybrid */}
+              {(features.customer_mode === 'b2b' || features.customer_mode === 'hybrid') && (
+                <div className="py-3 border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start space-x-3">
+                      <Building className="w-5 h-5 text-gray-500 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900">Default Business Type</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">Pre-selected type for new B2B customers</p>
+                      </div>
+                    </div>
+                    <select
+                      value={features.default_customer_type}
+                      onChange={(e) => handleInputChange('default_customer_type', e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm min-w-[160px]"
+                    >
+                      <option value="pharmacy">Pharmacy</option>
+                      <option value="hospital">Hospital</option>
+                      <option value="clinic">Clinic</option>
+                      <option value="institution">Institution</option>
+                      <option value="doctor">Doctor</option>
+                      <option value="wholesale">Wholesale</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Require Drug License Toggle */}
+              {(features.customer_mode === 'b2b' || features.customer_mode === 'hybrid') && (
+                <FeatureToggle
+                  name="Require Drug License"
+                  enabled="require_drug_license"
+                  description="Require drug license for pharmacy/hospital customers"
+                  icon={Shield}
+                />
+              )}
+
+              {/* Require GST Toggle */}
+              {(features.customer_mode === 'b2b' || features.customer_mode === 'hybrid') && (
+                <FeatureToggle
+                  name="Require GST Number"
+                  enabled="require_gst_for_b2b"
+                  description="Make GST number mandatory for B2B customers"
+                  icon={FileText}
+                />
+              )}
+            </div>
+
+            {/* Mode description */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <div className="text-xs text-gray-600">
+                {features.customer_mode === 'b2b' && (
+                  <>
+                    <strong>B2B Mode:</strong> Only business customers (pharmacies, hospitals, clinics) can be created. Ideal for pharmaceutical distributors and wholesale businesses.
+                  </>
+                )}
+                {features.customer_mode === 'b2c' && (
+                  <>
+                    <strong>B2C Mode:</strong> Only individual/retail customers can be created. Ideal for retail pharmacies selling directly to consumers.
+                  </>
+                )}
+                {features.customer_mode === 'hybrid' && (
+                  <>
+                    <strong>Hybrid Mode:</strong> Both business and individual customers can be created. Users can choose when adding new customers.
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Inventory Features */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">

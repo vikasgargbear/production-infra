@@ -451,7 +451,7 @@ class ReturnService:
             result.append(return_dict)
         
         # Get total count
-        count_query = f"SELECT COUNT(*) FROM sales.sales_returns sr WHERE 1=1{count_conditions}"
+        count_query = f"SELECT COUNT(*) FROM sales.sales_returns sr WHERE sr.org_id = sr.org_id{count_conditions}"
         total = db.execute(text(count_query), params).scalar()
         
         return {"total": total, "returns": result}
@@ -471,9 +471,9 @@ class ReturnService:
                 COUNT(DISTINCT ii.invoice_item_id) as total_items,
                 SUM(ii.quantity) as total_quantity
             FROM sales.invoices i
-            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id AND c.org_id = i.org_id
             LEFT JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
-            WHERE i.invoice_status = 'generated'
+            WHERE i.org_id = i.org_id AND i.invoice_status = 'generated'
         """
         params = {}
         
@@ -636,13 +636,11 @@ class ReturnService:
         """Get detailed return with items."""
         sale_return = db.execute(text("""
             SELECT sr.*, c.customer_name as party_name, c.gst_number as party_gst,
-                   (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')
-                    FROM sales.sales_return_items ri 
-                    WHERE ri.return_id = sr.return_id 
-                    LIMIT 1) as original_invoice_number
+                   i.invoice_number as original_invoice_number
             FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.return_id = :return_id AND sr.return_type = 'SALES'
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
+            LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id AND i.org_id = sr.org_id
+            WHERE sr.org_id = sr.org_id AND sr.return_id = :return_id AND sr.return_type = 'SALES'
         """), {"return_id": return_id}).first()
         
         if not sale_return:

@@ -231,37 +231,59 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
                 </div>
 
                 <div className="space-y-6">
-                    {/* Customer Type Toggle */}
-                    <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setIsBusinessCustomer(true);
-                                setNewCustomer({ ...newCustomer, customer_type: 'pharmacy' });
-                            }}
-                            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isBusinessCustomer
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-600 hover:text-gray-800'
-                                }`}
-                        >
-                            <Building className="inline-block w-4 h-4 mr-2" />
-                            Business
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setIsBusinessCustomer(false);
-                                setNewCustomer({ ...newCustomer, customer_type: 'individual' });
-                            }}
-                            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${!isBusinessCustomer
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-600 hover:text-gray-800'
-                                }`}
-                        >
-                            <User className="inline-block w-4 h-4 mr-2" />
-                            Individual
-                        </button>
-                    </div>
+                    {/* Customer Type Toggle - Only show in hybrid mode */}
+                    {customerMode === 'hybrid' ? (
+                        <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsBusinessCustomer(true);
+                                    setNewCustomer({ ...newCustomer, customer_type: features.default_customer_type || 'pharmacy' });
+                                }}
+                                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isBusinessCustomer
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                            >
+                                <Building className="inline-block w-4 h-4 mr-2" />
+                                Business
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsBusinessCustomer(false);
+                                    setNewCustomer({ ...newCustomer, customer_type: 'individual' });
+                                }}
+                                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${!isBusinessCustomer
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                            >
+                                <User className="inline-block w-4 h-4 mr-2" />
+                                Individual
+                            </button>
+                        </div>
+                    ) : (
+                        /* Mode indicator badge when not in hybrid mode */
+                        <div className="flex items-center justify-center">
+                            <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${isB2BOnly
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-green-100 text-green-800'
+                                }`}>
+                                {isB2BOnly ? (
+                                    <>
+                                        <Building className="w-4 h-4 mr-2" />
+                                        Business Customer
+                                    </>
+                                ) : (
+                                    <>
+                                        <User className="w-4 h-4 mr-2" />
+                                        Individual Customer
+                                    </>
+                                )}
+                            </span>
+                        </div>
+                    )}
 
                     {/* Basic Information */}
                     <div className="space-y-4">
