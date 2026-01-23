@@ -373,7 +373,7 @@ class ReturnService:
                 sr.updated_at,
                 c.customer_name as party_name,
                 i.invoice_number as original_invoice_number,
-                (SELECT COUNT(*) FROM sales.sales_return_items sri WHERE sri.org_id = sr.org_id AND sri.return_id = sr.return_id) as item_count
+                (SELECT COUNT(*) FROM sales.sales_return_items sri WHERE sri.return_id = sr.return_id) as item_count
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
