@@ -391,12 +391,9 @@ async def update_company_info(
         logger.error(f"Query parameters: org_id={context.org_id}, data={company_data}")
         db.rollback()
         
-        # Check if it's a specific database error
-        error_message = str(e)
-        if "jsonb" in error_message.lower():
-            error_message = "Error updating company data. Invalid JSON format."
-        elif "syntax" in error_message.lower():
-            error_message = "Database query syntax error. Please contact support."
+        # Return raw error for debugging (temporarily)
+        raw_error = str(e)
+        error_message = f"Raw error: {raw_error}"
         
         raise HTTPException(status_code=500, detail=f"Failed to update company info: {error_message}")
 
