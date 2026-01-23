@@ -190,53 +190,59 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         )}
 
                                         {/* Return Qty (Paid) */}
-                                        <td className="px-3 py-2 text-center">
-                                            <EditableCell
-                                                ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
-                                                value={row.return_paid_qty ?? row.return_quantity ?? 0}
-                                                type="number"
-                                                min={0}
-                                                max={isFromInvoice ? originalPaidQty : undefined}
-                                                step={1}
-                                                decimalPlaces={0}
-                                                onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', Number(val))}
-                                                onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
-                                                selectOnFocus={true}
-                                                className="w-16"
-                                            />
+                                        <td className="px-3 py-2">
+                                            <div className="flex justify-center">
+                                                <EditableCell
+                                                    ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
+                                                    value={row.return_paid_qty ?? row.return_quantity ?? 0}
+                                                    type="number"
+                                                    min={0}
+                                                    max={isFromInvoice ? originalPaidQty : undefined}
+                                                    step={1}
+                                                    decimalPlaces={0}
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', Number(val))}
+                                                    onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
+                                                    selectOnFocus={true}
+                                                    className="w-16"
+                                                />
+                                            </div>
                                         </td>
 
                                         {/* Free Qty */}
-                                        <td className="px-3 py-2 text-center">
-                                            <EditableCell
-                                                ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
-                                                value={row.return_free_qty ?? 0}
-                                                type="number"
-                                                min={0}
-                                                max={isFromInvoice ? originalFreeQty : undefined}
-                                                step={1}
-                                                decimalPlaces={0}
-                                                onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', Number(val))}
-                                                onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
-                                                selectOnFocus={true}
-                                                className="w-14"
-                                            />
+                                        <td className="px-3 py-2">
+                                            <div className="flex justify-center">
+                                                <EditableCell
+                                                    ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
+                                                    value={row.return_free_qty ?? 0}
+                                                    type="number"
+                                                    min={0}
+                                                    max={isFromInvoice ? originalFreeQty : undefined}
+                                                    step={1}
+                                                    decimalPlaces={0}
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', Number(val))}
+                                                    onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
+                                                    selectOnFocus={true}
+                                                    className="w-14"
+                                                />
+                                            </div>
                                         </td>
 
                                         {/* Rate */}
-                                        <td className="px-3 py-2 text-center">
-                                            <EditableCell
-                                                ref={(el: any) => setFieldRef(index, 'unit_price', el)}
-                                                value={row.unit_price || 0}
-                                                type="number"
-                                                min={0}
-                                                decimalPlaces={2}
-                                                prefix="₹"
-                                                onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
-                                                onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
-                                                selectOnFocus={true}
-                                                className="w-20"
-                                            />
+                                        <td className="px-3 py-2">
+                                            <div className="flex justify-center">
+                                                <EditableCell
+                                                    ref={(el: any) => setFieldRef(index, 'unit_price', el)}
+                                                    value={row.unit_price || 0}
+                                                    type="number"
+                                                    min={0}
+                                                    decimalPlaces={2}
+                                                    prefix="₹"
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
+                                                    onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
+                                                    selectOnFocus={true}
+                                                    className="w-20"
+                                                />
+                                            </div>
                                         </td>
 
 
