@@ -49,7 +49,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
-                    historyType="invoice"
                     additionalActions={[
                         {
                             label: "← Back to Items",

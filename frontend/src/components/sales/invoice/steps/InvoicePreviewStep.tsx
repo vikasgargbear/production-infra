@@ -47,7 +47,6 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
-                    historyType="invoice"
                     additionalActions={[
                         {
                             label: "← Back to Details",
