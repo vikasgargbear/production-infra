@@ -297,7 +297,7 @@ class LedgerService:
                     COALESCE(SUM(CASE WHEN CURRENT_DATE - i.invoice_date > 90 
                         THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as over_90
                 FROM sales.invoices i
-                JOIN parties.customers c ON i.customer_id = c.customer_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id AND i.org_id = c.org_id
                 WHERE i.payment_status != :paid AND i.invoice_status != :cancelled
                 AND i.final_amount > COALESCE(i.paid_amount, 0)
                 GROUP BY c.customer_id, c.customer_name, c.primary_phone
@@ -349,7 +349,7 @@ class LedgerService:
                         THEN i.final_amount - COALESCE(i.paid_amount, 0) ELSE 0 END), 0) as total_overdue,
                     COUNT(DISTINCT i.invoice_id) as total_pending_invoices
                 FROM parties.customers c
-                LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id 
+                LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id AND c.org_id = i.org_id
                     AND i.invoice_status != :cancelled
                     AND i.payment_status != :paid
                 WHERE c.is_active = true
@@ -406,7 +406,7 @@ class LedgerService:
                 COUNT(i.invoice_id) as invoice_count,
                 MAX(i.invoice_date) as last_invoice_date
             FROM parties.customers c
-            JOIN sales.invoices i ON c.customer_id = i.customer_id
+            JOIN sales.invoices i ON c.customer_id = i.customer_id AND c.org_id = i.org_id
             WHERE i.payment_status != :paid 
             AND i.invoice_status != :cancelled
             AND i.final_amount > COALESCE(i.paid_amount, 0)
