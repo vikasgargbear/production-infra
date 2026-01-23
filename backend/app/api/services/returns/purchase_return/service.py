@@ -128,3 +128,111 @@ class PurchaseReturnService:
                 updated_at = CURRENT_TIMESTAMP
             WHERE batch_id = :batch_id AND quantity_available >= :return_qty
         """), {"return_qty": return_qty, "batch_id": batch_id})
+    
+    @staticmethod
+    def list_purchase_returns(
+        db: Session,
+        skip: int = 0,
+        limit: int = 25,
+        supplier_id: int = None,
+        from_date: str = None,
+        to_date: str = None
+    ) -> Dict[str, Any]:
+        """List purchase returns with filters and pagination."""
+        query = """
+            SELECT 
+                pr.return_id,
+                pr.return_number,
+                pr.return_date,
+                pr.supplier_invoice_id,
+                pr.grn_id,
+                pr.supplier_id,
+                pr.return_reason,
+                pr.return_amount,
+                pr.tax_amount,
+                pr.total_amount,
+                pr.debit_note_number,
+                pr.debit_note_status,
+                pr.notes,
+                pr.created_at,
+                s.supplier_name as party_name,
+                (SELECT COUNT(*) FROM procurement.purchase_return_items pri WHERE pri.return_id = pr.return_id) as item_count
+            FROM procurement.purchase_returns pr
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+            WHERE 1=1
+        """
+        params = {"skip": skip, "limit": limit}
+        count_conditions = ""
+        
+        if supplier_id:
+            query += " AND pr.supplier_id = :supplier_id"
+            params["supplier_id"] = supplier_id
+            count_conditions += " AND pr.supplier_id = :supplier_id"
+        
+        if from_date:
+            query += " AND pr.return_date >= :from_date"
+            params["from_date"] = from_date
+            count_conditions += " AND pr.return_date >= :from_date"
+        
+        if to_date:
+            query += " AND pr.return_date <= :to_date"
+            params["to_date"] = to_date
+            count_conditions += " AND pr.return_date <= :to_date"
+        
+        query += """
+            ORDER BY pr.return_date DESC, pr.created_at DESC
+            LIMIT :limit OFFSET :skip
+        """
+        
+        returns = db.execute(text(query), params).fetchall()
+        
+        result = []
+        for ret in returns:
+            result.append({
+                "return_id": ret.return_id,
+                "return_number": ret.return_number,
+                "return_date": ret.return_date,
+                "supplier_invoice_id": ret.supplier_invoice_id,
+                "grn_id": ret.grn_id,
+                "supplier_id": ret.supplier_id,
+                "party_name": ret.party_name,
+                "return_reason": ret.return_reason,
+                "return_amount": ret.return_amount,
+                "tax_amount": ret.tax_amount,
+                "total_amount": ret.total_amount,
+                "debit_note_number": ret.debit_note_number,
+                "debit_note_status": ret.debit_note_status,
+                "notes": ret.notes,
+                "created_at": ret.created_at,
+                "item_count": ret.item_count or 0
+            })
+        
+        count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE 1=1{count_conditions}"
+        total = db.execute(text(count_query), params).scalar()
+        
+        return {"total": total, "returns": result}
+    
+    @staticmethod
+    def get_purchase_return_detail(db: Session, return_id: int) -> Optional[Dict[str, Any]]:
+        """Get detailed purchase return with items."""
+        purchase_return = db.execute(text("""
+            SELECT pr.*, s.supplier_name as party_name, s.gst_number as party_gst
+            FROM procurement.purchase_returns pr
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+            WHERE pr.return_id = :return_id
+        """), {"return_id": return_id}).first()
+        
+        if not purchase_return:
+            return None
+        
+        items = db.execute(text("""
+            SELECT pri.*, p.product_name, p.hsn_code
+            FROM procurement.purchase_return_items pri
+            LEFT JOIN inventory.products p ON pri.product_id = p.product_id
+            WHERE pri.return_id = :return_id
+        """), {"return_id": return_id}).fetchall()
+        
+        result = dict(purchase_return._mapping)
+        result["items"] = [dict(item._mapping) for item in items]
+        
+        return result

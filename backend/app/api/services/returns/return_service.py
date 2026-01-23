@@ -340,10 +340,10 @@ class ReturnService:
         to_date: str = None
     ) -> Dict[str, Any]:
         """
-        List sales returns with items and filters.
+        List sales returns with filters.
         
-        P3-10: Optimized to eliminate N+1 query pattern.
-        Uses JSON_AGG to fetch all items in single query.
+        P3-10: Simplified query to avoid JSON_AGG FILTER ambiguity with multi-tenant org_id.
+        Items can be fetched separately per return if needed.
         """
         query = """
             SELECT 
@@ -373,34 +373,10 @@ class ReturnService:
                 sr.updated_at,
                 c.customer_name as party_name,
                 i.invoice_number as original_invoice_number,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'return_item_id', sri.return_item_id,
-                            'invoice_item_id', sri.invoice_item_id,
-                            'product_id', sri.product_id,
-                            'product_name', p.product_name,
-                            'hsn_code', p.hsn_code,
-                            'batch_id', sri.batch_id,
-                            'batch_number', sri.batch_number,
-                            'return_quantity', sri.return_quantity,
-                            'uom', sri.uom,
-                            'damaged_quantity', sri.damaged_quantity,
-                            'saleable_quantity', sri.saleable_quantity,
-                            'unit_price', sri.unit_price,
-                            'return_value', sri.return_value,
-                            'tax_amount', sri.tax_amount,
-                            'item_return_reason', sri.item_return_reason,
-                            'disposition', sri.disposition
-                        ) ORDER BY sri.return_item_id
-                    ) FILTER (WHERE sri.return_item_id IS NOT NULL),
-                    '[]'::json
-                ) as items
+                (SELECT COUNT(*) FROM sales.sales_return_items sri WHERE sri.return_id = sr.return_id) as item_count
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
-            LEFT JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
-            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
@@ -422,14 +398,6 @@ class ReturnService:
             count_conditions += " AND sr.return_date <= :to_date"
         
         query += """
-            GROUP BY sr.return_id, sr.return_number, sr.return_date, sr.return_type,
-                     sr.invoice_id, sr.customer_id, sr.return_reason, sr.return_category,
-                     sr.approval_required, sr.approval_status, sr.return_amount,
-                     sr.tax_amount, sr.total_amount, sr.cgst_amount, sr.sgst_amount,
-                     sr.igst_amount, sr.credit_note_number, sr.credit_note_date,
-                     sr.credit_note_status, sr.adjusted_amount, sr.pending_amount,
-                     sr.notes, sr.created_at, sr.updated_at,
-                     c.customer_name, i.invoice_number
             ORDER BY sr.return_date DESC, sr.created_at DESC
             LIMIT :limit OFFSET :skip
         """
@@ -466,7 +434,8 @@ class ReturnService:
                 "notes": ret.notes,
                 "created_at": ret.created_at,
                 "updated_at": ret.updated_at,
-                "items": ret.items if isinstance(ret.items, list) else []
+                "item_count": ret.item_count or 0,
+                "items": []  # Items fetched separately if needed
             }
             result.append(return_dict)
         

@@ -37,6 +37,56 @@ class PurchaseReturnCreate(BaseModel):
     transport_details: Optional[Dict[str, Any]] = {}
     notes: Optional[str] = ""
 
+
+@router.get("/")
+@with_tenant_context
+async def list_purchase_returns(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    supplier_id: Optional[int] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    _: dict = Depends(PermissionChecker("purchase_returns", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """List purchase returns with pagination and filters"""
+    try:
+        result = PurchaseReturnService.list_purchase_returns(
+            db=db,
+            skip=skip,
+            limit=limit,
+            supplier_id=supplier_id,
+            from_date=from_date,
+            to_date=to_date
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error listing purchase returns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{return_id}")
+@with_tenant_context
+async def get_purchase_return_detail(
+    return_id: int,
+    _: dict = Depends(PermissionChecker("purchase_returns", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """Get purchase return details by ID"""
+    try:
+        result = PurchaseReturnService.get_purchase_return_detail(db, return_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Purchase return not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching purchase return detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/supplier-invoice/{invoice_id}/returnable-items")
 @with_tenant_context
 async def get_returnable_items(
