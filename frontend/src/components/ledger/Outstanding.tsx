@@ -260,9 +260,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
               documentNumber=""
               status=""
               icon={IndianRupee}
-              iconColor="text-blue-600"
+              iconColor="text-amber-600"
               onClose={onClose}
-              historyType="outstanding"
               onSaveDraft={() => { }}
               additionalActions={[]}
             />
@@ -282,24 +281,21 @@ const Outstanding: React.FC<OutstandingProps> = ({
   // If showing customer details, render that view
   if (ui.showDetailsView && selectedParty) {
     return (
-      <div className="h-full bg-blue-50">
+      <div className="h-full bg-gray-100">
         <div className="h-full flex flex-col">
           <ModuleHeader
-            title={`Customer Details - ${selectedParty.party_name}`}
+            title={`${selectedParty.party_name} - Outstanding`}
             documentNumber=""
             status=""
             icon={IndianRupee}
-            iconColor="text-blue-600"
+            iconColor="text-amber-600"
             onClose={() => dispatch({ type: 'SET_DETAILS_VIEW', show: false })}
-            historyType="customer-details"
             onSaveDraft={() => { }}
             additionalActions={[
               {
-                label: "Back to Outstanding",
+                label: "Back",
                 onClick: () => dispatch({ type: 'SET_DETAILS_VIEW', show: false }),
-                variant: "secondary",
-                icon: ChevronLeft,
-                className: "font-medium"
+                variant: "secondary"
               }
             ] as any}
           />
@@ -337,33 +333,23 @@ const Outstanding: React.FC<OutstandingProps> = ({
     );
   }
 
-  // Main summary view
   return (
-    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+    <div className={embedded ? 'p-6' : 'h-full bg-gray-100'}>
       {!embedded && (
         <div className="h-full flex flex-col">
           <ModuleHeader
-            title="Outstanding & Payments"
+            title="Outstanding & Aging"
             documentNumber=""
             status=""
             icon={IndianRupee}
-            iconColor="text-blue-600"
+            iconColor="text-amber-600"
             onClose={onClose}
-            historyType="outstanding"
             onSaveDraft={() => { }}
             additionalActions={[
               {
-                label: ui.viewMode === 'summary' ? "View Aging Analysis" : "View Summary",
-                onClick: () => dispatch({ type: 'SET_VIEW_MODE', mode: ui.viewMode === 'summary' ? 'aging' : 'summary' }),
-                variant: ui.viewMode === 'aging' ? "primary" : "secondary",
-                icon: ui.viewMode === 'summary' ? BarChart3 : Table,
-                className: "font-medium"
-              },
-              {
                 label: "Refresh",
                 onClick: () => refetch(),
-                variant: "primary",
-                icon: RefreshCw
+                variant: "primary"
               }
             ] as any}
           />
