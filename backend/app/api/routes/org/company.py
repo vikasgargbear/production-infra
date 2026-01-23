@@ -391,12 +391,8 @@ async def update_company_info(
         logger.error(f"Query parameters: org_id={context.org_id}, data={company_data}")
         db.rollback()
         
-        # Provide helpful error messages
-        error_message = str(e)
-        if "jsonb" in error_message.lower() or "syntax" in error_message.lower():
-            error_message = "Database update failed. Please check your input data."
-        
-        raise HTTPException(status_code=500, detail=f"Failed to update company info: {error_message}")
+        # Temporarily show raw error for debugging
+        raise HTTPException(status_code=500, detail=f"Failed to update company info: {str(e)}")
 
 @router.get("/org-id")
 @with_tenant_context
