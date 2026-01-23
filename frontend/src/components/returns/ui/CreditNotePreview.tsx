@@ -181,16 +181,24 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
               </h3>
               <div>
                 <p className="font-semibold text-gray-900">{customer.customer_name || customer.name}</p>
-                {customer.address && (
+                {(customer.address || customer.billing_address) && (
                   <div className="text-sm text-gray-600 mt-1">
-                    <p>{customer.address}</p>
-                    {(customer.city || customer.state || customer.pincode) && (
-                      <p>
-                        {customer.city && `${customer.city}, `}
-                        {customer.state && `${customer.state} `}
-                        {customer.pincode}
-                      </p>
-                    )}
+                    <p>
+                      {typeof customer.address === 'string'
+                        ? customer.address
+                        : customer.address?.street || customer.address?.address_line1 ||
+                        (typeof customer.billing_address === 'string'
+                          ? customer.billing_address
+                          : customer.billing_address?.street || customer.billing_address?.address_line1 || '')}
+                    </p>
+                    {((customer.address && typeof customer.address === 'object' && (customer.address.city || customer.address.state || customer.address.pincode)) ||
+                      customer.city || customer.state || customer.pincode) && (
+                        <p>
+                          {(customer.address?.city || customer.city) && `${customer.address?.city || customer.city}, `}
+                          {(customer.address?.state || customer.state) && `${customer.address?.state || customer.state} `}
+                          {customer.address?.pincode || customer.pincode}
+                        </p>
+                      )}
                   </div>
                 )}
                 {customer.gst_number && (

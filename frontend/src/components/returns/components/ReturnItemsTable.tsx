@@ -24,7 +24,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     );
 
     // Editable fields for keyboard navigation
-    const EDITABLE_FIELDS = ['return_paid_qty', 'return_free_qty', 'unit_price', 'discount_percent'];
+    const EDITABLE_FIELDS = ['return_paid_qty', 'return_free_qty', 'unit_price'];
     const fieldRefs = useRef<Record<string, any>>({});
 
     const setFieldRef = (rowIndex: number, fieldName: string, element: any): void => {
@@ -136,7 +136,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                 </th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Free</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
-                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Disc %</th>
+
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Tax %</th>
                                 <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Action</th>
@@ -225,29 +225,12 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 prefix="₹"
                                                 onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
                                                 onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
-                                                readOnly={isFromInvoice}
                                                 selectOnFocus={true}
                                                 className="w-20"
                                             />
                                         </td>
 
-                                        {/* Discount % */}
-                                        <td className="px-3 py-2">
-                                            <EditableCell
-                                                ref={(el: any) => setFieldRef(index, 'discount_percent', el)}
-                                                value={row.discount_percent || 0}
-                                                type="number"
-                                                min={0}
-                                                max={100}
-                                                decimalPlaces={2}
-                                                suffix="%"
-                                                onSave={(val: string | number) => onUpdateItem(index, 'discount_percent', Number(val))}
-                                                onNavigate={(dir: string) => handleNavigate(index, 'discount_percent', dir)}
-                                                readOnly={isFromInvoice}
-                                                selectOnFocus={true}
-                                                className="w-16"
-                                            />
-                                        </td>
+
 
                                         {/* Tax % (read-only) */}
                                         <td className="px-3 py-2 text-center">
