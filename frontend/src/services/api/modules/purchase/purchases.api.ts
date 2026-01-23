@@ -42,11 +42,11 @@ export interface PurchaseOrderItem {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/purchase-orders',
-    ORDERS: '/purchase-orders',
-    BY_SUPPLIER: (id: number) => `/purchase-orders/supplier/${id}`,
-    APPROVE: (id: number) => `/purchase-orders/${id}/approve`,
-    RECEIVE: (id: number) => `/purchase-orders/${id}/receive`
+    BASE: '/purchases',
+    ORDERS: '/purchases',
+    BY_SUPPLIER: (id: number) => `/purchases/supplier/${id}`,
+    APPROVE: (id: number) => `/purchases/${id}/approve`,
+    RECEIVE: (id: number) => `/purchases/${id}/receive`
 } as const;
 
 // ============================================

@@ -10,17 +10,17 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, Download, AlertCircle } from 'lucide-react';
+import { RotateCcw, Download, AlertCircle, User } from 'lucide-react';
 import {
-  ModuleHeader, DatePicker, Select, useToast, ProceedToReviewComponent, NotesSection
+  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch
 } from '../global';
+import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
 import { getApiBaseUrl } from '../../config/apiBase';
 import offlineStorage from '../../services/offlineStorage';
 
 // Import extracted components
-import { ReturnCustomerSelector } from './components/ReturnCustomerSelector';
 import { ReturnInvoiceSelector } from './components/ReturnInvoiceSelector';
 import { ReturnItemsTable } from './components/ReturnItemsTable';
 import { ReturnReviewPanel } from './components/ReturnReviewPanel';
@@ -517,7 +517,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Step 1: Create Return Form
   if (ui.currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Sales Return"
@@ -529,10 +529,8 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             historyType="return"
           />
 
-          {/* Quick Actions Bar */}
-          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
-            Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
-          </div>
+          {/* Keyboard Shortcuts Bar */}
+          <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
 
           {/* Loading Overlay */}
           {(loading || saving) && (
@@ -550,67 +548,86 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto bg-gray-50">
-            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-              {/* Return Info */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-start gap-6">
-                  <div className="w-64">
-                    <DatePicker
-                      value={typeof returnData.return_date === 'string' ? new Date(returnData.return_date) : returnData.return_date}
-                      onChange={(date) => {
-                        const dateStr = date instanceof Date ? date.toISOString().split('T')[0] : date;
-                        dispatch({ type: 'SET_RETURN_DATA', data: { return_date: dateStr } });
-                      }}
-                      label="Return Date"
-                      size="lg"
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Return Reason <span className="text-red-500">*</span>
-                        </label>
-                        <Select
-                          value={returnData.return_reason || ''}
-                          onChange={(value) => dispatch({ type: 'SET_RETURN_DATA', data: { return_reason: String(value || '') } })}
-                          options={returnReasons}
-                          placeholder="Select return reason..."
-                          size="lg"
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Return Method <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={returnData.return_method || 'credit_note'}
-                          onChange={(e) => dispatch({ type: 'SET_RETURN_DATA', data: { return_method: e.target.value } })}
-                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="credit_note">Credit Note (Recommended)</option>
-                          <option value="replacement">Replacement</option>
-                          <option value="refund">Refund (Requires Approval)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+          <div className="flex-1 overflow-y-auto bg-blue-50">
+            <div className="px-6 py-6 space-y-6">
+              {/* Return Info - 3-column grid with consistent h-10 heights */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <StandardDatePicker
+                  label="Return Date"
+                  value={returnData.return_date || ''}
+                  onChange={(dateStr) => {
+                    dispatch({ type: 'SET_RETURN_DATA', data: { return_date: dateStr } });
+                  }}
+                  required
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Return Reason <span className="text-red-500">*</span>
+                  </label>
+                  <Select
+                    value={returnData.return_reason || ''}
+                    onChange={(value) => dispatch({ type: 'SET_RETURN_DATA', data: { return_reason: String(value || '') } })}
+                    options={returnReasons}
+                    placeholder="Select reason..."
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Return Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={returnData.return_method || 'credit_note'}
+                    onChange={(e) => dispatch({ type: 'SET_RETURN_DATA', data: { return_method: e.target.value } })}
+                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="credit_note">Credit Note (Recommended)</option>
+                    <option value="replacement">Replacement</option>
+                    <option value="refund">Refund (Requires Approval)</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Customer Selection */}
-              <ReturnCustomerSelector
-                selectedCustomer={selectedCustomer}
-                onCustomerSelect={handleCustomerSelect}
-                onCreateCustomer={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
-                customerSearchRef={customerSearchRef}
-              />
+              {/* Customer Section - Using global CustomerSearch like Invoice */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                    <User className="w-4 h-4 mr-2" />
+                    CUSTOMER
+                  </h3>
+                  <button
+                    onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    Create Customer
+                  </button>
+                </div>
+                <CustomerSearch
+                  ref={customerSearchRef}
+                  value={selectedCustomer as any}
+                  onChange={handleCustomerSelect as any}
+                  displayMode="compact"
+                  placeholder="Search customer by name, phone, or code..."
+                  showCreateButton={false}
+                  clearable={true}
+                />
+              </div>
 
-              {/* Invoice Selection */}
+              {/* Invoice Selection - or back button in manual mode */}
+              {!ui.showInvoiceSection && ui.showManualEntry && selectedCustomer && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => {
+                      dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+                      dispatch({ type: 'TOGGLE_MANUAL_ENTRY' });
+                      dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
+                  >
+                    ← Back to Invoice Selection
+                  </button>
+                </div>
+              )}
               <ReturnInvoiceSelector
                 selectedCustomer={selectedCustomer}
                 selectedInvoice={selectedInvoice}
@@ -661,7 +678,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Step 2: Review Panel
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Sales Return - Review"
@@ -670,7 +687,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           icon={RotateCcw}
           iconColor="text-red-600"
           onClose={onClose}
-          historyType="return"
         />
 
         {/* Content */}

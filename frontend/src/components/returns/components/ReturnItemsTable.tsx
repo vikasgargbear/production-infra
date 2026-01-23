@@ -24,25 +24,28 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     );
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+        <div className="mb-6">
+            {/* Section Header */}
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                    <Package className="w-4 h-4 mr-2" />
                     RETURN ITEMS ({selectedItems.length})
                 </h3>
-
-                {showManualEntry && (
-                    <div className="flex-1 max-w-md ml-4">
-                        <ProductSearch
-                            onAddItem={onAddManualItem}
-                            placeholder="Add product manually..."
-                            showBatchSelection={false}
-                        />
-                    </div>
-                )}
             </div>
 
+            {/* Product Search for Manual Entry - Full Width */}
+            {showManualEntry && (
+                <div className="mb-4">
+                    <ProductSearch
+                        onAddItem={onAddManualItem}
+                        placeholder="Search products by name, code, or HSN..."
+                        showBatchSelection={false}
+                    />
+                </div>
+            )}
+
             {items.length > 0 ? (
-                <div className="overflow-x-auto">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
                     <table className="w-full border-collapse">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
@@ -120,16 +123,18 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     </table>
                 </div>
             ) : (
-                <div className="text-center py-8 text-gray-500">
-                    <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                    <p>No items added yet</p>
-                    {selectedInvoice ? (
-                        <p className="text-sm mt-1">Invoice items will appear here</p>
-                    ) : showManualEntry ? (
-                        <p className="text-sm mt-1">Search and add products manually</p>
-                    ) : (
-                        <p className="text-sm mt-1">Select an invoice or use manual entry</p>
-                    )}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <div className="text-center py-8 text-gray-500">
+                        <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p>No items added yet</p>
+                        {selectedInvoice ? (
+                            <p className="text-sm mt-1">Invoice items will appear here</p>
+                        ) : showManualEntry ? (
+                            <p className="text-sm mt-1">Search and add products manually</p>
+                        ) : (
+                            <p className="text-sm mt-1">Select an invoice or use manual entry</p>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

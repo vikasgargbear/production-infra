@@ -36,9 +36,9 @@ export interface SupplierInvoiceData {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/supplier-invoices',
+    BASE: '/supplier-invoices/',
     BY_SUPPLIER: (id: number) => `/supplier-invoices/supplier/${id}`,
-    UNPAID: '/supplier-invoices/unpaid'
+    UNPAID: '/supplier-invoices/unpaid/'
 } as const;
 
 // ============================================

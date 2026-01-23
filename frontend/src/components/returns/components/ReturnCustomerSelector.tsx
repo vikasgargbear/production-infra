@@ -19,7 +19,7 @@ export const ReturnCustomerSelector = React.memo<ReturnCustomerSelectorProps>(({
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-4 flex items-center">
                     <User className="w-4 h-4 mr-2" />
                     CUSTOMER
                 </h3>

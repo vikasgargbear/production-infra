@@ -104,6 +104,8 @@ def get_grns(
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
+        org_id = str(context.org_id)
+        
         # Build base query
         where_conditions = ["g.org_id = :org_id"]
         params = {"org_id": org_id}
@@ -195,6 +197,8 @@ def get_grn_details(
 ):
     """Get detailed GRN information"""
     try:
+        org_id = str(context.org_id)
+        
         # Get GRN header
         grn_sql = """
             SELECT 
@@ -255,6 +259,8 @@ def update_grn(
 ):
     """Update GRN details"""
     try:
+        org_id = str(context.org_id)
+        
         # Check if GRN exists
         check_sql = "SELECT grn_id FROM procurement.goods_receipt_notes WHERE grn_id = :grn_id AND org_id = :org_id"
         existing = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": org_id}).first()

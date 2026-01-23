@@ -8,6 +8,7 @@ import {
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
   ProceedToReviewComponent, StandardDatePicker, ItemsTable
 } from '../global';
+import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
@@ -499,7 +500,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Step 1: Create Return - Sales Return Style
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Purchase Return"
@@ -510,152 +511,141 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             onClose={onClose}
           />
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-              {/* Top Section - Date, Reason, Method */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex gap-6">
-                  {/* Left side - Return Date */}
-                  <div className="w-64">
-                    <DatePicker
-                      value={returnData.return_date ? new Date(returnData.return_date) : new Date()}
-                      onChange={(date) => setReturnData(prev => ({
-                        ...prev,
-                        return_date: date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
-                      }))}
-                      label="Return Date"
-                      size="lg"
-                      className="w-full"
-                    />
-                  </div>
+          {/* Keyboard Shortcuts Bar */}
+          <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
 
-                  {/* Right side - Return Reason and Method */}
-                  <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Return Reason <span className="text-red-500">*</span>
-                        </label>
-                        <Select
-                          value={returnData.return_reason}
-                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value as string }))}
-                          options={returnReasons}
-                          placeholder="Select return reason..."
-                          size="lg"
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Return Method <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={returnData.return_method || 'debit_note'}
-                          onChange={(e) => setReturnData(prev => ({ ...prev, return_method: e.target.value }))}
-                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="debit_note">Debit Note (Recommended)</option>
-                          <option value="replacement">Replacement</option>
-                          <option value="refund">Refund (Requires Approval)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto bg-blue-50 p-6">
+            <div className="space-y-6">
+              {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <StandardDatePicker
+                  label="Return Date"
+                  value={returnData.return_date}
+                  onChange={(dateStr) => setReturnData(prev => ({
+                    ...prev,
+                    return_date: dateStr || new Date().toISOString().split('T')[0]
+                  }))}
+                  required
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Return Reason <span className="text-red-500">*</span>
+                  </label>
+                  <Select
+                    value={returnData.return_reason}
+                    onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value as string }))}
+                    options={returnReasons}
+                    placeholder="Select reason..."
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Return Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={returnData.return_method || 'debit_note'}
+                    onChange={(e) => setReturnData(prev => ({ ...prev, return_method: e.target.value }))}
+                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="debit_note">Debit Note (Recommended)</option>
+                    <option value="replacement">Replacement</option>
+                    <option value="refund">Refund (Requires Approval)</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Supplier & Invoice Selection */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                {/* Supplier Section */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+              {/* Supplier Section - Using global SupplierSearch like Invoice */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
                     <Building2 className="w-4 h-4 mr-2" />
                     SUPPLIER
                   </h3>
-                  <SupplierSearch
-                    value={selectedSupplier || null}
-                    onChange={handleSupplierSelect}
-                    displayMode="inline"
-                    placeholder="Search supplier by name, phone, or code..."
-                    required
-                    clearable={true}
-                  />
                 </div>
+                <SupplierSearch
+                  value={selectedSupplier || null}
+                  onChange={handleSupplierSelect}
+                  displayMode="inline"
+                  placeholder="Search supplier by name, phone, or code..."
+                  required
+                  clearable={true}
+                />
+              </div>
 
-                {/* Show option to select invoice if skipped */}
-                {selectedSupplier && !showInvoiceSection && showManualEntry && (
-                  <div className="mb-4">
+              {/* Show option to select invoice if skipped */}
+              {selectedSupplier && !showInvoiceSection && showManualEntry && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => {
+                      setShowInvoiceSection(true);
+                      setShowManualEntry(false);
+                      setReturnData(prev => ({ ...prev, items: [] }));
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    ← Back to Invoice Selection
+                  </button>
+                </div>
+              )}
+
+              {/* Invoice Section */}
+              {selectedSupplier && showInvoiceSection && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      SELECT SUPPLIER INVOICE
+                    </h3>
                     <button
-                      onClick={() => {
-                        setShowInvoiceSection(true);
-                        setShowManualEntry(false);
-                        setReturnData(prev => ({ ...prev, items: [] }));
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      onClick={handleSkipInvoiceSelection}
+                      className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     >
-                      ← Back to Invoice Selection
+                      Skip Invoice Selection
                     </button>
                   </div>
-                )}
 
-                {/* Invoice Section */}
-                {selectedSupplier && showInvoiceSection && (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
-                        <FileText className="w-4 h-4 mr-2" />
-                        SELECT SUPPLIER INVOICE
-                      </h3>
+                  {/* Show selected invoice if any */}
+                  {selectedInvoice && (
+                    <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">
+                          Invoice #{selectedInvoice.supplier_invoice_number || selectedInvoice.invoice_number}
+                        </h4>
+                        <p className="text-sm text-gray-600">
+                          Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Amount: ₹{(selectedInvoice.total_amount || selectedInvoice.invoice_amount || 0).toLocaleString()}
+                        </p>
+                      </div>
                       <button
-                        onClick={handleSkipInvoiceSelection}
-                        className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        onClick={() => {
+                          setSelectedInvoice(null);
+                          setReturnData(prev => ({
+                            ...prev,
+                            supplier_invoice_id: '',
+                            items: []
+                          }));
+                        }}
+                        className="text-red-600 hover:text-red-700"
                       >
-                        Skip Invoice Selection
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
+                  )}
 
-                    {/* Show selected invoice if any */}
-                    {selectedInvoice && (
-                      <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">
-                            Invoice #{selectedInvoice.supplier_invoice_number || selectedInvoice.invoice_number}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Amount: ₹{(selectedInvoice.total_amount || selectedInvoice.invoice_amount || 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setSelectedInvoice(null);
-                            setReturnData(prev => ({
-                              ...prev,
-                              supplier_invoice_id: '',
-                              items: []
-                            }));
-                          }}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Invoice Selector */}
-                    {!selectedInvoice && (
-                      <PurchaseReturnSelector
-                        invoices={returnableInvoices}
-                        onInvoiceSelect={handleInvoiceSelect}
-                        loading={loading}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
+                  {/* Invoice Selector */}
+                  {!selectedInvoice && (
+                    <PurchaseReturnSelector
+                      invoices={returnableInvoices}
+                      onInvoiceSelect={handleInvoiceSelect}
+                      loading={loading}
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Return Items */}
               {(selectedInvoice || showManualEntry) && returnData.items.length > 0 && (
@@ -749,7 +739,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Review Purchase Return"

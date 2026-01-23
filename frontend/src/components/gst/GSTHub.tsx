@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
   Home, FileText, BarChart3, RefreshCw,
-  Settings, Receipt
+  Upload, Receipt
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { GSTDashboard } from './dashboard';
 import GSTFiling from './GSTFiling';
 import { GSTReports } from './reports';
 import GSTReconciliation from './GSTReconciliation';
+import { GSTR2BUpload, ReconciliationDashboard } from './gstr2b';
 
 interface GSTHubProps {
   open?: boolean;
@@ -20,6 +21,31 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
   // Function to navigate to reports
   const navigateToReports = () => {
     setActiveModule('gst-reports');
+  };
+
+  // Function to navigate to GSTR-2B reconciliation
+  const navigateToGSTR2B = () => {
+    setActiveModule('gstr2b-upload');
+  };
+
+  // GSTR-2B Upload component with reconciliation dashboard
+  const GSTR2BModule: React.FC<{ onClose?: () => void }> = (props) => {
+    const [showReconciliation, setShowReconciliation] = useState(false);
+
+    return (
+      <div className="p-6 space-y-6">
+        {!showReconciliation ? (
+          <GSTR2BUpload
+            onUploadComplete={() => setShowReconciliation(true)}
+            onReconcile={() => setShowReconciliation(true)}
+          />
+        ) : (
+          <ReconciliationDashboard
+            onStartReconcile={() => setShowReconciliation(false)}
+          />
+        )}
+      </div>
+    );
   };
 
   const gstModules = [
@@ -40,6 +66,15 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       icon: FileText,
       color: 'green',
       component: GSTFiling
+    },
+    {
+      id: 'gstr2b-upload',
+      label: '2B Upload',
+      fullLabel: 'GSTR-2B Upload',
+      description: 'Upload & reconcile 2B',
+      icon: Upload,
+      color: 'teal',
+      component: GSTR2BModule
     },
     {
       id: 'gst-reports',

@@ -48,7 +48,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
   // Auto-expand customer when navigating from Collection Center
   React.useEffect(() => {
     if (initialCustomerId) {
-      dispatch({ type: 'TOGGLE_EXPAND', payload: initialCustomerId });
+      dispatch({ type: 'TOGGLE_PARTY_EXPANSION', partyId: initialCustomerId });
       // Clear the initial customer after expanding
       onCustomerChange?.();
     }

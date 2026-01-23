@@ -13,7 +13,7 @@ import {
   Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination } from '../global';
-import { purchasesApi } from '../../services/api';
+import { supplierInvoicesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 
 // Import hooks and types
@@ -40,26 +40,28 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         searchParams.search = searchFilters.search.trim();
       }
 
-      const response = await purchasesApi.getAll(searchParams);
+      const response = await supplierInvoicesApi.getAll(searchParams);
       const responseData = response?.data || response;
 
-      if (responseData?.purchases || responseData?.success) {
-        const purchasesData = responseData.purchases || responseData.data?.purchases || [];
+      // Handle both array response and object with invoices key
+      const invoicesData = Array.isArray(responseData) ? responseData :
+        (responseData?.invoices || responseData?.data?.invoices || []);
 
-        const transformedPurchases: PurchaseOrder[] = purchasesData.map((purchase: any) => ({
-          id: purchase.po_id?.toString() || purchase.po_number,
-          po_number: purchase.po_number,
-          po_date: purchase.po_date,
-          supplier_id: purchase.supplier_id?.toString() || '',
-          supplier_name: purchase.supplier_name,
-          total_amount: purchase.total_amount || 0,
-          paid_amount: purchase.paid_amount || 0,
-          pending_amount: purchase.pending_amount || 0,
-          payment_status: purchase.payment_status || 'pending',
-          status: purchase.status || 'draft',
-          items_count: purchase.items_count || 0,
-          created_at: purchase.created_at || purchase.po_date,
-          updated_at: purchase.updated_at || purchase.po_date
+      if (invoicesData.length >= 0) {
+        const transformedPurchases: PurchaseOrder[] = invoicesData.map((invoice: any) => ({
+          id: invoice.supplier_invoice_id?.toString() || invoice.invoice_number,
+          po_number: invoice.invoice_number || invoice.supplier_invoice_number,
+          po_date: invoice.invoice_date || invoice.created_at,
+          supplier_id: invoice.supplier_id?.toString() || '',
+          supplier_name: invoice.supplier_name,
+          total_amount: invoice.invoice_total || invoice.total_amount || 0,
+          paid_amount: invoice.paid_amount || 0,
+          pending_amount: (invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0),
+          payment_status: invoice.payment_status || (invoice.paid_amount >= invoice.invoice_total ? 'paid' : 'pending'),
+          status: invoice.status || 'confirmed',
+          items_count: invoice.items_count || invoice.item_count || 0,
+          created_at: invoice.created_at || invoice.invoice_date,
+          updated_at: invoice.updated_at || invoice.invoice_date
         }));
 
         dispatch({ type: 'SET_PURCHASES', purchases: transformedPurchases });
@@ -74,7 +76,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           }
         });
       } else {
-        dispatch({ type: 'SET_ERROR', error: responseData?.error?.message || 'Failed to fetch purchases' });
+        // Empty array is valid - just means no invoices yet
       }
     } catch (error) {
       dispatch({ type: 'SET_ERROR', error: 'Failed to fetch purchases. Please try again.' });
@@ -194,12 +196,12 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     },
     {
       key: 'po_number',
-      header: 'PO #',
+      header: 'Invoice #',
       render: (_: any, purchase: PurchaseOrder) => (
         <div>
           <div className="font-medium text-gray-900">{purchase.po_number}</div>
           <div className="text-xs text-gray-500">
-            {new Date(purchase.po_date).toLocaleDateString('en-IN')}
+            {purchase.po_date ? new Date(purchase.po_date).toLocaleDateString('en-IN') : '-'}
           </div>
         </div>
       ),
@@ -297,8 +299,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Purchase History</h1>
-              <p className="text-sm text-gray-600 mt-1">{pagination.total} total purchases</p>
+              <h1 className="text-2xl font-bold text-gray-900">Supplier Invoices</h1>
+              <p className="text-sm text-gray-600 mt-1">{pagination.total} total invoices</p>
             </div>
             {onClose && (
               <button onClick={onClose} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">

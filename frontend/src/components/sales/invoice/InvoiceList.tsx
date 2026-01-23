@@ -9,9 +9,10 @@
  * - Types extracted to invoicelist/types/
  */
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { Pagination } from '../../global';
 import { invoicesApi } from '../../../services/api';
+import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 
 // Import extracted components
 import { InvoiceFilters } from './invoicelist/components/InvoiceFilters';
@@ -25,6 +26,10 @@ import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.
 const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
+
+  // Cancel modal state
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [invoiceToCancel, setInvoiceToCancel] = useState<Invoice | null>(null);
 
   // Fetch invoices from backend
   const fetchInvoices = useCallback(async (page = 1, searchFilters: any = {}) => {
@@ -248,6 +253,17 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     // TODO: Implement print functionality
   };
 
+  const handleCancelInvoice = (invoice: Invoice) => {
+    setInvoiceToCancel(invoice);
+    setCancelModalOpen(true);
+  };
+
+  const handleCancelComplete = () => {
+    setCancelModalOpen(false);
+    setInvoiceToCancel(null);
+    fetchInvoices(pagination.page, buildSearchParams()); // Refresh list
+  };
+
   const handleMarkPaid = () => {
     console.log('Mark selected as paid:', Array.from(selectedIds));
     // TODO: Implement bulk mark as paid
@@ -338,6 +354,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               onToggleSelectAll={handleToggleSelectAll}
               onViewInvoice={handleViewInvoice}
               onPrintInvoice={handlePrintInvoice}
+              onCancelInvoice={handleCancelInvoice}
             />
 
             {/* Pagination */}
@@ -361,6 +378,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           <strong>Shortcuts:</strong> Alt+R: Refresh | Alt+E: Export | Alt+S: Filters | Ctrl+F: Search | Esc: Close
         </div>
       </div>
+
+      {/* Cancel Invoice Modal */}
+      <CancelInvoiceModal
+        isOpen={cancelModalOpen}
+        onClose={() => { setCancelModalOpen(false); setInvoiceToCancel(null); }}
+        invoice={invoiceToCancel}
+        onCancelled={handleCancelComplete}
+      />
     </div>
   );
 };

@@ -17,7 +17,7 @@ export interface Invoice {
     total_amount: number;
     paid_amount: number;
     pending_amount: number;
-    payment_status: 'paid' | 'partial' | 'pending' | 'overdue';
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled';
     items_count: number;
     created_at: string;
     updated_at: string;
@@ -54,6 +54,7 @@ export interface InvoiceTableProps {
     onToggleSelectAll: () => void;
     onViewInvoice: (invoice: Invoice) => void;
     onPrintInvoice: (invoice: Invoice) => void;
+    onCancelInvoice?: (invoice: Invoice) => void;
 }
 
 export interface InvoiceBulkActionsProps {

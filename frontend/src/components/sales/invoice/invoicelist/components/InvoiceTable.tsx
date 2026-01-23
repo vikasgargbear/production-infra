@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Eye, Printer, MoreVertical } from 'lucide-react';
+import { Eye, Printer, MoreVertical, XCircle } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
 import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
 
@@ -17,7 +17,8 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     onToggleSelect,
     onToggleSelectAll,
     onViewInvoice,
-    onPrintInvoice
+    onPrintInvoice,
+    onCancelInvoice
 }) => {
     const columns = useMemo(() => [
         {
@@ -90,7 +91,8 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
                     paid: { status: 'success', label: 'Paid' },
                     partial: { status: 'warning', label: 'Partial' },
                     pending: { status: 'info', label: 'Pending' },
-                    overdue: { status: 'error', label: 'Overdue' }
+                    overdue: { status: 'error', label: 'Overdue' },
+                    cancelled: { status: 'error', label: 'Cancelled' }
                 };
 
                 const statusConfig = statusMap[invoice.payment_status] || { status: 'default', label: invoice.payment_status };
@@ -119,33 +121,47 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
             key: 'actions',
             header: 'Actions',
             align: 'center' as const,
-            render: (_: any, invoice: Invoice) => (
-                <div className="flex items-center justify-center space-x-2">
-                    <button
-                        onClick={() => onViewInvoice(invoice)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                        title="View Invoice"
-                    >
-                        <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={() => onPrintInvoice(invoice)}
-                        className="p-1 text-gray-600 hover:bg-gray-50 rounded"
-                        title="Print Invoice"
-                    >
-                        <Printer className="w-4 h-4" />
-                    </button>
-                    <button
-                        className="p-1 text-gray-600 hover:bg-gray-50 rounded"
-                        title="More Actions"
-                    >
-                        <MoreVertical className="w-4 h-4" />
-                    </button>
-                </div>
-            ),
-            width: '120px'
+            render: (_: any, invoice: Invoice) => {
+                // Can cancel only if not cancelled and no payments made
+                const canCancel = invoice.payment_status !== 'cancelled' && invoice.paid_amount === 0;
+
+                return (
+                    <div className="flex items-center justify-center space-x-1">
+                        <button
+                            onClick={() => onViewInvoice(invoice)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                            title="View Invoice"
+                        >
+                            <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => onPrintInvoice(invoice)}
+                            className="p-1 text-gray-600 hover:bg-gray-50 rounded"
+                            title="Print Invoice"
+                        >
+                            <Printer className="w-4 h-4" />
+                        </button>
+                        {canCancel && onCancelInvoice && (
+                            <button
+                                onClick={() => onCancelInvoice(invoice)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                title="Cancel Invoice"
+                            >
+                                <XCircle className="w-4 h-4" />
+                            </button>
+                        )}
+                        <button
+                            className="p-1 text-gray-600 hover:bg-gray-50 rounded"
+                            title="More Actions"
+                        >
+                            <MoreVertical className="w-4 h-4" />
+                        </button>
+                    </div>
+                );
+            },
+            width: '140px'
         }
-    ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onViewInvoice, onPrintInvoice]);
+    ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onViewInvoice, onPrintInvoice, onCancelInvoice]);
 
     return (
         <div className="bg-white rounded-lg shadow-sm">
