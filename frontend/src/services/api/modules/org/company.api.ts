@@ -51,12 +51,16 @@ export const companyApi = {
         return apiHelpers.put(ENDPOINTS.INFO, data);
     },
 
-    uploadLogo: (file: File): Promise<AxiosResponse> => {
-        const formData = new FormData();
-        formData.append('logo', file);
-        return apiHelpers.post(ENDPOINTS.LOGO, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+    uploadLogo: (logoBase64: string): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.LOGO, { logo: logoBase64 });
+    },
+
+    getLogo: (): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.LOGO);
+    },
+
+    deleteLogo: (): Promise<AxiosResponse> => {
+        return apiHelpers.delete(ENDPOINTS.LOGO);
     },
 
     getGSTInfo: (): Promise<AxiosResponse> => {

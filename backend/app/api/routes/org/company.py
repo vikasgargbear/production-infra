@@ -94,6 +94,17 @@ async def get_company_info(
             bank_result = db.execute(text(bank_query), {"org_id": str(context.org_id)})
             bank_data = bank_result.first()
             
+            # Get company logo if exists
+            logo_query = """
+                SELECT setting_value
+                FROM system_config.system_settings
+                WHERE org_id = :org_id AND setting_key = 'company_logo'
+                LIMIT 1
+            """
+            logo_result = db.execute(text(logo_query), {"org_id": str(context.org_id)})
+            logo_data = logo_result.first()
+            company_logo = logo_data.setting_value if logo_data else None
+            
             # Return formatted data matching frontend expectations
             response = {
                 "name": org_data.org_name or "Your Company",
@@ -109,7 +120,7 @@ async def get_company_info(
                 "pan": org_data.pan_number or "",
                 "drug_license_no": org_data.drug_license_number or "",
                 "fssai_no": org_data.fssai_number or "",
-                "logo": None,
+                "logo": company_logo,
                 # Additional fields from business_settings
                 "tagline": business_settings.get("tagline", ""),
                 "financial_year_start": business_settings.get("financial_year_start", "2024-04-01"),
@@ -196,7 +207,7 @@ async def update_company_info(
 ):
     """Update company information"""
     try:
-        logger.info(f"Updating company info for org_id: {org_id}")
+        logger.info(f"Updating company info for org_id: {context.org_id}")
         logger.info(f"Received data: {company_data}")
         
         # First, check if organization exists
@@ -354,7 +365,7 @@ async def update_company_info(
         
     except Exception as e:
         logger.error(f"Error updating company info: {str(e)}")
-        logger.error(f"Query parameters: org_id={org_id}, data={company_data}")
+        logger.error(f"Query parameters: org_id={context.org_id}, data={company_data}")
         db.rollback()
         
         # Check if it's a specific database error
@@ -569,6 +580,104 @@ async def upload_qr_code(
         logger.error(f"Error uploading QR code: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to upload QR code: {str(e)}")
+
+@router.post("/logo")
+@with_tenant_context
+async def upload_logo(
+    logo_data: Dict[str, str] = Body(...),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """Upload company logo as base64"""
+    try:
+        logo_base64 = logo_data.get("logo", "")
+        
+        if not logo_base64:
+            raise HTTPException(status_code=400, detail="Logo data is required")
+        
+        # Store logo in system settings
+        query = """
+            INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
+            VALUES (:org_id, 'company_logo', :logo)
+            ON CONFLICT (org_id, setting_key)
+            DO UPDATE SET setting_value = :logo, updated_at = CURRENT_TIMESTAMP
+        """
+        
+        db.execute(text(query), {
+            "org_id": str(context.org_id),
+            "logo": logo_base64
+        })
+        
+        return {
+            "success": True,
+            "message": "Logo uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading logo: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to upload logo: {str(e)}")
+
+@router.get("/logo")
+@with_tenant_context
+async def get_logo(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """Get company logo"""
+    try:
+        query = """
+            SELECT setting_value
+            FROM system_config.system_settings
+            WHERE org_id = :org_id AND setting_key = 'company_logo'
+            LIMIT 1
+        """
+        
+        result = db.execute(text(query), {"org_id": str(context.org_id)})
+        row = result.first()
+        
+        if row and row.setting_value:
+            return {
+                "success": True,
+                "logo": row.setting_value
+            }
+        
+        return {
+            "success": True,
+            "logo": None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching logo: {str(e)}")
+        return {
+            "success": False,
+            "logo": None
+        }
+
+@router.delete("/logo")
+@with_tenant_context
+async def delete_logo(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """Delete company logo"""
+    try:
+        query = """
+            DELETE FROM system_config.system_settings
+            WHERE org_id = :org_id AND setting_key = 'company_logo'
+        """
+        
+        db.execute(text(query), {"org_id": str(context.org_id)})
+        
+        return {
+            "success": True,
+            "message": "Logo deleted successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting logo: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete logo: {str(e)}")
 
 @router.get("/settings")
 @with_tenant_context

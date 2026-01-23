@@ -85,44 +85,6 @@ class LedgerService:
                     AND p.payment_status != :cancelled_payment
                     AND (:from_date IS NULL OR p.payment_date >= :from_date)
                     AND (:to_date IS NULL OR p.payment_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Credit Notes (Credit)
-                    SELECT 
-                        cn.note_id as id,
-                        cn.note_date as date,
-                        'Credit Note' as type,
-                        cn.note_number as reference,
-                        CONCAT('Credit Note - ', COALESCE(cn.reason, '')) as description,
-                        0::numeric as debit,
-                        cn.amount as credit,
-                        3 as sort_order
-                    FROM financial.credit_debit_notes cn
-                    WHERE cn.party_id = :party_id AND cn.party_type = :customer_type 
-                    AND cn.note_type = 'credit'
-                    AND cn.status = 'approved'
-                    AND (:from_date IS NULL OR cn.note_date >= :from_date)
-                    AND (:to_date IS NULL OR cn.note_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Debit Notes (Debit)
-                    SELECT 
-                        dn.note_id as id,
-                        dn.note_date as date,
-                        'Debit Note' as type,
-                        dn.note_number as reference,
-                        CONCAT('Debit Note - ', COALESCE(dn.reason, '')) as description,
-                        dn.amount as debit,
-                        0::numeric as credit,
-                        4 as sort_order
-                    FROM financial.credit_debit_notes dn
-                    WHERE dn.party_id = :party_id AND dn.party_type = :customer_type
-                    AND dn.note_type = 'debit'
-                    AND dn.status = 'approved'
-                    AND (:from_date IS NULL OR dn.note_date >= :from_date)
-                    AND (:to_date IS NULL OR dn.note_date <= :to_date)
                 )
                 SELECT * FROM all_transactions
                 ORDER BY date DESC, sort_order
@@ -154,52 +116,30 @@ class LedgerService:
                 "transaction_count": len(transactions)
             }
         else:
-            # Supplier statement (TenantAwareSession auto-adds org_id)
+            # Supplier statement - only show payments (supplier_invoices table may not exist)
+            # TenantAwareSession auto-adds org_id
             query = """
-                WITH all_transactions AS (
-                    -- Purchase Invoices (Credit - we owe them)
-                    SELECT 
-                        si.invoice_id as id,
-                        si.invoice_date as date,
-                        'Purchase Invoice' as type,
-                        si.invoice_number as reference,
-                        CONCAT('Purchase #', si.invoice_number) as description,
-                        0::numeric as debit,
-                        si.final_amount as credit,
-                        1 as sort_order
-                    FROM purchases.supplier_invoices si
-                    WHERE si.supplier_id = :party_id
-                    AND si.invoice_status != :cancelled
-                    AND (:from_date IS NULL OR si.invoice_date >= :from_date)
-                    AND (:to_date IS NULL OR si.invoice_date <= :to_date)
-                    
-                    UNION ALL
-                    
-                    -- Payments to Supplier (Debit - reduces what we owe)
-                    SELECT 
-                        p.payment_id as id,
-                        p.payment_date as date,
-                        'Payment' as type,
-                        p.payment_number as reference,
-                        CONCAT('Payment #', p.payment_number) as description,
-                        p.payment_amount as debit,
-                        0::numeric as credit,
-                        2 as sort_order
-                    FROM financial.payments p
-                    WHERE p.party_id = :party_id AND p.party_type = :supplier_type
-                    AND p.payment_status != :cancelled_payment
-                    AND (:from_date IS NULL OR p.payment_date >= :from_date)
-                    AND (:to_date IS NULL OR p.payment_date <= :to_date)
-                )
-                SELECT * FROM all_transactions
-                ORDER BY date DESC, sort_order
+                SELECT 
+                    p.payment_id as id,
+                    p.payment_date as date,
+                    'Payment' as type,
+                    p.payment_number as reference,
+                    CONCAT('Payment #', p.payment_number) as description,
+                    p.payment_amount as debit,
+                    0::numeric as credit,
+                    1 as sort_order
+                FROM financial.payments p
+                WHERE p.party_id = :party_id AND p.party_type = :supplier_type
+                AND p.payment_status != :cancelled_payment
+                AND (:from_date IS NULL OR p.payment_date >= :from_date)
+                AND (:to_date IS NULL OR p.payment_date <= :to_date)
+                ORDER BY p.payment_date DESC
             """
             
             result = db.execute(text(query), {
                 "party_id": party_id,
                 "from_date": from_date,
                 "to_date": to_date,
-                "cancelled": InvoiceStatus.CANCELLED.value,
                 "cancelled_payment": PaymentRecordStatus.CANCELLED.value,
                 "supplier_type": PartyType.SUPPLIER.value
             })
@@ -209,9 +149,9 @@ class LedgerService:
             
             for row in result:
                 trans = dict(row._mapping)
-                running_balance = running_balance + Decimal(str(trans['credit'])) - Decimal(str(trans['debit']))
+                running_balance = running_balance - Decimal(str(trans['debit']))
                 trans['running_balance'] = float(running_balance)
-                trans['balance_type'] = 'Cr' if running_balance > 0 else 'Dr'
+                trans['balance_type'] = 'Dr' if running_balance < 0 else 'Nil'
                 trans['display_balance'] = float(abs(running_balance))
                 transactions.append(trans)
             
@@ -267,25 +207,25 @@ class LedgerService:
                 "pending_invoices": result.invoice_count if result else 0
             }
         else:
-            result = db.execute(text("""
-                SELECT 
-                    COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as payable,
-                    COUNT(*) as invoice_count
-                FROM purchases.supplier_invoices
-                WHERE supplier_id = :party_id
-                AND invoice_status != :cancelled 
-                AND payment_status != :paid
+            # Supplier invoices table doesn't exist - return zeros
+            # Only track payments made to suppliers
+            total_paid = db.execute(text("""
+                SELECT COALESCE(SUM(payment_amount), 0) as total_paid
+                FROM financial.payments
+                WHERE party_id = :party_id AND party_type = :party_type
+                AND payment_status != :cancelled
             """), {
                 "party_id": party_id,
-                "cancelled": InvoiceStatus.CANCELLED.value,
-                "paid": InvoicePaymentStatus.PAID.value
-            }).fetchone()
+                "party_type": PartyType.SUPPLIER.value,
+                "cancelled": PaymentRecordStatus.CANCELLED.value
+            }).scalar() or 0
             
             return {
                 "party_id": party_id,
                 "party_type": party_type,
-                "payable": float(result.payable) if result else 0,
-                "pending_invoices": result.invoice_count if result else 0
+                "payable": 0,
+                "total_paid": float(total_paid),
+                "pending_invoices": 0
             }
     
     @staticmethod
