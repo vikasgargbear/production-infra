@@ -54,158 +54,78 @@ const Outstanding: React.FC<OutstandingProps> = ({
     }
   }, [initialCustomerId]);
 
-  // Fetch outstanding data using the sales API
+  // Fetch outstanding data using the ledger aging API (works on production)
   const { data, isLoading, refetch, error } = useQuery({
     queryKey: ['outstanding-data', partyType, filters],
     queryFn: async () => {
       try {
-        // Use the sales/outstanding endpoint
-        const response = await apiClient.get('/sales/outstanding', {
-          params: {}
+        // Use the ledger/aging endpoint which returns party-level outstanding with aging
+        const response = await apiClient.get('/ledger/aging', {
+          params: { party_type: partyType }
         });
 
         const responseData = response.data || {};
-        const invoices = Array.isArray(responseData.invoices) ? responseData.invoices :
-          Array.isArray(responseData) ? responseData : [];
+        const agingData = responseData.aging_data || [];
+        const summaryData = responseData.summary || {};
 
-        // Group by customer for summary view
-        const partiesMap = new Map<string, PartyOutstanding>();
+        // Transform aging_data to PartyOutstanding format
+        const parties: PartyOutstanding[] = agingData.map((party: any) => ({
+          party_id: String(party.customer_id || party.supplier_id || party.party_id),
+          party_name: party.customer_name || party.supplier_name || party.party_name || 'Unknown',
+          party_phone: party.phone || party.primary_phone || '',
+          party_email: party.email || party.primary_email || '',
+          total_outstanding: parseFloat(party.total_outstanding || party.total_payable || 0),
+          total_advance: parseFloat(party.advance || 0),
+          customer_net_position: parseFloat(party.net_balance || party.total_outstanding || 0),
+          total_overdue: parseFloat(party.overdue_amount || party.overdue || 0),
+          invoice_count: parseInt(party.pending_invoices || party.invoice_count || 0),
+          overdue_count: parseInt(party.overdue_invoices || 0),
+          oldest_invoice_days: parseInt(party.max_overdue_days || party.oldest_invoice_days || 0),
+          credit_limit: parseFloat(party.credit_limit || 0),
+          credit_utilization: parseFloat(party.credit_utilization || 0),
+          invoices: [] // Invoice details would need separate API call
+        }));
 
-        // Process invoices and group by customer
-        invoices.forEach((invoice: any) => {
-          const partyId = String(invoice.customer_id);
-
-          if (!partiesMap.has(partyId)) {
-            partiesMap.set(partyId, {
-              party_id: partyId,
-              party_name: invoice.customer_name || 'Unknown Customer',
-              party_phone: invoice.customer_phone || '',
-              party_email: invoice.customer_email || '',
-              total_outstanding: 0,
-              total_advance: invoice.customer_advance || 0,
-              customer_net_position: invoice.customer_net_position || 0,
-              total_overdue: 0,
-              invoice_count: 0,
-              overdue_count: 0,
-              oldest_invoice_days: 0,
-              invoices: []
-            } as any);
-          }
-
-          const party = partiesMap.get(partyId)!;
-          const pendingAmount = parseFloat(invoice.pending_amount || 0);
-          const daysOverdue = parseInt(invoice.days_overdue || 0);
-
-          // Update advance and net position if provided
-          if (invoice.customer_advance && party.total_advance === 0) {
-            party.total_advance = invoice.customer_advance;
-          }
-          if (invoice.customer_net_position !== undefined && party.customer_net_position === 0) {
-            party.customer_net_position = invoice.customer_net_position;
-          }
-
-          party.total_outstanding += pendingAmount;
-          party.invoice_count++;
-
-          if (daysOverdue > 0) {
-            party.total_overdue += pendingAmount;
-            party.overdue_count++;
-            party.oldest_invoice_days = Math.max(party.oldest_invoice_days, daysOverdue);
-          }
-
-          // Determine aging bucket
-          let agingBucket: InvoiceDetail['aging_bucket'] = 'current';
-          if (daysOverdue > 90) agingBucket = 'over_90';
-          else if (daysOverdue > 60) agingBucket = '61-90';
-          else if (daysOverdue > 30) agingBucket = '31-60';
-          else if (daysOverdue > 0) agingBucket = '1-30';
-
-          // Determine status
-          let status: InvoiceDetail['status'] = 'pending';
-          if (invoice.payment_status === 'partial') status = 'partial';
-          else if (daysOverdue > 0) status = 'overdue';
-
-          // Add invoice details
-          party.invoices!.push({
-            invoice_id: String(invoice.invoice_id),
-            invoice_number: invoice.invoice_number || '',
-            invoice_date: invoice.invoice_date || '',
-            due_date: invoice.due_date || '',
-            original_amount: parseFloat(invoice.final_amount || 0),
-            paid_amount: parseFloat(invoice.paid_amount || 0),
-            current_outstanding: pendingAmount,
-            days_overdue: daysOverdue,
-            aging_bucket: agingBucket,
-            status: status
-          });
-        });
-
-        const parties = Array.from(partiesMap.values());
-
-        // Calculate summary
+        // Build summary from response
         const summary: OutstandingSummary = {
-          total_receivable: 0,
-          total_payable: 0,
-          total_overdue: 0,
-          party_count: parties.length,
-          overdue_party_count: 0,
+          total_receivable: parseFloat(summaryData.total || summaryData.total_receivable || 0),
+          total_payable: parseFloat(summaryData.total_payable || 0),
+          total_overdue: parseFloat(summaryData.overdue || summaryData.total_overdue || 0),
+          party_count: parseInt(summaryData.party_count || parties.length),
+          overdue_party_count: parties.filter(p => p.total_overdue > 0).length,
           aging_summary: {
-            current: { count: 0, amount: 0 },
-            '1-30': { count: 0, amount: 0 },
-            '31-60': { count: 0, amount: 0 },
-            '61-90': { count: 0, amount: 0 },
-            over_90: { count: 0, amount: 0 }
+            current: {
+              count: parties.filter(p => p.oldest_invoice_days <= 0).length,
+              amount: parseFloat(summaryData.current || 0)
+            },
+            '1-30': {
+              count: parties.filter(p => p.oldest_invoice_days > 0 && p.oldest_invoice_days <= 30).length,
+              amount: parseFloat(summaryData['1_30'] || summaryData.bucket_1_30 || 0)
+            },
+            '31-60': {
+              count: parties.filter(p => p.oldest_invoice_days > 30 && p.oldest_invoice_days <= 60).length,
+              amount: parseFloat(summaryData['31_60'] || summaryData.bucket_31_60 || 0)
+            },
+            '61-90': {
+              count: parties.filter(p => p.oldest_invoice_days > 60 && p.oldest_invoice_days <= 90).length,
+              amount: parseFloat(summaryData['61_90'] || summaryData.bucket_61_90 || 0)
+            },
+            over_90: {
+              count: parties.filter(p => p.oldest_invoice_days > 90).length,
+              amount: parseFloat(summaryData['over_90'] || summaryData.bucket_90_plus || 0)
+            }
           }
         };
-
-        // Use backend total if available
-        if (responseData.total_outstanding !== undefined) {
-          summary.total_receivable = responseData.total_outstanding;
-        } else {
-          parties.forEach(party => {
-            summary.total_receivable += party.total_outstanding;
-          });
-        }
-
-        // Calculate other summaries
-        parties.forEach(party => {
-          summary.total_overdue += party.total_overdue;
-          if (party.overdue_count > 0) {
-            summary.overdue_party_count++;
-          }
-
-          // Update aging summary
-          party.invoices?.forEach(invoice => {
-            const bucket = invoice.aging_bucket;
-            const amount = invoice.current_outstanding;
-
-            if (bucket === 'current') {
-              summary.aging_summary.current.count++;
-              summary.aging_summary.current.amount += amount;
-            } else if (bucket === '1-30') {
-              summary.aging_summary['1-30'].count++;
-              summary.aging_summary['1-30'].amount += amount;
-            } else if (bucket === '31-60') {
-              summary.aging_summary['31-60'].count++;
-              summary.aging_summary['31-60'].amount += amount;
-            } else if (bucket === '61-90') {
-              summary.aging_summary['61-90'].count++;
-              summary.aging_summary['61-90'].amount += amount;
-            } else if (bucket === 'over_90') {
-              summary.aging_summary.over_90.count++;
-              summary.aging_summary.over_90.amount += amount;
-            }
-          });
-        });
 
         return {
           parties,
           summary,
-          total_advances: responseData.total_advances || 0,
-          net_position: responseData.net_position || 0,
-          customer_advances: responseData.customer_advances || {}
+          total_advances: 0,
+          net_position: 0,
+          customer_advances: {}
         };
       } catch (err) {
+        console.error('Outstanding API error:', err);
         return {
           parties: [],
           summary: {
