@@ -54,13 +54,13 @@ export interface StockTransferData {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/stock',
-    CURRENT: '/stock/current',
-    ADJUSTMENTS: '/stock/adjustments',
-    TRANSFERS: '/stock/transfers',
-    LOW_STOCK: '/stock/low-stock',
-    EXPIRING: '/stock/expiring',
-    VALUATION: '/stock/valuation'
+    BASE: '/inventory/stock',
+    CURRENT: '/inventory/stock/current',
+    ADJUSTMENTS: '/stock-adjustments/',
+    MOVEMENTS: '/stock-movements/',
+    LOW_STOCK: '/stock-movements/low-stock',
+    EXPIRING: '/stock-movements/near-expiry',
+    VALUATION: '/inventory/stock/valuation'
 } as const;
 
 // ============================================
@@ -120,7 +120,7 @@ export const stockApi = {
 
     // Get stock movements (alias for adjustments history)
     getMovements: (params: StockParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/movements`, { params });
+        return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params });
     },
 
     // Create stock adjustment (proper method name for flow components)
