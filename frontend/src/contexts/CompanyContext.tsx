@@ -105,17 +105,21 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             if (currentOrgId) {
                 try {
                     const response = await companyApi.getCompanyProfile();
-                    const profileResponse = (response as any).data || response;
+                    const rawResponse = (response as any).data || response;
 
-                    if (profileResponse.success && profileResponse.data) {
-                        const profileData = profileResponse.data;
+                    // Handle both wrapped {success, data} and direct response formats
+                    const profileData = rawResponse.success && rawResponse.data
+                        ? rawResponse.data
+                        : rawResponse;
 
+                    // Check if we have valid profile data (must have name or company_name)
+                    if (profileData && (profileData.name || profileData.company_name)) {
                         const apiCompanyInfo: CompanyInfo = {
-                            name: profileData.name || cachedCompanyInfo.name,
+                            name: profileData.name || profileData.company_name || cachedCompanyInfo.name,
                             address: profileData.address || cachedCompanyInfo.address,
                             phone: profileData.phone || cachedCompanyInfo.phone,
                             email: profileData.email || cachedCompanyInfo.email,
-                            gst: profileData.gst || cachedCompanyInfo.gst,
+                            gst: profileData.gst || profileData.gstin || cachedCompanyInfo.gst,
                             drugLicense: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
                             state: profileData.state || cachedCompanyInfo.state,
                             logo: profileData.logo || cachedCompanyInfo.logo,
