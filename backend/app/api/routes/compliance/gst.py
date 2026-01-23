@@ -598,8 +598,15 @@ async def get_compliance_status(
     """
     org_id = str(context.org_id)
     try:
+        # Clear any previous transaction state
+        try:
+            db.rollback()
+        except:
+            pass
+            
         # Check basic compliance requirements
         org_gstin = get_organization_gstin(db, org_id)
+        db.commit()  # Commit after reading org settings
 
         issues = []
         score = 100
@@ -657,6 +664,10 @@ async def get_compliance_status(
         }
 
     except Exception as e:
+        try:
+            db.rollback()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/settings")
