@@ -104,6 +104,7 @@ export interface ReturnItemsTableProps {
 export interface ReturnReviewPanelProps {
     returnData: ReturnFormData;
     selectedCustomer: Customer | null;
+    selectedInvoice?: any;
     customerDues: number;
     onSave: () => void;
     onPrint: () => void;

@@ -124,6 +124,16 @@ export const stockApi = {
         return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params });
     },
 
+    // Get movements for a specific batch
+    getBatchMovements: (batchId: number, params: StockParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, batch_id: batchId } });
+    },
+
+    // Get movements for a specific product
+    getProductMovements: (productId: number, params: StockParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.MOVEMENTS, { params: { ...params, product_id: productId } });
+    },
+
     // Create stock adjustment (proper method name for flow components)
     createAdjustment: (data: StockAdjustmentData): Promise<AxiosResponse> => {
         return apiHelpers.post(ENDPOINTS.ADJUSTMENTS, data);

@@ -711,6 +711,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           <ReturnReviewPanel
             returnData={returnData}
             selectedCustomer={selectedCustomer}
+            selectedInvoice={selectedInvoice}
             customerDues={customerDues}
             onSave={handleSaveReturn}
             onPrint={handlePrint}
