@@ -257,14 +257,14 @@ async def update_company_info(
         
         if exists:
             # Update existing organization
-            # Note: Using ::jsonb instead of CAST for better compatibility
+            # Note: Must use CAST() not :: syntax because :: conflicts with SQLAlchemy's :param binding
             update_query = """
                 UPDATE master.organizations
                 SET 
                     org_name = :name,
-                    registered_address = :registered_address::jsonb,
-                    contact_numbers = :contact_numbers::jsonb,
-                    email_addresses = :email_addresses::jsonb,
+                    registered_address = CAST(:registered_address AS jsonb),
+                    contact_numbers = CAST(:contact_numbers AS jsonb),
+                    email_addresses = CAST(:email_addresses AS jsonb),
                     website = :website,
                     gst_number = :gst,
                     pan_number = :pan,
@@ -371,10 +371,10 @@ async def update_company_info(
             "show_bank_details": company_data.get("show_bank_details", True)
         }
         
-        # Update business_settings column
+        # Update business_settings column (using CAST not :: to avoid SQLAlchemy conflict)
         db.execute(text("""
             UPDATE master.organizations
-            SET business_settings = :business_settings::jsonb
+            SET business_settings = CAST(:business_settings AS jsonb)
             WHERE org_id = :org_id
         """), {
             "org_id": str(context.org_id),
@@ -391,9 +391,10 @@ async def update_company_info(
         logger.error(f"Query parameters: org_id={context.org_id}, data={company_data}")
         db.rollback()
         
-        # Return raw error for debugging (temporarily)
-        raw_error = str(e)
-        error_message = f"Raw error: {raw_error}"
+        # Provide helpful error messages
+        error_message = str(e)
+        if "jsonb" in error_message.lower() or "syntax" in error_message.lower():
+            error_message = "Database update failed. Please check your input data."
         
         raise HTTPException(status_code=500, detail=f"Failed to update company info: {error_message}")
 
