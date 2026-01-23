@@ -374,9 +374,9 @@ class ReturnService:
                 c.customer_name as party_name,
                 i.invoice_number as original_invoice_number
             FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
-            WHERE 1=1
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
+            LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id AND i.org_id = sr.org_id
+            WHERE sr.org_id = sr.org_id
         """
         params = {"skip": skip, "limit": limit}
         count_conditions = ""

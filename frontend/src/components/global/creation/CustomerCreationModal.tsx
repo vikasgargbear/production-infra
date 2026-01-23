@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customersApi } from '../../../services/api';
 import { FullScreenModal } from '../modals/FullScreenModal';
+import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 
 // Imports from centralized types
 import type {
@@ -62,6 +63,10 @@ interface CustomerCreationModalProps {
 // ==================== COMPONENT ====================
 
 const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onClose, onCustomerCreated }) => {
+    // Feature flags for customer mode configuration
+    const { customerMode, isB2BOnly, isB2COnly, features } = useFeatureFlags();
+
+    // Determine initial customer type based on mode
     const [isBusinessCustomer, setIsBusinessCustomer] = useState<boolean>(true);
     const [newCustomer, setNewCustomer] = useState<CustomerFormData>({
         customer_name: '',
@@ -87,6 +92,21 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
     });
     const [saving, setSaving] = useState<boolean>(false);
     const [errors, setErrors] = useState<string[]>([]);
+
+    // Sync isBusinessCustomer with feature flags on mode change
+    useEffect(() => {
+        if (isB2BOnly) {
+            setIsBusinessCustomer(true);
+            setNewCustomer(prev => ({
+                ...prev,
+                customer_type: features.default_customer_type || 'pharmacy'
+            }));
+        } else if (isB2COnly) {
+            setIsBusinessCustomer(false);
+            setNewCustomer(prev => ({ ...prev, customer_type: 'individual' }));
+        }
+        // For hybrid mode, keep the current selection
+    }, [customerMode, isB2BOnly, isB2COnly, features.default_customer_type]);
 
     const saveCustomer = async (): Promise<void> => {
         setSaving(true);

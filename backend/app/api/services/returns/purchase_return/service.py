@@ -157,8 +157,8 @@ class PurchaseReturnService:
                 pr.created_at,
                 s.supplier_name as party_name
             FROM procurement.purchase_returns pr
-            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE 1=1
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id AND s.org_id = pr.org_id
+            WHERE pr.org_id = pr.org_id
         """
         params = {"skip": skip, "limit": limit}
         count_conditions = ""
