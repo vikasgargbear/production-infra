@@ -155,8 +155,7 @@ class PurchaseReturnService:
                 pr.debit_note_status,
                 pr.notes,
                 pr.created_at,
-                s.supplier_name as party_name,
-                (SELECT COUNT(*) FROM procurement.purchase_return_items pri WHERE pri.return_id = pr.return_id) as item_count
+                s.supplier_name as party_name
             FROM procurement.purchase_returns pr
             LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
             WHERE 1=1
@@ -186,6 +185,17 @@ class PurchaseReturnService:
         
         returns = db.execute(text(query), params).fetchall()
         
+        # Get item counts in separate queries to avoid TenantAwareSession subquery issues
+        return_ids = [ret.return_id for ret in returns]
+        item_counts = {}
+        if return_ids:
+            for rid in return_ids:
+                count_result = db.execute(
+                    text("SELECT COUNT(*) FROM procurement.purchase_return_items WHERE return_id = :rid"),
+                    {"rid": rid}
+                ).scalar()
+                item_counts[rid] = count_result or 0
+        
         result = []
         for ret in returns:
             result.append({
@@ -204,7 +214,7 @@ class PurchaseReturnService:
                 "debit_note_status": ret.debit_note_status,
                 "notes": ret.notes,
                 "created_at": ret.created_at,
-                "item_count": ret.item_count or 0
+                "item_count": item_counts.get(ret.return_id, 0)
             })
         
         count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE 1=1{count_conditions}"

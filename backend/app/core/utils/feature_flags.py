@@ -133,3 +133,46 @@ def check_credit_limit_enforcement(db: Session, org_id: str = None) -> bool:
 def check_notifications_enabled(db: Session, org_id: str = None) -> bool:
     """Check if system notifications are enabled"""
     return is_feature_enabled(db, 'system_notifications', org_id)
+
+def get_customer_mode(db: Session, org_id: str = None) -> str:
+    """
+    Get customer mode setting for the organization.
+    
+    Returns:
+        'b2b': Only business customers (pharmacies, hospitals, etc.)
+        'b2c': Only individual/retail customers
+        'hybrid': Both B2B and B2C customers allowed
+    """
+    try:
+        if org_id:
+            result = db.execute(
+                text("""
+                    SELECT setting_value FROM master.system_settings
+                    WHERE setting_key = 'customer_mode' 
+                    AND setting_category = 'features'
+                    AND org_id = :org_id
+                """),
+                {"org_id": org_id}
+            ).first()
+            
+            if result:
+                return result.setting_value
+        
+        # Default to B2B for pharma distributors
+        return 'b2b'
+        
+    except Exception as e:
+        logger.error(f"Error getting customer mode: {str(e)}")
+        return 'b2b'
+
+def is_b2b_only(db: Session, org_id: str = None) -> bool:
+    """Check if only B2B customers are allowed"""
+    return get_customer_mode(db, org_id) == 'b2b'
+
+def is_b2c_only(db: Session, org_id: str = None) -> bool:
+    """Check if only B2C customers are allowed"""
+    return get_customer_mode(db, org_id) == 'b2c'
+
+def is_hybrid_mode(db: Session, org_id: str = None) -> bool:
+    """Check if both B2B and B2C customers are allowed"""
+    return get_customer_mode(db, org_id) == 'hybrid'

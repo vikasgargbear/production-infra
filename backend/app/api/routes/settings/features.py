@@ -81,7 +81,16 @@ DEFAULT_FEATURES = {
     "purchaseWorkflow": True,
     "salesWorkflow": False,
     "paymentApproval": True,
-    "returnApproval": True
+    "returnApproval": True,
+    
+    # Business Mode Configuration
+    # - 'b2b': Only business customers (pharmacies, hospitals, etc.)
+    # - 'b2c': Only individual/retail customers
+    # - 'hybrid': Both B2B and B2C customers allowed
+    "customer_mode": "b2b",
+    "default_customer_type": "pharmacy",  # Default type for new B2B customers
+    "require_drug_license": True,  # Require drug license for B2B customers
+    "require_gst_for_b2b": False,  # GST optional for B2B customers
 }
 
 

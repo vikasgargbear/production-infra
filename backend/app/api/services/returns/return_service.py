@@ -372,8 +372,7 @@ class ReturnService:
                 sr.created_at,
                 sr.updated_at,
                 c.customer_name as party_name,
-                i.invoice_number as original_invoice_number,
-                (SELECT COUNT(*) FROM sales.sales_return_items sri WHERE sri.return_id = sr.return_id) as item_count
+                i.invoice_number as original_invoice_number
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
@@ -403,6 +402,18 @@ class ReturnService:
         """
         
         returns = db.execute(text(query), params).fetchall()
+        
+        # Get item counts in a separate query to avoid TenantAwareSession subquery issues
+        return_ids = [ret.return_id for ret in returns]
+        item_counts = {}
+        if return_ids:
+            # Execute separate count query for each return's items
+            for rid in return_ids:
+                count_result = db.execute(
+                    text("SELECT COUNT(*) FROM sales.sales_return_items WHERE return_id = :rid"),
+                    {"rid": rid}
+                ).scalar()
+                item_counts[rid] = count_result or 0
         
         # Convert to dict format
         result = []
@@ -434,7 +445,7 @@ class ReturnService:
                 "notes": ret.notes,
                 "created_at": ret.created_at,
                 "updated_at": ret.updated_at,
-                "item_count": ret.item_count or 0,
+                "item_count": item_counts.get(ret.return_id, 0),
                 "items": []  # Items fetched separately if needed
             }
             result.append(return_dict)
