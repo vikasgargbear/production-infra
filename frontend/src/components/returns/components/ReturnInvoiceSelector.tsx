@@ -53,7 +53,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                 </button>
                 <button
                     onClick={onSkipInvoice}
-                    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+                    className="px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center space-x-2 font-medium"
                     title="Skip invoice and enter items manually"
                 >
                     <span>Manual Entry</span>

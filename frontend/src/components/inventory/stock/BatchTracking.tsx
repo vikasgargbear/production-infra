@@ -152,16 +152,25 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
   // Load batch movements with offline fallback
   const loadBatchMovements = async (batchId) => {
     try {
-      const response = await (stockApi as any).getBatchMovements(batchId);
+      const response = await stockApi.getBatchMovements(batchId);
 
-      if (response?.data && Array.isArray(response.data)) {
-        const movementsData = response.data;
-        setBatchMovements(movementsData);
+      // Handle both array and object with movements property
+      let movementsData: any[] = [];
+      if (response?.data) {
+        if (Array.isArray(response.data)) {
+          movementsData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          movementsData = response.data.data;
+        } else if (response.data.movements && Array.isArray(response.data.movements)) {
+          movementsData = response.data.movements;
+        }
+      }
 
-        // Store movements cache
+      setBatchMovements(movementsData);
+
+      // Store movements cache
+      if (movementsData.length > 0) {
         await offlineDB.setCache(`batch_movements_${batchId}`, movementsData);
-      } else {
-        setBatchMovements([]);
       }
     } catch (error) {
 
