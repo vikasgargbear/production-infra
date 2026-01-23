@@ -124,7 +124,7 @@ async def get_aging_data(
         # Get collection efficiency from last 7 days
         collections_query = text("""
             SELECT 
-                COALESCE(SUM(amount), 0) as week_collections,
+                COALESCE(SUM(payment_amount), 0) as week_collections,
                 COUNT(*) as collection_count
             FROM financial.payments 
             WHERE org_id = :org_id 
@@ -334,7 +334,7 @@ async def get_collection_performance(
         daily_collections_query = text("""
             SELECT 
                 payment_date::date as date,
-                SUM(amount) as amount,
+                SUM(payment_amount) as amount,
                 COUNT(*) as count
             FROM financial.payments 
             WHERE org_id = :org_id 
@@ -538,7 +538,7 @@ async def get_hub_statistics(
     try:
         # Get today's collections
         today_payments_query = text("""
-            SELECT COALESCE(SUM(amount), 0) as today_collections,
+            SELECT COALESCE(SUM(payment_amount), 0) as today_collections,
                    COUNT(*) as payment_count
             FROM financial.payments 
             WHERE org_id = :org_id AND payment_date = CURRENT_DATE
