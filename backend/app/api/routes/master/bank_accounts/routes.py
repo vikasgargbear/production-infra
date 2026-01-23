@@ -25,6 +25,7 @@ def validate_ifsc(ifsc_code: str) -> bool:
 
 router = APIRouter(tags=["Bank Accounts"])
 
+@router.get("")
 @router.get("/")
 @with_tenant_context
 async def get_bank_accounts(
