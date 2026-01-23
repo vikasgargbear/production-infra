@@ -97,40 +97,15 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
-// ===========================================
-// DEV MODE: Set to true to bypass login during local development
-// ===========================================
-const DEV_MODE = process.env.NODE_ENV === 'development' && true; // Toggle: true = skip login, false = normal login
-
-const DEV_USER: User = {
-    user_id: 1,
-    email: 'dev@pharma.local',
-    org_id: 1,
-    role_id: 1,
-    permissions: { admin: true }
-};
-
 /**
  * AuthProvider Component
  */
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-    // DEV MODE: Start authenticated if enabled
-    const [state, setState] = useState<AuthState>(() => {
-        if (DEV_MODE) {
-            console.log('🚀 [DEV MODE] Auto-authenticated as dev user');
-            return {
-                user: DEV_USER,
-                token: 'dev-token',
-                isAuthenticated: true,
-                isLoading: false
-            };
-        }
-        return {
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            isLoading: true
-        };
+    const [state, setState] = useState<AuthState>({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: true
     });
 
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -392,12 +367,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      */
     useEffect(() => {
         const initAuth = async () => {
-            // DEV MODE: Skip auth initialization - already authenticated
-            if (DEV_MODE) {
-                console.log('🚀 [DEV MODE] Skipping auth initialization - already authenticated');
-                return;
-            }
-
             // Check for OAuth callback
             const hash = window.location.hash;
             if (hash && hash.includes('access_token')) {

@@ -62,37 +62,23 @@ apiClient.interceptors.response.use(
 
 export const apiHelpers = {
   get: <T = any>(url: string, config?: any) => {
-    // Note: Don't add trailing slash for GET with params - causes redirect issues
-    // FastAPI redirect_slashes + params creates /path/?x=1 -> /path?x=1 which breaks CORS
-    // Only add trailing slash if no params
-    let finalUrl = url;
-    if (!config?.params && !url.endsWith('/')) {
-      finalUrl = `${url}/`;
-    }
-    return apiClient.get<T>(finalUrl, config);
+    // Send URL exactly as passed - no trailing slash manipulation
+    return apiClient.get<T>(url, config);
   },
   post: <T = any>(url: string, data?: any, config?: any) => {
-    // CRITICAL FIX: Ensure trailing slash for FastAPI routes
-    // FastAPI is strict about trailing slashes - /invoices != /invoices/
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    console.log('[API] POST to:', urlWithSlash);
-    return apiClient.post<T>(urlWithSlash, data, config);
+    return apiClient.post<T>(url, data, config);
   },
   put: <T = any>(url: string, data?: any, config?: any) => {
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    return apiClient.put<T>(urlWithSlash, data, config);
+    return apiClient.put<T>(url, data, config);
   },
   patch: <T = any>(url: string, data?: any, config?: any) => {
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    return apiClient.patch<T>(urlWithSlash, data, config);
+    return apiClient.patch<T>(url, data, config);
   },
   delete: <T = any>(url: string, config?: any) => {
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    return apiClient.delete<T>(urlWithSlash, config);
+    return apiClient.delete<T>(url, config);
   },
   download: (url: string, filename: string) => {
-    const urlWithSlash = url.endsWith('/') ? url : `${url}/`;
-    return apiClient.get(urlWithSlash, { responseType: 'blob' }).then((response) => {
+    return apiClient.get(url, { responseType: 'blob' }).then((response) => {
       const href = window.URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = href;

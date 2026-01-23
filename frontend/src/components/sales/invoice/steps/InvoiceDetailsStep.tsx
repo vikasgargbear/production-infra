@@ -589,7 +589,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                 } else if (remaining < 0) {
                                     return (
                                         <span className="text-red-600 font-semibold">
-                                            Over-allocated: ₹{Math.abs(remaining).toFixed(2)}
+                                            ⚠️ Payment exceeds by ₹{Math.abs(remaining).toFixed(2)}
                                         </span>
                                     );
                                 }

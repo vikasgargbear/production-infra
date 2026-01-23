@@ -76,7 +76,7 @@ class LedgerService:
                         p.payment_date as date,
                         'Payment' as type,
                         p.payment_number as reference,
-                        CONCAT('Payment - ', COALESCE(p.payment_mode, 'Cash')) as description,
+                        CONCAT('Payment #', p.payment_number) as description,
                         0::numeric as debit,
                         p.payment_amount as credit,
                         2 as sort_order
@@ -181,7 +181,7 @@ class LedgerService:
                         p.payment_date as date,
                         'Payment' as type,
                         p.payment_number as reference,
-                        CONCAT('Payment to Supplier - ', COALESCE(p.payment_mode, 'Cash')) as description,
+                        CONCAT('Payment #', p.payment_number) as description,
                         p.payment_amount as debit,
                         0::numeric as credit,
                         2 as sort_order
@@ -638,7 +638,7 @@ class LedgerService:
         """Get last payment info for a party."""
         result = db.execute(text("""
             SELECT payment_id, payment_number, payment_date, payment_amount,
-                   payment_mode, CURRENT_DATE - payment_date as days_since
+                   payment_type, CURRENT_DATE - payment_date as days_since
             FROM financial.payments
             WHERE party_id = :party_id AND party_type = :party_type AND org_id = :org_id
             AND payment_status != :cancelled_status ORDER BY payment_date DESC LIMIT 1
