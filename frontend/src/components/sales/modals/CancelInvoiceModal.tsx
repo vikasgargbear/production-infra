@@ -59,15 +59,25 @@ const CancelInvoiceModal: React.FC<CancelInvoiceModalProps> = ({
             }
         } catch (error: any) {
             let errorMessage = 'Failed to cancel invoice';
+            let isGstr1Block = false;
+
             if (error.response?.data?.detail) {
-                if (typeof error.response.data.detail === 'string') {
-                    errorMessage = error.response.data.detail;
-                } else if (Array.isArray(error.response.data.detail)) {
-                    errorMessage = error.response.data.detail
+                const detail = error.response.data.detail;
+
+                // Check for GSTR-1 deadline blocking (object with error key)
+                if (typeof detail === 'object' && detail.error === 'GSTR1_DEADLINE_PASSED') {
+                    isGstr1Block = true;
+                    errorMessage = `🚫 GST Compliance Block\n\n${detail.message}\n\n📅 Invoice Date: ${detail.invoice_date}\n📅 GSTR-1 Deadline: ${detail.gstr1_deadline}\n\n💡 Tip: ${detail.help}`;
+                } else if (typeof detail === 'string') {
+                    errorMessage = detail;
+                } else if (Array.isArray(detail)) {
+                    errorMessage = detail
                         .map((err: any) => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
                         .join(', ');
+                } else if (detail.message) {
+                    errorMessage = detail.message;
                 } else {
-                    errorMessage = JSON.stringify(error.response.data.detail);
+                    errorMessage = JSON.stringify(detail);
                 }
             } else if (error.message) {
                 errorMessage = error.message;

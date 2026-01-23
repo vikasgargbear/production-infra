@@ -301,36 +301,75 @@ async def cancel_invoice(
     context: OrgContext = Depends(get_org_context)
 ):
     """
-    Cancel/void an invoice
+    Cancel/void an invoice with GST compliance enforcement
     
-    - For draft invoices: Simply marks as cancelled
-    - For posted invoices: Creates reversal entries
-    - Cannot cancel invoices with payments (must reverse payments first)
-    - Optionally generates a Credit Note for GST compliance
+    Rules:
+    - Draft invoices: Can always cancel
+    - Posted invoices BEFORE GSTR-1 deadline (11th of next month): Can cancel with warning
+    - Posted invoices AFTER GSTR-1 deadline: BLOCKED - must use Credit Note instead
+    - Invoices with payments: BLOCKED - must reverse payments first
+    
+    This ensures compliance with Section 34 of CGST Act.
     """
     try:
         org_id = str(context.org_id)
         
-        # Use service method to check invoice status
-        invoice_status_info = InvoiceService.get_invoice_status(db, invoice_id, org_id)
+        # Get invoice with date for deadline calculation
+        invoice_result = db.execute(text("""
+            SELECT invoice_id, invoice_status, invoice_date, paid_amount, final_amount, gstr1_reported_date
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         
-        if not invoice_status_info:
+        invoice = invoice_result.fetchone()
+        
+        if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
         
-        invoice_status = invoice_status_info["invoice_status"]
-        paid_amount = invoice_status_info["paid_amount"]
+        invoice_status = invoice.invoice_status
+        invoice_date = invoice.invoice_date
+        paid_amount = float(invoice.paid_amount or 0)
+        gstr1_reported = invoice.gstr1_reported_date is not None
         
+        # Rule 1: Already cancelled
         if invoice_status == InvoiceStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Invoice is already cancelled")
         
-        # Cannot cancel if there are payments
-        if paid_amount and float(paid_amount) > 0:
+        # Rule 2: Cannot cancel if there are payments
+        if paid_amount > 0:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot cancel invoice with payments. ₹{paid_amount} has been paid. Reverse payments first."
+                detail=f"Cannot cancel invoice with payments. ₹{paid_amount:.2f} has been paid. Please reverse payments first."
             )
         
-        # Use service method to cancel and optionally reverse inventory
+        # Rule 3: Check GSTR-1 deadline for posted invoices
+        gstr1_blocked = False
+        if invoice_status == 'posted':
+            # Calculate GSTR-1 deadline: 11th of (invoice_month + 1)
+            if invoice_date.month == 12:
+                gstr1_deadline = date(invoice_date.year + 1, 1, 11)
+            else:
+                gstr1_deadline = date(invoice_date.year, invoice_date.month + 1, 11)
+            
+            today = date.today()
+            
+            # Block if deadline has passed or already reported in GSTR-1
+            if today > gstr1_deadline or gstr1_reported:
+                gstr1_blocked = True
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "GSTR1_DEADLINE_PASSED",
+                        "message": "This invoice cannot be cancelled because the GSTR-1 filing deadline has passed. " +
+                                   "As per GST compliance, you must issue a Credit Note to reverse this invoice instead.",
+                        "invoice_date": str(invoice_date),
+                        "gstr1_deadline": str(gstr1_deadline),
+                        "requires_credit_note": True,
+                        "help": "Go to Finance → Credit Notes → Create From Invoice"
+                    }
+                )
+        
+        # Proceed with cancellation
         InvoiceService.cancel_invoice(
             db=db,
             invoice_id=invoice_id,
@@ -343,7 +382,7 @@ async def cancel_invoice(
         credit_note_id = None
         credit_note_number = None
         
-        # Generate Credit Note if requested (for GST compliance)
+        # Generate Credit Note if requested (optional for non-blocked cancellations)
         if request.create_credit_note and invoice_status == 'posted':
             try:
                 from ....services.finance.credit_note.credit_note_service import CreditNoteService

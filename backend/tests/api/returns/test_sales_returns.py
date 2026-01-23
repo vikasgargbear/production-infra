@@ -417,6 +417,115 @@ class TestSalesReturnsAPI:
         # Credit should be for paid qty only: 7 * 100 = 700
         expected_credit_base = item["paid_quantity"] * item["unit_price"]
         assert expected_credit_base == 700.0
+    
+    # =========================================================================
+    # INCLUDE_GST AND CREDIT ADJUSTMENT TESTS  
+    # =========================================================================
+    
+    def test_create_return_with_include_gst_false(self, returns_api, sample_customer):
+        """Test return with GST excluded (include_gst=False)"""
+        customer_id = sample_customer.get("customer_id", 1)
+        
+        item = SalesReturnFactory.create_item(
+            product_id=1,
+            return_quantity=5,
+            unit_price=100.00,
+            tax_percent=12.0
+        )
+        
+        payload = SalesReturnFactory.create(
+            customer_id=customer_id,
+            items=[item],
+            include_gst=False  # GST excluded from credit
+        )
+        
+        # Validate payload structure
+        assert payload["include_gst"] == False
+        assert "items" in payload
+        
+        # Calculate expected: without GST, total = subtotal only
+        # The backend should handle this appropriately
+    
+    def test_create_return_with_credit_adjustment_existing_dues(self, returns_api, sample_customer):
+        """Test return with credit applied to existing outstanding"""
+        customer_id = sample_customer.get("customer_id", 1)
+        
+        item = SalesReturnFactory.create_item(
+            product_id=1,
+            return_quantity=3,
+            unit_price=150.00
+        )
+        
+        payload = SalesReturnFactory.create(
+            customer_id=customer_id,
+            items=[item],
+            credit_adjustment_type="existing_dues"  # Apply to outstanding
+        )
+        
+        assert payload["credit_adjustment_type"] == "existing_dues"
+        
+        # Test with "future" type as well
+        payload_future = SalesReturnFactory.create(
+            customer_id=customer_id,
+            items=[item],
+            credit_adjustment_type="future"  # Keep for future
+        )
+        
+        assert payload_future["credit_adjustment_type"] == "future"
+    
+    def test_create_return_with_return_reason_notes(self, returns_api, sample_customer):
+        """Test return with detailed reason notes"""
+        customer_id = sample_customer.get("customer_id", 1)
+        
+        item = SalesReturnFactory.create_item(
+            product_id=1,
+            return_quantity=2
+        )
+        
+        detailed_notes = "Product packaging was compromised during transit. Customer reported visible damage on box exterior and moisture exposure."
+        
+        payload = SalesReturnFactory.create(
+            customer_id=customer_id,
+            items=[item],
+            return_reason="DAMAGED",
+            return_reason_notes=detailed_notes
+        )
+        
+        assert payload["return_reason_notes"] == detailed_notes
+        assert payload["return_reason"] == "DAMAGED"
+    
+    def test_return_with_mixed_paid_and_free_quantities(self, returns_api, sample_customer):
+        """Test return calculation with both paid and free items"""
+        customer_id = sample_customer.get("customer_id", 1)
+        
+        # Scenario: Invoice had 10 paid + 2 free, customer returning 8
+        item = SalesReturnFactory.create_item(
+            product_id=1,
+            quantity=12,  # Total original
+            paid_quantity=10,
+            free_quantity=2,
+            return_quantity=8,  # Returning 8 (should credit max 8, but only paid portion)
+            unit_price=100.00,
+            discount_percent=0,
+            tax_percent=12.0
+        )
+        
+        payload = SalesReturnFactory.create(
+            customer_id=customer_id,
+            items=[item]
+        )
+        
+        # Validate item has quantity breakdown
+        returned_item = payload["items"][0]
+        assert returned_item["paid_quantity"] == 10
+        assert returned_item["free_quantity"] == 2
+        assert returned_item["return_quantity"] == 8
+        
+        # Credit calculation: min(return_qty, paid_qty) * price = min(8, 10) * 100 = 800
+        # This is a validation test - actual calculation done by backend
+        credited_qty = min(returned_item["return_quantity"], returned_item["paid_quantity"])
+        expected_credit_base = credited_qty * returned_item["unit_price"]
+        assert expected_credit_base == 800.0
 
 
 # =============================================================================

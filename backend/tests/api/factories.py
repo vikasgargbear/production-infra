@@ -280,20 +280,54 @@ class SalesReturnFactory:
     
     @classmethod
     def create_item(cls, product_id: int, **overrides) -> Dict[str, Any]:
-        """Create return item"""
+        """
+        Create return item with all frontend fields.
+        Matches ReturnFormItem from return.types.ts
+        """
+        return_qty = random.randint(1, 10)
+        paid_qty = return_qty + random.randint(0, 5)
+        free_qty = random.randint(0, 2)
+        total_qty = paid_qty + free_qty
+        
         data = {
+            # Core identifiers
+            "id": f"item-{random_alnum(6)}",
             "product_id": product_id,
             "product_name": f"Product {product_id}",
             "batch_id": None,
             "batch_number": BatchFactory.batch_number(),
-            "return_quantity": random.randint(1, 10),
+            "invoice_item_id": None,
+            
+            # Quantity fields (critical for credit calculation)
+            "quantity": total_qty,
+            "paid_quantity": paid_qty,
+            "free_quantity": free_qty,
+            "return_quantity": return_qty,
+            "max_returnable_qty": total_qty,
+            
+            # Pricing
             "unit_price": float(random.randint(50, 200)),
-            "discount_percent": 0,
+            "discount_percent": random.choice([0, 5, 10]),
             "tax_percent": 12.0,
+            
+            # Return details
             "return_reason": random.choice(cls.RETURN_REASONS),
             "disposition": random.choice(cls.DISPOSITIONS),
             "restock": True,
-            "selected": True
+            "selected": True,
+            "is_manual": False,
+            
+            # Pharma compliance
+            "hsn_code": "30049099",
+            "unit": random.choice(["Box", "Strip", "Bottle"]),
+            "manufacturer": random.choice(["Sun Pharma", "Cipla", "Lupin"]),
+            "manufacturing_date": str(date.today() - timedelta(days=random.randint(30, 180))),
+            "expiry_date": str(date.today() + timedelta(days=random.randint(180, 730))),
+            
+            # Status/workflow
+            "requires_approval": False,
+            "verification_status": "PENDING",
+            "available_stock": random.randint(50, 500)
         }
         
         data.update(overrides)
@@ -301,16 +335,55 @@ class SalesReturnFactory:
     
     @classmethod
     def create(cls, customer_id: int, items: List[Dict], **overrides) -> Dict[str, Any]:
-        """Create complete sales return payload"""
+        """
+        Create complete sales return payload.
+        Matches ReturnFormData from return.types.ts
+        """
+        # Calculate totals from items
+        subtotal = sum(
+            item.get('return_quantity', 0) * item.get('unit_price', 0) * 
+            (1 - item.get('discount_percent', 0) / 100)
+            for item in items if item.get('selected', True)
+        )
+        tax_amount = sum(
+            item.get('return_quantity', 0) * item.get('unit_price', 0) * 
+            (1 - item.get('discount_percent', 0) / 100) *
+            item.get('tax_percent', 0) / 100
+            for item in items if item.get('selected', True)
+        )
+        
         data = {
+            # Header
+            "return_no": f"SR-TEST-{random_alnum(6)}",
             "customer_id": customer_id,
             "invoice_id": None,
+            "invoice_number": "",
+            "invoice_date": "",
             "return_date": str(date.today()),
-            "return_reason": random.choice(cls.RETURN_REASONS),
-            "return_method": random.choice(cls.RETURN_METHODS),
+            
+            # Items
             "items": items,
-            "notes": "Auto-generated test return",
-            "include_gst": True
+            
+            # Return details
+            "return_reason": random.choice(cls.RETURN_REASONS),
+            "return_reason_notes": "Auto-generated test return - additional notes for testing",
+            "return_method": random.choice(cls.RETURN_METHODS),
+            
+            # Calculated amounts
+            "subtotal_amount": float(subtotal),
+            "tax_amount": float(tax_amount),
+            "total_amount": float(subtotal + tax_amount),
+            
+            # GST handling
+            "include_gst": True,
+            "credit_adjustment_type": random.choice(["future", "existing_dues"]),
+            
+            # Status
+            "status": "PENDING",
+            "credit_note_no": "",
+            
+            # Notes
+            "notes": "Auto-generated test return"
         }
         
         data.update(overrides)
