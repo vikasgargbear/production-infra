@@ -558,8 +558,11 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                               />
                             </td>
                             <td className="px-6 py-4">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">{item.customer_name}</div>
+                              <div
+                                className={onCustomerClick ? 'cursor-pointer' : ''}
+                                onClick={() => onCustomerClick?.(item)}
+                              >
+                                <div className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">{item.customer_name}</div>
                                 <div className="text-xs text-gray-500">
                                   {item.customer_phone || 'No phone'} • {item.customer_email || 'No email'}
                                 </div>

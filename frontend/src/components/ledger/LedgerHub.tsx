@@ -30,6 +30,16 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Navigation state for switching between modules
+  const [activeModule, setActiveModule] = useState<string>('party-statement');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  const handleCustomerClick = (customer: any) => {
+    // Store customer ID and switch to Party Ledger module
+    setSelectedCustomerId(customer.customer_id);
+    setActiveModule('party-statement');
+  };
+
   const ledgerModules: LedgerModule[] = [
     {
       id: 'party-statement',
@@ -38,7 +48,13 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'View transaction history',
       icon: FileText,
       color: 'blue',
-      component: PartyLedger
+      component: (props: any) => (
+        <PartyLedger
+          {...props}
+          initialCustomerId={selectedCustomerId}
+          onCustomerChange={() => setSelectedCustomerId(null)}
+        />
+      )
     },
     {
       id: 'outstanding',
@@ -56,7 +72,12 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'Payment follow-up',
       icon: AlertTriangle,
       color: 'orange',
-      component: CollectionCenter
+      component: (props: any) => (
+        <CollectionCenter
+          {...props}
+          onCustomerClick={handleCustomerClick}
+        />
+      )
     }
   ];
 
@@ -69,10 +90,10 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Here you would load any initial ledger data
       // For now, we'll just set a default state
-      
+
     } catch (error) {
       setError('Failed to load initial ledger data');
     } finally {
@@ -89,12 +110,12 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose || (() => { })}
       title="Party Ledger"
       subtitle="Manage customer & supplier accounts"
       icon={Archive}
       modules={ledgerModules}
-      defaultModule="party-statement"
+      defaultModule={activeModule}
     />
   );
 };
