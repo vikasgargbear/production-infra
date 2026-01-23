@@ -144,26 +144,29 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
         {/* Header Section - Company Branding Row - 3 tiles to match below */}
         <div className="mb-3">
           <div className="grid grid-cols-3 gap-3 items-stretch">
-            {/* Company Info - Bigger for branding */}
+            {/* Company Info */}
             <div>
-              <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-4 h-full border border-blue-200 print-border print-bg-blue">
-                <div className="flex items-start space-x-3">
+              <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 h-full border border-blue-200 print-border print-bg-blue">
+                <div className="flex items-start space-x-2">
                   {companyInfo?.logo ? (
                     <img
                       src={companyInfo?.logo}
                       alt={companyInfo?.company_name || companyInfo?.name || 'Company'}
-                      className="w-20 h-20 object-contain rounded-lg flex-shrink-0"
+                      className="w-12 h-12 object-contain rounded-lg flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                      <span className="text-3xl font-bold text-white">{(companyInfo?.company_name || companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl font-bold text-white">{(companyInfo?.company_name || companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
                     </div>
                   )}
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">{companyInfo?.company_name || companyInfo?.name || 'Your Company Name'}</h2>
-                    <p className="text-sm text-gray-600 mt-1">{companyInfo?.address || ''}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst || companyInfo?.gst_number || ''}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo?.drug_license_no || companyInfo?.drugLicense || ''}</p>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base font-bold text-gray-900 leading-tight">{companyInfo?.company_name || companyInfo?.name || 'Your Company Name'}</h2>
+                    <p className="text-xs text-gray-600 mt-0.5 truncate">{companyInfo?.address || ''}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      <span className="font-medium">GST:</span> {companyInfo?.gst || companyInfo?.gst_number || ''}
+                      <span className="mx-1">|</span>
+                      <span className="font-medium">DL:</span> {companyInfo?.drug_license_no || companyInfo?.drugLicense || ''}
+                    </p>
                   </div>
                 </div>
               </div>
