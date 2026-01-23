@@ -437,8 +437,8 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       sortable: true,
       render: (value, batch) => (
         <div>
-          <div className="text-gray-900">{value}</div>
-          <div className="text-sm text-gray-500">{batch.product_code}</div>
+          <div className="text-gray-900 font-medium">{value}</div>
+          {batch.manufacturer && <div className="text-xs text-gray-400">{batch.manufacturer}</div>}
         </div>
       ),
     },
@@ -449,8 +449,8 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       sortable: true,
       render: (value, batch) => (
         <div>
-          <div className="font-medium">{value || 0}</div>
-          <div className="text-sm text-gray-500">Sold: {batch.quantity_sold || 0}</div>
+          <div className="font-medium text-lg">{value || 0}</div>
+          <div className="text-xs text-gray-400">MRP: ₹{batch.mrp || 0}</div>
         </div>
       ),
     },
@@ -482,9 +482,10 @@ const BatchTracking = ({ open = true, onClose }: { open?: boolean; onClose?: () 
       header: 'Status',
       key: 'status',
       align: 'center' as const,
-      render: (value: any, batch: any) => (
+      render: (_value: any, batch: any) => (
         <StatusBadge
           status={getBatchStatusColor(batch)}
+          label={getBatchStatusText(batch)}
         />
       ),
     },
