@@ -58,6 +58,7 @@ const ENDPOINTS = {
     CURRENT: '/inventory/stock/current',
     ADJUSTMENTS: '/stock-adjustments/',
     MOVEMENTS: '/stock-movements/',
+    TRANSFERS: '/stock-movements/transfer',
     LOW_STOCK: '/stock-movements/low-stock',
     EXPIRING: '/stock-movements/near-expiry',
     VALUATION: '/inventory/stock/valuation'

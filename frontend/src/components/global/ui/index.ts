@@ -18,6 +18,7 @@ export { DataTable } from './display/DataTable';
 export { StatusBadge } from './display/StatusBadge';
 export { default as SummaryCard, InvoiceSummary, PaymentSummary, OrderSummary } from './display/SummaryCard';
 export { default as ItemsTable, ItemsTableKeyboard } from './display/ItemsTableUnified';
+export { default as EditableCell } from './display/EditableCell';
 export { default as Card, CardSection } from './Card';
 export { default as Badge, BadgeGroup, SimpleStatusBadge } from './Badge';
 export { default as DocumentFooter } from './display/DocumentFooter';

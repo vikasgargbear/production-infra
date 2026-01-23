@@ -190,7 +190,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 max={isFromInvoice ? originalPaidQty : undefined}
                                                 step={1}
                                                 decimalPlaces={0}
-                                                onSave={(val: number) => onUpdateItem(index, 'return_paid_qty', val)}
+                                                onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', Number(val))}
                                                 onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
                                                 selectOnFocus={true}
                                                 className="w-16"
@@ -207,7 +207,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 max={isFromInvoice ? originalFreeQty : undefined}
                                                 step={1}
                                                 decimalPlaces={0}
-                                                onSave={(val: number) => onUpdateItem(index, 'return_free_qty', val)}
+                                                onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', Number(val))}
                                                 onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
                                                 selectOnFocus={true}
                                                 className="w-14"
@@ -223,7 +223,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 min={0}
                                                 decimalPlaces={2}
                                                 prefix="₹"
-                                                onSave={(val: number) => onUpdateItem(index, 'unit_price', val)}
+                                                onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
                                                 onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
                                                 readOnly={isFromInvoice}
                                                 selectOnFocus={true}
@@ -241,7 +241,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 max={100}
                                                 decimalPlaces={2}
                                                 suffix="%"
-                                                onSave={(val: number) => onUpdateItem(index, 'discount_percent', val)}
+                                                onSave={(val: string | number) => onUpdateItem(index, 'discount_percent', Number(val))}
                                                 onNavigate={(dir: string) => handleNavigate(index, 'discount_percent', dir)}
                                                 readOnly={isFromInvoice}
                                                 selectOnFocus={true}

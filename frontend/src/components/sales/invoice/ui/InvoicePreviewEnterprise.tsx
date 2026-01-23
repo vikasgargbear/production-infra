@@ -179,7 +179,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 {(() => {
                   // Get selected bank account from invoice or use default
                   // Support both camelCase and snake_case field names
-                  const bankAccounts = companyInfo?.bank_accounts || companyInfo?.bankAccounts;
+                  const bankAccounts = (companyInfo as any)?.bank_accounts || companyInfo?.bankAccounts;
                   const selectedBank = invoice.bank_account_id && bankAccounts
                     ? bankAccounts.find((acc: any) => acc.id === invoice.bank_account_id)
                     : bankAccounts?.[0]; // Default to first account
