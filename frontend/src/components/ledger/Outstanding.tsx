@@ -38,10 +38,21 @@ import type { OutstandingProps, PartyOutstanding, InvoiceDetail, OutstandingSumm
 const Outstanding: React.FC<OutstandingProps> = ({
   partyType = 'customer',
   embedded = false,
-  onClose
+  onClose,
+  initialCustomerId,
+  onCustomerChange
 }) => {
   // Use centralized state management (replaces 7 useState!)
   const { state, dispatch, filters, ui, selectedParty, allocationModal } = useOutstandingState();
+
+  // Auto-expand customer when navigating from Collection Center
+  React.useEffect(() => {
+    if (initialCustomerId) {
+      dispatch({ type: 'TOGGLE_EXPAND', payload: initialCustomerId });
+      // Clear the initial customer after expanding
+      onCustomerChange?.();
+    }
+  }, [initialCustomerId]);
 
   // Fetch outstanding data using the sales API
   const { data, isLoading, refetch, error } = useQuery({

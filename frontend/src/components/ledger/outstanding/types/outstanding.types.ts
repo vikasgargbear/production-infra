@@ -60,6 +60,8 @@ export interface OutstandingProps {
     partyType?: 'customer' | 'supplier';
     embedded?: boolean;
     onClose?: () => void;
+    initialCustomerId?: string | null;
+    onCustomerChange?: () => void;
 }
 
 export interface OutstandingSummaryCardsProps {

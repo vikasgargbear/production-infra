@@ -35,9 +35,9 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
   const handleCustomerClick = (customer: any) => {
-    // Store customer ID and switch to Party Ledger module
+    // Store customer ID and switch to Outstanding module (shows invoice-level aging)
     setSelectedCustomerId(customer.customer_id);
-    setActiveModule('party-statement');
+    setActiveModule('outstanding');
   };
 
   const ledgerModules: LedgerModule[] = [
@@ -63,7 +63,13 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'Pending payments with aging analysis',
       icon: DollarSign,
       color: 'amber',
-      component: Outstanding
+      component: (props: any) => (
+        <Outstanding
+          {...props}
+          initialCustomerId={selectedCustomerId}
+          onCustomerChange={() => setSelectedCustomerId(null)}
+        />
+      )
     },
     {
       id: 'collection-center',
