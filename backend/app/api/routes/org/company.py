@@ -280,18 +280,19 @@ async def update_company_info(
                 "error": "Organization not found. Please complete initial setup."
             }
         
-        # Execute the update
+        # Execute the update - accept both 'name' and 'company_name' for consistency with GET
+        org_name = company_data.get("name") or company_data.get("company_name") or ""
         result = db.execute(text(update_query), {
             "org_id": str(context.org_id),
-            "name": company_data.get("name", ""),
+            "name": org_name,
             "registered_address": registered_address,
             "contact_numbers": contact_numbers,
             "email_addresses": email_addresses,
-            "website": company_data.get("website", ""),
-            "gst": company_data.get("gst", ""),
-            "pan": company_data.get("pan", ""),
-            "drug_license_no": company_data.get("drug_license_no", ""),
-            "fssai_no": company_data.get("fssai_no", "")
+            "website": company_data.get("website") or "",
+            "gst": company_data.get("gst") or company_data.get("gstin") or "",
+            "pan": company_data.get("pan") or "",
+            "drug_license_no": company_data.get("drug_license_no") or "",
+            "fssai_no": company_data.get("fssai_no") or ""
         })
         
         # TenantAwareSession auto-commits
