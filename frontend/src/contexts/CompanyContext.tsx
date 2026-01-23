@@ -147,43 +147,31 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     if (apiCompanyInfo.paymentQR) {
                         localStorage.setItem('companyPaymentQR', apiCompanyInfo.paymentQR);
                     }
-
-                    // Also get org ID
-                    const orgRes = await companyApi.getOrganizationId();
-                    const orgResponse = (orgRes as any).data || orgRes;
-                    if (orgResponse.org_id) {
-                        setOrgId(orgResponse.org_id);
-                        localStorage.setItem('orgId', orgResponse.org_id);
-                    }
+                    // Note: org_id is already in localStorage from login/sync, no need to fetch again
                 } else {
-                    // Fallback to old API
-                    const [companyRes, orgRes] = await Promise.all([
-                        companyApi.getCompanyInfo(),
-                        companyApi.getOrganizationId()
-                    ]);
-                    const companyResponse = (companyRes as any).data || companyRes;
-                    const orgResponse = (orgRes as any).data || orgRes;
+                    // Fallback to old API (just company info, org_id already cached)
+                    try {
+                        const companyRes = await companyApi.getCompanyInfo();
+                        const companyResponse = (companyRes as any).data || companyRes;
 
-                    if (companyResponse) {
-                        const apiCompanyInfo: CompanyInfo = {
-                            name: companyResponse.name || cachedCompanyInfo.name,
-                            address: companyResponse.address || cachedCompanyInfo.address,
-                            phone: companyResponse.phone || cachedCompanyInfo.phone,
-                            email: companyResponse.email || cachedCompanyInfo.email,
-                            gst: companyResponse.gst || cachedCompanyInfo.gst,
-                            drugLicense: companyResponse.drug_license_no || cachedCompanyInfo.drugLicense,
-                            state: companyResponse.state || cachedCompanyInfo.state,
-                            logo: companyResponse.logo || cachedCompanyInfo.logo,
-                            bankAccounts: cachedCompanyInfo.bankAccounts,
-                            paymentQR: cachedCompanyInfo.paymentQR
-                        };
+                        if (companyResponse) {
+                            const apiCompanyInfo: CompanyInfo = {
+                                name: companyResponse.name || cachedCompanyInfo.name,
+                                address: companyResponse.address || cachedCompanyInfo.address,
+                                phone: companyResponse.phone || cachedCompanyInfo.phone,
+                                email: companyResponse.email || cachedCompanyInfo.email,
+                                gst: companyResponse.gst || cachedCompanyInfo.gst,
+                                drugLicense: companyResponse.drug_license_no || cachedCompanyInfo.drugLicense,
+                                state: companyResponse.state || cachedCompanyInfo.state,
+                                logo: companyResponse.logo || cachedCompanyInfo.logo,
+                                bankAccounts: cachedCompanyInfo.bankAccounts,
+                                paymentQR: cachedCompanyInfo.paymentQR
+                            };
 
-                        setCompanyInfo(apiCompanyInfo);
-                    }
-
-                    if (orgResponse && orgResponse.org_id) {
-                        setOrgId(orgResponse.org_id);
-                        localStorage.setItem('orgId', orgResponse.org_id);
+                            setCompanyInfo(apiCompanyInfo);
+                        }
+                    } catch (fallbackError) {
+                        // Ignore fallback errors, use cached data
                     }
                 }
             } catch (apiError) {
