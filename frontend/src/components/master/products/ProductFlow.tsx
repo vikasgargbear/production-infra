@@ -21,6 +21,7 @@ import MonthYearPicker from '../../global/ui/forms/MonthYearPicker';
 
 interface ProductFlowProps {
     open?: boolean;
+    show?: boolean;  // Alias for backward compatibility with ProductCreationModal
     onClose?: () => void;
     onProductCreated?: (product: any) => void;
     initialProductName?: string;
@@ -111,11 +112,14 @@ const PACK_TYPES = [
 // ==================== COMPONENT ====================
 
 const ProductFlow: React.FC<ProductFlowProps> = ({
-    open = true,
+    open,
+    show,  // Alias for backward compatibility
     onClose,
     onProductCreated,
     initialProductName = ''
 }) => {
+    // Use show as alias for open (backward compat with ProductCreationModal)
+    const isOpen = open ?? show ?? true;
     const formRef = useRef<HTMLDivElement>(null);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
@@ -163,7 +167,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
     // Enable Enter-as-Tab navigation
     useEnterAsTab({
         containerRef: formRef,
-        enabled: open,
+        enabled: isOpen,
         excludeSelectors: ['textarea', 'button[type="submit"]']
     });
 
@@ -172,14 +176,14 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
         useCallback(() => {
             if (onClose) onClose();
         }, [onClose]),
-        open,
+        isOpen,
         'ProductFlow-Main'
     );
 
     // Load master data
     useEffect(() => {
         const loadMasterData = async () => {
-            if (!open) return;
+            if (!isOpen) return;
             try {
                 setLoadingMaster(true);
                 const [catRes, typeRes] = await Promise.all([
@@ -195,14 +199,14 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             }
         };
         loadMasterData();
-    }, [open]);
+    }, [isOpen]);
 
     // Update product name when opened with initial value
     useEffect(() => {
-        if (open && initialProductName) {
+        if (isOpen && initialProductName) {
             setFormData(prev => ({ ...prev, product_name: initialProductName }));
         }
-    }, [open, initialProductName]);
+    }, [isOpen, initialProductName]);
 
     // Handle schedule type change (auto-set narcotic/prescription)
     const handleScheduleTypeChange = (value: string) => {
@@ -328,7 +332,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
         }
     };
 
-    if (!open) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-gray-50 z-50 overflow-hidden flex flex-col">
