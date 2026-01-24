@@ -75,12 +75,7 @@ export interface SalesReturnFlowProps {
     onClose: () => void;
 }
 
-export interface ReturnCustomerSelectorProps {
-    selectedCustomer: Customer | null;
-    onCustomerSelect: (customer: Customer | null) => void;
-    onCreateCustomer: () => void;
-    customerSearchRef: React.RefObject<any>;
-}
+// NOTE: ReturnCustomerSelector was removed - use CustomerSearch directly with displayMode="compact"
 
 export interface ReturnInvoiceSelectorProps {
     selectedCustomer: Customer | null;

@@ -614,20 +614,23 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                   </h3>
                   <button
                     onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                    className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
                   >
                     Create Customer
                   </button>
                 </div>
-                <CustomerSearch
-                  ref={customerSearchRef}
-                  value={selectedCustomer as any}
-                  onChange={handleCustomerSelect as any}
-                  displayMode="compact"
-                  placeholder="Search customer by name, phone, or code..."
-                  showCreateButton={false}
-                  clearable={true}
-                />
+                {/* White card wrapper - consistent with ProductSearch */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <CustomerSearch
+                    ref={customerSearchRef}
+                    value={selectedCustomer as any}
+                    onChange={handleCustomerSelect as any}
+                    displayMode="compact"
+                    placeholder="Search customer by name, phone, or code..."
+                    showCreateButton={false}
+                    clearable={true}
+                  />
+                </div>
               </div>
 
               <ReturnInvoiceSelector

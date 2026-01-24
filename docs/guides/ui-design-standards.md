@@ -146,12 +146,15 @@ Always use these global components - **NEVER create inline search implementation
 ### Standard Search Pattern
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ 📋 CUSTOMER                       [Create Customer] │  ← Outer label
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ 🔍 Search customer by name, phone, or code...   │ │  ← Search input
-│ └─────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│ 📋 CUSTOMER                             [Create Customer]     │  ← Section header
+│ ┌───────────────────────────────────────────────────────────┐ │
+│ │  White card (p-4) wrapper                                 │ │
+│ │  ┌─────────────────────────────────────────────────────┐ │ │
+│ │  │ 🔍 Search customer by name, phone, or code...       │ │ │  ← Search input
+│ │  └─────────────────────────────────────────────────────┘ │ │
+│ └───────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Implementation
@@ -160,7 +163,7 @@ Always use these global components - **NEVER create inline search implementation
 {/* Section Label with Create button */}
 <div className="flex items-center justify-between mb-3">
     <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
-        <Users className="w-4 h-4 mr-2" />
+        <User className="w-4 h-4 mr-2" />
         CUSTOMER
     </h3>
     <button 
@@ -171,24 +174,29 @@ Always use these global components - **NEVER create inline search implementation
     </button>
 </div>
 
-{/* Search Component - use compact mode to hide duplicate label */}
-<CustomerSearch
-    value={selectedCustomer}
-    onChange={handleCustomerSelect}
-    displayMode="compact"       // ← Critical: hides internal label
-    placeholder="Search customer by name, phone, or code..."
-    showCreateButton={false}    // ← We already have Create button above
-    clearable={true}
-/>
+{/* White card wrapper - REQUIRED for consistent padding */}
+<div className="bg-white rounded-lg border border-gray-200 p-4">
+    <CustomerSearch
+        value={selectedCustomer}
+        onChange={handleCustomerSelect}
+        displayMode="compact"       // ← Critical: hides internal label
+        placeholder="Search customer by name, phone, or code..."
+        showCreateButton={false}    // ← We already have Create button above
+        clearable={true}
+    />
+</div>
 ```
+
+> [!WARNING]
+> The white card wrapper (`bg-white rounded-lg border border-gray-200 p-4`) is **REQUIRED** for all entity search sections to match ProductSearch styling.
 
 ### Key Rules
 
 1. **Outer Label**: Always add uppercase label with icon (`CUSTOMER`, `PRODUCTS`)
 2. **displayMode**: Use `"compact"` to prevent duplicate labels
-3. **Create Button**: Place in section header, NOT inside search
-4. **Background**: Customer: `bg-blue-50`, Supplier: `bg-green-50`
-5. **Consistent padding**: All search sections use `p-4`
+3. **White Card Wrapper**: Wrap search in `bg-white rounded-lg border border-gray-200 p-4`
+4. **Create Button**: Place in section header with `min-w-[140px]`, NOT inside search
+5. **showCreateButton**: Set to `false` since we have external Create button
 
 ---
 
