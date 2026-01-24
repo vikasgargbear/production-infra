@@ -47,6 +47,8 @@ async def search_suppliers(
         return SupplierService.search_suppliers(
             db, str(context.org_id), search_term, limit, offset
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "search suppliers")
 
@@ -65,6 +67,8 @@ async def get_suppliers(
         return SupplierService.list_suppliers(
             db, str(context.org_id), search, skip, limit
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "list suppliers")
 
@@ -173,6 +177,9 @@ async def create_supplier(
             "message": "Supplier created successfully"
         }
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise handle_error(e, "create supplier")
@@ -252,6 +259,8 @@ async def get_supplier_products(
     """Get products from a specific supplier"""
     try:
         return SupplierService.get_supplier_products(db, str(context.org_id), supplier_id)
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "get supplier products", supplier_id)
 
@@ -269,5 +278,7 @@ async def get_supplier_purchases(
         return SupplierService.get_supplier_purchases(
             db, str(context.org_id), supplier_id, skip, limit
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "get supplier purchases", supplier_id)

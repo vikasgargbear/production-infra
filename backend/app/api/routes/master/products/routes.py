@@ -73,6 +73,8 @@ async def get_products(
             include_stock=True
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "list products")
 
@@ -98,6 +100,8 @@ async def search_products(
             offset=offset
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "search products")
 
@@ -180,6 +184,8 @@ async def search_products_with_batches(
             "batches_count": len(batches)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "search products with batches")
 
@@ -325,6 +331,8 @@ async def get_all_products_with_batches(
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise handle_error(e, "bulk sync products with batches")
 
@@ -504,6 +512,9 @@ async def create_product(
             "message": "Product created successfully with initial stock" if product.get("quantity_available") else "Product created successfully"
         }
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise handle_error(e, "create product")
