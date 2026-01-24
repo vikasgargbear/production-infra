@@ -59,15 +59,24 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
 }) => {
   return (
     <div className="space-y-6">
-      {/* Customer Selection */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Customer Selection</h3>
-        <CustomerSearch
-          value={selectedCustomer}
-          onChange={setSelectedCustomer}
-          placeholder="Search customer by name, phone, or GST number..."
-          className="w-full"
-        />
+      {/* Customer Selection - Standard Pattern */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+            CUSTOMER *
+          </h3>
+        </div>
+        {/* White card wrapper - consistent styling */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <CustomerSearch
+            value={selectedCustomer}
+            onChange={setSelectedCustomer}
+            displayMode="compact"
+            placeholder="Search customer by name, phone, or GST number..."
+            showCreateButton={false}
+            clearable={true}
+          />
+        </div>
         {selectedCustomer && (
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="font-semibold text-blue-900">{selectedCustomer.customer_name}</h4>
@@ -77,7 +86,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
             )}
           </div>
         )}
-      </Card>
+      </div>
 
       {/* Note Details */}
       {selectedCustomer && (
@@ -140,7 +149,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                 </div>
               )}
             </div>
-            
+
             {/* Create without invoice toggle */}
             <div className="mb-4">
               <label className="flex items-center">
@@ -173,7 +182,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                 </span>
               </label>
             </div>
-            
+
             {/* Show invoice selection only if not creating standalone */}
             {!createWithoutInvoice && (
               <>
@@ -193,7 +202,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                     </div>
                   </div>
                 )}
-                
+
                 {/* Compact Filters */}
                 <div className="flex items-center justify-between mb-3">
                   <button
@@ -224,7 +233,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                     </button>
                   )}
                 </div>
-                
+
                 {showFilters && (
                   <div className="bg-gray-50 rounded-lg p-3 mb-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -295,7 +304,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                     </div>
                   </div>
                 )}
-                
+
                 {loadingInvoices ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -316,11 +325,10 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                         <div
                           key={invoice.id}
                           onClick={() => handleInvoiceSelect(invoice)}
-                          className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all transform hover:scale-[1.01] ${
-                            noteData.selected_invoice?.id === invoice.id
+                          className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all transform hover:scale-[1.01] ${noteData.selected_invoice?.id === invoice.id
                               ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-200'
                               : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
@@ -334,13 +342,12 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                                   <p className="text-sm text-gray-600">Outstanding: ₹{invoice.outstanding_amount.toLocaleString()}</p>
                                 </div>
                                 <div>
-                                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                    invoice.status === 'Paid' 
+                                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${invoice.status === 'Paid'
                                       ? 'bg-green-100 text-green-800'
                                       : invoice.status === 'Partially Paid'
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : 'bg-red-100 text-red-800'
-                                  }`}>
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {invoice.status}
                                   </span>
                                 </div>
@@ -455,7 +462,7 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                     Invoice #{noteData.selected_invoice.invoice_number} Selected
                   </h4>
                   <p className="text-sm text-gray-600">
-                    Date: {new Date(noteData.selected_invoice.invoice_date).toLocaleDateString()} | 
+                    Date: {new Date(noteData.selected_invoice.invoice_date).toLocaleDateString()} |
                     Total: ₹{noteData.selected_invoice.total_amount?.toLocaleString() || '0'}
                   </p>
                 </div>
@@ -465,14 +472,14 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                   handleFieldChange('selected_invoice', null);
                   setNoteItems([]);
                 }}
-                className="p-2 hover:bg-white rounded-lg transition-colors" 
+                className="p-2 hover:bg-white rounded-lg transition-colors"
                 title="Clear invoice selection"
               >
                 <X className="w-4 h-4 text-gray-500 hover:text-gray-700" />
               </button>
             </div>
           </div>
-          
+
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-4">
               <h3 className="text-lg font-semibold text-gray-900">

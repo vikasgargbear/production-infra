@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  User, FileText, Calendar, CreditCard, AlertCircle, 
+import {
+  User, FileText, Calendar, CreditCard, AlertCircle,
   CheckCircle, X, ChevronRight, Calculator, Info
 } from 'lucide-react';
 import { CustomerSearch, Card } from '../../global';
@@ -94,51 +94,48 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
   };
 
   const isFormValid = () => {
-    return selectedCustomer && 
-           noteData.note_date && 
-           noteData.reason && 
-           noteData.settlement_type &&
-           (createWithoutInvoice || noteData.selected_invoice) &&
-           (!createWithoutInvoice ? noteItems.some(item => item.quantity > 0) : noteData.amount > 0);
+    return selectedCustomer &&
+      noteData.note_date &&
+      noteData.reason &&
+      noteData.settlement_type &&
+      (createWithoutInvoice || noteData.selected_invoice) &&
+      (!createWithoutInvoice ? noteItems.some(item => item.quantity > 0) : noteData.amount > 0);
   };
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Compact Step Indicator */}
       <div className="flex items-center space-x-2 mb-4 bg-white rounded-lg p-2 shadow-sm">
-        <div 
-          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${
-            activeSection === 'customer' ? 'bg-blue-100 text-blue-700' : 
-            selectedCustomer ? 'bg-green-50 text-green-700' : 'text-gray-500'
-          }`}
+        <div
+          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${activeSection === 'customer' ? 'bg-blue-100 text-blue-700' :
+              selectedCustomer ? 'bg-green-50 text-green-700' : 'text-gray-500'
+            }`}
           onClick={() => setActiveSection('customer')}
         >
           <User className="w-4 h-4" />
           <span className="text-sm font-medium">Customer</span>
           {selectedCustomer && <CheckCircle className="w-3 h-3 ml-1" />}
         </div>
-        
+
         <ChevronRight className="w-4 h-4 text-gray-400" />
-        
-        <div 
-          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${
-            activeSection === 'details' ? 'bg-blue-100 text-blue-700' : 
-            noteData.reason && noteData.settlement_type ? 'bg-green-50 text-green-700' : 'text-gray-500'
-          }`}
+
+        <div
+          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${activeSection === 'details' ? 'bg-blue-100 text-blue-700' :
+              noteData.reason && noteData.settlement_type ? 'bg-green-50 text-green-700' : 'text-gray-500'
+            }`}
           onClick={() => selectedCustomer && setActiveSection('details')}
         >
           <FileText className="w-4 h-4" />
           <span className="text-sm font-medium">Details</span>
           {noteData.reason && noteData.settlement_type && <CheckCircle className="w-3 h-3 ml-1" />}
         </div>
-        
+
         <ChevronRight className="w-4 h-4 text-gray-400" />
-        
-        <div 
-          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${
-            activeSection === 'invoice' ? 'bg-blue-100 text-blue-700' : 
-            noteData.selected_invoice ? 'bg-green-50 text-green-700' : 'text-gray-500'
-          }`}
+
+        <div
+          className={`flex items-center space-x-1 px-3 py-1.5 rounded cursor-pointer transition-colors ${activeSection === 'invoice' ? 'bg-blue-100 text-blue-700' :
+              noteData.selected_invoice ? 'bg-green-50 text-green-700' : 'text-gray-500'
+            }`}
           onClick={() => selectedCustomer && noteData.reason && setActiveSection('invoice')}
         >
           <Calculator className="w-4 h-4" />
@@ -149,11 +146,15 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
 
       {/* Customer Selection - Compact when filled */}
       {activeSection === 'customer' && (
-        <Card className="mb-4">
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-              Select Customer
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+              <User className="w-4 h-4 mr-2" />
+              CUSTOMER
             </h3>
+          </div>
+          {/* White card wrapper - consistent styling */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
             <CustomerSearch
               value={selectedCustomer}
               onChange={(customer) => {
@@ -162,11 +163,13 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                   handleFieldChange('customer_id', (customer as any).customer_id || (customer as any).id);
                 }
               }}
+              displayMode="compact"
               placeholder="Search by name, phone, or ID..."
-              className="w-full"
+              showCreateButton={false}
+              clearable={true}
             />
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Compact Customer Display */}
@@ -202,7 +205,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
             Credit Note Details
           </h3>
-          
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Date</label>
@@ -214,7 +217,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs text-gray-600 mb-1">Reason</label>
               <select
@@ -234,7 +237,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                 ))}
               </select>
             </div>
-            
+
             <div>
               <label className="block text-xs text-gray-600 mb-1">Settlement</label>
               <select
@@ -292,7 +295,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Select Invoice & Items
               </h3>
-              
+
               <div className="flex items-center space-x-4">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -303,7 +306,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                   />
                   <span className="text-sm font-medium text-gray-700">Include GST</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -341,11 +344,10 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {customerInvoices.map((invoice) => (
-                        <tr 
+                        <tr
                           key={invoice.id}
-                          className={`hover:bg-gray-50 cursor-pointer ${
-                            noteData.selected_invoice?.id === invoice.id ? 'bg-blue-50' : ''
-                          }`}
+                          className={`hover:bg-gray-50 cursor-pointer ${noteData.selected_invoice?.id === invoice.id ? 'bg-blue-50' : ''
+                            }`}
                           onClick={() => handleInvoiceSelect(invoice)}
                         >
                           <td className="px-3 py-2">
@@ -365,11 +367,10 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                             ₹{invoice.credit_amount?.toLocaleString() || 0}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                              invoice.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
-                              invoice.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
+                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${invoice.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                                invoice.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-gray-100 text-gray-700'
+                              }`}>
                               {invoice.payment_status}
                             </span>
                           </td>
@@ -511,7 +512,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">Credit Amount</label>
@@ -525,7 +526,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                       step="0.01"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">Notes</label>
                     <input

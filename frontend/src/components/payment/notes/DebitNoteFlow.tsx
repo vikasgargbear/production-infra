@@ -344,26 +344,41 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
 
             {/* Debit Note Form - Single Page Flow */}
             <div className="space-y-6">
-              {/* Customer Selection */}
-              <Card>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Customer Selection</h3>
-                <CustomerSearch
-                  value={selectedCustomer}
-                  onChange={setSelectedCustomer}
-                  onCreateNew={() => setShowCustomerModal(true)}
-                  placeholder="Search customer by name, phone, or GST number..."
-                  className="w-full"
-                />
+              {/* Customer Selection - Standard Pattern */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-orange-700 uppercase tracking-wider flex items-center">
+                    <Users className="w-4 h-4 mr-2" />
+                    CUSTOMER
+                  </h3>
+                  <button
+                    onClick={() => setShowCustomerModal(true)}
+                    className="min-w-[140px] px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    Create Customer
+                  </button>
+                </div>
+                {/* White card wrapper - consistent styling */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <CustomerSearch
+                    value={selectedCustomer}
+                    onChange={setSelectedCustomer}
+                    displayMode="compact"
+                    placeholder="Search customer by name, phone, or GST number..."
+                    showCreateButton={false}
+                    clearable={true}
+                  />
+                </div>
                 {selectedCustomer && (
-                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-semibold text-blue-900">{selectedCustomer.customer_name}</h4>
-                    <p className="text-sm text-blue-700">Phone: {selectedCustomer.phone}</p>
+                  <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <h4 className="font-semibold text-orange-900">{selectedCustomer.customer_name}</h4>
+                    <p className="text-sm text-orange-700">Phone: {selectedCustomer.phone}</p>
                     {selectedCustomer.gst_number && (
-                      <p className="text-sm text-blue-700">GST: {selectedCustomer.gst_number}</p>
+                      <p className="text-sm text-orange-700">GST: {selectedCustomer.gst_number}</p>
                     )}
                   </div>
                 )}
-              </Card>
+              </div>
 
               {/* Note Details */}
               {selectedCustomer && (

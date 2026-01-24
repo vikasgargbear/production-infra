@@ -592,29 +592,32 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
               {/* Party Selection - Only show if no party is selected */}
               {!initialPartyId && !selectedParty && (
                 <div className="mb-6">
-                  {/* Outer label like Supplier search */}
-                  <div className="flex items-center gap-2 mb-3">
-                    {partyType === 'customer' ? (
-                      <>
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-700 uppercase tracking-wide">CUSTOMER</span>
-                      </>
-                    ) : (
-                      <>
-                        <Building className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-700 uppercase tracking-wide">SUPPLIER</span>
-                      </>
-                    )}
+                  {/* Section header with label */}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                      {partyType === 'customer' ? (
+                        <>
+                          <User className="w-4 h-4 mr-2" />
+                          CUSTOMER
+                        </>
+                      ) : (
+                        <>
+                          <Building className="w-4 h-4 mr-2" />
+                          SUPPLIER
+                        </>
+                      )}
+                    </h3>
                   </div>
 
-                  {/* Search field with light background container */}
-                  <div className={`rounded-xl p-4 ${partyType === 'customer' ? 'bg-blue-50' : 'bg-green-50'}`}>
+                  {/* White card wrapper - consistent with standard pattern */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-4">
                     {partyType === 'customer' ? (
                       <CustomerSearch
                         value={selectedParty}
                         onChange={setSelectedParty}
                         placeholder="Search customer by name, phone, or code..."
                         displayMode="compact"
+                        showCreateButton={false}
                         clearable={true}
                       />
                     ) : (

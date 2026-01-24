@@ -452,15 +452,24 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                       </div>
                     </div>
 
-                    {/* Customer Selection */}
-                    <div>
-                      <label className={classes.formLabel}>Customer *</label>
-                      <CustomerSearch
-                        value={selectedCustomer}
-                        onChange={handleCustomerSelect as any}
-                        placeholder="Search customer by name, phone or ID..."
-                        className="mt-1"
-                      />
+                    {/* Customer Selection - Standard Pattern */}
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                          Customer *
+                        </h3>
+                      </div>
+                      {/* White card wrapper - consistent styling */}
+                      <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <CustomerSearch
+                          value={selectedCustomer}
+                          onChange={handleCustomerSelect as any}
+                          displayMode="compact"
+                          placeholder="Search customer by name, phone or ID..."
+                          showCreateButton={false}
+                          clearable={true}
+                        />
+                      </div>
                     </div>
 
                     {/* Invoice Selection */}
