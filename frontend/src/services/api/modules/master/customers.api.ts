@@ -25,7 +25,7 @@ export interface CustomerParams {
 // ============================================================================
 
 const ENDPOINTS = {
-  BASE: '/customers/',
+  BASE: '/customers',
   DETAILS: (id: number | string) => `/customers/${id}`,
   LEDGER: (id: number | string) => `/customers/${id}/ledger`,
   OUTSTANDING: (id: number | string) => `/customers/${id}/outstanding`,
@@ -55,7 +55,7 @@ export const customersApi = {
   // Create new customer
   create: (data: any) => {
     const cleanedData = cleanData(data);
-    return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
+    return apiHelpers.post(`${ENDPOINTS.BASE}/`, cleanedData);
   },
 
   // Update customer
