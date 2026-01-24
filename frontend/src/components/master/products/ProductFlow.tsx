@@ -9,13 +9,14 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Package, Building2, Hash, Percent, IndianRupee, Shield,
     AlertTriangle, Thermometer, FileText, ArrowLeft, Loader2,
-    Save, Pill, Box, Calendar
+    Save, Pill, Calendar
 } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
 import MonthYearPicker from '../../global/ui/forms/MonthYearPicker';
+import PackTypeSelector from '../../global/selector/PackTypeSelector';
 
 // ==================== TYPES ====================
 
@@ -97,16 +98,6 @@ const GST_RATES = [
     { value: 12, label: '12%' },
     { value: 18, label: '18%' },
     { value: 28, label: '28%' }
-];
-
-const PACK_TYPES = [
-    { value: 'STRIP', label: 'Strip' },
-    { value: 'BOTTLE', label: 'Bottle' },
-    { value: 'BOX', label: 'Box' },
-    { value: 'TUBE', label: 'Tube' },
-    { value: 'VIAL', label: 'Vial' },
-    { value: 'SACHET', label: 'Sachet' },
-    { value: 'UNIT', label: 'Unit' }
 ];
 
 // ==================== COMPONENT ====================
@@ -564,46 +555,26 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
                         </div>
                     </section>
 
-                    {/* Pack Configuration */}
+                    {/* Pack Configuration - Marg ERP style 10*10 input */}
                     <section className="bg-white rounded-xl border border-gray-200 p-6">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                            <Box className="w-5 h-5 text-green-600" />
-                            Pack Configuration
-                        </h2>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Pack Type</label>
-                                <select
-                                    value={formData.pack_type}
-                                    onChange={(e) => setFormData({ ...formData, pack_type: e.target.value })}
-                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                >
-                                    {PACK_TYPES.map(pt => (
-                                        <option key={pt.value} value={pt.value}>{pt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Units per Pack</label>
-                                <input
-                                    type="number"
-                                    value={formData.units_per_pack}
-                                    onChange={(e) => setFormData({ ...formData, units_per_pack: parseInt(e.target.value) || 1 })}
-                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                    min="1"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Packs per Box</label>
-                                <input
-                                    type="number"
-                                    value={formData.packages_per_box}
-                                    onChange={(e) => setFormData({ ...formData, packages_per_box: parseInt(e.target.value) || 1 })}
-                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                    min="1"
-                                />
-                            </div>
-                        </div>
+                        <PackTypeSelector
+                            productType={formData.category_name || 'Tablet'}
+                            packData={{
+                                sale_unit: formData.pack_type,
+                                units_per_pack: formData.units_per_pack,
+                                packages_per_box: formData.packages_per_box,
+                                use_boxes: true
+                            }}
+                            onChange={(data) => {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    pack_type: data.sale_unit || prev.pack_type,
+                                    units_per_pack: Number(data.units_per_pack) || 10,
+                                    packages_per_box: Number(data.packages_per_box) || 10
+                                }));
+                            }}
+                            compact={true}
+                        />
                     </section>
 
                     {/* Initial Stock */}
