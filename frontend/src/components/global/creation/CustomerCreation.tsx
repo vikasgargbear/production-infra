@@ -1,14 +1,11 @@
 /**
  * CustomerCreation - Customer Creation Component
  * 
- * This is a compatibility shim that re-exports CustomerCreationModal
- * for backwards compatibility with existing imports.
- * 
- * Usage:
- * <CustomerCreation onClose={handleClose} onCustomerCreated={handleCreated} />
+ * Full-screen overlay that completely covers the parent page
+ * for an immersive customer creation experience.
  */
 import React from 'react';
-import CustomerCreationModal from './CustomerCreationModal';
+import CustomerFlow from '../../master/customers/CustomerFlow';
 
 interface CustomerCreationProps {
     onClose: () => void;
@@ -21,14 +18,17 @@ const CustomerCreation: React.FC<CustomerCreationProps> = ({
     onClose,
     onCustomerCreated,
 }) => {
-    // Use the unified CustomerCreationModal
+    // Full-screen overlay that covers everything
     return (
-        <CustomerCreationModal
-            show={true}
-            onClose={onClose}
-            onCustomerCreated={onCustomerCreated}
-        />
+        <div className="fixed inset-0 z-50 bg-white">
+            <CustomerFlow
+                open={true}
+                onClose={onClose}
+                onCustomerCreated={onCustomerCreated}
+            />
+        </div>
     );
 };
 
 export default CustomerCreation;
+

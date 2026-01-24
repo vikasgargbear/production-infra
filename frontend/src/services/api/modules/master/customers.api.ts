@@ -25,7 +25,7 @@ export interface CustomerParams {
 // ============================================================================
 
 const ENDPOINTS = {
-  BASE: '/customers',
+  BASE: '/customers/',
   DETAILS: (id: number | string) => `/customers/${id}`,
   LEDGER: (id: number | string) => `/customers/${id}/ledger`,
   OUTSTANDING: (id: number | string) => `/customers/${id}/outstanding`,

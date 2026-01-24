@@ -292,6 +292,9 @@ async def create_customer(
             "message": "Customer created successfully"
         }
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise handle_error(e, "create customer")

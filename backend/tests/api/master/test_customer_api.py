@@ -51,6 +51,9 @@ def create_test_customer_payload():
         "drug_license_number": f"DL-{''.join(random.choices(string.digits, k=6))}",
         "drug_license_validity": str(date.today() + timedelta(days=365)),
         
+        # FSSAI License (for food/supplements)
+        "fssai_number": f"{''.join(random.choices(string.digits, k=14))}",
+        
         # Contact info
         "primary_email": f"test{phone[-4:]}@example.com",
         "secondary_phone": generate_random_phone(),
@@ -61,11 +64,12 @@ def create_test_customer_payload():
         "contact_person_phone": generate_random_phone(),
         "contact_person_email": f"contact{phone[-4:]}@example.com",
         
-        # Credit terms
+        # Credit terms - Updated to match frontend dropdown values
         "credit_limit": 50000.00,
         "credit_days": 30,
-        "credit_rating": "GOOD",
-        "payment_terms": "Net 30",
+        "credit_rating": "B",  # A, B, C, D as per frontend
+        "payment_terms": "NET30",  # CASH, NET15, NET30, NET45, NET60 as per frontend
+        "discount_percent": 5.0,  # Default discount percentage
         
         # Address (created inline with customer)
         "address_line1": "Test Building, 123 Main Street",
