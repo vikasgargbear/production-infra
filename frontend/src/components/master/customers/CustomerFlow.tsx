@@ -767,19 +767,19 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Sticky Footer */}
-            <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 py-3">
-                <div className="flex items-center justify-end gap-3">
+            <div className="flex-shrink-0 bg-white border-t border-gray-200">
+                <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-end gap-3">
                     <button
                         onClick={onClose}
                         disabled={saving}
-                        className="px-4 py-2 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                        className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-6 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
+                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 transition-colors"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Saving...' : 'Save Customer'}

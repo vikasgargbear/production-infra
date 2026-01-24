@@ -135,7 +135,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
                         }
                     }}
                     placeholder={placeholder}
-                    className={`w-full pl-10 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 transition-all ${className}`}
+                    className={`w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${className}`}
                 />
             </div>
 

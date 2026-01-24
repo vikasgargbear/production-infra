@@ -263,7 +263,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                             type="text"
                             value={packTypeInput}
                             onChange={(e: ChangeEvent<HTMLInputElement>) => handlePackTypeInput(e.target.value)}
-                            className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                             placeholder="10*10"
                         />
                     </div>
@@ -275,7 +275,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                         <select
                             value={localPackData.sale_unit || ''}
                             onChange={(e: ChangeEvent<HTMLSelectElement>) => handleChange('sale_unit', e.target.value)}
-                            className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                         >
                             <option value="">Select Sale Unit</option>
                             {saleOptions.map(unit => (
@@ -312,7 +312,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                             handleChange('units_per_pack', 1);
                                         }
                                     }}
-                                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     placeholder="10"
                                     min="1"
                                 />
@@ -326,7 +326,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                     type="text"
                                     value={localPackData.unit_type === undefined ? baseUnit : localPackData.unit_type}
                                     onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange('unit_type', e.target.value)}
-                                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                     placeholder={baseUnit}
                                     list="unit-suggestions"
                                 />
@@ -363,7 +363,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                             }
                                         }
                                     }}
-                                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                     placeholder="10"
                                 />
                             </div>
@@ -397,7 +397,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                 <select
                     value={localPackData.sale_unit || ''}
                     onChange={(e: ChangeEvent<HTMLSelectElement>) => handleChange('sale_unit', e.target.value)}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                 >
                     <option value="">Select Sale Unit (Optional)</option>
                     {saleOptions.map(unit => (
@@ -421,7 +421,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                 handleChange('units_per_pack', 1);
                             }
                         }}
-                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="10"
                         min="1"
                     />
@@ -449,7 +449,7 @@ const PackTypeSelector: React.FC<PackTypeSelectorProps> = ({
                                 handleChange('use_boxes', false);
                             }
                         }}
-                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="Optional"
                         min="0"
                     />
