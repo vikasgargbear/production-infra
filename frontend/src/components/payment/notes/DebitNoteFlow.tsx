@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import {
   Receipt, Save, Calendar, Filter, Calculator, AlertCircle, CheckCircle, Users, FileText, FileInput
 } from 'lucide-react';
-import { CustomerSearch, Select, Card, DatePicker, Button } from '../../global';
-import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
+import { CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
 import { notesApi, invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 
@@ -477,7 +476,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (
-        <CustomerCreationB2B
+        <CustomerCreation
           onClose={() => setShowCustomerModal(false)}
           onCustomerCreated={(customer) => {
             setSelectedCustomer(customer);

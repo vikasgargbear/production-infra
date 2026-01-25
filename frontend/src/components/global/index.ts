@@ -9,7 +9,6 @@ export {
     SupplierCreationModal,
     ProductCreationModal,
     CustomerCreationB2B,
-    CustomerCreationB2C,
     CustomerCreation
 } from './creation';
 

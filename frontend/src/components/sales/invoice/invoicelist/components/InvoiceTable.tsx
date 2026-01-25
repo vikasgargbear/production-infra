@@ -164,7 +164,7 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     ], [selectedIds, isAllSelected, onToggleSelect, onToggleSelectAll, onViewInvoice, onPrintInvoice, onCancelInvoice]);
 
     return (
-        <div className="bg-white rounded-lg shadow-sm">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <DataTable
                 columns={columns}
                 data={invoices}

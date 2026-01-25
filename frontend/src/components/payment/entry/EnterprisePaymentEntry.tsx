@@ -18,8 +18,7 @@ import {
 } from 'lucide-react';
 
 // Import global components
-import { CustomerSearch } from '../../global';
-import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
+import { CustomerSearch, CustomerCreation } from '../../global';
 import { paymentsApi } from '../../../services/api';
 import type { Customer as BaseCustomer } from '../../../types/models';
 
@@ -808,7 +807,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       {/* Customer Creation Modal */}
       {showCustomerCreationModal && (
-        <CustomerCreationB2B
+        <CustomerCreation
           onClose={() => setShowCustomerCreationModal(false)}
           onCustomerCreated={(customer) => {
             handlePartySelect(customer);

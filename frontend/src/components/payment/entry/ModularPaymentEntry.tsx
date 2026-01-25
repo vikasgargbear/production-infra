@@ -14,8 +14,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 
 
 // Import global components
-import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card } from '../../global';
-import CustomerCreationB2B from '../../global/creation/CustomerCreationB2B';
+import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
 
 
 interface PaymentEntryContentProps {
@@ -903,7 +902,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (
-        <CustomerCreationB2B
+        <CustomerCreation
           onClose={() => setShowCustomerModal(false)}
           onCustomerCreated={(customer) => {
             setCustomer(customer);

@@ -13,10 +13,10 @@ import {
     ProductSearch,
     DocumentFooter,
     ProductCreationModal,
-    StandardDatePicker
+    StandardDatePicker,
+    CustomerCreation
 } from '../../../global';
 import ItemsTableKeyboard from '../../../global/ui/display/ItemsTableUnified';
-import CustomerCreationB2B from '../../../global/creation/CustomerCreationB2B';
 import KeyboardShortcuts from '../../../global/ui/KeyboardShortcuts';
 import ImportFromInvoiceModal from '../ui/ImportFromInvoiceModal';
 import { Challan, ChallanItem, CustomerDetails, Employee, ImportData } from '../types/challanTypes';
@@ -245,7 +245,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
 
             {/* Customer Creation Modal */}
             {showCreateCustomer && (
-                <CustomerCreationB2B
+                <CustomerCreation
                     onClose={() => setShowCreateCustomer(false)}
                     onCustomerCreated={(customer: any) => {
                         handleCustomerSelect(customer);

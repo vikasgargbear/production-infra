@@ -43,6 +43,13 @@ export interface InvoiceFiltersProps {
     onRefresh: () => void;
     refreshing: boolean;
     refreshSuccess: boolean;
+    statusCounts?: {
+        all: number;
+        paid: number;
+        partial: number;
+        pending: number;
+        overdue: number;
+    };
 }
 
 export interface InvoiceTableProps {

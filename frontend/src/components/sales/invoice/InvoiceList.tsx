@@ -9,7 +9,8 @@
  * - Types extracted to invoicelist/types/
  */
 
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import { FileText, Clock, AlertTriangle, IndianRupee, Plus, X } from 'lucide-react';
 import { Pagination } from '../../global';
 import { invoicesApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
@@ -294,6 +295,24 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const isAllSelected = filteredInvoices.length > 0 && filteredInvoices.every(invoice => selectedIds.has(invoice.id));
   const selectedCount = Array.from(selectedIds).filter(id => filteredInvoices.some(f => f.id === id)).length;
 
+  // Calculate summary stats
+  const summaryStats = useMemo(() => {
+    const totalAmount = invoices.reduce((sum, inv) => sum + inv.total_amount, 0);
+    const pendingAmount = invoices.reduce((sum, inv) => sum + inv.pending_amount, 0);
+    const overdueCount = invoices.filter(inv => {
+      if (inv.payment_status === 'paid' || inv.payment_status === 'cancelled') return false;
+      return new Date(inv.due_date) < new Date();
+    }).length;
+    const statusCounts = {
+      all: invoices.length,
+      paid: invoices.filter(i => i.payment_status === 'paid').length,
+      partial: invoices.filter(i => i.payment_status === 'partial').length,
+      pending: invoices.filter(i => i.payment_status === 'pending').length,
+      overdue: overdueCount
+    };
+    return { totalAmount, pendingAmount, overdueCount, statusCounts };
+  }, [invoices]);
+
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
@@ -302,18 +321,76 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                {pagination.total} total invoices
+              <p className="text-sm text-gray-500 mt-0.5">
+                Manage and track all your sales invoices
               </p>
             </div>
-            {onClose && (
+            <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium transition-colors"
+                onClick={() => window.dispatchEvent(new CustomEvent('openInvoiceFlow'))}
               >
-                Close
+                <Plus className="w-4 h-4" />
+                Create Invoice
               </button>
-            )}
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Stat Cards */}
+          <div className="grid grid-cols-4 gap-4 mt-4">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total</p>
+                  <p className="text-xl font-bold text-gray-900">{pagination.total}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <IndianRupee className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Value</p>
+                  <p className="text-xl font-bold text-gray-900">₹{summaryStats.totalAmount.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Pending</p>
+                  <p className="text-xl font-bold text-amber-600">₹{summaryStats.pendingAmount.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Overdue</p>
+                  <p className="text-xl font-bold text-red-600">{summaryStats.overdueCount}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -333,6 +410,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               onRefresh={handleRefresh}
               refreshing={ui.refreshing}
               refreshSuccess={ui.refreshSuccess}
+              statusCounts={summaryStats.statusCounts}
             />
 
             {/* Bulk Actions */}
@@ -374,8 +452,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         </div>
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 border-t border-gray-200 px-6 py-2 text-xs text-gray-600">
-          <strong>Shortcuts:</strong> Alt+R: Refresh | Alt+E: Export | Alt+S: Filters | Ctrl+F: Search | Esc: Close
+        <div className="bg-gray-50 border-t border-gray-200 px-6 py-2 text-xs text-gray-500">
+          <span className="font-medium">Shortcuts:</span> Alt+R: Refresh | Alt+E: Export | Alt+S: Filters | Ctrl+F: Search | Esc: Close
         </div>
       </div>
 

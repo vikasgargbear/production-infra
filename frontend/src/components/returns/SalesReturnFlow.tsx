@@ -12,10 +12,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RotateCcw, Download, AlertCircle, User } from 'lucide-react';
 import {
-  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch
+  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch, CustomerCreation
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import CustomerCreationB2B from '../global/creation/CustomerCreationB2B';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
 import { getApiBaseUrl } from '../../config/apiBase';
 import offlineStorage from '../../services/offlineStorage';
@@ -674,7 +673,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
         {/* Customer Creation Modal */}
         {ui.showCustomerModal && (
-          <CustomerCreationB2B
+          <CustomerCreation
             onClose={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
             onCustomerCreated={(newCustomer) => {
               handleCustomerSelect(newCustomer);
