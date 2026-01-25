@@ -104,13 +104,13 @@ const PaymentFlowOptimized: React.FC = () => {
     <div className="space-y-4">
       {/* Customer Selection - Standard Pattern */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">CUSTOMER</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider">CUSTOMER</h3>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('openCustomerModal'))}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+            className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
           >
-            + New Customer
+            Create Customer
           </button>
         </div>
         {/* White card wrapper - consistent with other flows */}
@@ -170,6 +170,7 @@ const PaymentFlowOptimized: React.FC = () => {
                   type="number"
                   value={payment.amount}
                   onChange={(e) => handleFieldChange('amount', e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   className={`w-full pl-10 pr-3 py-2.5 text-xl font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
                     }`}
                   placeholder="0"
@@ -247,6 +248,7 @@ const PaymentFlowOptimized: React.FC = () => {
                       type="number"
                       value={split.amount}
                       onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       placeholder="Amount"
                       className="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />

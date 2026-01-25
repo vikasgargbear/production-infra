@@ -165,6 +165,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                 type="number"
                                                 value={invoice.freight_charges || ''}
                                                 onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
+                                                onFocus={(e) => e.target.select()}
                                                 className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                                 placeholder="0"
                                                 min="0"
@@ -271,6 +272,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                                     newPayments[index] = { ...newPayments[index], amount: parseFloat(e.target.value) || 0 };
                                                                     setInvoice(prev => ({ ...prev, payments: newPayments }));
                                                                 }}
+                                                                onFocus={(e) => e.target.select()}
                                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                                                 placeholder="Amount"
                                                             />
@@ -475,6 +477,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                             setInvoice(prev => ({ ...prev, discount_percent: value }));
                                                         }
                                                     }}
+                                                    onFocus={(e) => e.target.select()}
                                                     className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                                                     placeholder="Enter value"
                                                 />

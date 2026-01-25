@@ -284,6 +284,7 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                         inputMode="decimal"
                                         value={paymentAmount === 0 ? '' : paymentAmount}
                                         onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                                        onFocus={(e) => e.target.select()}
                                         disabled={readOnly}
                                         className={`${inputClass} flex-1`}
                                         placeholder="0.00"
@@ -370,6 +371,7 @@ const SplitPayment: FC<SplitPaymentProps> = ({
                                             inputMode="decimal"
                                             value={payment.amount === '' ? '' : payment.amount}
                                             onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
+                                            onFocus={(e) => e.target.select()}
                                             disabled={readOnly}
                                             placeholder="0.00"
                                             className={`${inputClass} flex-1`}
