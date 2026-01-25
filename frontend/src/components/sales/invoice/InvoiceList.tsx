@@ -10,19 +10,45 @@
  */
 
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
-import { Plus, X } from 'lucide-react';
-import { Pagination } from '../../global';
+import { FileText, RefreshCw, Download } from 'lucide-react';
+import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
 import { invoicesApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 
 // Import extracted components
-import { InvoiceFilters } from './invoicelist/components/InvoiceFilters';
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
 import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
 
 // Import hooks and types
 import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
 import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.types';
+
+// Filter configuration for InlineFilterPanel
+const filterOptions = [
+  {
+    key: 'payment_status',
+    label: 'Status',
+    type: 'select' as const,
+    options: [
+      { value: 'all', label: 'All Status' },
+      { value: 'paid', label: 'Paid' },
+      { value: 'partial', label: 'Partial' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'overdue', label: 'Overdue' }
+    ],
+    defaultValue: 'all'
+  },
+  {
+    key: 'dateFrom',
+    label: 'From Date',
+    type: 'date' as const
+  },
+  {
+    key: 'dateTo',
+    label: 'To Date',
+    type: 'date' as const
+  }
+];
 
 const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
@@ -307,57 +333,69 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     }).length
   }), [invoices]);
 
+  // Handle filter changes from InlineFilterPanel
+  const handleFilterChange = (newFilters: any) => {
+    // Map filter values to search params
+    const searchFilters: any = {};
+    if (newFilters.payment_status && newFilters.payment_status !== 'all') {
+      searchFilters.payment_status = newFilters.payment_status;
+    }
+    if (newFilters.dateFrom) {
+      searchFilters.date_from = newFilters.dateFrom;
+    }
+    if (newFilters.dateTo) {
+      searchFilters.date_to = newFilters.dateTo;
+    }
+    fetchInvoices(1, { ...searchFilters, search: filters.searchQuery });
+  };
+
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Invoice History</h1>
-              <p className="text-sm text-gray-500">
-                {pagination.total} invoices
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium transition-colors"
-                onClick={() => window.dispatchEvent(new CustomEvent('openInvoiceFlow'))}
-              >
-                <Plus className="w-4 h-4" />
-                New Invoice
-              </button>
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Invoice History"
+          documentNumber=""
+          status="active"
+          icon={FileText}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="invoice"
+          showSaveDraft={false}
+          onSaveDraft={() => { }}
+          additionalActions={[
+            {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: RefreshCw,
+              disabled: loading
+            },
+            {
+              label: "Export All",
+              onClick: handleExportAll,
+              variant: "default",
+              icon: Download
+            }
+          ] as any}
+        />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
-            {/* Filters */}
-            <InvoiceFilters
-              searchQuery={filters.searchQuery}
-              dateFilter={filters.dateFilter}
-              statusFilter={filters.statusFilter}
-              showFilters={ui.showFilters}
-              onSearchChange={handleSearchChange}
-              onDateFilterChange={handleDateChange}
-              onStatusFilterChange={handleStatusChange}
-              onToggleFilters={() => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
-              onRefresh={handleRefresh}
-              refreshing={ui.refreshing}
-              refreshSuccess={ui.refreshSuccess}
-              statusCounts={statusCounts}
-            />
+
+            {/* Global Inline Filter Panel */}
+            <div className="mb-6">
+              <InlineFilterPanel
+                filters={filterOptions}
+                onFilterChange={handleFilterChange}
+                searchQuery={filters.searchQuery}
+                onSearchChange={handleSearchChange}
+                showFilters={ui.showFilters}
+                onToggleFilters={(show: boolean) => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
+              />
+            </div>
 
             {/* Bulk Actions */}
             <InvoiceBulkActions
@@ -395,11 +433,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 border-t border-gray-200 px-6 py-2 text-xs text-gray-500">
-          <span className="font-medium">Shortcuts:</span> Alt+R: Refresh | Alt+E: Export | Alt+S: Filters | Ctrl+F: Search | Esc: Close
         </div>
       </div>
 
