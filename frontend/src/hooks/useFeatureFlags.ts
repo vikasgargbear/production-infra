@@ -10,7 +10,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api/apiClient';
-import { API_ENDPOINTS } from '../config/api.config';
 
 // ============================================
 // Types

@@ -369,15 +369,6 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
                     clearable={true}
                   />
                 </div>
-                {selectedCustomer && (
-                  <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                    <h4 className="font-semibold text-orange-900">{selectedCustomer.customer_name}</h4>
-                    <p className="text-sm text-orange-700">Phone: {selectedCustomer.phone}</p>
-                    {selectedCustomer.gst_number && (
-                      <p className="text-sm text-orange-700">GST: {selectedCustomer.gst_number}</p>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Note Details */}

@@ -53,9 +53,9 @@ export function useCustomerSearch(query: string) {
  */
 export function useCustomer(
   customerId: string,
-  options?: UseQueryOptions<ApiResponse<Customer>, unknown, ApiResponse<Customer>>
+  options?: Partial<UseQueryOptions<ApiResponse<Customer>, Error, ApiResponse<Customer>>>
 ) {
-  return useQuery<ApiResponse<Customer>>({
+  return useQuery<ApiResponse<Customer>, Error>({
     queryKey: customerKeys.detail(parseInt(customerId)),
     queryFn: async () => {
       const response = await customersApi.getById(customerId);

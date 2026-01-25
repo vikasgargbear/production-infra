@@ -35,9 +35,9 @@ export function useProductSearch(
     category?: string;
     manufacturer?: string;
   },
-  options?: UseQueryOptions<ApiResponse<Product[]>, unknown, ApiResponse<Product[]>>
+  options?: Partial<UseQueryOptions<ApiResponse<Product[]>, Error, ApiResponse<Product[]>>>
 ) {
-  return useQuery<ApiResponse<Product[]>>({
+  return useQuery<ApiResponse<Product[]>, Error>({
     queryKey: productKeys.search(query, params),
     queryFn: async () => {
       const response = await productsApi.search(query, {
@@ -48,7 +48,6 @@ export function useProductSearch(
     },
     enabled: query.length >= 2, // Only search with 2+ characters
     staleTime: 1 * 60 * 1000, // 1 minute
-    placeholderData: (previousData) => previousData,
     ...options,
   });
 }
@@ -58,9 +57,9 @@ export function useProductSearch(
  */
 export function useProduct(
   productId: string,
-  options?: UseQueryOptions<ApiResponse<Product>, unknown, ApiResponse<Product>>
+  options?: Partial<UseQueryOptions<ApiResponse<Product>, Error, ApiResponse<Product>>>
 ) {
-  return useQuery<ApiResponse<Product>>({
+  return useQuery<ApiResponse<Product>, Error>({
     queryKey: productKeys.detail(productId),
     queryFn: async () => {
       const response = await productsApi.getById(productId);

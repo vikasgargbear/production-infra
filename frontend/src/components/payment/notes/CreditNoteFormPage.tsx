@@ -77,15 +77,6 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
             clearable={true}
           />
         </div>
-        {selectedCustomer && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="font-semibold text-blue-900">{selectedCustomer.customer_name}</h4>
-            <p className="text-sm text-blue-700">Phone: {selectedCustomer.phone}</p>
-            {selectedCustomer.gst_number && (
-              <p className="text-sm text-blue-700">GST: {selectedCustomer.gst_number}</p>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Note Details */}
@@ -326,8 +317,8 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                           key={invoice.id}
                           onClick={() => handleInvoiceSelect(invoice)}
                           className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all transform hover:scale-[1.01] ${noteData.selected_invoice?.id === invoice.id
-                              ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-200'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
+                            ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-200'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
                             }`}
                         >
                           <div className="flex items-center justify-between">
@@ -343,10 +334,10 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                                 </div>
                                 <div>
                                   <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${invoice.status === 'Paid'
-                                      ? 'bg-green-100 text-green-800'
-                                      : invoice.status === 'Partially Paid'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-red-100 text-red-800'
+                                    ? 'bg-green-100 text-green-800'
+                                    : invoice.status === 'Partially Paid'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-red-100 text-red-800'
                                     }`}>
                                     {invoice.status}
                                   </span>

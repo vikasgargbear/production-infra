@@ -101,7 +101,6 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = ({
         onClose={() => setShowCreateModal(false)}
         onSupplierCreated={handleSupplierCreated}
         initialData={{}}
-        title="Create New Supplier"
       />
     </div>
   );

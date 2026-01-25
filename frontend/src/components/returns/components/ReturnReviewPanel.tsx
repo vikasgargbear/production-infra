@@ -1,12 +1,13 @@
 /**
  * ReturnReviewPanel Component
  * Clean, professional preview matching invoice preview style
- * Layout: Header with Back to Items | Footer with Print, Confirm Return
+ * Uses global ModuleHeader and DocumentFooter components
  */
 
-import React, { useMemo } from 'react';
-import { Save, Printer, ArrowLeft } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
+import { ModuleHeader, DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
 export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
@@ -20,6 +21,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     saving
 }) => {
     const { companyDetails } = useCompanyDetails();
+    const [notes, setNotes] = useState(returnData.return_reason_notes || '');
 
     const selectedItems = useMemo(() =>
         returnData.items.filter(item => item.selected && item.return_quantity > 0),
@@ -65,6 +67,13 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
     const isGSTCustomer = (selectedCustomer as any)?.gst_number;
 
+    // Handle save with notes
+    const handleSave = () => {
+        // Update returnData with notes before save
+        returnData.return_reason_notes = notes;
+        onSave();
+    };
+
     return (
         <div className="h-full flex flex-col bg-gray-50">
             {/* Print styles */}
@@ -84,22 +93,22 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                 }
             `}</style>
 
-            {/* Header Bar - like Invoice */}
-            <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between no-print">
-                <div className="flex items-center space-x-4">
-                    <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded">
-                        {returnData.return_no}
-                    </span>
-                    <span className="text-sm text-gray-500">PREVIEW</span>
-                </div>
-                <button
-                    onClick={onBack}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center space-x-2"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Back to Items</span>
-                </button>
-            </div>
+            {/* Header - Using Global ModuleHeader */}
+            <ModuleHeader
+                title={isGSTCustomer ? 'Credit Note Preview' : 'Sales Return Preview'}
+                documentNumber={returnData.return_no}
+                status="preview"
+                icon={RotateCcw}
+                iconColor="text-orange-600"
+                additionalActions={[
+                    {
+                        label: "← Back to Items",
+                        onClick: onBack,
+                        variant: "default",
+                        className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
+                    }
+                ]}
+            />
 
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -110,23 +119,25 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             {/* Header - 3 Column Grid like Invoice */}
                             <div className="mb-4">
                                 <div className="grid grid-cols-3 gap-3 items-stretch">
-                                    {/* Company Info */}
-                                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                    {/* Company Info - Enhanced with GST and DL */}
+                                    <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 border border-blue-200">
                                         <div className="flex items-start space-x-2">
-                                            <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <span className="text-lg font-bold text-white">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <span className="text-xl font-bold text-white">
                                                     {(companyDetails.company_name || 'A').charAt(0).toUpperCase()}
                                                 </span>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                                                <h2 className="text-base font-bold text-gray-900 leading-tight">
                                                     {companyDetails.company_name || 'Your Company'}
                                                 </h2>
                                                 <p className="text-xs text-gray-600 mt-0.5 truncate">
                                                     {companyDetails.company_address || ''}
                                                 </p>
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    GST: {companyDetails.company_gst_number || '-'}
+                                                <p className="text-xs text-gray-600 mt-0.5">
+                                                    <span className="font-medium">GST:</span> {companyDetails.company_gst_number || '-'}
+                                                    <span className="mx-1">|</span>
+                                                    <span className="font-medium">DL:</span> {companyDetails.company_drug_license || '-'}
                                                 </p>
                                             </div>
                                         </div>
@@ -144,6 +155,11 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                         {isGSTCustomer && (
                                             <div className="text-xs text-gray-500 mt-0.5">
                                                 GST: {(selectedCustomer as any).gst_number}
+                                            </div>
+                                        )}
+                                        {(selectedCustomer as any)?.drug_license_number && (
+                                            <div className="text-xs text-gray-500 mt-0.5">
+                                                DL: {(selectedCustomer as any).drug_license_number}
                                             </div>
                                         )}
                                     </div>
@@ -245,13 +261,6 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             <div className="grid grid-cols-2 gap-6">
                                 {/* Left - Notes & Tax Breakup */}
                                 <div className="space-y-4">
-                                    {returnData.return_reason_notes && (
-                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                            <h3 className="text-xs font-semibold text-gray-700 uppercase mb-1">Notes</h3>
-                                            <p className="text-xs text-gray-600">{returnData.return_reason_notes}</p>
-                                        </div>
-                                    )}
-
                                     {/* Tax Breakup for GST customers */}
                                     {isGSTCustomer && (
                                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -325,42 +334,45 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             </div>
                         </div>
                     </div>
+
+                    {/* Notes Section - Like Invoice Preview */}
+                    <div className="w-full mt-4 mb-4">
+                        <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
+                            <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+                                <h3 className="text-xs font-bold text-gray-800 uppercase">Return Notes</h3>
+                            </div>
+                            <div className="p-3">
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                    rows={2}
+                                    placeholder="Add any additional notes for this return..."
+                                />
+                                <div className="flex justify-between items-center mt-2">
+                                    <span className="text-xs text-gray-500">These notes will appear on the printed document</span>
+                                    <span className="text-xs text-gray-400">{notes.length}/500</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Footer Bar - like Invoice with action buttons */}
-            <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between no-print">
-                <div className="text-sm text-gray-600">
-                    Items: {selectedItems.length}
-                </div>
-                <div className="flex items-center space-x-3">
-                    <button
-                        onClick={onPrint}
-                        disabled={saving}
-                        className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                    >
-                        <Printer className="w-4 h-4" />
-                        <span>Print</span>
-                    </button>
-                    <button
-                        onClick={onSave}
-                        disabled={saving}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                    >
-                        {saving ? (
-                            <>
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                <span>Creating...</span>
-                            </>
-                        ) : (
-                            <>
-                                <Save className="w-4 h-4" />
-                                <span>Confirm Return</span>
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
+            {/* Footer - Using Global DocumentFooter */}
+            <DocumentFooter
+                totalItems={selectedItems.length}
+                grandTotal={returnData.total_amount}
+                subtotalAmount={returnData.subtotal_amount}
+                taxAmount={returnData.tax_amount}
+                onPrint={onPrint}
+                onSave={handleSave}
+                isSaving={saving}
+                saveLabel="Confirm Return"
+                showActionButtons={true}
+                showPrintOptions={true}
+                showSaveOption={true}
+            />
         </div>
     );
 });

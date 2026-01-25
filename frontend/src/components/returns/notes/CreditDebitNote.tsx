@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft, X
+  FileText, CreditCard, Receipt, CheckCircle, User, Package, Plus
 } from 'lucide-react';
 import {
   Button,
   Card,
-  CardSection,
   Select,
-  DatePicker,
-  SummaryCard,
   CustomerSearch,
   InvoiceSelector,
-  useToast
+  useToast,
+  ModuleHeader,
+  ProceedToReviewComponent,
+  StandardDatePicker
 } from '../../global';
-import { theme, classes } from '../../../config/theme.config';
 import { notesApi } from '../../../services/api';
 import { invoicesApi } from '../../../services/api';
 
@@ -58,7 +57,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   noteType = 'credit',
   onClose
 }) => {
-  const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
+  const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -78,9 +77,10 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [showItemsSection, setShowItemsSection] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   const isCredit = noteType === 'credit';
+  const themeColor = isCredit ? 'green' : 'orange';
 
   // Generate note number
   const generateNoteNumber = () => {
@@ -96,20 +96,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       note_number: generateNoteNumber()
     }));
   }, []);
-
-  // Tab configuration
-  const tabs = [
-    {
-      id: 'create',
-      label: `Create ${isCredit ? 'Credit' : 'Debit'} Note`,
-      icon: Plus
-    },
-    {
-      id: 'list',
-      label: `${isCredit ? 'Credit' : 'Debit'} Notes List`,
-      icon: FileText
-    }
-  ];
 
   // Reason options
   const reasonOptions = isCredit ? [
@@ -132,8 +118,15 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     setSelectedCustomer(customer);
     setNoteData(prev => ({
       ...prev,
-      customer_id: customer.id || customer.customer_id,
-      customer_name: customer.name || customer.customer_name
+      customer_id: customer?.id || customer?.customer_id || '',
+      customer_name: customer?.name || customer?.customer_name || ''
+    }));
+    // Clear invoice selection when customer changes
+    setSelectedInvoice(null);
+    setNoteData(prev => ({
+      ...prev,
+      invoice_id: '',
+      items: []
     }));
   };
 
@@ -148,8 +141,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       invoice_number: invoice.invoice_number,
       invoice_date: invoice.invoice_date
     }));
-
-    setShowItemsSection(true);
 
     // Load invoice items
     try {
@@ -265,37 +256,22 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     calculateTotals(updatedItems);
   };
 
-  // Remove item
-  const removeItem = (index: number) => {
-    const updatedItems = noteData.items.filter((_, i) => i !== index);
-    setNoteData(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
+  // Validation
+  const canProceedToReview = () => {
+    return !!selectedCustomer &&
+      !!noteData.invoice_id &&
+      !!noteData.reason &&
+      noteData.items.filter(item => item.selected).length > 0;
   };
 
   // Handle submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!noteData.customer_id) {
-      toast.error('Please select a customer');
-      return;
-    }
-
-    if (!noteData.invoice_id) {
-      toast.error('Please select an invoice');
-      return;
-    }
-
-    if (!noteData.reason) {
-      toast.error('Please select a reason');
+  const handleSubmit = async () => {
+    if (!canProceedToReview()) {
+      toast.error('Please complete all required fields');
       return;
     }
 
     const selectedItems = noteData.items.filter(item => item.selected);
-    if (selectedItems.length === 0) {
-      toast.error('Please select at least one item');
-      return;
-    }
 
     try {
       setSaving(true);
@@ -318,26 +294,10 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       if (response.data?.success || response.data || response.status === 200) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
 
-        // Reset form
-        setNoteData({
-          note_number: generateNoteNumber(),
-          note_date: new Date().toISOString().split('T')[0],
-          customer_id: '',
-          invoice_id: '',
-          reason: '',
-          items: [],
-          subtotal: 0,
-          tax_amount: 0,
-          total_amount: 0,
-          notes: '',
-          status: 'PENDING'
-        });
-        setSelectedCustomer(null);
-        setSelectedInvoice(null);
-        setShowItemsSection(false);
-
-        // Switch to list tab
-        setActiveTab('list');
+        // Reset form and close
+        setTimeout(() => {
+          if (onClose) onClose();
+        }, 1500);
       }
     } catch (error: any) {
       toast.error(error.message || `Failed to create ${noteType} note`);
@@ -346,356 +306,323 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     }
   };
 
-  // Calculate summary data
-  const summaryItems = [
-    { label: 'Subtotal', value: noteData.subtotal, isBold: false },
-    { label: 'Tax Amount', value: noteData.tax_amount, isBold: false },
-    {
-      label: `Total ${isCredit ? 'Credit' : 'Debit'} Amount`,
-      value: noteData.total_amount,
-      isTotal: true,
-      color: isCredit ? theme.colors.secondary.DEFAULT : theme.colors.warning.DEFAULT
-    }
-  ];
+  // Step 1: Create Note
+  const createContent = (
+    <div className="space-y-6">
+      {/* Date Section */}
+      <div className="grid grid-cols-2 gap-4">
+        <StandardDatePicker
+          label="Note Date"
+          value={noteData.note_date}
+          onChange={(value) => setNoteData(prev => ({ ...prev, note_date: value }))}
+          required
+        />
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-2">Reason *</label>
+          <Select
+            options={reasonOptions}
+            value={noteData.reason}
+            onChange={(reason) => setNoteData(prev => ({ ...prev, reason: reason as string }))}
+            placeholder="Select reason..."
+          />
+        </div>
+      </div>
+
+      {/* Customer Section - Standard Pattern */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={`text-sm font-semibold text-${themeColor}-700 uppercase tracking-wider flex items-center`}>
+            <User className="w-4 h-4 mr-2" />
+            CUSTOMER *
+          </h3>
+        </div>
+        {/* White card wrapper - consistent styling */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <CustomerSearch
+            value={selectedCustomer}
+            onChange={handleCustomerSelect as any}
+            displayMode="compact"
+            placeholder="Search customer by name, phone or ID..."
+            showCreateButton={false}
+            clearable={true}
+          />
+        </div>
+      </div>
+
+      {/* Invoice Selection */}
+      {selectedCustomer && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={`text-sm font-semibold text-${themeColor}-700 uppercase tracking-wider flex items-center`}>
+              <FileText className="w-4 h-4 mr-2" />
+              SELECT INVOICE *
+            </h3>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            {selectedInvoice ? (
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                <div>
+                  <p className="font-medium text-gray-900">{selectedInvoice.invoice_number}</p>
+                  <p className="text-sm text-gray-600">
+                    {new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN')} •
+                    ₹{selectedInvoice.final_amount?.toFixed(2) || '0.00'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowInvoiceModal(true)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowInvoiceModal(true)}
+                className={`w-full px-4 py-3 border-2 border-dashed border-${themeColor}-300 rounded-lg text-${themeColor}-600 hover:border-${themeColor}-400 hover:bg-${themeColor}-50 transition-colors flex items-center justify-center gap-2`}
+              >
+                <FileText className="w-5 h-5" />
+                Click to Select Invoice
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Selector Modal */}
+      {showInvoiceModal && (
+        <InvoiceSelector
+          customerId={selectedCustomer?.id || selectedCustomer?.customer_id}
+          onSelect={(invoice) => {
+            handleInvoiceSelect(invoice);
+            setShowInvoiceModal(false);
+          }}
+          onClose={() => setShowInvoiceModal(false)}
+        />
+      )}
+
+      {/* Items Section */}
+      {noteData.items.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={`text-sm font-semibold text-${themeColor}-700 uppercase tracking-wider flex items-center`}>
+              <Package className="w-4 h-4 mr-2" />
+              SELECT ITEMS FOR {isCredit ? 'CREDIT' : 'DEBIT'} NOTE
+            </h3>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-gray-500">Loading invoice items...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {noteData.items.map((item, index) => (
+                  <div
+                    key={index}
+                    className={`p-4 border rounded-lg ${item.selected ? `border-${themeColor}-200 bg-${themeColor}-50` : 'border-gray-200 bg-gray-50'
+                      }`}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={() => toggleItemSelection(index)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{item.product_name}</p>
+                        {item.batch_number && (
+                          <p className="text-sm text-gray-500">Batch: {item.batch_number}</p>
+                        )}
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <label className="text-xs text-gray-500">Quantity</label>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateItemQuantity(index, parseFloat(e.target.value) || 0)}
+                              min={0}
+                              max={item.max_quantity}
+                              disabled={!item.selected}
+                              className="w-full mt-1 px-2 py-1 border border-gray-300 rounded"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Rate</label>
+                            <p className="mt-1 font-medium">₹{item.unit_price.toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Tax %</label>
+                            <p className="mt-1 font-medium">{item.tax_percent}%</p>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Amount</label>
+                            <p className={`mt-1 font-medium text-${themeColor}-600`}>
+                              ₹{item.amount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <label className="block text-sm font-medium text-gray-600 mb-2">Additional Notes</label>
+        <textarea
+          value={noteData.notes}
+          onChange={(e) => setNoteData(prev => ({ ...prev, notes: e.target.value }))}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg h-20 resize-none"
+          placeholder="Additional notes..."
+          rows={3}
+        />
+      </div>
+    </div>
+  );
+
+  // Step 2: Review
+  const reviewContent = (
+    <div className="space-y-6">
+      {/* Summary Card */}
+      <div className={`bg-${themeColor}-50 border border-${themeColor}-200 rounded-lg p-6`}>
+        <h3 className={`text-lg font-semibold text-${themeColor}-900 mb-4`}>
+          {isCredit ? 'Credit' : 'Debit'} Note Summary
+        </h3>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p className={`text-sm text-${themeColor}-700`}>Note Number</p>
+            <p className="font-semibold">{noteData.note_number}</p>
+          </div>
+          <div>
+            <p className={`text-sm text-${themeColor}-700`}>Note Date</p>
+            <p className="font-semibold">{new Date(noteData.note_date).toLocaleDateString('en-IN')}</p>
+          </div>
+          <div>
+            <p className={`text-sm text-${themeColor}-700`}>Customer</p>
+            <p className="font-semibold">{selectedCustomer?.customer_name || selectedCustomer?.name}</p>
+          </div>
+          <div>
+            <p className={`text-sm text-${themeColor}-700`}>Invoice</p>
+            <p className="font-semibold">{noteData.invoice_number}</p>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 pt-4 space-y-2">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Subtotal:</span>
+            <span className="font-medium">₹{noteData.subtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Tax Amount:</span>
+            <span className="font-medium">₹{noteData.tax_amount.toFixed(2)}</span>
+          </div>
+          <div className={`flex justify-between text-lg font-bold text-${themeColor}-700 pt-2 border-t`}>
+            <span>Total {isCredit ? 'Credit' : 'Debit'} Amount:</span>
+            <span>₹{noteData.total_amount.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Selected Items */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h4 className="font-semibold mb-3">Selected Items ({noteData.items.filter(i => i.selected).length})</h4>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2">Item</th>
+              <th className="text-center py-2">Qty</th>
+              <th className="text-right py-2">Rate</th>
+              <th className="text-right py-2">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {noteData.items.filter(i => i.selected).map((item, index) => (
+              <tr key={index} className="border-b">
+                <td className="py-2">{item.product_name}</td>
+                <td className="text-center py-2">{item.quantity}</td>
+                <td className="text-right py-2">₹{item.unit_price.toFixed(2)}</td>
+                <td className="text-right py-2 font-medium">₹{item.amount.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Info Notice */}
+      <div className={`p-4 rounded-lg ${isCredit ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
+        <p className={`text-sm font-medium ${isCredit ? 'text-green-800' : 'text-orange-800'}`}>
+          <CheckCircle className="w-4 h-4 inline mr-2" />
+          {isCredit
+            ? 'This amount will be credited to customer account'
+            : 'This amount will be added to customer dues'
+          }
+        </p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className={classes.pageContainer}>
-      <div className={classes.contentWrapper}>
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Back"
-                >
-                  <ArrowLeft className="w-6 h-6" />
-                </button>
-              )}
+    <div className={`h-full bg-${themeColor}-50`}>
+      <div className="h-full flex flex-col">
+        {/* Header - Using Global ModuleHeader for Consistency */}
+        <ModuleHeader
+          title={`${isCredit ? 'Credit' : 'Debit'} Note`}
+          documentNumber={noteData.note_number || ''}
+          status={currentStep === 1 ? 'draft' : 'review'}
+          icon={isCredit ? CreditCard : Receipt}
+          iconColor={`text-${themeColor}-600`}
+          onClose={onClose}
+          historyType={isCredit ? 'credit_note' : 'debit_note'}
+        />
 
-              {isCredit ? (
-                <CreditCard className="w-8 h-8 text-green-600" />
-              ) : (
-                <Receipt className="w-8 h-8 text-orange-600" />
-              )}
-              <div>
-                <h1 className={classes.pageTitle}>
-                  {isCredit ? 'Credit' : 'Debit'} Notes Management
-                </h1>
-                <p className={classes.bodyText}>
-                  Create and manage {isCredit ? 'credit' : 'debit'} notes for invoices
-                </p>
-              </div>
-            </div>
+        {/* Keyboard Shortcuts Help */}
+        <div className={`bg-${themeColor}-50 px-4 py-2 text-xs text-${themeColor}-700 border-b border-${themeColor}-200`}>
+          Keyboard shortcuts: <strong>Ctrl+S</strong> - {currentStep === 1 ? 'Proceed to Review' : 'Save'} | <strong>Esc</strong> - {currentStep === 2 ? 'Back to Edit' : 'Close'}
+        </div>
+
+        {/* Content */}
+        <div className={`flex-1 overflow-y-auto bg-${themeColor}-50`}>
+          <div className="max-w-4xl mx-auto px-6 py-6">
+            {currentStep === 1 ? createContent : reviewContent}
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as 'create' | 'list')}
-                    className={`
-                      flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors
-                      ${activeTab === tab.id
-                        ? `border-${isCredit ? 'green' : 'orange'}-500 text-${isCredit ? 'green' : 'orange'}-600`
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }
-                    `}
-                  >
-                    <Icon className="w-5 h-5 mr-2" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        </div>
-
-        {/* Create Note Tab */}
-        {activeTab === 'create' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Form Section */}
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardSection title="Basic Information">
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Note Details */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={classes.formLabel}>Note Number</label>
-                        <input
-                          type="text"
-                          value={noteData.note_number}
-                          className={`${theme.components.input.base} mt-1 bg-gray-50`}
-                          readOnly
-                        />
-                      </div>
-
-                      <div>
-                        <label className={classes.formLabel}>Note Date *</label>
-                        <DatePicker
-                          value={noteData.note_date as any}
-                          onChange={(date) => setNoteData(prev => ({
-                            ...prev,
-                            note_date: typeof date === 'string' ? date : date?.toISOString().split('T')[0] || ''
-                          }))}
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Customer Selection - Standard Pattern */}
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
-                          Customer *
-                        </h3>
-                      </div>
-                      {/* White card wrapper - consistent styling */}
-                      <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <CustomerSearch
-                          value={selectedCustomer}
-                          onChange={handleCustomerSelect as any}
-                          displayMode="compact"
-                          placeholder="Search customer by name, phone or ID..."
-                          showCreateButton={false}
-                          clearable={true}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Invoice Selection */}
-                    {selectedCustomer && (
-                      <div>
-                        <label className={classes.formLabel}>Select Invoice *</label>
-                        <InvoiceSelector
-                          customerId={selectedCustomer.id || selectedCustomer.customer_id}
-                          onSelect={handleInvoiceSelect}
-                          onClose={() => { }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Reason and Notes */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={classes.formLabel}>Reason *</label>
-                        <Select
-                          options={reasonOptions}
-                          value={noteData.reason}
-                          onChange={(reason) => setNoteData(prev => ({ ...prev, reason }) as any)}
-                          placeholder="Select reason..."
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <div>
-                        <label className={classes.formLabel}>Notes</label>
-                        <textarea
-                          value={noteData.notes}
-                          onChange={(e) => setNoteData(prev => ({ ...prev, notes: e.target.value }))}
-                          className={`${theme.components.input.base} h-20 resize-none mt-1`}
-                          placeholder="Additional notes..."
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                  </form>
-                </CardSection>
-              </Card>
-
-              {/* Items Section */}
-              {showItemsSection && noteData.items.length > 0 && (
-                <Card>
-                  <CardSection title="Invoice Items">
-                    {loading ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                        <p className="mt-2 text-gray-500">Loading invoice items...</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {noteData.items.map((item, index) => (
-                          <div
-                            key={index}
-                            className={`p-4 border rounded-lg ${item.selected ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
-                              }`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-start space-x-3">
-                                <input
-                                  type="checkbox"
-                                  checked={item.selected}
-                                  onChange={() => toggleItemSelection(index)}
-                                  className="mt-1"
-                                />
-                                <div className="flex-1">
-                                  <p className="font-medium text-gray-900">{item.product_name}</p>
-                                  {item.batch_number && (
-                                    <p className="text-sm text-gray-500">Batch: {item.batch_number}</p>
-                                  )}
-                                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div>
-                                      <label className="text-xs text-gray-500">Quantity</label>
-                                      <input
-                                        type="number"
-                                        value={item.quantity}
-                                        onChange={(e) => updateItemQuantity(index, parseFloat(e.target.value) || 0)}
-                                        min={0}
-                                        max={item.max_quantity}
-                                        disabled={!item.selected}
-                                        className={`${theme.components.input.base} mt-1`}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-gray-500">Rate</label>
-                                      <p className="mt-1 font-medium">₹{item.unit_price.toFixed(2)}</p>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-gray-500">Tax %</label>
-                                      <p className="mt-1 font-medium">{item.tax_percent}%</p>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-gray-500">Amount</label>
-                                      <p className="mt-1 font-medium text-blue-600">
-                                        ₹{item.amount.toFixed(2)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => removeItem(index)}
-                                className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                title="Remove item"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardSection>
-                </Card>
-              )}
-
-              {/* Action Buttons */}
-              {showItemsSection && (
-                <div className="flex justify-end space-x-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setShowItemsSection(false);
-                      setSelectedInvoice(null);
-                      setNoteData(prev => ({
-                        ...prev,
-                        invoice_id: '',
-                        invoice_number: '',
-                        invoice_date: '',
-                        items: [],
-                        subtotal: 0,
-                        tax_amount: 0,
-                        total_amount: 0
-                      }));
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSubmit}
-                    disabled={saving || noteData.items.filter(i => i.selected).length === 0}
-                  >
-                    {saving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Create {isCredit ? 'Credit' : 'Debit'} Note
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Summary Section */}
-            <div>
-              <Card>
-                <CardSection title="Note Summary">
-                  {noteData.total_amount > 0 ? (
-                    <div className="space-y-4">
-                      {/* Selected Invoice Info */}
-                      {selectedInvoice && (
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm font-medium text-gray-700">Invoice Details</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Invoice: {selectedInvoice.invoice_number}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Amount Summary */}
-                      <SummaryCard
-                        title={`${isCredit ? 'Credit' : 'Debit'} Amount Breakdown`}
-                        items={summaryItems}
-                        variant="detailed"
-                      />
-
-                      {/* Additional Info */}
-                      <div className={`p-3 rounded-lg ${isCredit ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'
-                        }`}>
-                        <p className={`text-sm font-medium ${isCredit ? 'text-green-800' : 'text-orange-800'
-                          }`}>
-                          {isCredit
-                            ? 'This amount will be credited to customer account'
-                            : 'This amount will be added to customer dues'
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6">
-                      <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className={classes.bodyText}>
-                        Select invoice items to see summary
-                      </p>
-                    </div>
-                  )}
-                </CardSection>
-              </Card>
-            </div>
-          </div>
-        )}
-
-        {/* List Tab */}
-        {activeTab === 'list' && (
-          <Card>
-            <CardSection title={`${isCredit ? 'Credit' : 'Debit'} Notes`}>
-              <div className="text-center py-8">
-                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500">
-                  {isCredit ? 'Credit' : 'Debit'} notes list will appear here
-                </p>
-              </div>
-            </CardSection>
-          </Card>
-        )}
+        {/* Footer - Using Global Component for Consistency */}
+        <ProceedToReviewComponent
+          currentStep={currentStep}
+          canProceed={currentStep === 1 ? canProceedToReview() : true}
+          onBack={currentStep === 2 ? () => setCurrentStep(1) : undefined}
+          onProceed={currentStep === 1 ? () => setCurrentStep(2) : handleSubmit}
+          onReset={() => {
+            setSelectedCustomer(null);
+            setSelectedInvoice(null);
+            setNoteData({
+              note_number: generateNoteNumber(),
+              note_date: new Date().toISOString().split('T')[0],
+              customer_id: '',
+              invoice_id: '',
+              reason: '',
+              items: [],
+              subtotal: 0,
+              tax_amount: 0,
+              total_amount: 0,
+              notes: '',
+              status: 'PENDING'
+            });
+          }}
+          totalItems={noteData.items.filter(i => i.selected).length}
+          totalAmount={noteData.total_amount}
+          proceedText={currentStep === 1 ? 'Proceed to Review' : `Create ${isCredit ? 'Credit' : 'Debit'} Note`}
+          saving={saving}
+        />
       </div>
     </div>
   );
