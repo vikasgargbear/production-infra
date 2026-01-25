@@ -45,14 +45,23 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
             key: 'invoice_number',
             header: 'Invoice #',
             render: (_: any, invoice: Invoice) => (
-                <div>
-                    <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
-                    <div className="text-xs text-gray-500">
-                        {new Date(invoice.invoice_date).toLocaleDateString('en-IN')}
-                    </div>
+                <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
+            ),
+            width: '130px'
+        },
+        {
+            key: 'invoice_date',
+            header: 'Date',
+            render: (_: any, invoice: Invoice) => (
+                <div className="text-gray-700">
+                    {new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                    })}
                 </div>
             ),
-            width: '150px'
+            width: '110px'
         },
         {
             key: 'customer_name',
