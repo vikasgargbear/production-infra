@@ -26,6 +26,22 @@ import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.
 // Filter configuration for InlineFilterPanel
 const filterOptions = [
   {
+    key: 'date_preset',
+    label: 'Period',
+    type: 'select' as const,
+    options: [
+      { value: 'all', label: 'All Time' },
+      { value: 'today', label: 'Today' },
+      { value: 'yesterday', label: 'Yesterday' },
+      { value: 'last7days', label: 'Last 7 Days' },
+      { value: 'last30days', label: 'Last 30 Days' },
+      { value: 'thisMonth', label: 'This Month' },
+      { value: 'lastMonth', label: 'Last Month' },
+      { value: 'thisQuarter', label: 'This Quarter' }
+    ],
+    defaultValue: 'all'
+  },
+  {
     key: 'payment_status',
     label: 'Status',
     type: 'select' as const,
@@ -337,15 +353,67 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleFilterChange = (newFilters: any) => {
     // Map filter values to search params
     const searchFilters: any = {};
+
     if (newFilters.payment_status && newFilters.payment_status !== 'all') {
       searchFilters.payment_status = newFilters.payment_status;
     }
+
+    // Handle date preset conversion
+    if (newFilters.date_preset && newFilters.date_preset !== 'all') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      switch (newFilters.date_preset) {
+        case 'today':
+          searchFilters.date_from = today.toISOString().split('T')[0];
+          searchFilters.date_to = today.toISOString().split('T')[0];
+          break;
+        case 'yesterday':
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          searchFilters.date_from = yesterday.toISOString().split('T')[0];
+          searchFilters.date_to = yesterday.toISOString().split('T')[0];
+          break;
+        case 'last7days':
+          const last7 = new Date(today);
+          last7.setDate(last7.getDate() - 7);
+          searchFilters.date_from = last7.toISOString().split('T')[0];
+          searchFilters.date_to = today.toISOString().split('T')[0];
+          break;
+        case 'last30days':
+          const last30 = new Date(today);
+          last30.setDate(last30.getDate() - 30);
+          searchFilters.date_from = last30.toISOString().split('T')[0];
+          searchFilters.date_to = today.toISOString().split('T')[0];
+          break;
+        case 'thisMonth':
+          const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          searchFilters.date_from = startOfMonth.toISOString().split('T')[0];
+          searchFilters.date_to = today.toISOString().split('T')[0];
+          break;
+        case 'lastMonth':
+          const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+          searchFilters.date_from = startOfLastMonth.toISOString().split('T')[0];
+          searchFilters.date_to = endOfLastMonth.toISOString().split('T')[0];
+          break;
+        case 'thisQuarter':
+          const quarter = Math.floor(today.getMonth() / 3);
+          const startOfQuarter = new Date(today.getFullYear(), quarter * 3, 1);
+          searchFilters.date_from = startOfQuarter.toISOString().split('T')[0];
+          searchFilters.date_to = today.toISOString().split('T')[0];
+          break;
+      }
+    }
+
+    // Custom date range (overrides preset if both specified)
     if (newFilters.dateFrom) {
       searchFilters.date_from = newFilters.dateFrom;
     }
     if (newFilters.dateTo) {
       searchFilters.date_to = newFilters.dateTo;
     }
+
     fetchInvoices(1, { ...searchFilters, search: filters.searchQuery });
   };
 
