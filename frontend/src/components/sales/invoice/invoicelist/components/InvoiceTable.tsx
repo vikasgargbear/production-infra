@@ -42,14 +42,6 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
             width: '50px'
         },
         {
-            key: 'invoice_number',
-            header: 'Invoice #',
-            render: (_: any, invoice: Invoice) => (
-                <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
-            ),
-            width: '130px'
-        },
-        {
             key: 'invoice_date',
             header: 'Date',
             render: (_: any, invoice: Invoice) => (
@@ -64,13 +56,18 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
             width: '110px'
         },
         {
+            key: 'invoice_number',
+            header: 'Invoice #',
+            render: (_: any, invoice: Invoice) => (
+                <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
+            ),
+            width: '140px'
+        },
+        {
             key: 'customer_name',
             header: 'Customer',
             render: (_: any, invoice: Invoice) => (
-                <div>
-                    <div className="font-medium text-gray-900">{invoice.customer_name}</div>
-                    <div className="text-xs text-gray-500">{invoice.items_count} items</div>
-                </div>
+                <div className="font-medium text-gray-900">{invoice.customer_name}</div>
             )
         },
         {
@@ -108,23 +105,35 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
 
                 return <StatusBadge status={statusConfig.status as any} label={statusConfig.label} />;
             },
-            width: '120px'
+            width: '100px'
         },
         {
             key: 'due_date',
             header: 'Due Date',
             render: (_: any, invoice: Invoice) => {
+                // Handle missing or invalid due_date
+                if (!invoice.due_date) {
+                    return <div className="text-gray-400">-</div>;
+                }
+
                 const dueDate = new Date(invoice.due_date);
+                if (isNaN(dueDate.getTime())) {
+                    return <div className="text-gray-400">-</div>;
+                }
+
                 const today = new Date();
                 const isOverdue = dueDate < today && invoice.payment_status !== 'paid';
 
                 return (
-                    <div className={isOverdue ? 'text-red-600' : 'text-gray-900'}>
-                        {dueDate.toLocaleDateString('en-IN')}
+                    <div className={isOverdue ? 'text-red-600' : 'text-gray-700'}>
+                        {dueDate.toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short'
+                        })}
                     </div>
                 );
             },
-            width: '120px'
+            width: '100px'
         },
         {
             key: 'actions',

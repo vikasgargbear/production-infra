@@ -70,21 +70,19 @@ export const InvoiceFilters = React.memo<InvoiceFiltersProps>(({
                     </div>
                 </div>
 
-                {/* Date Chips */}
-                <div className="flex items-center gap-1">
-                    {DATE_CHIPS.map(chip => (
-                        <button
-                            key={chip.value}
-                            onClick={() => onDateFilterChange(chip.value)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${dateFilter === chip.value
-                                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                                    : 'text-gray-600 hover:bg-gray-100'
-                                }`}
-                        >
-                            {chip.label}
-                        </button>
-                    ))}
-                </div>
+                {/* Date Filter Dropdown */}
+                <select
+                    value={dateFilter}
+                    onChange={(e) => onDateFilterChange(e.target.value)}
+                    className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="quarter">This Quarter</option>
+                    <option value="year">This Year</option>
+                </select>
 
                 {/* Refresh */}
                 <button
@@ -122,8 +120,8 @@ export const InvoiceFilters = React.memo<InvoiceFiltersProps>(({
                         {tab.label}
                         {statusCounts && (
                             <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${statusFilter === tab.value
-                                    ? 'bg-white/20'
-                                    : 'bg-gray-100 text-gray-600'
+                                ? 'bg-white/20'
+                                : 'bg-gray-100 text-gray-600'
                                 }`}>
                                 {statusCounts[tab.value as keyof typeof statusCounts] || 0}
                             </span>
