@@ -15,6 +15,7 @@ import { suppliersApi } from '../../../services/api';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
+import { AddressInput, AddressInputData } from '../../global';
 
 // ==================== TYPES ====================
 
@@ -435,62 +436,35 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </div>
                     </section>
 
-                    {/* Address */}
+                    {/* Address - Using shared AddressInput component */}
                     <section className="bg-white rounded-xl border border-gray-200 p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-blue-600" />
                             Address
                         </h2>
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input
-                                    type="text"
-                                    value={formData.address_line1}
-                                    onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="Building / Street Address"
-                                />
-                                <input
-                                    type="text"
-                                    value={formData.address_line2}
-                                    onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
-                                    className={inputClass}
-                                    placeholder="Area / Landmark"
-                                />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={formData.city}
-                                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                                        className={inputClass}
-                                        placeholder="City *"
-                                    />
-                                </div>
-                                <div>
-                                    <select
-                                        value={formData.state}
-                                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                                        className={inputClass}
-                                    >
-                                        {INDIAN_STATES.map(s => (
-                                            <option key={s} value={s}>{s}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={formData.pincode}
-                                        onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                                        className={inputClass}
-                                        placeholder="Pincode"
-                                        maxLength={6}
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                        <AddressInput
+                            value={{
+                                address_line1: formData.address_line1,
+                                address_line2: formData.address_line2,
+                                city: formData.city,
+                                state: formData.state,
+                                pincode: formData.pincode
+                            }}
+                            onChange={(address: AddressInputData) => setFormData({
+                                ...formData,
+                                address_line1: address.address_line1,
+                                address_line2: address.address_line2 || '',
+                                city: address.city,
+                                state: address.state,
+                                pincode: address.pincode
+                            })}
+                            inputClassName={inputClass}
+                            showLandmark={true}
+                            labels={{
+                                address_line1: 'Building / Street Address',
+                                address_line2: 'Area / Additional'
+                            }}
+                        />
                     </section>
 
                     {/* Tax & Compliance */}
