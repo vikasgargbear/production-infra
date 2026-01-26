@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronRight, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft } from 'lucide-react';
+import { Search, Filter, ChevronRight, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft, RefreshCw } from 'lucide-react';
 import { stockApi } from '../../services/api';
-import { DataTable, Column, ModuleHeader } from '../global';
+import { DataTable, Column, ModuleHeader, InlineFilterPanel } from '../global';
 
 interface StockListHistoryProps {
   open?: boolean;
@@ -56,7 +56,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
 
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(movement => 
+      filtered = filtered.filter(movement =>
         movement.movement_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movement.reference_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -126,17 +126,17 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
   // Derive stock movements from purchases, sales, and adjustments
   const deriveStockMovementsFromTransactions = async (): Promise<StockMovement[]> => {
     const movements: StockMovement[] = [];
-    
+
     try {
       // Import APIs dynamically to avoid circular dependencies
       const { purchasesApi } = await import('../../services/api');
       const { invoicesApi } = await import('../../services/api');
-      
+
       // Get recent purchases (stock-in movements)
       try {
         const purchasesResponse = await purchasesApi.getAll({ limit: 50 });
         const purchases = purchasesResponse.data?.purchases || purchasesResponse.data || [];
-        
+
         purchases.forEach((purchase: any, index: number) => {
           if (purchase.items && Array.isArray(purchase.items)) {
             purchase.items.forEach((item: any, itemIndex: number) => {
@@ -165,7 +165,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
       try {
         const invoicesResponse = await invoicesApi.getAll({ limit: 50 });
         const invoices = invoicesResponse.data?.invoices || invoicesResponse.data || [];
-        
+
         invoices.forEach((invoice: any, index: number) => {
           if (invoice.items && Array.isArray(invoice.items)) {
             invoice.items.forEach((item: any, itemIndex: number) => {
@@ -192,9 +192,9 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
 
       // Sort by date (newest first)
       movements.sort((a, b) => new Date(b.movement_date).getTime() - new Date(a.movement_date).getTime());
-      
+
       return movements.slice(0, 100); // Limit to 100 most recent
-      
+
     } catch (error) {
       return [];
     }
@@ -335,17 +335,34 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
   return (
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Stock Movement History"
           documentNumber=""
-          status=""
+          status="active"
           icon={Package}
           iconColor="text-blue-600"
           onClose={onClose}
-          historyType="stock"
-          onSaveDraft={() => {}}
+          showSaveDraft={false}
+          onSaveDraft={() => { }}
+          additionalActions={[
+            {
+              label: "",
+              onClick: loadStockMovements,
+              variant: "ghost",
+              icon: RefreshCw,
+              disabled: loading,
+              title: "Refresh",
+              className: loading ? "animate-spin" : ""
+            },
+            {
+              label: "Export All",
+              onClick: () => console.log('Export'),
+              variant: "default",
+              className: "bg-gray-900 hover:bg-gray-800 text-white"
+            }
+          ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}
@@ -363,79 +380,100 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-6 py-6">
-          {/* Filters */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-            <div className="flex items-center space-x-6">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search by movement number, product, reference, or batch..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                />
-              </div>
 
-              {/* Type Filter */}
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[130px]"
-              >
-                <option value="all">All Types</option>
-                <option value="receive">Stock In</option>
-                <option value="issue">Stock Out</option>
-                <option value="transfer">Transfer</option>
-                <option value="adjustment">Adjustment</option>
-              </select>
+            {/* Filters using InlineFilterPanel */}
+            <InlineFilterPanel
+              filters={[
+                {
+                  key: 'date_preset',
+                  label: 'Period',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All Time' },
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'last7days', label: 'Last 7 Days' },
+                    { value: 'last30days', label: 'Last 30 Days' },
+                    { value: 'thisMonth', label: 'This Month' },
+                    { value: 'lastMonth', label: 'Last Month' },
+                    { value: 'thisQuarter', label: 'This Quarter' }
+                  ],
+                },
+                {
+                  key: 'movement_type',
+                  label: 'Type',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All Types' },
+                    { value: 'receive', label: 'Stock In' },
+                    { value: 'issue', label: 'Stock Out' },
+                    { value: 'transfer', label: 'Transfer' },
+                    { value: 'adjustment', label: 'Adjustment' }
+                  ],
+                },
+                {
+                  key: 'status',
+                  label: 'Status',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All Status' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'cancelled', label: 'Cancelled' }
+                  ],
+                },
+                {
+                  key: 'dateFrom',
+                  label: 'From Date',
+                  type: 'date'
+                },
+                {
+                  key: 'dateTo',
+                  label: 'To Date',
+                  type: 'date'
+                }
+              ]}
+              onFilterChange={(filters) => {
+                // Handle filter changes
+                const newType = filters.movement_type === 'all' ? 'all' : filters.movement_type;
+                const newStatus = filters.status === 'all' ? 'all' : filters.status;
+                setSelectedType(newType as any);
+                setSelectedStatus(newStatus as any);
+              }}
+              onSearchChange={setSearchQuery}
+            />
 
-              {/* Status Filter */}
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Data Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {error ? (
-              <div className="text-center py-12">
-                <div className="text-red-600 mb-4">
-                  <Package className="w-12 h-12 mx-auto" />
+            {/* Data Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              {error ? (
+                <div className="text-center py-12">
+                  <div className="text-red-600 mb-4">
+                    <Package className="w-12 h-12 mx-auto" />
+                  </div>
+                  <p className="text-red-600">{error}</p>
+                  <button
+                    onClick={loadStockMovements}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Retry
+                  </button>
                 </div>
-                <p className="text-red-600">{error}</p>
-                <button
-                  onClick={loadStockMovements}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <DataTable
-                data={filteredMovements}
-                columns={columns}
-                keyField="id"
-                loading={loading}
-                emptyMessage="No stock movements found"
-                emptyIcon={<Package className="w-12 h-12 text-gray-400" />}
-                hoverable={true}
-                striped={true}
-                paginated={true}
-                pageSize={20}
-                searchable={false}
-              />
-            )}
-          </div>
+              ) : (
+                <DataTable
+                  data={filteredMovements}
+                  columns={columns}
+                  keyField="id"
+                  loading={loading}
+                  emptyMessage="No stock movements found"
+                  emptyIcon={<Package className="w-12 h-12 text-gray-400" />}
+                  hoverable={true}
+                  striped={true}
+                  paginated={true}
+                  pageSize={20}
+                  searchable={false}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -10,11 +10,13 @@
 
 import React, { useEffect, useCallback } from 'react';
 import {
-  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle
+  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, Pagination } from '../global';
+import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
 import { supplierInvoicesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
+import { useCompany } from '../../contexts/CompanyContext';
+import { toast } from 'react-toastify';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
@@ -293,58 +295,93 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
   ];
 
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Supplier Invoices</h1>
-              <p className="text-sm text-gray-600 mt-1">{pagination.total} total invoices</p>
-            </div>
-            {onClose && (
-              <button onClick={onClose} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
-                Close
-              </button>
-            )}
-          </div>
-        </div>
+
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Purchase History"
+          documentNumber=""
+          status="active"
+          icon={Package}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          showSaveDraft={false}
+          onSaveDraft={() => { }}
+          additionalActions={[
+            {
+              label: "",
+              onClick: handleRefresh,
+              variant: "ghost",
+              icon: RefreshCw,
+              disabled: ui.refreshing,
+              title: "Refresh",
+              className: ui.refreshing ? "animate-spin" : ""
+            },
+            {
+              label: "Export All",
+              onClick: handleExport,
+              variant: "default",
+              className: "bg-gray-900 hover:bg-gray-800 text-white"
+            }
+          ] as any}
+        />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
-            {/* Search and Actions */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 max-w-md">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="Search purchases..."
-                      value={filters.searchQuery}
-                      onChange={(e) => handleSearchChange(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleRefresh}
-                    disabled={ui.refreshing}
-                    className="px-4 py-2 text-sm font-medium bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {ui.refreshing ? (
-                      <RefreshCw className="w-4 h-4 inline-block mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 inline-block mr-2" />
-                    )}
-                    Refresh
-                  </button>
-                </div>
-              </div>
-            </div>
+            {/* Filters */}
+            <InlineFilterPanel
+              filters={[
+                {
+                  key: 'date_preset',
+                  label: 'Period',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All Time' },
+                    { value: 'today', label: 'Today' },
+                    { value: 'yesterday', label: 'Yesterday' },
+                    { value: 'last7days', label: 'Last 7 Days' },
+                    { value: 'last30days', label: 'Last 30 Days' },
+                    { value: 'thisMonth', label: 'This Month' },
+                    { value: 'lastMonth', label: 'Last Month' },
+                    { value: 'thisQuarter', label: 'This Quarter' }
+                  ],
+                },
+                {
+                  key: 'payment_status',
+                  label: 'Status',
+                  type: 'select',
+                  options: [
+                    { value: 'all', label: 'All Status' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'partial', label: 'Partial' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'overdue', label: 'Overdue' }
+                  ],
+                },
+                {
+                  key: 'dateFrom',
+                  label: 'From Date',
+                  type: 'date'
+                },
+                {
+                  key: 'dateTo',
+                  label: 'To Date',
+                  type: 'date'
+                }
+              ]}
+              onFilterChange={(newFilters) => {
+                dispatch({ type: 'SET_FILTERS', filters: newFilters });
+                const searchParams = {
+                  search: filters.searchQuery,
+                  payment_status: newFilters.payment_status === 'all' ? undefined : newFilters.payment_status
+                };
+                fetchPurchases(1, searchParams);
+              }}
+              onSearchChange={handleSearchChange}
+            />
 
             {/* Bulk Actions */}
             {selectedCount > 0 && (

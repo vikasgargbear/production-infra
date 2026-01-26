@@ -113,6 +113,22 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   // Filter configuration for the global component
   const filterOptions = [
     {
+      key: 'date_preset',
+      label: 'Period',
+      type: 'select' as const,
+      options: [
+        { value: 'all', label: 'All Time' },
+        { value: 'today', label: 'Today' },
+        { value: 'yesterday', label: 'Yesterday' },
+        { value: 'last7days', label: 'Last 7 Days' },
+        { value: 'last30days', label: 'Last 30 Days' },
+        { value: 'thisMonth', label: 'This Month' },
+        { value: 'lastMonth', label: 'Last Month' },
+        { value: 'thisQuarter', label: 'This Quarter' }
+      ],
+      defaultValue: 'all'
+    },
+    {
       key: 'return_type',
       label: 'Type',
       type: 'select' as const,
