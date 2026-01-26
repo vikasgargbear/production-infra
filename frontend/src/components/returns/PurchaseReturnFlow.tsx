@@ -516,7 +516,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50 p-6">
-            <div className="space-y-6">
+            <div className="max-w-6xl mx-auto space-y-6">
               {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <StandardDatePicker

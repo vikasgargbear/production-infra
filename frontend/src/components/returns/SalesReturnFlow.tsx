@@ -565,7 +565,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
-            <div className="px-6 py-6 space-y-6">
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
               {/* Return Info - 3-column grid with consistent h-10 heights */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <StandardDatePicker
