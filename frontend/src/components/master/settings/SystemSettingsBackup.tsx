@@ -989,8 +989,8 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ open, onClose }) => {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg text-left transition-colors ${activeTab === tab.id
-                                            ? 'bg-blue-50 text-blue-700'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-700 hover:bg-gray-50'
                                         }`}
                                 >
                                     <Icon className="w-5 h-5" />
@@ -1003,7 +1003,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ open, onClose }) => {
 
                 {/* Main Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    <div className="max-w-4xl mx-auto">
+                    <div className="max-w-6xl mx-auto">
                         <div className="bg-white rounded-lg border border-gray-200 p-6">
                             {renderTabContent()}
                         </div>

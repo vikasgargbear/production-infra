@@ -95,7 +95,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
             {/* Header - Using Global ModuleHeader */}
             <ModuleHeader
-                title={isGSTCustomer ? 'Credit Note Preview' : 'Sales Return Preview'}
+                title="Return - Review"
                 documentNumber={returnData.return_no}
                 status="preview"
                 icon={RotateCcw}
@@ -112,7 +112,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
-                <div className="max-w-4xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                     {/* Clean Preview - Invoice Style */}
                     <div id="return-preview" className="bg-white rounded-lg border border-gray-200 shadow-sm">
                         <div className="px-6 py-4">
@@ -197,6 +197,63 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                 </div>
                             )}
 
+                            {/* Credit Note Banner - Highlight what will be generated */}
+                            {returnData.return_type === 'credit_note' && isGSTCustomer && (
+                                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <span className="text-blue-600 font-bold">₹</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-blue-900">
+                                                Credit Note will be generated
+                                            </p>
+                                            <p className="text-xs text-blue-600">
+                                                {returnData.credit_adjustment_type === 'existing_dues'
+                                                    ? 'Will be adjusted against outstanding dues'
+                                                    : 'Will be available for future purchases'
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xl font-bold text-blue-700">
+                                            {formatCurrency(returnData.total_amount)}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* No Financial Adjustment Banner */}
+                            {returnData.return_type === 'no_adjustment' && (
+                                <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                    <p className="text-sm font-medium text-gray-700">
+                                        📦 Return Only — No credit note or refund will be issued
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Replacement Banner */}
+                            {returnData.return_type === 'replacement' && (
+                                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <p className="text-sm font-medium text-green-700">
+                                        🔄 Replacement will be issued for returned items
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Refund Banner */}
+                            {returnData.return_type === 'refund' && (
+                                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between">
+                                    <p className="text-sm font-medium text-purple-700">
+                                        💰 Cash/Bank Refund to be issued
+                                    </p>
+                                    <span className="text-lg font-bold text-purple-700">
+                                        {formatCurrency(returnData.total_amount)}
+                                    </span>
+                                </div>
+                            )}
+
                             {/* Items Table - Clean like Invoice */}
                             <div className="mb-6">
                                 <table className="w-full border border-gray-200">
@@ -225,6 +282,10 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                     <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
                                                     <td className="py-2 px-3 border-r border-gray-200">
                                                         <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
+                                                        <div className="text-[10px] text-gray-500">
+                                                            {item.pack_size && `Pack: ${item.pack_size}`}
+                                                            {item.uom && ` | ${item.uom}`}
+                                                        </div>
                                                     </td>
                                                     <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
                                                         {item.hsn_code || '3004'}

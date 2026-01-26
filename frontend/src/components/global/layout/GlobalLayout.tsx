@@ -102,7 +102,7 @@ const GlobalLayout: React.FC<GlobalLayoutProps> = ({
             container: 'h-full bg-gray-50',
             inner: 'h-full flex flex-col',
             content: 'flex-1 overflow-y-auto bg-gray-50',
-            contentInner: 'max-w-5xl mx-auto px-4 py-4',
+            contentInner: 'max-w-6xl mx-auto px-4 py-4',
             spacing: 'space-y-4'
         },
         spacious: {

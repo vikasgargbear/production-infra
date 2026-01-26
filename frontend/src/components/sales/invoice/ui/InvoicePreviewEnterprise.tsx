@@ -374,7 +374,10 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
                     <td className="py-2 px-3 border-r border-gray-200">
                       <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
-                      <div className="text-[10px] text-gray-500">Batch: {item.batch_number || 'N/A'}</div>
+                      <div className="text-[10px] text-gray-500">
+                        Batch: {item.batch_number || 'N/A'}
+                        {item.pack_size && ` | Pack: ${item.pack_size}`}
+                      </div>
                     </td>
                     <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
                       {item.hsn_code || '3004'}

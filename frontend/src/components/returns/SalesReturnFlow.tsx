@@ -590,19 +590,60 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Method <span className="text-red-500">*</span>
+                    Return Resolution <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={returnData.return_method || 'credit_note'}
-                    onChange={(e) => dispatch({ type: 'SET_RETURN_DATA', data: { return_method: e.target.value } })}
+                    value={returnData.return_type || 'credit_note'}
+                    onChange={(e) => dispatch({
+                      type: 'SET_RETURN_DATA',
+                      data: {
+                        return_type: e.target.value as any,
+                        return_method: e.target.value // Keep legacy field in sync
+                      }
+                    })}
                     className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
-                    <option value="credit_note">Credit Note (Recommended)</option>
-                    <option value="replacement">Replacement</option>
-                    <option value="refund">Refund (Requires Approval)</option>
+                    <option value="credit_note">📝 Credit Note (Recommended)</option>
+                    <option value="replacement">🔄 Replacement</option>
+                    <option value="refund">💰 Refund (Requires Approval)</option>
+                    <option value="no_adjustment">📦 No Financial Adjustment</option>
                   </select>
                 </div>
               </div>
+
+              {/* GST Withholding Option - Only for B2B customers */}
+              {selectedCustomer && (selectedCustomer as any).gst_number && (
+                <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">GST Treatment</p>
+                    <p className="text-xs text-yellow-600">
+                      {returnData.withhold_gst
+                        ? 'GST will NOT be included in return amount'
+                        : 'GST will be included in return amount (standard)'
+                      }
+                    </p>
+                  </div>
+                  <label className="flex items-center cursor-pointer">
+                    <span className="text-sm text-gray-700 mr-3">Withhold GST</span>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={returnData.withhold_gst || false}
+                        onChange={(e) => dispatch({
+                          type: 'SET_RETURN_DATA',
+                          data: { withhold_gst: e.target.checked }
+                        })}
+                        className="sr-only"
+                      />
+                      <div className={`w-11 h-6 rounded-full transition-colors ${returnData.withhold_gst ? 'bg-yellow-500' : 'bg-gray-300'
+                        }`}>
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${returnData.withhold_gst ? 'translate-x-5' : ''
+                          }`}></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               {/* Customer Section - Using global CustomerSearch like Invoice */}
               <div className="mb-6">

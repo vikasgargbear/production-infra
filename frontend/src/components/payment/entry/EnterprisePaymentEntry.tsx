@@ -759,7 +759,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         <div className="px-6 py-6">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-6xl mx-auto">
             {renderContent()}
           </div>
         </div>
@@ -767,7 +767,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       {/* Footer */}
       <div className="bg-white border-t border-gray-200 p-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           {/* Total Amount Display */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
             <p className="text-xs text-blue-600 font-medium">Total Payment Amount</p>

@@ -64,7 +64,9 @@ const initialReturnData: ReturnFormData = {
     credit_note_no: '',
     status: 'PENDING',
     include_gst: true,
-    credit_adjustment_type: 'future'
+    credit_adjustment_type: 'future',
+    return_type: 'credit_note', // Default to credit note
+    withhold_gst: false // Default GST included
 };
 
 const initialState: ReturnLocalState = {

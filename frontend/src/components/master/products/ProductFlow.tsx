@@ -355,7 +355,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
 
             {/* Scrollable Content */}
             <main className="flex-1 overflow-y-auto py-6" ref={formRef}>
-                <div className="max-w-4xl mx-auto px-6 space-y-8">
+                <div className="max-w-6xl mx-auto px-6 space-y-8">
                     {/* Error Display */}
                     {errors.length > 0 && (
                         <div className="bg-red-50 border border-red-200 rounded-xl p-4">

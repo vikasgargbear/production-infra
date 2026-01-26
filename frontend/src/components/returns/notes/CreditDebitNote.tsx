@@ -579,7 +579,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
         {/* Content */}
         <div className={`flex-1 overflow-y-auto bg-${themeColor}-50`}>
-          <div className="max-w-4xl mx-auto px-6 py-6">
+          <div className="max-w-6xl mx-auto px-6 py-6">
             {currentStep === 1 ? createContent : reviewContent}
           </div>
         </div>

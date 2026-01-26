@@ -210,7 +210,7 @@ const FeatureSettings = ({ open, onClose }) => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
 
           {/* Business Mode Configuration - NEW */}
           <div className="bg-white rounded-lg border border-blue-200 p-6 shadow-sm">

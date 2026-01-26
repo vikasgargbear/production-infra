@@ -92,6 +92,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const hasFetchedRecent = useRef<boolean>(false); // Guard against infinite fetches
+  const cacheRef = useRef<CacheState>({}); // Ref for cache to avoid deps loop
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -131,7 +132,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     try {
       const response = await invoicesApi.search({
         customer_id: customerId as any,
-        limit: 10,
+        limit: 5,
         sort: 'invoice_date',
         order: 'desc'
       });
@@ -151,20 +152,21 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     }
   }, [customerId]);
 
-  // Search invoices
-  const searchInvoices = useCallback(async (query) => {
+  // Search invoices - use refs for values that change frequently to avoid dep loop
+  const searchInvoices = useCallback(async (query: string) => {
     setHasSearched(true);
 
     if (!query || query.length < minSearchLength) {
-      setInvoices(hasSearched ? [] : recentInvoices);
+      // Empty query - show nothing or recent invoices
+      setInvoices([]);
       return;
     }
 
     const cacheKey = getCacheKey(query, filters);
 
-    // Check cache first
-    if (cache[cacheKey]) {
-      setInvoices(cache[cacheKey]);
+    // Check cache first using ref
+    if (cacheRef.current[cacheKey]) {
+      setInvoices(cacheRef.current[cacheKey]);
       return;
     }
 
@@ -191,7 +193,8 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
         const results: Invoice[] = respData?.invoices || [];
         setInvoices(results);
 
-        // Update cache
+        // Update cache ref
+        cacheRef.current[cacheKey] = results;
         setCache(prev => ({
           ...prev,
           [cacheKey]: results
@@ -214,14 +217,16 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     }
   }, [
     invoiceType, customerId, dateRange, maxResults, showDetails,
-    filters, minSearchLength, cache, getCacheKey, onSearchStart,
-    onSearchComplete, onError, hasSearched, recentInvoices
+    filters, minSearchLength, getCacheKey, onSearchStart,
+    onSearchComplete, onError
   ]);
 
   // Effect to search when debounced query changes
   useEffect(() => {
-    searchInvoices(debouncedSearchQuery);
-  }, [debouncedSearchQuery, searchInvoices]);
+    if (debouncedSearchQuery) {
+      searchInvoices(debouncedSearchQuery);
+    }
+  }, [debouncedSearchQuery]); // Only depend on query, not searchInvoices function);
 
   // Effect to fetch recent invoices when customer changes
   useEffect(() => {
@@ -290,16 +295,20 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
   // Format invoice display
   const formatInvoiceDisplay = (invoice) => {
     const date = format(new Date(invoice.invoice_date), 'dd/MM/yyyy');
+    // Use final_amount or total_amount, fallback to 0
+    const amountValue = invoice.final_amount ?? invoice.total_amount ?? 0;
     const amount = new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'INR'
-    }).format(invoice.total_amount);
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amountValue);
 
     return {
       primary: invoice.invoice_number,
-      secondary: `${invoice.customer_name} • ${date}`,
+      secondary: date, // Just date, no customer name (already selected)
       amount,
-      status: invoice.status,
+      status: invoice.payment_status || invoice.status,
       itemCount: invoice.items?.length || 0
     };
   };

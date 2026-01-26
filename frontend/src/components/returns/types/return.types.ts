@@ -60,6 +60,10 @@ export interface ReturnFormData {
     status: string;
     include_gst: boolean;
     credit_adjustment_type: 'future' | 'existing_dues';
+    /** Return resolution type */
+    return_type: 'credit_note' | 'replacement' | 'refund' | 'no_adjustment';
+    /** Whether to withhold GST from return (B2B option) */
+    withhold_gst: boolean;
 }
 
 export interface ReturnReason {
