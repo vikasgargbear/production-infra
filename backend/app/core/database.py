@@ -51,11 +51,11 @@ if IS_SUPABASE_POOLER:
     # Transaction pooler mode (port 6543) - increased pool for Railway
     engine = create_engine(
         DATABASE_URL,
-        pool_size=5,              # Increased from 1 for better concurrency
-        max_overflow=10,          # Increased from 2
+        pool_size=10,             # Increased from 5 for higher concurrency
+        max_overflow=20,          # Increased from 10
         pool_pre_ping=True,       # Always test connections
         pool_recycle=30,          # Recycle every 30 seconds
-        pool_timeout=10,          # Increased timeout
+        pool_timeout=20,          # Increased from 10 seconds
         echo=False,
         connect_args={
             "connect_timeout": 10,
@@ -67,11 +67,11 @@ else:
     # P1-5: Added query timeout protection (30s limit)
     engine = create_engine(
         DATABASE_URL,
-        pool_size=5,              # Normal pool size
-        max_overflow=10,          # More overflow allowed
+        pool_size=10,             # Increased from 5 for higher concurrency
+        max_overflow=20,          # Increased from 10
         pool_pre_ping=True,
         pool_recycle=3600,        # Recycle every hour
-        pool_timeout=30,
+        pool_timeout=20,          # Increased from 30
         echo=False,
         connect_args={
             "connect_timeout": 10,

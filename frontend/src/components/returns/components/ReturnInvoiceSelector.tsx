@@ -1,12 +1,12 @@
 /**
  * ReturnInvoiceSelector Component
- * Invoice search and selection for sales returns
- * Optimized with React.memo
+ * Inline invoice search for sales returns - uses InvoiceSearch pattern
+ * Follows CustomerSearch inline pattern for consistent UX
  */
 
 import React from 'react';
 import { FileText, ChevronRight } from 'lucide-react';
-import { InvoiceSelector } from '../../global';
+import { InvoiceSearch } from '../../global';
 import type { ReturnInvoiceSelectorProps } from '../types/return.types';
 
 export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
@@ -17,14 +17,13 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
     showInvoiceSection,
     invoiceSearchRef
 }) => {
-    // State to manage modal open - must be before any early returns
-    const [showModal, setShowModal] = React.useState(false);
-
     if (!selectedCustomer || !showInvoiceSection) return null;
 
-    // Handle invoice selection from modal
+    // Handle invoice selection from inline search
     const handleInvoiceSelect = (invoice: any) => {
-        onInvoiceSelect(invoice);
+        if (invoice) {
+            onInvoiceSelect(invoice);
+        }
     };
 
     return (
@@ -34,26 +33,9 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                     <FileText className="w-4 h-4 mr-2" />
                     INVOICE (Optional)
                 </h3>
-            </div>
-
-            <div className="flex items-center space-x-3">
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex-1 px-4 py-3 text-left border border-gray-300 rounded-lg hover:border-blue-500 transition-colors"
-                >
-                    {selectedInvoice ? (
-                        <span className="font-medium text-gray-900">
-                            {selectedInvoice.invoice_number}
-                        </span>
-                    ) : (
-                        <span className="text-gray-500">
-                            Click to search invoice by number or date... (Ctrl+I)
-                        </span>
-                    )}
-                </button>
                 <button
                     onClick={onSkipInvoice}
-                    className="px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center space-x-2 font-medium"
+                    className="min-w-[140px] px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                     title="Skip invoice and enter items manually"
                 >
                     <span>Manual Entry</span>
@@ -61,34 +43,51 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                 </button>
             </div>
 
-            {showModal && (
-                <InvoiceSelector
-                    customerId={String(selectedCustomer.customer_id)}
-                    onSelect={handleInvoiceSelect}
-                    onClose={() => setShowModal(false)}
-                />
-            )}
-
-            {selectedInvoice && (
-                <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                            <span className="font-medium text-gray-700">Invoice #:</span>{' '}
-                            <span className="text-gray-900">{selectedInvoice.invoice_number}</span>
-                        </div>
-                        <div>
-                            <span className="font-medium text-gray-700">Date:</span>{' '}
-                            <span className="text-gray-900">
-                                {new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN')}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="font-medium text-gray-700">Amount:</span>{' '}
-                            <span className="text-gray-900">₹{(selectedInvoice as any).final_amount?.toLocaleString('en-IN')}</span>
+            {/* White card wrapper - consistent with CustomerSearch pattern */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                {!selectedInvoice ? (
+                    <InvoiceSearch
+                        onSelect={handleInvoiceSelect}
+                        customerId={selectedCustomer.customer_id}
+                        placeholder="Search invoice by number or date... (Ctrl+I)"
+                        autoFocus={false}
+                    />
+                ) : (
+                    /* Selected invoice display - inline green card */
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                                    <FileText className="w-5 h-5 text-green-600" />
+                                </div>
+                                <div>
+                                    <span className="font-semibold text-gray-900 block">
+                                        {selectedInvoice.invoice_number}
+                                    </span>
+                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                        <span>
+                                            {new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric'
+                                            })}
+                                        </span>
+                                        <span className="font-medium text-green-700">
+                                            ₹{((selectedInvoice as any).final_amount || 0).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onInvoiceSelect(null as any)}
+                                className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                                Change
+                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 });

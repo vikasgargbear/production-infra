@@ -91,6 +91,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
   const [cache, setCache] = useState<CacheState>({});
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
+  const hasFetchedRecent = useRef<boolean>(false); // Guard against infinite fetches
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -112,50 +113,34 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     return `${invoiceType}-${customerId}-${query}-${JSON.stringify(filters)}`;
   }, [invoiceType, customerId]);
 
-  // Fetch recent invoices
+  // Fetch recent invoices - only once per customer
   const fetchRecentInvoices = useCallback(async () => {
     if (!customerId) {
       return;
     }
 
-    // Handle both numeric and string customer IDs
-    const customerIdStr = String(customerId);
-    const cacheKey = `recent-${invoiceType}-${customerIdStr}`;
-
-    // Check cache first
-    if (cache[cacheKey]) {
-      setRecentInvoices(cache[cacheKey]);
-      setInvoices(cache[cacheKey]); // Also set as current invoices
+    // Guard against repeated fetches
+    if (hasFetchedRecent.current) {
       return;
     }
+    hasFetchedRecent.current = true;
 
     setLoading(true);
     setError(null);
 
     try {
-      // TODO: Implement getByCustomer method or use search with customerId filter
       const response = await invoicesApi.search({
+        customer_id: customerId as any,
         limit: 10,
         sort: 'invoice_date',
-        order: 'desc',
-        status: filters.status || ['PAID', 'PARTIAL', 'UNPAID']
+        order: 'desc'
       });
 
       if ((response as APIResponse).success || (response as APIResponse).data) {
         const respData = (response as APIResponse).data;
         const results: Invoice[] = (respData as { invoices?: Invoice[] })?.invoices || (Array.isArray(respData) ? respData : []);
         setRecentInvoices(results);
-
-        // If no search query, also set as current invoices
-        if (!searchQuery) {
-          setInvoices(results);
-        }
-
-        // Update cache
-        setCache(prev => ({
-          ...prev,
-          [cacheKey]: results
-        }));
+        setInvoices(results);
       }
     } catch (err) {
       // Don't show error for recent invoices fetch
@@ -164,7 +149,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
     } finally {
       setLoading(false);
     }
-  }, [customerId, invoiceType, filters, cache, searchQuery]);
+  }, [customerId]);
 
   // Search invoices
   const searchInvoices = useCallback(async (query) => {
@@ -241,9 +226,10 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
   // Effect to fetch recent invoices when customer changes
   useEffect(() => {
     if (customerId) {
+      hasFetchedRecent.current = false; // Reset on customer change
       fetchRecentInvoices();
     }
-  }, [customerId, fetchRecentInvoices]);
+  }, [customerId]); // Only depend on customerId, not the function
 
   // Show recent invoices when focused with no search query
   useEffect(() => {

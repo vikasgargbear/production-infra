@@ -7,7 +7,7 @@ import {
   Card,
   Select,
   CustomerSearch,
-  InvoiceSelector,
+  InvoiceSearch,
   useToast,
   ModuleHeader,
   ProceedToReviewComponent,
@@ -376,29 +376,18 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setShowInvoiceModal(true)}
-                className={`w-full px-4 py-3 border-2 border-dashed border-${themeColor}-300 rounded-lg text-${themeColor}-600 hover:border-${themeColor}-400 hover:bg-${themeColor}-50 transition-colors flex items-center justify-center gap-2`}
-              >
-                <FileText className="w-5 h-5" />
-                Click to Select Invoice
-              </button>
+              <InvoiceSearch
+                onSelect={handleInvoiceSelect}
+                customerId={selectedCustomer?.customer_id || selectedCustomer?.id}
+                placeholder="Search invoice by number..."
+                autoFocus={false}
+              />
             )}
           </div>
         </div>
       )}
 
-      {/* Invoice Selector Modal */}
-      {showInvoiceModal && (
-        <InvoiceSelector
-          customerId={selectedCustomer?.id || selectedCustomer?.customer_id}
-          onSelect={(invoice) => {
-            handleInvoiceSelect(invoice);
-            setShowInvoiceModal(false);
-          }}
-          onClose={() => setShowInvoiceModal(false)}
-        />
-      )}
+      {/* Invoice search now inline above - no modal needed */}
 
       {/* Items Section */}
       {noteData.items.length > 0 && (
