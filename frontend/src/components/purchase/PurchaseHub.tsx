@@ -73,7 +73,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
     <ModuleHub
       open={open}
       onClose={onClose || (() => { })}
-      title="Purchase Hub"
+      title="Purchase"
       subtitle="Manage procurement & inventory"
       icon={ShoppingCart}
       modules={purchaseModules}

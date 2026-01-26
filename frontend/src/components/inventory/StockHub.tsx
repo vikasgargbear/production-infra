@@ -70,7 +70,7 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
     <ModuleHub
       open={open}
       onClose={onClose || (() => { })}
-      title="Stock Hub"
+      title="Stock"
       subtitle="Manage inventory & warehouse"
       icon={Archive}
       modules={stockModules as any}  // ModuleHub.tsx lacks proper TS types

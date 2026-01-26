@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  FileText, ShoppingCart, Truck, TrendingUp, List
+  FileText, ShoppingCart, Truck, IndianRupee, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { Module } from '../global/navigation/ModuleHub';
@@ -60,9 +60,9 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
     <ModuleHub
       open={open}
       onClose={onClose || (() => { })}
-      title="Sales Operations"
+      title="Sales"
       subtitle=""
-      icon={TrendingUp}
+      icon={IndianRupee}
       modules={salesModules}
       defaultModule="invoice"
     />
