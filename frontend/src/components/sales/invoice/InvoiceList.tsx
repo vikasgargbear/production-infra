@@ -429,16 +429,17 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           icon={FileText}
           iconColor="text-blue-600"
           onClose={onClose}
-          historyType="invoice"
           showSaveDraft={false}
           onSaveDraft={() => { }}
           additionalActions={[
             {
-              label: "Refresh",
+              label: "",
               onClick: handleRefresh,
-              variant: "default",
-              icon: RefreshCw,
-              disabled: loading
+              variant: "ghost",
+              icon: loading ? RefreshCw : RefreshCw,
+              disabled: loading,
+              title: "Refresh",
+              className: loading ? "animate-spin" : ""
             },
             {
               label: "Export All",

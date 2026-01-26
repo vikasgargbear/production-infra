@@ -187,7 +187,7 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
         },
         {
             key: 'due_date',
-            header: 'Due Date',
+            header: 'Due',
             render: (_: any, invoice: Invoice) => {
                 // Handle missing or invalid due_date
                 if (!invoice.due_date) {
@@ -211,7 +211,7 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
                     </div>
                 );
             },
-            width: '100px'
+            width: '90px'
         },
         {
             key: 'actions',
