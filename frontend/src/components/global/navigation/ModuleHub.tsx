@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, HelpCircle, ChevronRight, Activity, LucideIcon } from 'lucide-react';
+import { X, Settings, HelpCircle, ChevronRight, Activity, LucideIcon, Lock, Unlock } from 'lucide-react';
+import { useSidebar } from '../../../contexts/SidebarContext';
 
 // TypeScript interface for module configuration
 export interface Module {
@@ -41,6 +42,10 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     defaultModule || (layout === 'centered' ? '' : (modules[0]?.id || ''))
   );
 
+  // Sidebar collapse/expand state (must be called before any conditional returns)
+  const { settings: sidebarSettings, setIsHovering, toggleLockExpanded } = useSidebar();
+  const { isExpanded, lockExpanded } = sidebarSettings;
+
   // Color mapping for consistent styling and good contrast
   const colorStyles = {
     blue: {
@@ -65,7 +70,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       inactive: 'bg-blue-100 text-blue-600',
       hover: 'bg-blue-200',
       active: 'bg-blue-700', // Darker for better contrast
-      activeOverlay: 'from-teal-400/30'
+      activeOverlay: 'from-blue-400/30'
     },
     amber: {
       inactive: 'bg-amber-100 text-amber-600',
@@ -227,28 +232,44 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     );
   }
 
-  // Sidebar layout (default) - Enhanced with pharma-themed design
+  // Sidebar layout (default) - Enhanced with collapsible feature
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 flex">
-      {/* Enhanced Sidebar with Medical Theme - Professional Healthcare Aesthetics */}
-      <div className="w-80 h-full bg-gradient-to-b from-teal-50 via-cyan-50 to-emerald-50 p-3">
+      {/* Collapsible Sidebar */}
+      <div
+        className={`${isExpanded ? 'w-80' : 'w-20'} h-full bg-gradient-to-b from-blue-50 via-indigo-50 to-blue-50 p-3 transition-all duration-300 ease-in-out`}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
         <div className="h-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-100/50 flex flex-col">
-          {/* Header - Professional Medical Design */}
-          <div className="p-5 border-b border-blue-100/30 rounded-t-2xl bg-gradient-to-r from-teal-50/50 to-cyan-50/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
-                {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
+          {/* Header */}
+          <div className="p-4 border-b border-blue-100/30 rounded-t-2xl bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0">
+                  {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
+                </div>
+                {isExpanded && (
+                  <div>
+                    <h3 className="font-semibold text-blue-900">{title}</h3>
+                    <p className="text-xs text-blue-600">Healthcare Operations</p>
+                  </div>
+                )}
               </div>
-              <div>
-                <h3 className="font-semibold text-blue-900">{title}</h3>
-                <p className="text-xs text-blue-600">Healthcare Operations</p>
-              </div>
+              {/* Lock/Unlock Toggle */}
+              <button
+                onClick={toggleLockExpanded}
+                className={`p-2 rounded-lg transition-colors ${lockExpanded ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                title={lockExpanded ? 'Unlock sidebar (auto-collapse)' : 'Lock sidebar (always expanded)'}
+              >
+                {lockExpanded ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
-          {/* Module List - Medical Professional Design */}
-          <div className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-transparent to-teal-50/10">
-            <nav className="px-3">
+          {/* Module List */}
+          <div className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-transparent to-blue-50/10">
+            <nav className={isExpanded ? 'px-3' : 'px-2'}>
               {modules.map((module, index) => {
                 const Icon = module.icon;
                 const isActive = activeModule === module.id;
@@ -259,30 +280,33 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                     key={module.id}
                     onClick={() => setActiveModule(module.id)}
                     className={`
-                      w-full mb-1 px-3 py-2.5 rounded-xl flex items-center justify-between
+                      w-full mb-1 ${isExpanded ? 'px-3 py-2.5' : 'p-3 justify-center'} rounded-xl flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}
                       transition-all duration-200 group
                       ${isActive
-                        ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25'
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25'
                         : 'hover:bg-blue-50/50 text-slate-700 hover:text-blue-900 hover:shadow-sm'
                       }
                     `}
+                    title={!isExpanded ? (module.label || module.fullLabel) : undefined}
                   >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-blue-600 group-hover:text-cyan-600'}`} />
-                      <div className="text-left">
-                        <div className="text-sm font-medium">
-                          {module.label || module.fullLabel}
-                        </div>
-                        {module.description && (
-                          <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>
-                            {module.description}
+                    <div className={`flex items-center ${isExpanded ? 'gap-3' : ''}`}>
+                      <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-blue-600 group-hover:text-indigo-600'}`} />
+                      {isExpanded && (
+                        <div className="text-left">
+                          <div className="text-sm font-medium">
+                            {module.label || module.fullLabel}
                           </div>
-                        )}
-                      </div>
+                          {module.description && (
+                            <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>
+                              {module.description}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Status indicator or badge */}
-                    {module.badge && (
+                    {/* Status indicator or badge - only when expanded */}
+                    {isExpanded && module.badge && (
                       <span className={`
                         text-xs px-1.5 py-0.5 rounded
                         ${isActive
@@ -299,25 +323,27 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
             </nav>
           </div>
 
-          {/* Medical Tip Section */}
-          <div className="p-4 border-t border-blue-100/30">
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 mb-3 border border-blue-100/50">
-              <div className="flex items-center justify-between mb-2">
-                <Activity className="w-5 h-5 text-blue-600" />
-                <span className="text-xs text-blue-700 font-medium">Healthcare Tip</span>
+          {/* Healthcare Tip Section - only when expanded */}
+          {isExpanded && (
+            <div className="p-4 border-t border-blue-100/30">
+              <div className="bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl p-4 mb-3 border border-blue-100/50">
+                <div className="flex items-center justify-between mb-2">
+                  <Activity className="w-5 h-5 text-blue-600" />
+                  <span className="text-xs text-blue-700 font-medium">Healthcare Tip</span>
+                </div>
+                <p className="text-xs text-slate-600 mb-2">
+                  Press <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
+                </p>
+                <button className="text-xs text-blue-600 hover:text-indigo-700 font-medium flex items-center gap-1 transition-colors">
+                  View all shortcuts
+                  <ChevronRight className="w-3 h-3" />
+                </button>
               </div>
-              <p className="text-xs text-slate-600 mb-2">
-                Press <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
-              </p>
-              <button className="text-xs text-blue-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
-                View all shortcuts
-                <ChevronRight className="w-3 h-3" />
-              </button>
             </div>
-          </div>
+          )}
 
           {/* Footer - Medical Professional */}
-          <div className="p-4 border-t border-blue-100/30 rounded-b-2xl bg-gradient-to-r from-teal-50/30 to-cyan-50/30">
+          <div className="p-4 border-t border-blue-100/30 rounded-b-2xl bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
             <div className="flex items-center justify-between">
               <button className="p-2 hover:bg-blue-100/50 rounded-lg transition-all hover:shadow-sm">
                 <Settings className="w-4 h-4 text-blue-600" />
