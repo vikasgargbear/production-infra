@@ -62,9 +62,9 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       activeOverlay: 'from-green-400/30'
     },
     teal: {
-      inactive: 'bg-teal-100 text-teal-600',
-      hover: 'bg-teal-200',
-      active: 'bg-teal-700', // Darker for better contrast
+      inactive: 'bg-blue-100 text-blue-600',
+      hover: 'bg-blue-200',
+      active: 'bg-blue-700', // Darker for better contrast
       activeOverlay: 'from-teal-400/30'
     },
     amber: {
@@ -232,16 +232,16 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     <div className="fixed inset-0 bg-gray-100 z-50 flex">
       {/* Enhanced Sidebar with Medical Theme - Professional Healthcare Aesthetics */}
       <div className="w-80 h-full bg-gradient-to-b from-teal-50 via-cyan-50 to-emerald-50 p-3">
-        <div className="h-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-teal-100/50 flex flex-col">
+        <div className="h-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-100/50 flex flex-col">
           {/* Header - Professional Medical Design */}
-          <div className="p-5 border-b border-teal-100/30 rounded-t-2xl bg-gradient-to-r from-teal-50/50 to-cyan-50/50">
+          <div className="p-5 border-b border-blue-100/30 rounded-t-2xl bg-gradient-to-r from-teal-50/50 to-cyan-50/50">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
                 {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
               </div>
               <div>
-                <h3 className="font-semibold text-teal-900">{title}</h3>
-                <p className="text-xs text-teal-600">Healthcare Operations</p>
+                <h3 className="font-semibold text-blue-900">{title}</h3>
+                <p className="text-xs text-blue-600">Healthcare Operations</p>
               </div>
             </div>
           </div>
@@ -263,18 +263,18 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                       transition-all duration-200 group
                       ${isActive
                         ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25'
-                        : 'hover:bg-teal-50/50 text-slate-700 hover:text-teal-900 hover:shadow-sm'
+                        : 'hover:bg-blue-50/50 text-slate-700 hover:text-blue-900 hover:shadow-sm'
                       }
                     `}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-teal-600 group-hover:text-cyan-600'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-blue-600 group-hover:text-cyan-600'}`} />
                       <div className="text-left">
                         <div className="text-sm font-medium">
                           {module.label || module.fullLabel}
                         </div>
                         {module.description && (
-                          <div className={`text-xs ${isActive ? 'text-teal-100' : 'text-slate-500'}`}>
+                          <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>
                             {module.description}
                           </div>
                         )}
@@ -287,7 +287,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                         text-xs px-1.5 py-0.5 rounded
                         ${isActive
                           ? 'bg-white/20 text-white'
-                          : 'bg-teal-100/50 text-teal-700'
+                          : 'bg-blue-100/50 text-blue-700'
                         }
                       `}>
                         {module.badge}
@@ -300,16 +300,16 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           </div>
 
           {/* Medical Tip Section */}
-          <div className="p-4 border-t border-teal-100/30">
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 mb-3 border border-teal-100/50">
+          <div className="p-4 border-t border-blue-100/30">
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 mb-3 border border-blue-100/50">
               <div className="flex items-center justify-between mb-2">
-                <Activity className="w-5 h-5 text-teal-600" />
-                <span className="text-xs text-teal-700 font-medium">Healthcare Tip</span>
+                <Activity className="w-5 h-5 text-blue-600" />
+                <span className="text-xs text-blue-700 font-medium">Healthcare Tip</span>
               </div>
               <p className="text-xs text-slate-600 mb-2">
-                Press <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
+                Press <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
               </p>
-              <button className="text-xs text-teal-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
+              <button className="text-xs text-blue-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
                 View all shortcuts
                 <ChevronRight className="w-3 h-3" />
               </button>
@@ -317,13 +317,13 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           </div>
 
           {/* Footer - Medical Professional */}
-          <div className="p-4 border-t border-teal-100/30 rounded-b-2xl bg-gradient-to-r from-teal-50/30 to-cyan-50/30">
+          <div className="p-4 border-t border-blue-100/30 rounded-b-2xl bg-gradient-to-r from-teal-50/30 to-cyan-50/30">
             <div className="flex items-center justify-between">
-              <button className="p-2 hover:bg-teal-100/50 rounded-lg transition-all hover:shadow-sm">
-                <Settings className="w-4 h-4 text-teal-600" />
+              <button className="p-2 hover:bg-blue-100/50 rounded-lg transition-all hover:shadow-sm">
+                <Settings className="w-4 h-4 text-blue-600" />
               </button>
-              <button className="p-2 hover:bg-teal-100/50 rounded-lg transition-all hover:shadow-sm">
-                <HelpCircle className="w-4 h-4 text-teal-600" />
+              <button className="p-2 hover:bg-blue-100/50 rounded-lg transition-all hover:shadow-sm">
+                <HelpCircle className="w-4 h-4 text-blue-600" />
               </button>
             </div>
           </div>

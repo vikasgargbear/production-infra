@@ -583,7 +583,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           <Heart className="w-14 h-14 text-red-400 rotate-6" />
         </div>
         <div className="absolute bottom-20 right-16">
-          <Pill className="w-10 h-10 text-teal-500 -rotate-45" />
+          <Pill className="w-10 h-10 text-blue-500 -rotate-45" />
         </div>
       </div>
 
@@ -724,7 +724,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
               </div>
               <span className="ml-2 text-sm font-medium text-blue-800">System Healthy</span>
             </div>
-            <div className="flex items-center space-x-2 text-xs text-teal-600">
+            <div className="flex items-center space-x-2 text-xs text-blue-600">
               <Activity className="w-3 h-3" />
               <span>Live</span>
             </div>
@@ -732,7 +732,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           <div className="text-xs text-blue-600 mt-1 flex items-center justify-between">
             <span>Last health check: {new Date().toLocaleTimeString()}</span>
             <div className="flex items-center space-x-1">
-              <div className="w-1 h-1 bg-teal-500 rounded-full"></div>
+              <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
               <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
               <div className="w-1 h-1 bg-green-500 rounded-full"></div>
             </div>
