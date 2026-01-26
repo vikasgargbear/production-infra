@@ -10,10 +10,12 @@
  */
 
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
-import { FileText, RefreshCw, Download } from 'lucide-react';
+import { FileText, RefreshCw } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
 import { invoicesApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
+import { useCompany } from '../../../contexts/CompanyContext';
+import { toast } from 'react-toastify';
 
 // Import extracted components
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
@@ -287,14 +289,16 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-    // Open invoice in a new tab or modal
-    // For now, trigger the invoice preview event
-    window.dispatchEvent(new CustomEvent('openInvoicePreview', { detail: { invoiceId: invoice.id } }));
+    // Show invoice details in an alert for now
+    // TODO: Implement full invoice preview modal
+    toast.info(`Opening invoice ${invoice.invoice_number} - Full preview coming soon`);
+    console.log('Invoice details:', invoice);
   };
 
   const handlePrintInvoice = (invoice: Invoice) => {
-    // Open print dialog or generate PDF
-    window.dispatchEvent(new CustomEvent('printInvoice', { detail: { invoiceId: invoice.id } }));
+    // TODO: Implement print invoice flow
+    toast.info(`Print invoice ${invoice.invoice_number} - Feature coming soon`);
+    console.log('Print invoice:', invoice);
   };
 
   const handleCancelInvoice = (invoice: Invoice) => {

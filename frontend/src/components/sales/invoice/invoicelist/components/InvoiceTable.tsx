@@ -7,6 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { Eye, Printer, MoreVertical, MessageCircle, Mail, Edit2, XCircle } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
+import { useCompany } from '../../../../../contexts/CompanyContext';
 import type { InvoiceTableProps, Invoice } from '../types/invoicelist.types';
 
 // Dropdown menu for more actions
@@ -77,6 +78,10 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     onPrintInvoice,
     onCancelInvoice
 }) => {
+    // Get company name for message templates
+    const { companyInfo } = useCompany();
+    const companyName = companyInfo?.name || 'Our Company';
+
     // Format date helper
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString('en-IN', {
@@ -93,18 +98,17 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
 
         return `Dear ${invoice.customer_name},
 
-Your invoice from our platform is ready!
+Your invoice from ${companyName} is ready!
 
 Invoice #: ${invoice.invoice_number}
 Date: ${invoiceDate}
 Amount: ₹${invoice.total_amount.toLocaleString('en-IN')}
 Due Date: ${dueDate}
 
-${invoice.pending_amount > 0 ? `Pending: ₹${invoice.pending_amount.toLocaleString('en-IN')}\n` : ''}
-Thank you for your business!
+${invoice.pending_amount > 0 ? `Pending: ₹${invoice.pending_amount.toLocaleString('en-IN')}\n` : ''}Thank you for your business!
 
 ---
-Powered by [Your Company Name]`;
+${companyName}`;
     };
 
     // Handle WhatsApp share
