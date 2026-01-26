@@ -36,6 +36,7 @@ import {
   Cross,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Star,
   RotateCw,
   Globe,
@@ -44,14 +45,30 @@ import {
   Mail,
   BadgeCheck,
   Lock,
-  Thermometer
+  Unlock,
+  Thermometer,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
+import { useSidebar } from '../../../contexts/SidebarContext';
 
 /**
- * Enhanced Pharma-Friendly Sidebar Component
- * Medical-themed design with comprehensive pharmaceutical workflow support
+ * Enhanced Collapsible Sidebar Component
+ * Collapses to icons by default, expands on hover
+ * Can be locked open via toggle or master settings
  */
 const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
+  const { settings: sidebarSettings, setIsHovering, toggleLockExpanded } = useSidebar();
+  const { isExpanded, lockExpanded } = sidebarSettings;
+
+  // Debounce hover to prevent flicker
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+  };
   const [hoveredItem, setHoveredItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSections, setExpandedSections] = useState({
@@ -570,150 +587,198 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   );
 
   return (
-    <div className={`w-80 h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 border-r border-gray-200 flex flex-col ${className} relative overflow-hidden`}>
-      {/* Medical Background Pattern */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-10 left-10">
-          <Cross className="w-16 h-16 text-blue-600 rotate-12" />
+    <div
+      className={`${isExpanded ? 'w-80' : 'w-20'} h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 border-r border-gray-200 flex flex-col ${className} relative overflow-hidden transition-all duration-300 ease-in-out`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Background Pattern - Only show when expanded */}
+      {isExpanded && (
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-10 left-10">
+            <Cross className="w-16 h-16 text-blue-600 rotate-12" />
+          </div>
+          <div className="absolute top-32 right-8">
+            <Atom className="w-12 h-12 text-blue-600 -rotate-12" />
+          </div>
+          <div className="absolute bottom-32 left-6">
+            <Heart className="w-14 h-14 text-red-400 rotate-6" />
+          </div>
+          <div className="absolute bottom-20 right-16">
+            <Pill className="w-10 h-10 text-blue-500 -rotate-45" />
+          </div>
         </div>
-        <div className="absolute top-32 right-8">
-          <Atom className="w-12 h-12 text-blue-600 -rotate-12" />
-        </div>
-        <div className="absolute bottom-32 left-6">
-          <Heart className="w-14 h-14 text-red-400 rotate-6" />
-        </div>
-        <div className="absolute bottom-20 right-16">
-          <Pill className="w-10 h-10 text-blue-500 -rotate-45" />
-        </div>
-      </div>
+      )}
 
-      {/* Header with Medical Theme */}
-      <div className="relative z-10 p-6 border-b border-gray-200/50 bg-white/90 backdrop-blur-sm">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Cross className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <div className="font-bold text-gray-900 text-lg">AASO Pharma+</div>
-            <div className="text-sm text-gray-600 flex items-center">
-              <Heart className="w-3 h-3 mr-1 text-red-500" />
-              Healthcare Management
+      {/* Header */}
+      <div className="relative z-10 p-4 border-b border-gray-200/50 bg-white/90 backdrop-blur-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+              <Cross className="w-5 h-5 text-white" />
             </div>
+            {isExpanded && (
+              <div className="transition-opacity duration-200">
+                <div className="font-bold text-gray-900 text-base">AASO Pharma+</div>
+                <div className="text-xs text-gray-600 flex items-center">
+                  <Heart className="w-3 h-3 mr-1 text-red-500" />
+                  Healthcare
+                </div>
+              </div>
+            )}
           </div>
+          {/* Lock/Unlock Toggle */}
+          <button
+            onClick={toggleLockExpanded}
+            className={`p-2 rounded-lg transition-colors ${lockExpanded ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-500'}`}
+            title={lockExpanded ? 'Unlock sidebar (auto-collapse)' : 'Lock sidebar (always expanded)'}
+          >
+            {lockExpanded ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <Unlock className="w-4 h-4" />
+            )}
+          </button>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto relative z-10">
-        <div className="p-4 space-y-6">
-          {/* User Profile Section */}
-          <UserProfileSection />
+        {isExpanded ? (
+          /* Full expanded view */
+          <div className="p-4 space-y-6">
+            {/* User Profile Section */}
+            <UserProfileSection />
 
-          {/* Quick Stats Section */}
-          <QuickStatsSection />
+            {/* Quick Stats Section */}
+            <QuickStatsSection />
 
-          {/* Drug Search Section */}
-          <DrugSearchSection />
+            {/* Drug Search Section */}
+            <DrugSearchSection />
 
-          {/* Quick Actions Section */}
-          <QuickActionsSection />
+            {/* Quick Actions Section */}
+            <QuickActionsSection />
 
-          {/* Compliance Section */}
-          <ComplianceSection />
+            {/* Compliance Section */}
+            <ComplianceSection />
 
-          {/* Notifications Section */}
-          <NotificationsSection />
+            {/* Notifications Section */}
+            <NotificationsSection />
 
-          {/* Navigation Sections */}
-          {menuSections.map((section) => {
-            const SectionIcon = section.icon;
-            return (
-              <div key={section.id} className="space-y-3">
-                {/* Section Header with Medical Icons */}
-                <div className="flex items-center space-x-2 p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-gray-200">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                    <SectionIcon className="w-4 h-4 text-white" />
+            {/* Navigation Sections */}
+            {menuSections.map((section) => {
+              const SectionIcon = section.icon;
+              return (
+                <div key={section.id} className="space-y-3">
+                  {/* Section Header with Medical Icons */}
+                  <div className="flex items-center space-x-2 p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-gray-200">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                      <SectionIcon className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        {section.title}
+                      </h3>
+                      <p className="text-xs text-gray-500">{section.description}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      {section.title}
-                    </h3>
-                    <p className="text-xs text-gray-500">{section.description}</p>
-                  </div>
-                </div>
 
-                {/* Section Items with Enhanced Medical Styling */}
-                <div className="space-y-2 ml-4">
-                  {section.items.map((item) => {
-                    const IconComponent = item.icon;
-                    const isActive = activeTab === item.id;
-                    const isHovered = hoveredItem === item.id;
+                  {/* Section Items with Enhanced Medical Styling */}
+                  <div className="space-y-2 ml-4">
+                    {section.items.map((item) => {
+                      const IconComponent = item.icon;
+                      const isActive = activeTab === item.id;
+                      const isHovered = hoveredItem === item.id;
 
-                    return (
-                      <button
-                        key={item.id}
-                        className={`w-full flex items-center p-3 rounded-xl border transition-all duration-200 group ${getItemBackgroundColor(item.id, isHovered)}`}
-                        onClick={() => onTabChange(item.id)}
-                        onMouseEnter={() => setHoveredItem(item.id)}
-                        onMouseLeave={() => setHoveredItem(null)}
-                      >
-                        {/* Icon with Medical Theme */}
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${isActive
-                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
-                          : isHovered
-                            ? 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
-                            : 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600'
-                          }`}>
-                          <IconComponent className="w-5 h-5" />
-                        </div>
+                      return (
+                        <button
+                          key={item.id}
+                          className={`w-full flex items-center p-3 rounded-xl border transition-all duration-200 group ${getItemBackgroundColor(item.id, isHovered)}`}
+                          onClick={() => onTabChange(item.id)}
+                          onMouseEnter={() => setHoveredItem(item.id)}
+                          onMouseLeave={() => setHoveredItem(null)}
+                        >
+                          {/* Icon with Medical Theme */}
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${isActive
+                            ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                            : isHovered
+                              ? 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
+                              : 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600'
+                            }`}>
+                            <IconComponent className="w-5 h-5" />
+                          </div>
 
-                        {/* Content */}
-                        <div className="ml-3 flex-1 text-left">
-                          <div className="flex items-center justify-between">
-                            <span className={`font-medium text-sm ${isActive ? 'text-blue-900' : 'text-gray-900'
-                              }`}>
-                              {item.label}
-                            </span>
-
-                            {/* Count/Badge with Medical Colors */}
-                            {item.count && (
-                              <span className={`text-xs px-2 py-1 rounded-full border font-medium transition-all duration-200 ${item.status ? getStatusColor(item.status) : 'bg-blue-100 text-blue-700 border-blue-200'
+                          {/* Content */}
+                          <div className="ml-3 flex-1 text-left">
+                            <div className="flex items-center justify-between">
+                              <span className={`font-medium text-sm ${isActive ? 'text-blue-900' : 'text-gray-900'
                                 }`}>
-                                {item.count}
+                                {item.label}
                               </span>
-                            )}
+
+                              {/* Count/Badge with Medical Colors */}
+                              {item.count && (
+                                <span className={`text-xs px-2 py-1 rounded-full border font-medium transition-all duration-200 ${item.status ? getStatusColor(item.status) : 'bg-blue-100 text-blue-700 border-blue-200'
+                                  }`}>
+                                  {item.count}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {item.description}
+                            </p>
                           </div>
 
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {item.description}
-                          </p>
-                        </div>
+                          {/* Pulse indicator for important items */}
+                          {item.highlight && (
+                            <div className="flex items-center ml-2">
+                              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                              <div className="w-3 h-3 bg-blue-400/30 rounded-full animate-ping absolute"></div>
+                            </div>
+                          )}
 
-                        {/* Pulse indicator for important items */}
-                        {item.highlight && (
-                          <div className="flex items-center ml-2">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                            <div className="w-3 h-3 bg-blue-400/30 rounded-full animate-ping absolute"></div>
-                          </div>
-                        )}
-
-                        {/* Medical urgency indicators */}
-                        {item.status === 'alert' && (
-                          <div className="ml-2">
-                            <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                          {/* Medical urgency indicators */}
+                          {item.status === 'alert' && (
+                            <div className="ml-2">
+                              <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Collapsed icon-only view */
+          <div className="p-2 space-y-2">
+            {menuSections.flatMap(section =>
+              section.items.slice(0, 2).map((item) => {
+                const IconComponent = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id)}
+                    className={`w-full flex items-center justify-center p-3 rounded-lg transition-all duration-200 ${isActive
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                        : 'hover:bg-gray-100 text-gray-600'
+                      }`}
+                    title={item.label}
+                  >
+                    <IconComponent className="w-5 h-5" />
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Enhanced Footer with Medical Status */}
+      {/* Enhanced Footer */}
       <div className="relative z-10 p-4 border-t border-gray-200/50 bg-white/80 backdrop-blur-sm">
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3">
           <div className="flex items-center justify-between">

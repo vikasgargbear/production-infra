@@ -24,6 +24,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
+import { SidebarProvider } from './contexts/SidebarContext';
 // OLD InitialSetup moved to _OLD - not used with new AuthContext
 // import InitialSetup from './components/InitialSetup';
 import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
@@ -295,25 +296,27 @@ const AppContent = (): JSX.Element => {
     <InitialSyncLoader>
       <QueryClientProvider client={queryClient as any}>
         <CompanyProvider>
-          <EscapeKeyProvider>
-            <ToastProvider>
-              <ErrorBoundary>
-                <div className="min-h-screen bg-gray-50">
-                  {/* Offline banner at top */}
-                  <OfflineBanner />
+          <SidebarProvider>
+            <EscapeKeyProvider>
+              <ToastProvider>
+                <ErrorBoundary>
+                  <div className="min-h-screen bg-gray-50">
+                    {/* Offline banner at top */}
+                    <OfflineBanner />
 
-                  <Suspense fallback={<LoadingSpinner />}>
-                    {renderActiveComponent()}
-                  </Suspense>
-                  <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
-                    <SyncStatusIndicator />
-                    <OfflineIndicator />
+                    <Suspense fallback={<LoadingSpinner />}>
+                      {renderActiveComponent()}
+                    </Suspense>
+                    <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
+                      <SyncStatusIndicator />
+                      <OfflineIndicator />
+                    </div>
+                    <ToastContainer position="top-right" />
                   </div>
-                  <ToastContainer position="top-right" />
-                </div>
-              </ErrorBoundary>
-            </ToastProvider>
-          </EscapeKeyProvider>
+                </ErrorBoundary>
+              </ToastProvider>
+            </EscapeKeyProvider>
+          </SidebarProvider>
         </CompanyProvider>
       </QueryClientProvider>
     </InitialSyncLoader>
