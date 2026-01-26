@@ -77,25 +77,55 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     onPrintInvoice,
     onCancelInvoice
 }) => {
+    // Format date helper
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
+
+    // Create formatted message for both channels
+    const createInvoiceMessage = (invoice: Invoice) => {
+        const invoiceDate = formatDate(invoice.invoice_date);
+        const dueDate = invoice.due_date ? formatDate(invoice.due_date) : 'Not specified';
+
+        return `Dear ${invoice.customer_name},
+
+Your invoice from our platform is ready!
+
+Invoice #: ${invoice.invoice_number}
+Date: ${invoiceDate}
+Amount: ₹${invoice.total_amount.toLocaleString('en-IN')}
+Due Date: ${dueDate}
+
+${invoice.pending_amount > 0 ? `Pending: ₹${invoice.pending_amount.toLocaleString('en-IN')}\n` : ''}
+Thank you for your business!
+
+---
+Powered by [Your Company Name]`;
+    };
+
     // Handle WhatsApp share
     const handleWhatsApp = (invoice: Invoice) => {
-        const message = `Invoice ${invoice.invoice_number}\nAmount: ₹${invoice.total_amount.toLocaleString('en-IN')}\nDue: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-IN') : 'N/A'}`;
+        const message = createInvoiceMessage(invoice);
         const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     };
 
     // Handle Email share
     const handleEmail = (invoice: Invoice) => {
-        const subject = `Invoice ${invoice.invoice_number}`;
-        const body = `Dear Customer,\n\nPlease find the details for Invoice ${invoice.invoice_number}:\n\nAmount: ₹${invoice.total_amount.toLocaleString('en-IN')}\nDue Date: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-IN') : 'N/A'}\n\nThank you for your business.`;
+        const subject = `Invoice ${invoice.invoice_number} - ₹${invoice.total_amount.toLocaleString('en-IN')}`;
+        const body = createInvoiceMessage(invoice);
         const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = mailto;
     };
 
     // Handle Edit
     const handleEdit = (invoice: Invoice) => {
-        // TODO: Implement edit flow
-        alert(`Edit invoice: ${invoice.invoice_number}`);
+        // Trigger edit invoice event
+        window.dispatchEvent(new CustomEvent('editInvoice', { detail: { invoiceId: invoice.id } }));
     };
 
     const columns = useMemo(() => [

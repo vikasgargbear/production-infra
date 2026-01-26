@@ -287,13 +287,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-    console.log('View invoice:', invoice);
-    // TODO: Implement invoice view modal
+    // Open invoice in a new tab or modal
+    // For now, trigger the invoice preview event
+    window.dispatchEvent(new CustomEvent('openInvoicePreview', { detail: { invoiceId: invoice.id } }));
   };
 
   const handlePrintInvoice = (invoice: Invoice) => {
-    console.log('Print invoice:', invoice);
-    // TODO: Implement print functionality
+    // Open print dialog or generate PDF
+    window.dispatchEvent(new CustomEvent('printInvoice', { detail: { invoiceId: invoice.id } }));
   };
 
   const handleCancelInvoice = (invoice: Invoice) => {
@@ -445,7 +446,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               label: "Export All",
               onClick: handleExportAll,
               variant: "default",
-              icon: Download
+              className: "bg-gray-900 hover:bg-gray-800 text-white"
             }
           ] as any}
         />
