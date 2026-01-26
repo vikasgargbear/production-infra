@@ -165,9 +165,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     </div>
                 )}
 
-                {/* Content - FULL WIDTH for desktop software experience */}
+                {/* Content - Consistent max-width like Purchase */}
                 <div className="flex-1 overflow-y-auto bg-blue-50">
-                    <div className="w-full px-8 py-6">
+                    <div className="max-w-6xl mx-auto px-6 py-6">
 
 
 

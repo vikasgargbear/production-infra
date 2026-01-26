@@ -62,7 +62,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto bg-blue-50">
-                    <div className="w-full max-w-5xl mx-auto px-8 py-6">
+                    <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* 1. Delivery - Address first, then options */}
                         <div className="mb-6">
