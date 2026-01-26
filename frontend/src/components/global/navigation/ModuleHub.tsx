@@ -232,132 +232,99 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     );
   }
 
-  // Sidebar layout (default) - Enhanced with collapsible feature
+  // Sidebar layout - Clean minimal design
   return (
-    <div className="fixed inset-0 bg-gray-100 z-50 flex">
-      {/* Collapsible Sidebar */}
+    <div className="fixed inset-0 bg-gray-50 z-50 flex">
+      {/* Clean Minimal Collapsible Sidebar */}
       <div
-        className={`${isExpanded ? 'w-80' : 'w-20'} h-full bg-gradient-to-b from-blue-50 via-indigo-50 to-blue-50 p-3 transition-all duration-300 ease-in-out`}
+        className={`${isExpanded ? 'w-52' : 'w-16'} h-full bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out`}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        <div className="h-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-100/50 flex flex-col">
-          {/* Header */}
-          <div className="p-4 border-b border-blue-100/30 rounded-t-2xl bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0">
-                  {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
+        {/* Header - Logo */}
+        <div className={`h-14 border-b border-gray-100 flex items-center ${isExpanded ? 'px-4 justify-between' : 'justify-center'}`}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+              {HubIcon ? <HubIcon className="w-6 h-6 text-gray-900" /> : (
+                <div className="flex items-center gap-0.5">
+                  <div className="w-1.5 h-5 bg-gray-900 rounded-full"></div>
+                  <div className="w-1.5 h-5 bg-gray-900 rounded-full"></div>
+                  <div className="w-1.5 h-5 bg-gray-900 rounded-full"></div>
                 </div>
-                {isExpanded && (
-                  <div>
-                    <h3 className="font-semibold text-blue-900">{title}</h3>
-                    <p className="text-xs text-blue-600">Healthcare Operations</p>
-                  </div>
-                )}
-              </div>
-              {/* Lock/Unlock Toggle */}
-              <button
-                onClick={toggleLockExpanded}
-                className={`p-2 rounded-lg transition-colors ${lockExpanded ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-500'}`}
-                title={lockExpanded ? 'Unlock sidebar (auto-collapse)' : 'Lock sidebar (always expanded)'}
-              >
-                {lockExpanded ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-              </button>
+              )}
             </div>
+            {isExpanded && <span className="font-semibold text-gray-900 text-sm">{title}</span>}
           </div>
-
-          {/* Module List */}
-          <div className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-transparent to-blue-50/10">
-            <nav className={isExpanded ? 'px-3' : 'px-2'}>
-              {modules.map((module, index) => {
-                const Icon = module.icon;
-                const isActive = activeModule === module.id;
-                const colors = colorStyles[module.color] || colorStyles.gray;
-
-                return (
-                  <button
-                    key={module.id}
-                    onClick={() => setActiveModule(module.id)}
-                    className={`
-                      w-full mb-1 ${isExpanded ? 'px-3 py-2.5' : 'p-3 justify-center'} rounded-xl flex items-center ${isExpanded ? 'justify-between' : 'justify-center'}
-                      transition-all duration-200 group
-                      ${isActive
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25'
-                        : 'hover:bg-blue-50/50 text-slate-700 hover:text-blue-900 hover:shadow-sm'
-                      }
-                    `}
-                    title={!isExpanded ? (module.label || module.fullLabel) : undefined}
-                  >
-                    <div className={`flex items-center ${isExpanded ? 'gap-3' : ''}`}>
-                      <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-blue-600 group-hover:text-indigo-600'}`} />
-                      {isExpanded && (
-                        <div className="text-left">
-                          <div className="text-sm font-medium">
-                            {module.label || module.fullLabel}
-                          </div>
-                          {module.description && (
-                            <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>
-                              {module.description}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Status indicator or badge - only when expanded */}
-                    {isExpanded && module.badge && (
-                      <span className={`
-                        text-xs px-1.5 py-0.5 rounded
-                        ${isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-blue-100/50 text-blue-700'
-                        }
-                      `}>
-                        {module.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          {/* Healthcare Tip Section - only when expanded */}
           {isExpanded && (
-            <div className="p-4 border-t border-blue-100/30">
-              <div className="bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl p-4 mb-3 border border-blue-100/50">
-                <div className="flex items-center justify-between mb-2">
-                  <Activity className="w-5 h-5 text-blue-600" />
-                  <span className="text-xs text-blue-700 font-medium">Healthcare Tip</span>
-                </div>
-                <p className="text-xs text-slate-600 mb-2">
-                  Press <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
-                </p>
-                <button className="text-xs text-blue-600 hover:text-indigo-700 font-medium flex items-center gap-1 transition-colors">
-                  View all shortcuts
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
+            <button
+              onClick={toggleLockExpanded}
+              className={`p-1.5 rounded transition-colors ${lockExpanded ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              title={lockExpanded ? 'Unlock sidebar' : 'Lock sidebar open'}
+            >
+              {lockExpanded ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+            </button>
           )}
+        </div>
 
-          {/* Footer - Medical Professional */}
-          <div className="p-4 border-t border-blue-100/30 rounded-b-2xl bg-gradient-to-r from-blue-50/30 to-indigo-50/30">
-            <div className="flex items-center justify-between">
-              <button className="p-2 hover:bg-blue-100/50 rounded-lg transition-all hover:shadow-sm">
-                <Settings className="w-4 h-4 text-blue-600" />
-              </button>
-              <button className="p-2 hover:bg-blue-100/50 rounded-lg transition-all hover:shadow-sm">
-                <HelpCircle className="w-4 h-4 text-blue-600" />
-              </button>
-            </div>
+        {/* Platform Label - Only when expanded */}
+        {isExpanded && (
+          <div className="px-4 pt-4 pb-2">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Platform</span>
           </div>
+        )}
+
+        {/* Module Navigation */}
+        <nav className={`flex-1 overflow-y-auto ${isExpanded ? 'px-2' : 'px-2'} ${isExpanded ? '' : 'pt-4'}`}>
+          {modules.map((module) => {
+            const Icon = module.icon;
+            const isActive = activeModule === module.id;
+
+            return (
+              <button
+                key={module.id}
+                onClick={() => setActiveModule(module.id)}
+                className={`
+                  w-full mb-1 rounded-lg flex items-center transition-all duration-150
+                  ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}
+                  ${isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }
+                `}
+                title={!isExpanded ? (module.label || module.fullLabel) : undefined}
+              >
+                <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : ''}`} />
+                {isExpanded && (
+                  <span className={`text-sm font-medium truncate ${isActive ? 'text-blue-700' : ''}`}>
+                    {module.label || module.fullLabel}
+                  </span>
+                )}
+                {isExpanded && module.badge && (
+                  <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                    {module.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className={`border-t border-gray-100 ${isExpanded ? 'px-2 py-3' : 'py-3'}`}>
+          <button className={`w-full rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2 gap-3' : 'p-3 justify-center'}`}>
+            <Settings className="w-5 h-5" />
+            {isExpanded && <span className="text-sm">Settings</span>}
+          </button>
+          <button className={`w-full rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2 gap-3' : 'p-3 justify-center'}`}>
+            <HelpCircle className="w-5 h-5" />
+            {isExpanded && <span className="text-sm">Help</span>}
+          </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 h-full bg-white shadow-xl">
+      <div className="flex-1 h-full bg-white">
         <div className="h-full overflow-hidden">
           {renderModule()}
         </div>
