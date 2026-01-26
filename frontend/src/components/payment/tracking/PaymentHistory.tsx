@@ -116,7 +116,7 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
       key: 'payment_id',
       header: 'Payment #',
       render: (_: any, payment: Payment) => (
-        <div className="font-medium text-gray-900">{payment.payment_id}</div>
+        <div className="text-sm text-gray-600">{payment.payment_id}</div>
       ),
       width: '140px'
     },

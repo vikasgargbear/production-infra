@@ -214,7 +214,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       key: 'po_number',
       header: 'Purchase #',
       render: (_: any, purchase: PurchaseOrder) => (
-        <div className="font-medium text-gray-900">{purchase.po_number}</div>
+        <div className="text-sm text-gray-600">{purchase.po_number}</div>
       ),
       width: '140px'
     },

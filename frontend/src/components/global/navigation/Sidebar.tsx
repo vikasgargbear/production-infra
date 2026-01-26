@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Home,
   Plus,
   ShoppingCart,
@@ -312,27 +312,27 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
     }
   ];
 
-  // Helper functions for styling
+  // Helper functions for styling - UPDATED TO BLUE THEME
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'bg-teal-100 text-teal-800 border-teal-200';
+      case 'active': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'warning': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'alert': return 'bg-red-100 text-red-800 border-red-200';
-      case 'new': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'new': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       default: return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
 
   const getItemBackgroundColor = (itemId, isHovered) => {
     const isActive = activeTab === itemId;
-    if (isActive) return 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-200 shadow-lg';
+    if (isActive) return 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm';
     if (isHovered) return 'bg-gradient-to-r from-gray-50 to-blue-50 border-gray-200';
-    return 'bg-white/80 backdrop-blur-sm border-gray-100';
+    return 'bg-white border-gray-100';
   };
 
   const getStatCardColor = (color) => {
     const colors = {
-      teal: 'from-teal-500 to-cyan-500',
+      teal: 'from-blue-500 to-blue-600',
       red: 'from-red-500 to-pink-500',
       blue: 'from-blue-500 to-indigo-500',
       amber: 'from-amber-500 to-orange-500',
@@ -351,20 +351,20 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   // Quick Stats Component
   const QuickStatsSection = () => (
     <div className="mb-6">
-      <button 
+      <button
         onClick={() => toggleSection('quickStats')}
         className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
       >
         <div className="flex items-center space-x-2">
-          <Activity className="w-4 h-4 text-teal-600" />
+          <Activity className="w-4 h-4 text-blue-600" />
           <span className="text-sm font-semibold text-gray-900">Today's Overview</span>
         </div>
-        {expandedSections.quickStats ? 
-          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+        {expandedSections.quickStats ?
+          <ChevronDown className="w-4 h-4 text-gray-500" /> :
           <ChevronRight className="w-4 h-4 text-gray-500" />
         }
       </button>
-      
+
       {expandedSections.quickStats && (
         <div className="grid grid-cols-2 gap-3 mt-3">
           {Object.entries(quickStats).map(([key, stat]) => (
@@ -386,7 +386,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   // Quick Actions Component
   const QuickActionsSection = () => (
     <div className="mb-6">
-      <button 
+      <button
         onClick={() => toggleSection('quickActions')}
         className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
       >
@@ -394,12 +394,12 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           <Zap className="w-4 h-4 text-blue-600" />
           <span className="text-sm font-semibold text-gray-900">Quick Actions</span>
         </div>
-        {expandedSections.quickActions ? 
-          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+        {expandedSections.quickActions ?
+          <ChevronDown className="w-4 h-4 text-gray-500" /> :
           <ChevronRight className="w-4 h-4 text-gray-500" />
         }
       </button>
-      
+
       {expandedSections.quickActions && (
         <div className="space-y-2 mt-3">
           {[
@@ -437,10 +437,10 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           placeholder="Search drugs..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+          className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
         />
       </div>
-      
+
       {searchQuery === '' && (
         <div className="mt-3">
           <div className="text-xs font-medium text-gray-500 mb-2">Recent Searches</div>
@@ -449,7 +449,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
               <button
                 key={drug}
                 onClick={() => setSearchQuery(drug)}
-                className="text-xs px-2 py-1 bg-teal-50 text-teal-700 rounded-full hover:bg-teal-100 transition-colors"
+                className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors"
               >
                 {drug}
               </button>
@@ -463,7 +463,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   // Compliance Status Component
   const ComplianceSection = () => (
     <div className="mb-6">
-      <button 
+      <button
         onClick={() => toggleSection('compliance')}
         className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
       >
@@ -471,27 +471,25 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           <BadgeCheck className="w-4 h-4 text-green-600" />
           <span className="text-sm font-semibold text-gray-900">Compliance Status</span>
         </div>
-        {expandedSections.compliance ? 
-          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+        {expandedSections.compliance ?
+          <ChevronDown className="w-4 h-4 text-gray-500" /> :
           <ChevronRight className="w-4 h-4 text-gray-500" />
         }
       </button>
-      
+
       {expandedSections.compliance && (
         <div className="space-y-2 mt-3">
           {Object.entries(complianceStatus).map(([key, status]) => (
             <div key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  status.color === 'green' ? 'bg-green-500' : 
+                <div className={`w-2 h-2 rounded-full ${status.color === 'green' ? 'bg-green-500' :
                   status.color === 'amber' ? 'bg-amber-500' : 'bg-red-500'
-                }`}></div>
+                  }`}></div>
                 <span className="text-xs font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                status.color === 'green' ? 'bg-green-100 text-green-800' : 
+              <span className={`text-xs px-2 py-1 rounded-full ${status.color === 'green' ? 'bg-green-100 text-green-800' :
                 status.color === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-              }`}>
+                }`}>
                 {status.status}
               </span>
             </div>
@@ -504,7 +502,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   // Notifications Component
   const NotificationsSection = () => (
     <div className="mb-6">
-      <button 
+      <button
         onClick={() => toggleSection('notifications')}
         className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
       >
@@ -515,18 +513,17 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
             <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
           )}
         </div>
-        {expandedSections.notifications ? 
-          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+        {expandedSections.notifications ?
+          <ChevronDown className="w-4 h-4 text-gray-500" /> :
           <ChevronRight className="w-4 h-4 text-gray-500" />
         }
       </button>
-      
+
       {expandedSections.notifications && (
         <div className="space-y-2 mt-3 max-h-40 overflow-y-auto">
           {notifications.map((notification) => (
-            <div key={notification.id} className={`p-2 rounded-lg border-l-4 ${
-              notification.urgent ? 'border-red-500 bg-red-50' : 'border-blue-500 bg-blue-50'
-            }`}>
+            <div key={notification.id} className={`p-2 rounded-lg border-l-4 ${notification.urgent ? 'border-red-500 bg-red-50' : 'border-blue-500 bg-blue-50'
+              }`}>
               <div className="text-xs font-medium text-gray-700">{notification.message}</div>
               {notification.urgent && (
                 <div className="flex items-center mt-1">
@@ -544,7 +541,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   // User Profile Section
   const UserProfileSection = () => (
     <div className="mb-6">
-      <div className="bg-gradient-to-br from-teal-500 to-blue-600 p-4 rounded-xl text-white relative overflow-hidden">
+      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-xl text-white relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
@@ -573,11 +570,11 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   );
 
   return (
-    <div className={`w-80 h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-teal-50 border-r border-gray-200 flex flex-col ${className} relative overflow-hidden`}>
+    <div className={`w-80 h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 border-r border-gray-200 flex flex-col ${className} relative overflow-hidden`}>
       {/* Medical Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute top-10 left-10">
-          <Cross className="w-16 h-16 text-teal-600 rotate-12" />
+          <Cross className="w-16 h-16 text-blue-600 rotate-12" />
         </div>
         <div className="absolute top-32 right-8">
           <Atom className="w-12 h-12 text-blue-600 -rotate-12" />
@@ -591,9 +588,9 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
       </div>
 
       {/* Header with Medical Theme */}
-      <div className="relative z-10 p-6 border-b border-gray-200/50 bg-white/80 backdrop-blur-sm">
+      <div className="relative z-10 p-6 border-b border-gray-200/50 bg-white/90 backdrop-blur-sm">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
             <Cross className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -611,19 +608,19 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
         <div className="p-4 space-y-6">
           {/* User Profile Section */}
           <UserProfileSection />
-          
+
           {/* Quick Stats Section */}
           <QuickStatsSection />
-          
+
           {/* Drug Search Section */}
           <DrugSearchSection />
-          
+
           {/* Quick Actions Section */}
           <QuickActionsSection />
-          
+
           {/* Compliance Section */}
           <ComplianceSection />
-          
+
           {/* Notifications Section */}
           <NotificationsSection />
 
@@ -633,8 +630,8 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
             return (
               <div key={section.id} className="space-y-3">
                 {/* Section Header with Medical Icons */}
-                <div className="flex items-center space-x-2 p-3 bg-white/60 backdrop-blur-sm rounded-lg border border-gray-200/50">
-                  <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
+                <div className="flex items-center space-x-2 p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-gray-200">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
                     <SectionIcon className="w-4 h-4 text-white" />
                   </div>
                   <div>
@@ -651,45 +648,42 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
                     const IconComponent = item.icon;
                     const isActive = activeTab === item.id;
                     const isHovered = hoveredItem === item.id;
-                    
+
                     return (
                       <button
                         key={item.id}
-                        className={`w-full flex items-center p-3 rounded-xl border transition-all duration-300 group transform hover:scale-105 ${getItemBackgroundColor(item.id, isHovered)}`}
+                        className={`w-full flex items-center p-3 rounded-xl border transition-all duration-200 group ${getItemBackgroundColor(item.id, isHovered)}`}
                         onClick={() => onTabChange(item.id)}
                         onMouseEnter={() => setHoveredItem(item.id)}
                         onMouseLeave={() => setHoveredItem(null)}
                       >
                         {/* Icon with Medical Theme */}
-                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                          isActive 
-                            ? 'bg-gradient-to-br from-teal-500 to-blue-600 text-white shadow-lg' 
-                            : isHovered 
-                              ? 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
-                              : 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600'
-                        }`}>
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${isActive
+                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                          : isHovered
+                            ? 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
+                            : 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600'
+                          }`}>
                           <IconComponent className="w-5 h-5" />
                         </div>
 
                         {/* Content */}
                         <div className="ml-3 flex-1 text-left">
                           <div className="flex items-center justify-between">
-                            <span className={`font-medium text-sm ${
-                              isActive ? 'text-teal-900' : 'text-gray-900'
-                            }`}>
+                            <span className={`font-medium text-sm ${isActive ? 'text-blue-900' : 'text-gray-900'
+                              }`}>
                               {item.label}
                             </span>
-                            
+
                             {/* Count/Badge with Medical Colors */}
                             {item.count && (
-                              <span className={`text-xs px-2 py-1 rounded-full border font-medium transition-all duration-200 ${
-                                item.status ? getStatusColor(item.status) : 'bg-teal-100 text-teal-700 border-teal-200'
-                              }`}>
+                              <span className={`text-xs px-2 py-1 rounded-full border font-medium transition-all duration-200 ${item.status ? getStatusColor(item.status) : 'bg-blue-100 text-blue-700 border-blue-200'
+                                }`}>
                                 {item.count}
                               </span>
                             )}
                           </div>
-                          
+
                           <p className="text-xs text-gray-500 mt-0.5">
                             {item.description}
                           </p>
@@ -698,8 +692,8 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
                         {/* Pulse indicator for important items */}
                         {item.highlight && (
                           <div className="flex items-center ml-2">
-                            <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse"></div>
-                            <div className="w-3 h-3 bg-teal-400/30 rounded-full animate-ping absolute"></div>
+                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                            <div className="w-3 h-3 bg-blue-400/30 rounded-full animate-ping absolute"></div>
                           </div>
                         )}
 
@@ -721,21 +715,21 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
 
       {/* Enhanced Footer with Medical Status */}
       <div className="relative z-10 p-4 border-t border-gray-200/50 bg-white/80 backdrop-blur-sm">
-        <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 rounded-xl p-3">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <div className="relative">
-                <Heart className="w-4 h-4 text-teal-600" />
-                <div className="absolute -inset-1 w-6 h-6 bg-teal-400/20 rounded-full animate-ping"></div>
+                <Heart className="w-4 h-4 text-blue-600" />
+                <div className="absolute -inset-1 w-6 h-6 bg-blue-400/20 rounded-full animate-ping"></div>
               </div>
-              <span className="ml-2 text-sm font-medium text-teal-800">System Healthy</span>
+              <span className="ml-2 text-sm font-medium text-blue-800">System Healthy</span>
             </div>
             <div className="flex items-center space-x-2 text-xs text-teal-600">
               <Activity className="w-3 h-3" />
               <span>Live</span>
             </div>
           </div>
-          <div className="text-xs text-teal-600 mt-1 flex items-center justify-between">
+          <div className="text-xs text-blue-600 mt-1 flex items-center justify-between">
             <span>Last health check: {new Date().toLocaleTimeString()}</span>
             <div className="flex items-center space-x-1">
               <div className="w-1 h-1 bg-teal-500 rounded-full"></div>

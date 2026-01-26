@@ -171,7 +171,7 @@ ${companyName}`;
             key: 'invoice_number',
             header: 'Invoice #',
             render: (_: any, invoice: Invoice) => (
-                <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
+                <div className="text-sm text-gray-600">{invoice.invoice_number}</div>
             ),
             width: '140px'
         },
