@@ -174,7 +174,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
   const isAllSelected = filteredPurchases.length > 0 && filteredPurchases.every(p => selectedIds.has(p.id));
   const selectedCount = Array.from(selectedIds).filter(id => filteredPurchases.some(f => f.id === id)).length;
 
-  // Table columns
+  // Table columns - MATCHING Invoice History structure exactly
   const columns = [
     {
       key: 'select',
@@ -197,17 +197,26 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       width: '50px'
     },
     {
-      key: 'po_number',
-      header: 'Invoice #',
+      key: 'po_date',
+      header: 'Date',
       render: (_: any, purchase: PurchaseOrder) => (
-        <div>
-          <div className="font-medium text-gray-900">{purchase.po_number}</div>
-          <div className="text-xs text-gray-500">
-            {purchase.po_date ? new Date(purchase.po_date).toLocaleDateString('en-IN') : '-'}
-          </div>
+        <div className="text-gray-700">
+          {purchase.po_date ? new Date(purchase.po_date).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }) : '-'}
         </div>
       ),
-      width: '150px'
+      width: '110px'
+    },
+    {
+      key: 'po_number',
+      header: 'Purchase #',
+      render: (_: any, purchase: PurchaseOrder) => (
+        <div className="font-medium text-gray-900">{purchase.po_number}</div>
+      ),
+      width: '140px'
     },
     {
       key: 'supplier_name',
@@ -217,29 +226,12 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           <div className="font-medium text-gray-900">{purchase.supplier_name}</div>
           <div className="text-xs text-gray-500">{purchase.items_count} items</div>
         </div>
-      )
-    },
-    {
-      key: 'total_amount',
-      header: 'Amount',
-      align: 'right' as const,
-      render: (_: any, purchase: PurchaseOrder) => (
-        <div className="text-right">
-          <div className="font-semibold text-gray-900">
-            ₹{purchase.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </div>
-          {purchase.pending_amount > 0 && (
-            <div className="text-xs text-red-600">
-              ₹{purchase.pending_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} pending
-            </div>
-          )}
-        </div>
       ),
       width: '150px'
     },
     {
       key: 'payment_status',
-      header: 'Payment',
+      header: 'Status',
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => {
         const statusMap: Record<string, any> = {
@@ -251,46 +243,52 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         const config = statusMap[purchase.payment_status] || { status: 'default', label: purchase.payment_status };
         return <StatusBadge status={config.status} label={config.label} />;
       },
-      width: '120px'
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      align: 'center' as const,
-      render: (_: any, purchase: PurchaseOrder) => {
-        const statusMap: Record<string, any> = {
-          confirmed: { status: 'success', label: 'Confirmed' },
-          received: { status: 'success', label: 'Received' },
-          draft: { status: 'warning', label: 'Draft' },
-          cancelled: { status: 'error', label: 'Cancelled' }
-        };
-        const config = statusMap[purchase.status] || { status: 'default', label: purchase.status };
-        return <StatusBadge status={config.status} label={config.label} />;
-      },
-      width: '120px'
+      width: '100px'
     },
     {
       key: 'actions',
       header: 'Actions',
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => (
-        <div className="flex items-center justify-center space-x-2">
+        <div className="flex items-center justify-center space-x-1">
           <button
-            onClick={() => console.log('View:', purchase)}
-            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+            onClick={() => toast.info(`Opening purchase ${purchase.po_number} - Feature coming soon`)}
+            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
             title="View Purchase"
           >
             <Eye className="w-4 h-4" />
           </button>
           <button
-            className="p-1 text-gray-600 hover:bg-gray-50 rounded"
+            onClick={() => toast.info(`Print purchase ${purchase.po_number} - Feature coming soon`)}
+            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded transition-colors"
             title="Print"
           >
             <Printer className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => {
+              const message = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+            }}
+            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+            title="Share via WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => {
+              const subject = `Purchase Order ${purchase.po_number}`;
+              const body = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            }}
+            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors"
+            title="Send via Email"
+          >
+            <Mail className="w-4 h-4" />
+          </button>
         </div>
       ),
-      width: '100px'
+      width: '180px'
     }
   ];
 
