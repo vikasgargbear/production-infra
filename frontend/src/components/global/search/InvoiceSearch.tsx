@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, Ref } from 'react';
-import { Search, FileText, Calendar, Package, User, ChevronRight, AlertCircle } from 'lucide-react';
+import { Search, FileText, Calendar, Package, User, ChevronRight, AlertCircle, ExternalLink } from 'lucide-react';
 import { invoicesApi } from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { format } from 'date-fns';
@@ -33,6 +33,7 @@ interface InvoiceSearchProps {
   onSearchStart?: () => void;
   onSearchComplete?: (results: Invoice[]) => void;
   onError?: (error: Error) => void;
+  onViewAll?: () => void; // Callback when user clicks "View All Invoices"
 }
 
 export interface InvoiceSearchHandle {
@@ -80,7 +81,8 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
   filters = {},
   onSearchStart,
   onSearchComplete,
-  onError
+  onError,
+  onViewAll
 }, ref) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -352,7 +354,7 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           autoFocus={autoFocus}
           disabled={disabled}
         />
@@ -441,6 +443,22 @@ const InvoiceSearch = forwardRef<InvoiceSearchHandle, InvoiceSearchProps>(({
               </div>
             );
           })}
+
+          {/* View All Invoices button */}
+          {onViewAll && (
+            <div
+              className="border-t border-gray-200 p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+              onClick={() => {
+                setIsOpen(false);
+                onViewAll();
+              }}
+            >
+              <div className="flex items-center justify-between text-sm text-blue-600 font-medium">
+                <span>View All Invoices</span>
+                <ExternalLink className="h-4 w-4" />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
