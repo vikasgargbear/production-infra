@@ -6,7 +6,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
-import useCompanyDetails from '../../../hooks/useCompanyDetails';
+import { useCompany } from '../../../contexts/CompanyContext';
 import { ModuleHeader, DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
@@ -20,7 +20,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     onBack,
     saving
 }) => {
-    const { companyDetails } = useCompanyDetails();
+    // Use same company context as Invoice for consistency
+    const { companyInfo } = useCompany();
     const [notes, setNotes] = useState(returnData.return_reason_notes || '');
 
     const selectedItems = useMemo(() =>
@@ -102,25 +103,33 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             {/* Header - 3 Column Grid like Invoice */}
                             <div className="mb-4">
                                 <div className="grid grid-cols-3 gap-3 items-stretch">
-                                    {/* Company Info - Enhanced with GST and DL */}
+                                    {/* Company Info - Using same pattern as Invoice */}
                                     <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 border border-blue-200">
                                         <div className="flex items-start space-x-2">
-                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <span className="text-xl font-bold text-white">
-                                                    {(companyDetails.company_name || 'A').charAt(0).toUpperCase()}
-                                                </span>
-                                            </div>
+                                            {companyInfo?.logo ? (
+                                                <img
+                                                    src={companyInfo?.logo}
+                                                    alt={companyInfo?.name || 'Company'}
+                                                    className="w-12 h-12 object-contain rounded-lg flex-shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-xl font-bold text-white">
+                                                        {(companyInfo?.name || 'A').charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <h2 className="text-base font-bold text-gray-900 leading-tight">
-                                                    {companyDetails.company_name || 'Your Company'}
+                                                    {companyInfo?.name || 'Your Company'}
                                                 </h2>
                                                 <p className="text-xs text-gray-600 mt-0.5 truncate">
-                                                    {companyDetails.company_address || ''}
+                                                    {companyInfo?.address || ''}
                                                 </p>
                                                 <p className="text-xs text-gray-600 mt-0.5">
-                                                    <span className="font-medium">GST:</span> {companyDetails.company_gst_number || '-'}
+                                                    <span className="font-medium">GST:</span> {companyInfo?.gst || '-'}
                                                     <span className="mx-1">|</span>
-                                                    <span className="font-medium">DL:</span> {companyDetails.company_drug_license || '-'}
+                                                    <span className="font-medium">DL:</span> {companyInfo?.drugLicense || '-'}
                                                 </p>
                                             </div>
                                         </div>
@@ -332,7 +341,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
                                     {/* Authorization */}
                                     <div className="border border-gray-200 rounded-lg p-2">
-                                        <p className="text-xs text-gray-600">For {companyDetails.company_name || 'Your Company'}</p>
+                                        <p className="text-xs text-gray-600">For {companyInfo?.name || 'Your Company'}</p>
                                         <p className="text-xs text-gray-400 mt-1">Digitally Authorized</p>
                                     </div>
                                 </div>
