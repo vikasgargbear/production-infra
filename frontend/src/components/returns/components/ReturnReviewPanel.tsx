@@ -93,23 +93,6 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                 }
             `}</style>
 
-            {/* Header - Using Global ModuleHeader */}
-            <ModuleHeader
-                title="Return - Review"
-                documentNumber={returnData.return_no}
-                status="preview"
-                icon={RotateCcw}
-                iconColor="text-orange-600"
-                additionalActions={[
-                    {
-                        label: "← Back to Items",
-                        onClick: onBack,
-                        variant: "default",
-                        className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
-                    }
-                ]}
-            />
-
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
                 <div className="max-w-6xl mx-auto">

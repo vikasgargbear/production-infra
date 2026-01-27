@@ -405,7 +405,10 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         const discountAmount = (baseAmount * discountPercent) / 100;
         const afterDiscount = baseAmount - discountAmount;
 
-        const taxPercent = (!selectedCustomer?.gst_number || returnData.include_gst)
+        // CRITICAL: If withhold_gst is true for B2B, do NOT add GST to credit amount
+        // GST stays with the company when goods are returned from GST customer
+        const shouldIncludeGst = !returnData.withhold_gst && selectedCustomer?.gst_number;
+        const taxPercent = shouldIncludeGst
           ? parseFloat(String(item.tax_percent || 0))
           : 0;
         const itemTax = (afterDiscount * taxPercent) / 100;
@@ -731,12 +734,20 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
-          title="Sales Return - Review"
+          title="Sales Return"
           documentNumber={returnData.return_no}
           status="pending"
           icon={RotateCcw}
           iconColor="text-red-600"
           onClose={onClose}
+          additionalActions={[
+            {
+              label: "← Back to Items",
+              onClick: () => dispatch({ type: 'SET_STEP', step: 1 }),
+              variant: "default",
+              className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
+            }
+          ]}
         />
 
         {/* Content */}
