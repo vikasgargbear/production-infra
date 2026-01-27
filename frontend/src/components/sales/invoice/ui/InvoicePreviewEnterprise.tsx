@@ -144,7 +144,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
         {/* Header Section - Company Branding Row - 3 tiles to match below */}
         <div className="mb-3">
           <div className="grid grid-cols-3 gap-3 items-stretch">
-            {/* Company Info */}
+            {/* Company Info - Cleaner layout */}
             <div>
               <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 h-full border border-blue-200 print-border print-bg-blue">
                 <div className="flex items-start space-x-2">
@@ -152,20 +152,21 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <img
                       src={companyInfo?.logo}
                       alt={companyInfo?.company_name || companyInfo?.name || 'Company'}
-                      className="w-12 h-12 object-contain rounded-lg flex-shrink-0"
+                      className="w-10 h-10 object-contain rounded-lg flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-xl font-bold text-white">{(companyInfo?.company_name || companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-lg font-bold text-white">{(companyInfo?.company_name || companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-base font-bold text-gray-900 leading-tight">{companyInfo?.company_name || companyInfo?.name || 'Your Company Name'}</h2>
-                    <p className="text-xs text-gray-600 mt-0.5 truncate">{companyInfo?.address || ''}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      <span className="font-medium">GST:</span> {companyInfo?.gst || companyInfo?.gst_number || ''}
-                      <span className="mx-1">|</span>
-                      <span className="font-medium">DL:</span> {companyInfo?.drug_license_no || companyInfo?.drugLicense || ''}
+                    <h2 className="text-sm font-bold text-gray-900 leading-tight">{companyInfo?.company_name || companyInfo?.name || 'Your Company Name'}</h2>
+                    <p className="text-[10px] text-gray-600 mt-0.5 line-clamp-2">{companyInfo?.address || ''}</p>
+                    <p className="text-[10px] text-gray-600 mt-0.5">
+                      <span className="font-medium">GST:</span> {companyInfo?.gst || companyInfo?.gst_number || '-'}
+                    </p>
+                    <p className="text-[10px] text-gray-600">
+                      <span className="font-medium">DL:</span> {companyInfo?.drug_license_no || companyInfo?.drugLicense || '-'}
                     </p>
                   </div>
                 </div>
@@ -239,37 +240,48 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
         {showAddresses && (
           <div className="mb-4">
             <div className="grid grid-cols-3 gap-3">
-              {/* Customer Details */}
+              {/* Customer Details - Cleaner formatting */}
               <div>
                 <div className="bg-white rounded-xl p-3 border border-gray-200 h-full">
-                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Customer Details</div>
+                  <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Customer</div>
                   <div className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</div>
 
-                  {/* Address - compact */}
-                  <div className="text-xs text-gray-600 mt-1">
-                    {typeof invoice.billing_address === 'string' && invoice.billing_address ? (
-                      invoice.billing_address
-                    ) : invoice.billing_address && typeof invoice.billing_address === 'object' ? (
-                      [
-                        (invoice.billing_address as any).address_line1,
-                        (invoice.billing_address as any).city,
-                        (invoice.billing_address as any).state,
-                        (invoice.billing_address as any).pincode
-                      ].filter(Boolean).join(', ')
-                    ) : invoice.customer_details?.address ? (
-                      typeof invoice.customer_details.address === 'string'
-                        ? invoice.customer_details.address
-                        : [
-                          (invoice.customer_details.address as any).address_line1,
-                          (invoice.customer_details.address as any).city,
-                          (invoice.customer_details.address as any).state,
-                          (invoice.customer_details.address as any).pincode
-                        ].filter(Boolean).join(', ')
-                    ) : null}
-                  </div>
+                  {/* Address - Split into lines */}
+                  {(() => {
+                    let addressLine1 = '';
+                    let cityZipLine = '';
 
-                  {/* Structured Details - Each on its own line */}
-                  <div className="mt-2 space-y-0.5 text-xs">
+                    if (typeof invoice.billing_address === 'string' && invoice.billing_address) {
+                      // Parse string address - assume format: "street, city, zip"
+                      const parts = invoice.billing_address.split(',').map(p => p.trim());
+                      addressLine1 = parts.slice(0, -2).join(', ') || parts[0] || '';
+                      cityZipLine = parts.slice(-2).join(', ');
+                    } else if (invoice.billing_address && typeof invoice.billing_address === 'object') {
+                      const addr = invoice.billing_address as any;
+                      addressLine1 = [addr.address_line1, addr.address_line2].filter(Boolean).join(', ');
+                      cityZipLine = [addr.city, addr.pincode || addr.zip].filter(Boolean).join(' | ');
+                    } else if (invoice.customer_details?.address) {
+                      if (typeof invoice.customer_details.address === 'string') {
+                        const parts = invoice.customer_details.address.split(',').map(p => p.trim());
+                        addressLine1 = parts.slice(0, -2).join(', ') || parts[0] || '';
+                        cityZipLine = parts.slice(-2).join(', ');
+                      } else {
+                        const addr = invoice.customer_details.address as any;
+                        addressLine1 = [addr.address_line1, addr.address_line2].filter(Boolean).join(', ');
+                        cityZipLine = [addr.city, addr.pincode || addr.zip].filter(Boolean).join(' | ');
+                      }
+                    }
+
+                    return (
+                      <div className="text-[10px] text-gray-600 mt-0.5">
+                        {addressLine1 && <div>{addressLine1}</div>}
+                        {cityZipLine && <div className="text-gray-500">{cityZipLine}</div>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Phone, GST, DL - Clean lines */}
+                  <div className="mt-1.5 space-y-0.5 text-[10px]">
                     {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
                       <div className="text-gray-600">📞 {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</div>
                     )}
@@ -337,31 +349,33 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
           </div>
         )}
 
-        {/* Items Table - Less Cramped, Bigger Font */}
-        <div className="mb-10">
-          <table className="w-full border border-gray-300">
+        {/* Items Table - Added Pack and Free columns, cleaner batch display */}
+        <div className="mb-8">
+          <table className="w-full border border-gray-300 text-[10px]">
             <thead className="bg-gray-100 print-colors">
               <tr className="border-b border-gray-300">
-                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">#</th>
-                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Product</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">HSN</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Expiry</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">MRP</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Qty</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Rate</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Disc%</th>
-                <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">GST%</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase">Amount</th>
+                <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '3%' }}>#</th>
+                <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '20%' }}>Product</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '7%' }}>Pack</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>Batch</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>HSN</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Exp</th>
+                <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>MRP</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Qty</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Free</th>
+                <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>Rate</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Disc%</th>
+                <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>GST%</th>
+                <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase" style={{ width: '10%' }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               {(invoice.items || []).map((item, index) => {
-                // Calculate per-item amounts (display only - no business logic)
-                // CRITICAL: ALWAYS use item.quantity (not base_quantity)
-                const quantity = parseFloat(String(item.quantity || 0)); // Source of truth
-                const unit_price = parseFloat(String(item.unit_price || 0)); // CANONICAL: unit_price only
-                const discount = parseFloat(String(item.discount_percent || 0)); // CANONICAL: discount_percent only
+                const quantity = parseFloat(String(item.quantity || 0));
+                const unit_price = parseFloat(String(item.unit_price || 0));
+                const discount = parseFloat(String(item.discount_percent || 0));
                 const gstPercent = parseFloat(String(item.gst_percent || item.tax_percent || 0));
+                const freeQty = parseFloat(String(item.free_quantity || 0));
 
                 const subtotal = quantity * unit_price;
                 const discountAmount = (subtotal * discount) / 100;
@@ -371,42 +385,44 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
                 return (
                   <tr key={index} className="border-b border-gray-200">
-                    <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
-                    <td className="py-2 px-3 border-r border-gray-200">
-                      <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
-                      <div className="text-[10px] text-gray-500">
-                        Batch: {item.batch_number || 'N/A'}
-                        {item.pack_size && ` | Pack: ${item.pack_size}`}
-                      </div>
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200">{index + 1}</td>
+                    <td className="py-1.5 px-2 border-r border-gray-200">
+                      <div className="font-medium text-gray-900">{item.product_name}</div>
                     </td>
-                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
+                      {item.pack_size || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
+                      {item.batch_number || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                       {item.hsn_code || '3004'}
                     </td>
-                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                       {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', {
                         month: '2-digit',
                         year: '2-digit'
                       }) : '-'}
                     </td>
-                    <td className="py-2 px-3 text-xs text-right border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-right border-r border-gray-200">
                       {formatCurrency(item.mrp || unit_price)}
                     </td>
-                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200 font-medium">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200 font-medium">
                       {item.quantity}
-                      {(item.free_quantity ?? 0) > 0 && (
-                        <div className="text-green-600 text-xs">+{item.free_quantity} free</div>
-                      )}
                     </td>
-                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-green-600 font-medium">
+                      {freeQty > 0 ? freeQty : '-'}
+                    </td>
+                    <td className="py-1.5 px-2 text-right border-r border-gray-200">
                       {formatCurrency(unit_price)}
                     </td>
-                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                       {discount > 0 ? `${discount.toFixed(1)}%` : '-'}
                     </td>
-                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                       {gstPercent > 0 ? `${gstPercent}%` : '-'}
                     </td>
-                    <td className="py-2 px-3 text-sm text-right font-semibold">
+                    <td className="py-1.5 px-2 text-right font-semibold">
                       {formatCurrency(lineTotal)}
                     </td>
                   </tr>

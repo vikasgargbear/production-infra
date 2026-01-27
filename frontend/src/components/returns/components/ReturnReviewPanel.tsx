@@ -103,32 +103,33 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             {/* Header - 3 Column Grid like Invoice */}
                             <div className="mb-4">
                                 <div className="grid grid-cols-3 gap-3 items-stretch">
-                                    {/* Company Info - Using same pattern as Invoice */}
+                                    {/* Company Info - Matching Invoice layout */}
                                     <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 border border-blue-200">
                                         <div className="flex items-start space-x-2">
                                             {companyInfo?.logo ? (
                                                 <img
                                                     src={companyInfo?.logo}
                                                     alt={companyInfo?.name || 'Company'}
-                                                    className="w-12 h-12 object-contain rounded-lg flex-shrink-0"
+                                                    className="w-10 h-10 object-contain rounded-lg flex-shrink-0"
                                                 />
                                             ) : (
-                                                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <span className="text-xl font-bold text-white">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-lg font-bold text-white">
                                                         {(companyInfo?.name || 'A').charAt(0).toUpperCase()}
                                                     </span>
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0">
-                                                <h2 className="text-base font-bold text-gray-900 leading-tight">
+                                                <h2 className="text-sm font-bold text-gray-900 leading-tight">
                                                     {companyInfo?.name || 'Your Company'}
                                                 </h2>
-                                                <p className="text-xs text-gray-600 mt-0.5 truncate">
+                                                <p className="text-[10px] text-gray-600 mt-0.5 line-clamp-2">
                                                     {companyInfo?.address || ''}
                                                 </p>
-                                                <p className="text-xs text-gray-600 mt-0.5">
+                                                <p className="text-[10px] text-gray-600 mt-0.5">
                                                     <span className="font-medium">GST:</span> {companyInfo?.gst || '-'}
-                                                    <span className="mx-1">|</span>
+                                                </p>
+                                                <p className="text-[10px] text-gray-600">
                                                     <span className="font-medium">DL:</span> {companyInfo?.drugLicense || '-'}
                                                 </p>
                                             </div>
@@ -246,20 +247,22 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                 </div>
                             )}
 
-                            {/* Items Table - Clean like Invoice */}
+                            {/* Items Table - Matching Invoice layout with Pack and Free columns */}
                             <div className="mb-6">
-                                <table className="w-full border border-gray-200">
+                                <table className="w-full border border-gray-200 text-[10px]">
                                     <thead className="bg-gray-100">
                                         <tr className="border-b border-gray-200">
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">#</th>
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Product</th>
-                                            <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">HSN</th>
-                                            <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Batch</th>
-                                            <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Expiry</th>
-                                            <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Qty</th>
-                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">Rate</th>
-                                            <th className="text-center py-2 px-3 text-xs font-semibold text-gray-700 uppercase border-r border-gray-200">GST%</th>
-                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-700 uppercase">Amount</th>
+                                            <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '3%' }}>#</th>
+                                            <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '22%' }}>Product</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>Pack</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '10%' }}>Batch</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>HSN</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Exp</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Qty</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Free</th>
+                                            <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '10%' }}>Rate</th>
+                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>GST%</th>
+                                            <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase" style={{ width: '12%' }}>Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -267,40 +270,40 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                             const qty = parseFloat(String(item.return_quantity || 0));
                                             const rate = parseFloat(String(item.unit_price || 0));
                                             const taxPercent = parseFloat(String(item.tax_percent || 0));
+                                            const freeQty = parseFloat(String(item.return_free_qty || 0));
                                             const lineTotal = qty * rate * (1 + taxPercent / 100);
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">
-                                                    <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
-                                                    <td className="py-2 px-3 border-r border-gray-200">
-                                                        <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
-                                                        <div className="text-[10px] text-gray-500">
-                                                            {item.pack_size && `Pack: ${item.pack_size}`}
-                                                            {item.uom && ` | ${item.uom}`}
-                                                        </div>
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">{index + 1}</td>
+                                                    <td className="py-1.5 px-2 border-r border-gray-200">
+                                                        <div className="font-medium text-gray-900">{item.product_name}</div>
                                                     </td>
-                                                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
-                                                        {item.hsn_code || '3004'}
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
+                                                        {item.pack_size || '-'}
                                                     </td>
-                                                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
                                                         {item.batch_number || '-'}
                                                     </td>
-                                                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
+                                                        {item.hsn_code || '3004'}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                                                         {formatExpiry(item.expiry_date)}
                                                     </td>
-                                                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200 font-medium">
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 font-medium">
                                                         {item.return_quantity}
-                                                        {(item.return_free_qty || 0) > 0 && (
-                                                            <div className="text-xs text-gray-500">+{item.return_free_qty} free</div>
-                                                        )}
                                                     </td>
-                                                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-green-600 font-medium">
+                                                        {freeQty > 0 ? freeQty : '-'}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right border-r border-gray-200">
                                                         {formatCurrency(rate)}
                                                     </td>
-                                                    <td className="py-2 px-3 text-xs text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
                                                         {taxPercent > 0 ? `${taxPercent}%` : '-'}
                                                     </td>
-                                                    <td className="py-2 px-3 text-sm text-right font-medium">
+                                                    <td className="py-1.5 px-2 text-right font-semibold">
                                                         {formatCurrency(lineTotal)}
                                                     </td>
                                                 </tr>
