@@ -603,9 +603,8 @@ async def upload_qr_code(
             "org_id": str(context.org_id),
             "qr_code": qr_code_base64
         })
-        
-        # TenantAwareSession auto-commits
-        
+        db.commit()
+
         return {
             "success": True,
             "message": "QR code uploaded successfully"
@@ -644,7 +643,8 @@ async def upload_logo(
             "org_id": str(context.org_id),
             "logo": logo_base64
         })
-        
+        db.commit()
+
         return {
             "success": True,
             "message": "Logo uploaded successfully"
