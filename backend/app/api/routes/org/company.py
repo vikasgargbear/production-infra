@@ -448,13 +448,13 @@ async def get_company_profile(
             qr_data AS (
                 SELECT setting_value as qr_code
                 FROM system_config.system_settings
-                WHERE org_id = :org_id AND setting_key = 'payment_qr_code'
+                WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'payment_qr_code'
                 LIMIT 1
             ),
             logo_data AS (
                 SELECT setting_value as logo
                 FROM system_config.system_settings
-                WHERE org_id = :org_id AND setting_key = 'company_logo'
+                WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'company_logo'
                 LIMIT 1
             )
             SELECT
@@ -590,13 +590,15 @@ async def upload_qr_code(
             raise HTTPException(status_code=400, detail="QR code data is required")
         
         # Store QR code in system settings
+        # Table has unique constraint on (org_id, setting_category, setting_key, setting_scope)
         query = """
-            INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
-            VALUES (:org_id, 'payment_qr_code', :qr_code)
-            ON CONFLICT (org_id, setting_key)
+            INSERT INTO system_config.system_settings
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
+            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization')
+            ON CONFLICT (org_id, setting_category, setting_key, setting_scope)
             DO UPDATE SET setting_value = :qr_code, updated_at = CURRENT_TIMESTAMP
         """
-        
+
         db.execute(text(query), {
             "org_id": str(context.org_id),
             "qr_code": qr_code_base64
@@ -629,10 +631,12 @@ async def upload_logo(
             raise HTTPException(status_code=400, detail="Logo data is required")
         
         # Store logo in system settings
+        # Table has unique constraint on (org_id, setting_category, setting_key, setting_scope)
         query = """
-            INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
-            VALUES (:org_id, 'company_logo', :logo)
-            ON CONFLICT (org_id, setting_key)
+            INSERT INTO system_config.system_settings
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
+            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization')
+            ON CONFLICT (org_id, setting_category, setting_key, setting_scope)
             DO UPDATE SET setting_value = :logo, updated_at = CURRENT_TIMESTAMP
         """
         
