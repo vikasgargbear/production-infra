@@ -450,14 +450,22 @@ async def get_company_profile(
                 FROM system_config.system_settings
                 WHERE org_id = :org_id AND setting_key = 'payment_qr_code'
                 LIMIT 1
+            ),
+            logo_data AS (
+                SELECT setting_value as logo
+                FROM system_config.system_settings
+                WHERE org_id = :org_id AND setting_key = 'company_logo'
+                LIMIT 1
             )
-            SELECT 
-                o.*, 
+            SELECT
+                o.*,
                 COALESCE(b.accounts, '[]'::jsonb) as bank_accounts,
-                q.qr_code as payment_qr_code
+                q.qr_code as payment_qr_code,
+                l.logo as company_logo
             FROM org_data o
             LEFT JOIN bank_data b ON true
             LEFT JOIN qr_data q ON true
+            LEFT JOIN logo_data l ON true
         """
         
         result = db.execute(text(profile_query), {"org_id": str(context.org_id)})
@@ -506,7 +514,8 @@ async def get_company_profile(
                 "website": row.website or "",
                 **business_settings,
                 "bank_accounts": bank_accounts if bank_accounts else [],
-                "payment_qr_code": row.payment_qr_code
+                "payment_qr_code": row.payment_qr_code,
+                "logo": row.company_logo
             }
         }
         
