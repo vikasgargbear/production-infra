@@ -161,7 +161,9 @@ async def get_company_info(
                 "show_logo": business_settings.get("show_logo", True),
                 "show_bank_details": business_settings.get("show_bank_details", True),
                 # ALL bank accounts as array (frontend expects this)
-                "bank_accounts": bank_accounts
+                "bank_accounts": bank_accounts,
+                # Nested business_settings for CompanyContext
+                "business_settings": business_settings
             }
             
             # Add default bank details as flat fields for backward compatibility
