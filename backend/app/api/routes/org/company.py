@@ -113,16 +113,17 @@ async def get_company_info(
                 if bank.is_default_account and not default_bank:
                     default_bank = bank_obj
             
-            # Get company logo if exists
-            logo_query = """
-                SELECT setting_value
+            # Get company logo and QR code from system_settings
+            assets_query = """
+                SELECT setting_key, setting_value
                 FROM system_config.system_settings
-                WHERE org_id = :org_id AND setting_key = 'company_logo'
-                LIMIT 1
+                WHERE org_id = :org_id AND setting_category = 'company'
+                  AND setting_key IN ('company_logo', 'payment_qr_code')
             """
-            logo_result = db.execute(text(logo_query), {"org_id": str(context.org_id)})
-            logo_data = logo_result.first()
-            company_logo = logo_data.setting_value if logo_data else None
+            assets_result = db.execute(text(assets_query), {"org_id": str(context.org_id)})
+            assets = {row.setting_key: row.setting_value for row in assets_result}
+            company_logo = assets.get('company_logo')
+            payment_qr = assets.get('payment_qr_code')
             
             # Return formatted data matching frontend expectations
             response = {
@@ -140,6 +141,7 @@ async def get_company_info(
                 "drug_license_no": org_data.drug_license_number or "",
                 "fssai_no": org_data.fssai_number or "",
                 "logo": company_logo,
+                "payment_qr_code": payment_qr,
                 # Additional fields from business_settings
                 "tagline": business_settings.get("tagline", ""),
                 "financial_year_start": business_settings.get("financial_year_start", "2024-04-01"),
