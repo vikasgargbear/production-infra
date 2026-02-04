@@ -413,7 +413,10 @@ async def update_company_info(
         })
         logger.info(f"[CompanySave] business_settings update executed for org_id: {context.org_id}")
         
-        # TenantAwareSession auto-commits
+        # CRITICAL: Actually commit the transaction!
+        # TenantAwareSession does NOT auto-commit - that was a bug in the comment
+        db.commit()
+        logger.info(f"[CompanySave] COMMITTED successfully for org_id: {context.org_id}")
         
         # Return the data in same format as GET
         return company_data

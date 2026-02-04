@@ -286,6 +286,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     };
 
     const handleInputChange = (field: keyof CompanyData, value: any) => {
+        // DEBUG: Log every input change
+        if (field === 'defaultTerms' || field === 'fssaiNo' || field === 'msmeNo') {
+            console.log(`[CompanyProfile] Field "${field}" changed to:`, value);
+        }
         setCompanyData(prev => ({
             ...prev,
             [field]: value
@@ -409,7 +413,14 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             localStorage.setItem('companyFssai', companyData.fssaiNo);
             localStorage.setItem('companyMsme', companyData.msmeNo);
 
+            // DEBUG: Log what we're sending to API
+            console.log('[CompanyProfile] Sending to API:', JSON.stringify(profileData, null, 2));
+            console.log('[CompanyProfile] default_terms value:', profileData.default_terms);
+            console.log('[CompanyProfile] fssai_number value:', profileData.fssai_number);
+
             const response = await companyApi.updateCompanyInfo(profileData);
+
+            console.log('[CompanyProfile] API Response:', response);
 
             if (response) {
                 // Update IndexedDB cache with new profile data
