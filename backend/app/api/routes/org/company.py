@@ -394,6 +394,7 @@ async def update_company_info(
         }
         
         # Update business_settings column (using CAST not :: to avoid SQLAlchemy conflict)
+        logger.info(f"[CompanySave] Saving business_settings with default_terms: '{business_settings.get('default_terms', '')}'")
         db.execute(text("""
             UPDATE master.organizations
             SET business_settings = CAST(:business_settings AS jsonb)
@@ -402,6 +403,7 @@ async def update_company_info(
             "org_id": str(context.org_id),
             "business_settings": json.dumps(business_settings)
         })
+        logger.info(f"[CompanySave] business_settings update executed for org_id: {context.org_id}")
         
         # TenantAwareSession auto-commits
         
