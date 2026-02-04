@@ -46,10 +46,10 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       component: SalesOrderFlow as React.ComponentType<any>
     },
     {
-      id: 'invoice-list',
-      label: 'Invoice History',
-      fullLabel: 'Invoice History',
-      description: 'View & Manage',
+      id: 'sales-history',
+      label: 'Sales History',
+      fullLabel: 'Sales History',
+      description: 'Invoices, Challans & Orders',
       icon: List,
       color: 'gray',
       component: InvoiceList

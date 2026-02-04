@@ -10,12 +10,36 @@
  */
 
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
-import { FileText, RefreshCw } from 'lucide-react';
+import { FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
-import { invoicesApi } from '../../../services/api';
+import { invoicesApi, challansApi, salesOrdersApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { toast } from 'react-toastify';
+
+// Document type configuration
+type DocumentType = 'invoice' | 'challan' | 'sales_order';
+
+const documentTypeConfig = {
+  invoice: {
+    label: 'Invoices',
+    icon: FileText,
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
+  },
+  challan: {
+    label: 'Delivery Challans',
+    icon: Package,
+    activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    iconColor: 'text-emerald-600'
+  },
+  sales_order: {
+    label: 'Sales Orders',
+    icon: ShoppingCart,
+    activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    iconColor: 'text-purple-600'
+  }
+};
 
 // Import extracted components
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
@@ -72,12 +96,15 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
 
+  // Document type state - default to invoice
+  const [documentType, setDocumentType] = useState<DocumentType>('invoice');
+
   // Cancel modal state
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [invoiceToCancel, setInvoiceToCancel] = useState<Invoice | null>(null);
 
-  // Fetch invoices from backend
-  const fetchInvoices = useCallback(async (page = 1, searchFilters: any = {}) => {
+  // Fetch documents from backend based on document type
+  const fetchDocuments = useCallback(async (page = 1, searchFilters: any = {}, docType: DocumentType = documentType) => {
     dispatch({ type: 'SET_LOADING', loading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
@@ -85,6 +112,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       const searchParams: any = {
         limit: pagination.per_page,
         offset: (page - 1) * pagination.per_page,
+        skip: (page - 1) * pagination.per_page,
         ...searchFilters
       };
 
@@ -92,13 +120,15 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         searchParams.search = searchFilters.search.trim();
       }
 
-      const response = await invoicesApi.getAll(searchParams);
-      const responseData = response?.data || response;
+      let response;
+      let transformedData: Invoice[] = [];
 
-      if (responseData?.invoices || responseData?.success) {
-        const invoicesData = responseData.invoices || responseData.data?.invoices || [];
+      if (docType === 'invoice') {
+        response = await invoicesApi.getAll(searchParams);
+        const responseData = response?.data || response;
+        const invoicesData = responseData?.invoices || responseData?.data?.invoices || [];
 
-        const transformedInvoices: Invoice[] = invoicesData.map((invoice: any) => ({
+        transformedData = (Array.isArray(invoicesData) ? invoicesData : []).map((invoice: any) => ({
           id: invoice.invoice_id?.toString() || invoice.invoice_number,
           invoice_number: invoice.invoice_number,
           customer_id: invoice.customer_id?.toString() || '',
@@ -114,31 +144,102 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           updated_at: invoice.updated_at || invoice.invoice_date
         }));
 
-        dispatch({ type: 'SET_INVOICES', invoices: transformedInvoices });
-
-        const total = responseData.total || responseData.data?.total || 0;
+        const total = responseData?.total || responseData?.data?.total || transformedData.length;
+        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
         dispatch({
           type: 'SET_PAGINATION',
-          pagination: {
-            total,
-            page,
-            total_pages: Math.ceil(total / pagination.per_page)
-          }
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
         });
-      } else {
-        dispatch({ type: 'SET_ERROR', error: responseData?.error?.message || 'Failed to fetch invoices' });
+
+      } else if (docType === 'challan') {
+        response = await challansApi.getAll({
+          skip: searchParams.skip,
+          limit: searchParams.limit,
+          start_date: searchFilters.date_from,
+          end_date: searchFilters.date_to
+        });
+        const responseData = response?.data || response;
+        const challansData = responseData?.challans || responseData || [];
+
+        transformedData = (Array.isArray(challansData) ? challansData : []).map((challan: any) => ({
+          id: challan.challan_id?.toString() || challan.challan_number,
+          invoice_number: challan.challan_number,
+          customer_id: challan.customer_id?.toString() || '',
+          customer_name: challan.customer_name,
+          invoice_date: challan.challan_date,
+          due_date: challan.expected_delivery_date || '',
+          total_amount: challan.total_amount || 0,
+          paid_amount: 0,
+          pending_amount: challan.total_amount || 0,
+          payment_status: challan.delivery_status || challan.challan_status || 'pending',
+          items_count: challan.items?.length || 0,
+          created_at: challan.created_at || challan.challan_date,
+          updated_at: challan.updated_at || challan.challan_date
+        }));
+
+        const total = responseData?.total || transformedData.length;
+        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
+        dispatch({
+          type: 'SET_PAGINATION',
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
+        });
+
+      } else if (docType === 'sales_order') {
+        response = await salesOrdersApi.getAll({
+          skip: searchParams.skip,
+          limit: searchParams.limit,
+          from_date: searchFilters.date_from,
+          to_date: searchFilters.date_to
+        });
+        const responseData = response?.data || response;
+        const ordersData = responseData?.orders || responseData || [];
+
+        transformedData = (Array.isArray(ordersData) ? ordersData : []).map((order: any) => ({
+          id: order.order_id?.toString() || order.order_number,
+          invoice_number: order.order_number,
+          customer_id: order.customer_id?.toString() || '',
+          customer_name: order.customer_name,
+          invoice_date: order.order_date,
+          due_date: order.expected_delivery_date || '',
+          total_amount: order.total_amount || order.final_amount || 0,
+          paid_amount: order.paid_amount || 0,
+          pending_amount: order.pending_amount || 0,
+          payment_status: order.order_status || 'pending',
+          items_count: order.items?.length || 0,
+          created_at: order.created_at || order.order_date,
+          updated_at: order.updated_at || order.order_date
+        }));
+
+        const total = responseData?.total || transformedData.length;
+        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
+        dispatch({
+          type: 'SET_PAGINATION',
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
+        });
       }
+
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to fetch invoices. Please try again.' });
+      console.error(`Failed to fetch ${docType}:`, error);
+      dispatch({ type: 'SET_ERROR', error: `Failed to fetch ${documentTypeConfig[docType].label}. Please try again.` });
+      dispatch({ type: 'SET_INVOICES', invoices: [] });
     } finally {
       dispatch({ type: 'SET_LOADING', loading: false });
     }
-  }, [dispatch, pagination.per_page]);
+  }, [dispatch, pagination.per_page, documentType]);
 
-  // Load invoices on mount
+  // Alias for backward compatibility
+  const fetchInvoices = fetchDocuments;
+
+  // Load documents on mount and when document type changes
   useEffect(() => {
-    fetchInvoices();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchDocuments(1, {}, documentType);
+  }, [documentType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle document type change
+  const handleDocumentTypeChange = (type: DocumentType) => {
+    setDocumentType(type);
+    dispatch({ type: 'CLEAR_SELECTION' });
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -174,20 +275,20 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
       if (event.key === 'PageUp' && pagination.page > 1) {
         event.preventDefault();
-        fetchInvoices(pagination.page - 1, buildSearchParams());
+        fetchDocuments(pagination.page - 1, buildSearchParams(), documentType);
         return;
       }
 
       if (event.key === 'PageDown' && pagination.page < pagination.total_pages) {
         event.preventDefault();
-        fetchInvoices(pagination.page + 1, buildSearchParams());
+        fetchDocuments(pagination.page + 1, buildSearchParams(), documentType);
         return;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, pagination, dispatch, fetchInvoices]);
+  }, [onClose, pagination, dispatch, fetchDocuments, documentType]);
 
   // Build search params from current filters
   const buildSearchParams = useCallback(() => ({
@@ -202,7 +303,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'SET_REFRESH_SUCCESS', success: false });
 
     try {
-      await fetchInvoices(pagination.page, buildSearchParams());
+      await fetchDocuments(pagination.page, buildSearchParams(), documentType);
       dispatch({ type: 'SET_REFRESH_SUCCESS', success: true });
       setTimeout(() => dispatch({ type: 'SET_REFRESH_SUCCESS', success: false }), 2000);
     } finally {
@@ -263,7 +364,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
 
     const timeoutId = setTimeout(() => {
-      fetchInvoices(1, { ...buildSearchParams(), search: query });
+      fetchDocuments(1, { ...buildSearchParams(), search: query }, documentType);
     }, 500);
 
     return () => clearTimeout(timeoutId);
@@ -271,12 +372,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   const handleStatusChange = (status: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { statusFilter: status } });
-    fetchInvoices(1, { ...buildSearchParams(), payment_status: status === 'all' ? undefined : status });
+    fetchDocuments(1, { ...buildSearchParams(), payment_status: status === 'all' ? undefined : status }, documentType);
   };
 
   const handleDateChange = (dateFilter: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { dateFilter } });
-    fetchInvoices(1, { ...buildSearchParams(), dateFilter });
+    fetchDocuments(1, { ...buildSearchParams(), dateFilter }, documentType);
   };
 
   const handleToggleSelect = (id: string) => {
@@ -309,7 +410,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const handleCancelComplete = () => {
     setCancelModalOpen(false);
     setInvoiceToCancel(null);
-    fetchInvoices(pagination.page, buildSearchParams()); // Refresh list
+    fetchDocuments(pagination.page, buildSearchParams(), documentType); // Refresh list
   };
 
   const handleMarkPaid = () => {
@@ -329,12 +430,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   };
 
   const handlePageChange = (page: number) => {
-    fetchInvoices(page, buildSearchParams());
+    fetchDocuments(page, buildSearchParams(), documentType);
   };
 
   const handlePerPageChange = (perPage: number) => {
     dispatch({ type: 'SET_PAGINATION', pagination: { per_page: perPage, page: 1 } });
-    fetchInvoices(1, buildSearchParams());
+    fetchDocuments(1, buildSearchParams(), documentType);
   };
 
   // Filtered invoices
@@ -419,7 +520,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       searchFilters.date_to = newFilters.dateTo;
     }
 
-    fetchInvoices(1, { ...searchFilters, search: filters.searchQuery });
+    fetchDocuments(1, { ...searchFilters, search: filters.searchQuery }, documentType);
   };
 
   return (
@@ -428,11 +529,11 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
-          title="Invoice History"
+          title="Sales History"
           documentNumber=""
           status="active"
-          icon={FileText}
-          iconColor="text-blue-600"
+          icon={documentTypeConfig[documentType].icon}
+          iconColor={documentTypeConfig[documentType].iconColor}
           onClose={onClose}
           showSaveDraft={false}
           onSaveDraft={() => { }}
@@ -454,6 +555,33 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             }
           ] as any}
         />
+
+        {/* Document Type Tabs */}
+        <div className="px-6 py-3 bg-white border-b border-gray-200">
+          <div className="flex space-x-1">
+            {(Object.keys(documentTypeConfig) as DocumentType[]).map((type) => {
+              const config = documentTypeConfig[type];
+              const Icon = config.icon;
+              const isActive = documentType === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => handleDocumentTypeChange(type)}
+                  className={`
+                    flex items-center px-4 py-2 rounded-lg font-medium transition-all text-sm border
+                    ${isActive
+                      ? config.activeClass
+                      : 'text-gray-600 hover:bg-gray-50 border-transparent'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">

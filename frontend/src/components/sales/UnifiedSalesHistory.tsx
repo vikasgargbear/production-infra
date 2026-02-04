@@ -72,8 +72,8 @@ const UnifiedSalesHistory: React.FC<UnifiedSalesHistoryProps> = ({ onClose, onSe
     const [statusFilter, setStatusFilter] = useState('all');
     const [customerFilter, setCustomerFilter] = useState('');
 
-    // Active tab
-    const [activeTab, setActiveTab] = useState('all');
+    // Active tab - default to invoice
+    const [activeTab, setActiveTab] = useState('invoice');
 
     // Document type configurations
     const documentTypes: DocumentType[] = [
@@ -120,11 +120,10 @@ const UnifiedSalesHistory: React.FC<UnifiedSalesHistoryProps> = ({ onClose, onSe
             if (activeTab === 'all' || activeTab === 'challan') {
                 requests.push(
                     challansApi.getAll({
-                        page: 1,
+                        skip: 0,
                         limit: 100,
-                        search: searchTerm,
-                        from_date: dateFrom,
-                        to_date: dateTo
+                        start_date: dateFrom || undefined,
+                        end_date: dateTo || undefined
                     }).then(res => {
                         const challansData = res.data?.challans || res.data || [];
                         const challans: SalesDocument[] = (Array.isArray(challansData) ? challansData : []).map((ch: Record<string, unknown>) => ({
@@ -146,11 +145,10 @@ const UnifiedSalesHistory: React.FC<UnifiedSalesHistoryProps> = ({ onClose, onSe
             if (activeTab === 'all' || activeTab === 'sales_order') {
                 requests.push(
                     salesOrdersApi.getAll({
-                        page: 1,
+                        skip: 0,
                         limit: 100,
-                        search: searchTerm,
-                        from_date: dateFrom,
-                        to_date: dateTo
+                        from_date: dateFrom || undefined,
+                        to_date: dateTo || undefined
                     }).then(res => {
                         const ordersData = res.data?.orders || res.data || [];
                         const orders: SalesDocument[] = (Array.isArray(ordersData) ? ordersData : []).map((ord: Record<string, unknown>) => ({

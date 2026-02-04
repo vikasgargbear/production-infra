@@ -101,7 +101,22 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [logic.currentStep, logic.showCreateCustomer, logic.showCreateProduct, logic.showImportModal, logic, onClose]);
+    }, [
+        logic.currentStep,
+        logic.showCreateCustomer,
+        logic.showCreateProduct,
+        logic.showImportModal,
+        logic.challan.customer_id,
+        logic.challan.items.length,
+        logic.setShowCreateCustomer,
+        logic.setShowCreateProduct,
+        logic.setShowImportModal,
+        logic.setCurrentStep,
+        logic.saveChallan,
+        logic.printChallan,
+        logic.productSearchRef,
+        onClose
+    ]);
 
     if (!open) return null;
 

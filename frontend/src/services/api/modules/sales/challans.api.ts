@@ -1,8 +1,8 @@
 /**
  * Challans API Module
  * Handles delivery challan operations
- * 
- * ENDPOINTS: /challan (backend: app/api/routes/sales/challan.py)
+ *
+ * ENDPOINTS: /challan (backend: app/api/routes/sales/challans/routes.py)
  */
 
 import { apiHelpers } from '../../apiClient';

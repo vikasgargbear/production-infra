@@ -1,8 +1,8 @@
 /**
  * Orders API Module
  * Handles order CRUD and actions
- * 
- * ENDPOINTS: /orders (backend: app/api/routes/sales/orders.py)
+ *
+ * ENDPOINTS: /sales-orders (backend: app/api/routes/sales/orders/routes.py)
  */
 
 import { apiHelpers } from '../../apiClient';
@@ -23,30 +23,30 @@ interface OrderParams {
 }
 
 const ENDPOINTS = {
-  BASE: '/orders',
-  DETAILS: (id: OrderId) => `/orders/${id}`,
-  ITEMS: (id: OrderId) => `/orders/${id}/items`,
-  SEARCH: '/orders/search',
-  VALIDATE: '/orders/validate',
-  DUPLICATE: (id: OrderId) => `/orders/${id}/duplicate`,
-  CONVERT_TO_INVOICE: (id: OrderId) => `/orders/${id}/convert-to-invoice`,
-  CONVERT_TO_CHALLAN: (id: OrderId) => `/orders/${id}/convert-to-challan`,
-  UPDATE_STATUS: (id: OrderId) => `/orders/${id}/status`,
-  APPROVE: (id: OrderId) => `/orders/${id}/approve`,
-  REJECT: (id: OrderId) => `/orders/${id}/reject`,
-  CANCEL: (id: OrderId) => `/orders/${id}/cancel`,
-  RESERVE_INVENTORY: (id: OrderId) => `/orders/${id}/reserve-inventory`,
-  RELEASE_INVENTORY: (id: OrderId) => `/orders/${id}/release-inventory`,
-  DELIVERY_SCHEDULE: (id: OrderId) => `/orders/${id}/delivery-schedule`,
-  PAYMENT_TERMS: (id: OrderId) => `/orders/${id}/payment-terms`,
-  HISTORY: (id: OrderId) => `/orders/${id}/history`,
-  AUDIT: (id: OrderId) => `/orders/${id}/audit`,
-  PDF: (id: OrderId) => `/orders/${id}/pdf`,
-  EMAIL: (id: OrderId) => `/orders/${id}/email`,
-  WHATSAPP: (id: OrderId) => `/orders/${id}/whatsapp`,
-  ANALYTICS: '/orders/analytics',
-  DASHBOARD: '/orders/dashboard',
-  REPORTS: '/orders/reports'
+  BASE: '/sales-orders',
+  DETAILS: (id: OrderId) => `/sales-orders/${id}`,
+  ITEMS: (id: OrderId) => `/sales-orders/${id}/items`,
+  SEARCH: '/sales-orders/search',
+  VALIDATE: '/sales-orders/validate',
+  DUPLICATE: (id: OrderId) => `/sales-orders/${id}/duplicate`,
+  CONVERT_TO_INVOICE: (id: OrderId) => `/sales-orders/${id}/convert-to-invoice`,
+  CONVERT_TO_CHALLAN: (id: OrderId) => `/sales-orders/${id}/convert-to-challan`,
+  UPDATE_STATUS: (id: OrderId) => `/sales-orders/${id}/status`,
+  APPROVE: (id: OrderId) => `/sales-orders/${id}/approve`,
+  REJECT: (id: OrderId) => `/sales-orders/${id}/reject`,
+  CANCEL: (id: OrderId) => `/sales-orders/${id}/cancel`,
+  RESERVE_INVENTORY: (id: OrderId) => `/sales-orders/${id}/reserve-inventory`,
+  RELEASE_INVENTORY: (id: OrderId) => `/sales-orders/${id}/release-inventory`,
+  DELIVERY_SCHEDULE: (id: OrderId) => `/sales-orders/${id}/delivery-schedule`,
+  PAYMENT_TERMS: (id: OrderId) => `/sales-orders/${id}/payment-terms`,
+  HISTORY: (id: OrderId) => `/sales-orders/${id}/history`,
+  AUDIT: (id: OrderId) => `/sales-orders/${id}/audit`,
+  PDF: (id: OrderId) => `/sales-orders/${id}/pdf`,
+  EMAIL: (id: OrderId) => `/sales-orders/${id}/email`,
+  WHATSAPP: (id: OrderId) => `/sales-orders/${id}/whatsapp`,
+  ANALYTICS: '/sales-orders/analytics',
+  DASHBOARD: '/sales-orders/dashboard',
+  REPORTS: '/sales-orders/reports'
 };
 
 // Re-export constants
