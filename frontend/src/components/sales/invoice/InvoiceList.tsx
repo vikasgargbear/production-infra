@@ -124,27 +124,40 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       let transformedData: Invoice[] = [];
 
       if (docType === 'invoice') {
+        // Invoices API returns { invoices: [], total }
         response = await invoicesApi.getAll(searchParams);
-        const responseData = response?.data || response;
-        const invoicesData = responseData?.invoices || responseData?.data?.invoices || [];
+        const responseData = response?.data;
+        console.log('[Invoice API] Raw response:', responseData);
 
-        transformedData = (Array.isArray(invoicesData) ? invoicesData : []).map((invoice: any) => ({
-          id: invoice.invoice_id?.toString() || invoice.invoice_number,
+        // Backend returns: { invoices: [...], total }
+        const invoicesData = responseData?.invoices;
+
+        if (!Array.isArray(invoicesData)) {
+          console.error('[Invoice API] Expected invoices array, got:', typeof invoicesData);
+          dispatch({ type: 'SET_INVOICES', invoices: [] });
+          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
+          return;
+        }
+
+        // Map invoice fields to display format
+        // Backend fields: invoice_id, invoice_number, invoice_date, customer_name, final_amount, paid_amount, pending_amount, payment_status, due_date
+        transformedData = invoicesData.map((invoice: any) => ({
+          id: String(invoice.invoice_id),
           invoice_number: invoice.invoice_number,
-          customer_id: invoice.customer_id?.toString() || '',
+          customer_id: String(invoice.customer_id),
           customer_name: invoice.customer_name,
           invoice_date: invoice.invoice_date,
-          due_date: invoice.due_date || '',
-          total_amount: invoice.final_amount || 0,
-          paid_amount: invoice.paid_amount || 0,
-          pending_amount: invoice.pending_amount || 0,
-          payment_status: invoice.payment_status || 'pending',
-          items_count: invoice.items_count || 0,
-          created_at: invoice.created_at || invoice.invoice_date,
-          updated_at: invoice.updated_at || invoice.invoice_date
+          due_date: invoice.due_date,
+          total_amount: Number(invoice.final_amount),
+          paid_amount: Number(invoice.paid_amount),
+          pending_amount: Number(invoice.pending_amount),
+          payment_status: invoice.payment_status,
+          items_count: invoice.items_count ?? 0,
+          created_at: invoice.created_at,
+          updated_at: invoice.updated_at
         }));
 
-        const total = responseData?.total || responseData?.data?.total || transformedData.length;
+        const total = responseData?.total ?? transformedData.length;
         dispatch({ type: 'SET_INVOICES', invoices: transformedData });
         dispatch({
           type: 'SET_PAGINATION',
@@ -152,32 +165,44 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         });
 
       } else if (docType === 'challan') {
+        // Challans API returns DIRECT ARRAY (not wrapped in { challans: [] })
         response = await challansApi.getAll({
           skip: searchParams.skip,
           limit: searchParams.limit,
           start_date: searchFilters.date_from,
           end_date: searchFilters.date_to
         });
-        const responseData = response?.data || response;
-        const challansData = responseData?.challans || responseData || [];
 
-        transformedData = (Array.isArray(challansData) ? challansData : []).map((challan: any) => ({
-          id: challan.challan_id?.toString() || challan.challan_number,
+        // Backend returns direct array: [{ challan_id, challan_number, ... }]
+        const challansData = response?.data;
+        console.log('[Challan API] Raw response:', challansData);
+
+        if (!Array.isArray(challansData)) {
+          console.error('[Challan API] Expected array, got:', typeof challansData);
+          dispatch({ type: 'SET_INVOICES', invoices: [] });
+          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
+          return;
+        }
+
+        // Map challan fields to display format
+        // Backend fields: challan_id, challan_number, challan_date, customer_name, total_amount, challan_status, delivery_status
+        transformedData = challansData.map((challan: any) => ({
+          id: String(challan.challan_id),
           invoice_number: challan.challan_number,
-          customer_id: challan.customer_id?.toString() || '',
+          customer_id: String(challan.customer_id),
           customer_name: challan.customer_name,
           invoice_date: challan.challan_date,
-          due_date: challan.expected_delivery_date || '',
-          total_amount: challan.total_amount || 0,
+          due_date: challan.dispatch_date,
+          total_amount: Number(challan.total_amount),
           paid_amount: 0,
-          pending_amount: challan.total_amount || 0,
-          payment_status: challan.delivery_status || challan.challan_status || 'pending',
-          items_count: challan.items?.length || 0,
-          created_at: challan.created_at || challan.challan_date,
-          updated_at: challan.updated_at || challan.challan_date
+          pending_amount: Number(challan.total_amount),
+          payment_status: challan.delivery_status,
+          items_count: Number(challan.total_quantity),
+          created_at: challan.challan_date,
+          updated_at: challan.challan_date
         }));
 
-        const total = responseData?.total || transformedData.length;
+        const total = transformedData.length;
         dispatch({ type: 'SET_INVOICES', invoices: transformedData });
         dispatch({
           type: 'SET_PAGINATION',
@@ -185,32 +210,46 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         });
 
       } else if (docType === 'sales_order') {
+        // Sales Orders API returns { orders: [], total, page, per_page }
         response = await salesOrdersApi.getAll({
           skip: searchParams.skip,
           limit: searchParams.limit,
           from_date: searchFilters.date_from,
           to_date: searchFilters.date_to
         });
-        const responseData = response?.data || response;
-        const ordersData = responseData?.orders || responseData || [];
 
-        transformedData = (Array.isArray(ordersData) ? ordersData : []).map((order: any) => ({
-          id: order.order_id?.toString() || order.order_number,
+        const responseData = response?.data;
+        console.log('[Sales Orders API] Raw response:', responseData);
+
+        // Backend returns: { orders: [...], total, page, per_page }
+        const ordersData = responseData?.orders;
+
+        if (!Array.isArray(ordersData)) {
+          console.error('[Sales Orders API] Expected orders array, got:', typeof ordersData);
+          dispatch({ type: 'SET_INVOICES', invoices: [] });
+          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
+          return;
+        }
+
+        // Map order fields to display format
+        // Backend fields: order_id, order_number, order_date, customer_name, total_amount, order_status, paid_amount, balance_amount
+        transformedData = ordersData.map((order: any) => ({
+          id: String(order.order_id),
           invoice_number: order.order_number,
-          customer_id: order.customer_id?.toString() || '',
+          customer_id: String(order.customer_id),
           customer_name: order.customer_name,
           invoice_date: order.order_date,
-          due_date: order.expected_delivery_date || '',
-          total_amount: order.total_amount || order.final_amount || 0,
-          paid_amount: order.paid_amount || 0,
-          pending_amount: order.pending_amount || 0,
-          payment_status: order.order_status || 'pending',
-          items_count: order.items?.length || 0,
-          created_at: order.created_at || order.order_date,
-          updated_at: order.updated_at || order.order_date
+          due_date: order.delivery_date,
+          total_amount: Number(order.total_amount),
+          paid_amount: Number(order.paid_amount),
+          pending_amount: Number(order.balance_amount),
+          payment_status: order.order_status,
+          items_count: order.items?.length ?? 0,
+          created_at: order.created_at,
+          updated_at: order.updated_at
         }));
 
-        const total = responseData?.total || transformedData.length;
+        const total = responseData?.total ?? transformedData.length;
         dispatch({ type: 'SET_INVOICES', invoices: transformedData });
         dispatch({
           type: 'SET_PAGINATION',
