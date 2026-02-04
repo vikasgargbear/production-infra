@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
+import useCompanyDetails from '../../../hooks/useCompanyDetails';
 
 interface ReturnItem {
   id?: string | number;
@@ -56,6 +57,8 @@ interface DebitNotePreviewProps {
 }
 
 const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplier = {}, purchase = {} }) => {
+  const { companyDetails } = useCompanyDetails();
+
   // Add safety checks for required data
   if (!supplier || !purchase || !returnData) {
     return (
@@ -143,19 +146,37 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
         {/* Header - Compact */}
         <div className="px-8 py-4 border-b border-gray-200">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex items-start gap-4">
+              {/* Company Logo */}
+              {companyDetails.company_logo ? (
+                <img
+                  src={companyDetails.company_logo}
+                  alt="Company Logo"
+                  className="h-16 w-16 object-contain"
+                />
+              ) : (
+                <div className="w-16 h-16 bg-orange-100 rounded flex items-center justify-center flex-shrink-0">
+                  <span className="text-xl font-bold text-orange-700">
+                    {(companyDetails.company_name || 'A').charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+
               {/* Company Details - Compact */}
               <div>
                 <h2 className="text-xl font-bold text-gray-900 mb-1">
-                  {localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
+                  {companyDetails.company_name}
                 </h2>
                 <div className="text-xs text-gray-600 space-y-0.5">
-                  <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
+                  <p>{companyDetails.company_address}</p>
                   <div className="flex gap-4">
-                    <span>GSTIN: {localStorage.getItem('company_gst_number') || ''}</span>
-                    <span>DL: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</span>
-                    <span>Ph: {localStorage.getItem('company_phone') || '+91 99999 99999'}</span>
+                    <span>GST: {companyDetails.company_gst_number}</span>
+                    <span>DL: {companyDetails.company_drug_license}</span>
+                    <span>Ph: {companyDetails.company_phone}</span>
                   </div>
+                  {companyDetails.company_email && (
+                    <p>Email: {companyDetails.company_email}</p>
+                  )}
                 </div>
               </div>
             </div>

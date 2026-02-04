@@ -6,6 +6,7 @@ import {
     AlertCircle, RefreshCw
 } from 'lucide-react';
 import { companyApi } from '../../../services/api';
+import { CompanyDataService } from '../../../services/offline/modules/company';
 import BankAccountManager from '../masters/BankAccountManager';
 
 interface CompanyProfileProps {
@@ -24,6 +25,7 @@ interface CompanyData {
     gst_number: string;
     drugLicenseNo: string;
     fssaiNo: string;
+    msmeNo: string;
 
     // Contact Details
     address: string;
@@ -93,6 +95,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         gst_number: '',
         drugLicenseNo: '',
         fssaiNo: '',
+        msmeNo: '',
 
         // Contact Details
         address: '',
@@ -146,24 +149,47 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     useEffect(() => {
         if (open) {
             fetchOrganizationProfile();
-
-            // Load logo from localStorage
-            const savedLogo = localStorage.getItem('companyLogo');
-            if (savedLogo) {
-                setLogoPreview(savedLogo);
-                setCompanyData(prev => ({
-                    ...prev,
-                    logo: savedLogo
-                }));
-            }
         }
     }, [open]);
 
     const fetchOrganizationProfile = async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+        setError(null);
 
+        // STEP 1: Try to get cached profile instantly (from memory/IndexedDB)
+        // This should be <5ms if cache is warm
+        const cachedProfile = await CompanyDataService.getProfile();
+
+        if (cachedProfile) {
+            // Set logo preview immediately
+            if (cachedProfile.company_logo) {
+                setLogoPreview(cachedProfile.company_logo);
+            }
+
+            // Populate form with cached data while API loads
+            setCompanyData(prev => ({
+                ...prev,
+                businessName: cachedProfile.company_name || prev.businessName,
+                address: cachedProfile.company_address || prev.address,
+                gst_number: cachedProfile.company_gst_number || prev.gst_number,
+                drugLicenseNo: cachedProfile.company_drug_license || prev.drugLicenseNo,
+                phone: cachedProfile.company_phone || prev.phone,
+                altPhone: cachedProfile.company_alternate_phone || prev.altPhone,
+                email: cachedProfile.company_email || prev.email,
+                website: cachedProfile.company_website || prev.website,
+                pan_number: cachedProfile.company_pan || prev.pan_number,
+                fssaiNo: cachedProfile.company_fssai || prev.fssaiNo,
+                logo: cachedProfile.company_logo || prev.logo,
+            }));
+
+            // We have cached data, so don't show loading spinner
+            console.log('[CompanyProfile] Loaded from cache instantly');
+        } else {
+            // No cache, need to show loading
+            setIsLoading(true);
+        }
+
+        // STEP 2: Fetch fresh data from API (in background)
+        try {
             const response = await companyApi.getCompanyInfo();
 
             if (response) {
@@ -181,6 +207,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     gst_number: data.gst || '',
                     drugLicenseNo: data.drug_license_no || '',
                     fssaiNo: data.fssai_no || '',
+                    msmeNo: data.msme_no || '',
 
                     // Contact Details
                     address: data.address || '',
@@ -229,14 +256,23 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     dateFormat: data.date_format || data.business_settings?.date_format || 'DD-MM-YYYY',
                     timeFormat: data.time_format || data.business_settings?.time_format || '12h'
                 });
-            } else {
+
+                // Update logo if it came from API
+                if (data.logo) {
+                    setLogoPreview(data.logo);
+                }
+            } else if (!cachedProfile) {
+                // No API response AND no cache
                 setError('No organization data available');
             }
         } catch (error) {
-            setError('Failed to load organization profile. Please check your connection and try again.');
-
-            // Show user-friendly error message
-            setTimeout(() => setError(null), 10000);
+            // Only show error if we had no cached data
+            if (!cachedProfile) {
+                setError('Failed to load organization profile. Please check your connection and try again.');
+                setTimeout(() => setError(null), 10000);
+            } else {
+                console.warn('[CompanyProfile] API fetch failed, using cached data');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -259,21 +295,21 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Check file size (max 2MB for localStorage)
+            // Check file size (max 2MB)
             if (file.size > 2 * 1024 * 1024) {
                 setError('Logo size should be less than 2MB');
                 setTimeout(() => setError(null), 5000);
                 return;
             }
 
-            // Show preview and save to localStorage
+            // Show preview and save to IndexedDB
             const reader = new FileReader();
-            reader.onloadend = () => {
+            reader.onloadend = async () => {
                 const base64Logo = reader.result as string;
                 setLogoPreview(base64Logo);
 
-                // Save to localStorage for persistence
-                localStorage.setItem('companyLogo', base64Logo);
+                // Save to IndexedDB for offline persistence (instead of localStorage)
+                await CompanyDataService.updateProfile({ company_logo: base64Logo });
 
                 // Update company data
                 setCompanyData(prev => ({
@@ -294,7 +330,18 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         setSuccessMessage('');
 
         try {
-            // Prepare data for API (matching backend company.py expected format)
+            // STEP 1: Upload logo separately if it exists (backend has dedicated endpoint)
+            if (companyData.logo) {
+                try {
+                    await companyApi.uploadLogo(companyData.logo);
+                    console.log('Logo uploaded successfully');
+                } catch (logoError) {
+                    console.error('Logo upload failed:', logoError);
+                    // Continue with other data even if logo fails
+                }
+            }
+
+            // STEP 2: Prepare data for API (matching backend company.py expected format)
             const profileData = {
                 name: companyData.businessName,
                 address: companyData.address,
@@ -307,11 +354,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 website: companyData.website,
                 gst: companyData.gst_number,
                 pan_number: companyData.pan_number,
-                logo: companyData.logo,
+                // NOTE: DO NOT send logo here - it has its own endpoint
                 // Additional fields can be stored here
                 tagline: companyData.tagline,
                 drug_license_no: companyData.drugLicenseNo,
                 fssai_no: companyData.fssaiNo,
+                msme_no: companyData.msmeNo,
                 state_code: companyData.stateCode,
                 alt_phone: companyData.altPhone,
                 financial_year_start: companyData.financialYearStart,
@@ -347,9 +395,45 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             localStorage.setItem('date_format', companyData.dateFormat);
             localStorage.setItem('time_format', companyData.timeFormat);
 
+            // Save business settings including TnC for invoice preview
+            const businessSettings = JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}');
+            businessSettings.terms_and_conditions = companyData.defaultTerms;
+            businessSettings.default_terms = companyData.defaultTerms;
+            businessSettings.default_footer = companyData.defaultFooter;
+            localStorage.setItem('companyBusinessSettings', JSON.stringify(businessSettings));
+
+            // Also update city, state, pincode for invoice preview
+            localStorage.setItem('companyCity', companyData.city);
+            localStorage.setItem('companyState', companyData.state);
+            localStorage.setItem('companyPincode', companyData.pincode);
+            localStorage.setItem('companyFssai', companyData.fssaiNo);
+            localStorage.setItem('companyMsme', companyData.msmeNo);
+
             const response = await companyApi.updateCompanyInfo(profileData);
 
             if (response) {
+                // Update IndexedDB cache with new profile data
+                await CompanyDataService.updateProfile({
+                    company_name: companyData.businessName,
+                    company_address: companyData.address,
+                    company_gst_number: companyData.gst_number,
+                    company_drug_license: companyData.drugLicenseNo,
+                    company_phone: companyData.phone,
+                    company_alternate_phone: companyData.altPhone,
+                    company_email: companyData.email,
+                    company_website: companyData.website,
+                    company_pan: companyData.pan_number,
+                    company_fssai: companyData.fssaiNo,
+                    company_msme: companyData.msmeNo,
+                    company_logo: companyData.logo || '',
+                    company_city: companyData.city,
+                    company_state: companyData.state,
+                    company_pincode: companyData.pincode,
+                    billing_address: companyData.address,
+                    shipping_address: companyData.address,
+                    terms_and_conditions: companyData.defaultTerms,
+                });
+
                 setSuccessMessage('Company profile saved successfully!');
                 setTimeout(() => {
                     setSuccessMessage('');
@@ -571,6 +655,19 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     onChange={(e) => handleInputChange('fssaiNo', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     placeholder="10023456789012"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    MSME/Udyam No.
+                                </label>
+                                <input
+                                    type="text"
+                                    value={companyData.msmeNo}
+                                    onChange={(e) => handleInputChange('msmeNo', e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="UDYAM-XX-00-0000000"
                                 />
                             </div>
                         </div>

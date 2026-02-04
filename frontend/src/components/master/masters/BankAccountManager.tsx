@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
     CreditCard, Plus, Trash2, Check,
-    X, AlertCircle, Building2, Star, Loader2
+    X, AlertCircle, Building2, Star, Loader2, Pencil, Upload, QrCode
 } from 'lucide-react';
-import { bankAccountsApi } from '../../../services/api';
+import { bankAccountsApi, companyApi } from '../../../services/api';
+import { useCompany } from '../../../contexts/CompanyContext';
 
 interface BankAccount {
     id: number | string;
@@ -13,6 +14,7 @@ interface BankAccount {
     account_type: string;
     ifsc_code: string;
     branch_name: string;
+    upi_id?: string;
     is_default_account: boolean;
 }
 
@@ -23,6 +25,7 @@ interface NewBankAccount {
     account_type: string;
     ifsc_code: string;
     branch_name: string;
+    upi_id: string;
     is_default_account: boolean;
 }
 
@@ -35,12 +38,47 @@ interface BankAccountManagerProps {
 }
 
 const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, onUpdate }) => {
+    const { companyInfo, updateCompanyInfo } = useCompany();
     const [accounts, setAccounts] = useState<BankAccount[]>([]);
     const [isAddingNew, setIsAddingNew] = useState(false);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [editingId, setEditingId] = useState<number | string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [qrPreview, setQrPreview] = useState<string>((companyInfo as any)?.paymentQR || '');
+    const [upiId, setUpiId] = useState<string>((companyInfo as any)?.upi_id || (companyInfo as any)?.upiId || '');
+
+    const [qrSuccess, setQrSuccess] = useState('');
+
+    const handleQRUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            // Show preview immediately
+            const reader = new FileReader();
+            reader.onloadend = () => setQrPreview(reader.result as string);
+            reader.readAsDataURL(file);
+
+            // Upload to backend
+            try {
+                await companyApi.uploadQRCode(file);
+                setError(null);
+                setQrSuccess('QR code uploaded successfully');
+                setTimeout(() => setQrSuccess(''), 3000);
+            } catch (err) {
+                setError('Failed to upload QR code. Please try again.');
+            }
+        }
+    };
+
+    const handleSaveUpiId = async () => {
+        try {
+            const info = companyInfo || {} as any;
+            await updateCompanyInfo({ ...info, upi_id: upiId });
+            setQrSuccess('UPI ID saved successfully');
+            setTimeout(() => setQrSuccess(''), 3000);
+        } catch (err) {
+            setError('Failed to save UPI ID');
+        }
+    };
     const [newAccount, setNewAccount] = useState<NewBankAccount>({
         account_name: '',
         account_number: '',
@@ -48,6 +86,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         account_type: 'CURRENT',
         ifsc_code: '',
         branch_name: '',
+        upi_id: '',
         is_default_account: false
     });
 
@@ -85,6 +124,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
 
     const handleAddAccount = () => {
         setIsAddingNew(true);
+        setEditingId(null);
         setNewAccount({
             account_name: companyData.businessName || '',
             account_number: '',
@@ -92,7 +132,23 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
             account_type: 'CURRENT',
             ifsc_code: '',
             branch_name: '',
+            upi_id: '',
             is_default_account: accounts.length === 0
+        });
+    };
+
+    const handleEditAccount = (account: BankAccount) => {
+        setIsAddingNew(true);
+        setEditingId(account.id);
+        setNewAccount({
+            account_name: account.account_name,
+            account_number: account.account_number,
+            bank_name: account.bank_name,
+            account_type: account.account_type,
+            ifsc_code: account.ifsc_code,
+            branch_name: account.branch_name,
+            upi_id: account.upi_id || '',
+            is_default_account: account.is_default_account
         });
     };
 
@@ -109,30 +165,36 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         }
 
         try {
-            const accountToAdd = {
+            const accountData = {
                 ...newAccount,
                 ifsc_code: newAccount.ifsc_code.toUpperCase()
             };
 
-            // Save to backend
-            // @ts-ignore
-            const response = await bankAccountsApi.createBankAccount(accountToAdd);
+            if (editingId) {
+                // Update existing account
+                await bankAccountsApi.update(editingId, accountData);
+            } else {
+                // Create new account
+                // @ts-ignore
+                await bankAccountsApi.createBankAccount(accountData);
+            }
 
             // Refresh the list
             await fetchAccounts();
 
             setIsAddingNew(false);
+            setEditingId(null);
             setError(null);
 
             // Update parent component
             if (onUpdate) {
-                onUpdate(accountToAdd);
+                onUpdate(accountData);
             }
         } catch (error: any) {
             if (error.response?.status === 404) {
                 setError('Bank account service is being deployed. Please try again in a few moments.');
             } else {
-                setError('Failed to save bank account. Please try again.');
+                setError(`Failed to ${editingId ? 'update' : 'save'} bank account. Please try again.`);
             }
         }
     };
@@ -256,9 +318,22 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                             <span className="text-gray-500">Branch:</span>{' '}
                                             <span className="text-gray-900">{account.branch_name || 'N/A'}</span>
                                         </div>
+                                        {account.upi_id && (
+                                            <div>
+                                                <span className="text-gray-500">UPI:</span>{' '}
+                                                <span className="text-gray-900">{account.upi_id}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex items-center space-x-2 ml-4">
+                                <div className="flex items-center space-x-1 ml-4">
+                                    <button
+                                        onClick={() => handleEditAccount(account)}
+                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                        title="Edit account"
+                                    >
+                                        <Pencil className="w-4 h-4" />
+                                    </button>
                                     {!account.is_default_account && (
                                         <button
                                             onClick={() => handleSetDefault(account.id)}
@@ -283,7 +358,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                     {/* Add New Account Form */}
                     {isAddingNew && (
                         <div className="border-2 border-dashed border-blue-300 rounded-lg p-4 bg-blue-50">
-                            <h3 className="text-sm font-medium text-gray-900 mb-3">Add New Bank Account</h3>
+                            <h3 className="text-sm font-medium text-gray-900 mb-3">{editingId ? 'Edit Bank Account' : 'Add New Bank Account'}</h3>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -365,6 +440,19 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                         placeholder="e.g., Main Branch"
                                     />
                                 </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                        UPI ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newAccount.upi_id}
+                                        onChange={(e) => setNewAccount({ ...newAccount, upi_id: e.target.value })}
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="e.g., business@upi"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-between mt-4">
@@ -380,7 +468,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
 
                                 <div className="flex items-center space-x-2">
                                     <button
-                                        onClick={() => setIsAddingNew(false)}
+                                        onClick={() => { setIsAddingNew(false); setEditingId(null); }}
                                         className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center space-x-1 text-sm"
                                     >
                                         <X className="w-4 h-4" />
@@ -391,7 +479,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                                         className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm"
                                     >
                                         <Check className="w-4 h-4" />
-                                        <span>Save Account</span>
+                                        <span>{editingId ? 'Update Account' : 'Save Account'}</span>
                                     </button>
                                 </div>
                             </div>
@@ -408,6 +496,60 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                     )}
                 </div>
             )}
+
+            {/* Payment QR Code Section */}
+            <div className="mt-6 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center">
+                        <QrCode className="w-4 h-4 mr-2" />
+                        Payment QR Code
+                    </h3>
+                    {qrSuccess && (
+                        <span className="text-xs text-green-600 font-medium flex items-center">
+                            <Check className="w-3 h-3 mr-1" />
+                            {qrSuccess}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-start gap-4">
+                    {qrPreview ? (
+                        <img src={qrPreview} alt="Payment QR" className="w-28 h-28 object-contain border border-gray-300 rounded-lg p-1" />
+                    ) : (
+                        <div className="w-28 h-28 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                            <QrCode className="w-10 h-10 text-gray-300" />
+                        </div>
+                    )}
+                    <div className="flex-1 space-y-3">
+                        <div>
+                            <input type="file" id="bank-qr-upload" accept="image/*" onChange={handleQRUpload} className="hidden" />
+                            <label htmlFor="bank-qr-upload" className="cursor-pointer inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                <Upload className="w-4 h-4 mr-1.5" />
+                                {qrPreview ? 'Change QR' : 'Upload QR Code'}
+                            </label>
+                            <p className="text-xs text-gray-500 mt-1">Upload your UPI/Payment QR code. It will appear on invoices.</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">UPI ID</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={upiId}
+                                    onChange={(e) => setUpiId(e.target.value)}
+                                    className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g., business@upi"
+                                />
+                                <button
+                                    onClick={handleSaveUpiId}
+                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                                >
+                                    Save
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">UPI ID will be shown below the QR code on invoices.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Info Note */}
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-2">

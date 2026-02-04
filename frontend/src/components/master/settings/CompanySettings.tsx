@@ -26,12 +26,14 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
     digitalSignature: (safeCompanyInfo as any).logo || '',
     businessType: businessSettings.business_type || 'b2b',
     paymentQR: (safeCompanyInfo as any).paymentQR || '',
-    showTransportDetails: businessSettings.show_transport_details !== false // Default to true
+    showTransportDetails: businessSettings.show_transport_details !== false, // Default to true
+    termsAndConditions: businessSettings.terms_and_conditions || ''
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
   const [signaturePreview, setSignaturePreview] = useState(settings.digitalSignature);
   const [qrPreview, setQrPreview] = useState(settings.paymentQR);
+  const [qrFile, setQrFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -50,7 +52,8 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
         digitalSignature: info.logo || '',
         businessType: bizSettings.business_type || 'b2b',
         showTransportDetails: bizSettings.show_transport_details !== false, // Default to true
-        paymentQR: info.paymentQR || ''
+        paymentQR: info.paymentQR || '',
+        termsAndConditions: bizSettings.terms_and_conditions || ''
       });
       setLogoPreview(info.logo || '');
       setSignaturePreview(info.logo || '');
@@ -58,15 +61,20 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
     }
   }, [open, companyInfo]);
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Show preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result);
-        setSettings({ ...settings, companyLogo: reader.result });
-      };
+      reader.onloadend = () => setLogoPreview(reader.result as string);
       reader.readAsDataURL(file);
+
+      // Upload immediately (exactly like QR does in BankAccountManager)
+      try {
+        await companyApi.uploadLogo(file);
+      } catch (err) {
+        console.error('Failed to upload logo:', err);
+      }
     }
   };
 
@@ -85,6 +93,7 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
   const handleQRUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
+      setQrFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setQrPreview(reader.result);
@@ -115,16 +124,12 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
         business_settings: {
           ...(info.business_settings || {}),
           business_type: settings.businessType,
-          show_transport_details: settings.showTransportDetails
+          show_transport_details: settings.showTransportDetails,
+          terms_and_conditions: settings.termsAndConditions
         }
       };
 
       await updateCompanyInfo(companyData);
-
-      // Upload QR code if changed
-      if (settings.paymentQR && settings.paymentQR !== info.paymentQR) {
-        await companyApi.uploadQRCode(settings.paymentQR);
-      }
 
       toast.saved('Company Settings');
     } catch (error) {
@@ -441,6 +446,21 @@ const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: (
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Terms & Conditions */}
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Terms & Conditions</h3>
+            <textarea
+              value={settings.termsAndConditions}
+              onChange={(e) => setSettings({ ...settings, termsAndConditions: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+              placeholder="e.g., Goods once sold will not be taken back. Interest @18% will be charged on overdue payments."
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              These terms will appear at the bottom of all invoices.
+            </p>
           </div>
 
           {/* Footer with Save Button */}

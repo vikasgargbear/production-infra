@@ -211,7 +211,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     ...prev,
                                                     payments: [
                                                         { id: '1', method: 'upi', amount: totalAmount, reference: '' },
-                                                        { id: '2', method: 'credit', amount: 0, reference: '' }
+                                                        { id: '2', method: 'credit', amount: '', reference: '' }
                                                     ],
                                                     payment_mode: 'split',
                                                     payment_status: 'partial'
@@ -266,11 +266,19 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                             {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>}
                                                             <input
                                                                 type="number"
-                                                                value={payment.amount}
+                                                                value={payment.amount === 0 || payment.amount === '' ? '' : payment.amount}
                                                                 onChange={(e) => {
                                                                     const newPayments = [...(invoice.payments || [])];
-                                                                    newPayments[index] = { ...newPayments[index], amount: parseFloat(e.target.value) || 0 };
+                                                                    const val = e.target.value;
+                                                                    newPayments[index] = { ...newPayments[index], amount: val === '' ? '' : parseFloat(val) || 0 };
                                                                     setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    if (e.target.value === '') {
+                                                                        const newPayments = [...(invoice.payments || [])];
+                                                                        newPayments[index] = { ...newPayments[index], amount: 0 };
+                                                                        setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                                                    }
                                                                 }}
                                                                 onFocus={(e) => e.target.select()}
                                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -317,7 +325,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     const newPayment: Payment = {
                                                         id: Date.now().toString(),
                                                         method: 'cash',
-                                                        amount: 0,
+                                                        amount: '',
                                                         reference: ''
                                                     };
                                                     setInvoice(prev => ({

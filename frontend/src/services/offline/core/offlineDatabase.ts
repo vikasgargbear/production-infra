@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 9;  // Bumped for customer_addresses store
+const DB_VERSION = 10;  // Bumped for company_profile store
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -73,6 +73,28 @@ export interface OfflineSchema extends DBSchema {
         value: any;
         indexes: { 'customer_id': string; 'sync_status': string; 'address_type': string };
     };
+    // Company profile store for offline-first access
+    company_profile: {
+        key: string;  // 'current' - single record
+        value: {
+            key: string;
+            company_name: string;
+            company_address: string;
+            company_gst_number: string;
+            company_drug_license: string;
+            company_phone: string;
+            company_alternate_phone: string;
+            company_email: string;
+            company_website: string;
+            company_pan: string;
+            company_fssai: string;
+            company_logo: string;
+            billing_address: string;
+            shipping_address: string;
+            bank_details: any;
+            updated_at: string;
+        };
+    };
 }
 
 class OfflineDatabase {
@@ -104,7 +126,19 @@ class OfflineDatabase {
         console.log(`${LOG_PREFIX} Initializing database v${DB_VERSION}...`);
 
         this.db = await openDB<OfflineSchema>(DB_NAME, DB_VERSION, {
+            blocked(currentVersion, blockedVersion, event) {
+                // Database upgrade is blocked by another tab
+                console.warn(`${LOG_PREFIX} ⚠️ Database upgrade blocked! Current: v${currentVersion}, target: v${blockedVersion}`);
+                console.warn(`${LOG_PREFIX} Close other tabs and refresh this page.`);
+
+                // Auto-reload after 3 seconds if blocked
+                setTimeout(() => {
+                    console.log(`${LOG_PREFIX} Reloading page to retry database upgrade...`);
+                    window.location.reload();
+                }, 3000);
+            },
             upgrade(db, oldVersion, newVersion, transaction) {
+                console.log(`${LOG_PREFIX} Upgrading from v${oldVersion} to v${newVersion}...`);
                 // Customers store
                 if (!db.objectStoreNames.contains('customers')) {
                     const customerStore = db.createObjectStore('customers', { keyPath: 'id' });
@@ -217,6 +251,11 @@ class OfflineDatabase {
                     addrStore.createIndex('customer_id', 'customer_id');
                     addrStore.createIndex('sync_status', 'sync_status');
                     addrStore.createIndex('address_type', 'address_type');
+                }
+
+                // Company Profile store (for offline-first company info access)
+                if (!db.objectStoreNames.contains('company_profile')) {
+                    db.createObjectStore('company_profile', { keyPath: 'key' });
                 }
             },
         });

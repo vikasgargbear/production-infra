@@ -16,16 +16,21 @@ interface BusinessSettings {
 interface CompanyInfo {
     name: string;
     address: string;
+    city: string;
+    state: string;
+    pincode: string;
     phone: string;
     email: string;
     gst: string;
+    gst_number?: string;  // Alias for invoice preview
     drugLicense: string;
-    state: string;
+    drug_license_no?: string;  // Alias for invoice preview
     logo: string | null;
     bankAccounts: BankAccount[];
     paymentQR: string | null;
     business_settings?: BusinessSettings;
-    fssaiLicense?: string | null;
+    fssai_no?: string | null;
+    msme_no?: string | null;
 }
 
 interface CompanyContextValue {
@@ -84,15 +89,21 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             const cachedCompanyInfo: CompanyInfo = {
                 name: localStorage.getItem('companyName') || '',
                 address: localStorage.getItem('companyAddress') || '',
+                city: localStorage.getItem('companyCity') || '',
+                state: localStorage.getItem('companyState') || '',
+                pincode: localStorage.getItem('companyPincode') || '',
                 phone: localStorage.getItem('companyPhone') || '',
                 email: localStorage.getItem('companyEmail') || '',
                 gst: localStorage.getItem('companyGST') || '',
+                gst_number: localStorage.getItem('companyGST') || '',
                 drugLicense: localStorage.getItem('companyDrugLicense') || '',
-                state: localStorage.getItem('companyState') || '',
+                drug_license_no: localStorage.getItem('companyDrugLicense') || '',
                 logo: localStorage.getItem('companyLogo') || null,
                 bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
                 paymentQR: localStorage.getItem('companyPaymentQR') || null,
-                business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}')
+                business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}'),
+                fssai_no: localStorage.getItem('companyFssai') || null,
+                msme_no: localStorage.getItem('companyMsme') || null,
             };
 
             const cachedOrgId = localStorage.getItem('orgId');
@@ -106,7 +117,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
 
             // BACKGROUND: Try to refresh from API (don't block on this)
             try {
-                const response = await companyApi.getCompanyProfile();
+                const response = await companyApi.getCompanyInfo();
                 const rawResponse = (response as any).data || response;
 
                 // Handle both wrapped {success, data} and direct response formats
@@ -119,15 +130,21 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     const apiCompanyInfo: CompanyInfo = {
                         name: profileData.name || profileData.company_name || cachedCompanyInfo.name,
                         address: profileData.address || cachedCompanyInfo.address,
+                        city: profileData.city || cachedCompanyInfo.city,
+                        state: profileData.state || cachedCompanyInfo.state,
+                        pincode: profileData.pincode || cachedCompanyInfo.pincode,
                         phone: profileData.phone || cachedCompanyInfo.phone,
                         email: profileData.email || cachedCompanyInfo.email,
                         gst: profileData.gst || profileData.gstin || cachedCompanyInfo.gst,
+                        gst_number: profileData.gst || profileData.gstin || cachedCompanyInfo.gst,
                         drugLicense: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
-                        state: profileData.state || cachedCompanyInfo.state,
+                        drug_license_no: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
                         logo: profileData.logo || cachedCompanyInfo.logo,
                         bankAccounts: profileData.bank_accounts || [],
                         paymentQR: profileData.payment_qr_code || null,
-                        business_settings: profileData.business_settings || {}
+                        business_settings: profileData.business_settings || {},
+                        fssai_no: profileData.fssai_no || cachedCompanyInfo.fssai_no,
+                        msme_no: profileData.msme_no || cachedCompanyInfo.msme_no,
                     };
 
                     setCompanyInfo(apiCompanyInfo);
@@ -135,11 +152,13 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     // Update localStorage with fresh data
                     localStorage.setItem('companyName', apiCompanyInfo.name);
                     localStorage.setItem('companyAddress', apiCompanyInfo.address);
+                    localStorage.setItem('companyCity', apiCompanyInfo.city);
+                    localStorage.setItem('companyState', apiCompanyInfo.state);
+                    localStorage.setItem('companyPincode', apiCompanyInfo.pincode);
                     localStorage.setItem('companyPhone', apiCompanyInfo.phone);
                     localStorage.setItem('companyEmail', apiCompanyInfo.email);
                     localStorage.setItem('companyGST', apiCompanyInfo.gst);
                     localStorage.setItem('companyDrugLicense', apiCompanyInfo.drugLicense);
-                    localStorage.setItem('companyState', apiCompanyInfo.state);
                     localStorage.setItem('companyBankAccounts', JSON.stringify(apiCompanyInfo.bankAccounts));
                     if (apiCompanyInfo.logo) {
                         localStorage.setItem('companyLogo', apiCompanyInfo.logo);
@@ -147,32 +166,16 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     if (apiCompanyInfo.paymentQR) {
                         localStorage.setItem('companyPaymentQR', apiCompanyInfo.paymentQR);
                     }
-                    // Note: org_id is already in localStorage from login/sync, no need to fetch again
-                } else {
-                    // Fallback to old API (just company info, org_id already cached)
-                    try {
-                        const companyRes = await companyApi.getCompanyInfo();
-                        const companyResponse = (companyRes as any).data || companyRes;
-
-                        if (companyResponse) {
-                            const apiCompanyInfo: CompanyInfo = {
-                                name: companyResponse.name || cachedCompanyInfo.name,
-                                address: companyResponse.address || cachedCompanyInfo.address,
-                                phone: companyResponse.phone || cachedCompanyInfo.phone,
-                                email: companyResponse.email || cachedCompanyInfo.email,
-                                gst: companyResponse.gst || cachedCompanyInfo.gst,
-                                drugLicense: companyResponse.drug_license_no || cachedCompanyInfo.drugLicense,
-                                state: companyResponse.state || cachedCompanyInfo.state,
-                                logo: companyResponse.logo || cachedCompanyInfo.logo,
-                                bankAccounts: cachedCompanyInfo.bankAccounts,
-                                paymentQR: cachedCompanyInfo.paymentQR
-                            };
-
-                            setCompanyInfo(apiCompanyInfo);
-                        }
-                    } catch (fallbackError) {
-                        // Ignore fallback errors, use cached data
+                    if (apiCompanyInfo.business_settings) {
+                        localStorage.setItem('companyBusinessSettings', JSON.stringify(apiCompanyInfo.business_settings));
                     }
+                    if (apiCompanyInfo.fssai_no) {
+                        localStorage.setItem('companyFssai', apiCompanyInfo.fssai_no);
+                    }
+                    if (apiCompanyInfo.msme_no) {
+                        localStorage.setItem('companyMsme', apiCompanyInfo.msme_no);
+                    }
+                    // Note: org_id is already in localStorage from login/sync, no need to fetch again
                 }
             } catch (apiError) {
                 console.error('Failed to fetch company profile:', apiError);
@@ -183,15 +186,18 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
             setCompanyInfo({
                 name: '',
                 address: '',
+                city: '',
+                state: '',
+                pincode: '',
                 phone: '',
                 email: '',
                 gst: '',
                 drugLicense: '',
-                state: '',
                 logo: null,
                 bankAccounts: [],
                 paymentQR: null,
-                fssaiLicense: null
+                fssai_no: null,
+                msme_no: null
             });
         } finally {
             setLoading(false);

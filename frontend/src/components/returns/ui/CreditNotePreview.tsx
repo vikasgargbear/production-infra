@@ -124,18 +124,38 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
         {/* Header */}
         <div className="p-8 border-b border-gray-200">
           <div className="flex justify-between items-start">
-            <div>
-              {/* Company Logo and Details */}
+            <div className="flex items-start gap-4">
+              {/* Company Logo */}
+              {companyDetails.company_logo ? (
+                <img
+                  src={companyDetails.company_logo}
+                  alt="Company Logo"
+                  className="h-20 w-20 object-contain"
+                />
+              ) : (
+                <div className="w-20 h-20 bg-green-100 rounded flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl font-bold text-green-700">
+                    {(companyDetails.company_name || 'A').charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+
+              {/* Company Details */}
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
                   {companyDetails.company_name}
                 </h2>
                 <div className="text-sm text-gray-600 space-y-1">
                   {companyDetails.company_address && <p>{companyDetails.company_address}</p>}
-                  {companyDetails.company_gst_number && <p>GSTIN: {companyDetails.company_gst_number}</p>}
-                  {companyDetails.company_drug_license && <p>DL No: {companyDetails.company_drug_license}</p>}
-                  {companyDetails.company_phone && <p>Phone: {companyDetails.company_phone}</p>}
-                  {companyDetails.company_email && <p>Email: {companyDetails.company_email}</p>}
+                  <div className="flex gap-4 flex-wrap">
+                    {companyDetails.company_gst_number && <p>GST: {companyDetails.company_gst_number}</p>}
+                    {companyDetails.company_drug_license && <p>DL: {companyDetails.company_drug_license}</p>}
+                  </div>
+                  <div className="space-y-0.5">
+                    {companyDetails.company_phone && <p>Phone: {companyDetails.company_phone}</p>}
+                    {companyDetails.company_alternate_phone && <p>Alt. Phone: {companyDetails.company_alternate_phone}</p>}
+                    {companyDetails.company_email && <p>Email: {companyDetails.company_email}</p>}
+                  </div>
                 </div>
               </div>
             </div>

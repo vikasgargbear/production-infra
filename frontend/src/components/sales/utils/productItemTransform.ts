@@ -133,6 +133,8 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         )),
         packages_per_box: parseInt(String(
             bestBatch?.packages_per_box || product.packages_per_box || 1
-        ))
+        )),
+        pack_type: bestBatch?.pack_type || product.pack_type || '',
+        pack_size: bestBatch?.pack_size || product.pack_size || ''
     } as unknown as T;
 };

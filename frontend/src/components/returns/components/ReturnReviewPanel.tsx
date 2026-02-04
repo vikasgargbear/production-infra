@@ -97,84 +97,77 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
                 <div className="max-w-6xl mx-auto">
-                    {/* Clean Preview - Invoice Style */}
-                    <div id="return-preview" className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                        <div className="px-6 py-4">
-                            {/* Header - 3 Column Grid like Invoice */}
-                            <div className="mb-4">
-                                <div className="grid grid-cols-3 gap-3 items-stretch">
-                                    {/* Company Info - Matching Invoice layout */}
-                                    <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3 border border-blue-200">
-                                        <div className="flex items-start space-x-2">
-                                            {companyInfo?.logo ? (
-                                                <img
-                                                    src={companyInfo?.logo}
-                                                    alt={companyInfo?.name || 'Company'}
-                                                    className="w-10 h-10 object-contain rounded-lg flex-shrink-0"
-                                                />
-                                            ) : (
-                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <span className="text-lg font-bold text-white">
-                                                        {(companyInfo?.name || 'A').charAt(0).toUpperCase()}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div className="flex-1 min-w-0">
-                                                <h2 className="text-sm font-bold text-gray-900 leading-tight">
-                                                    {companyInfo?.name || 'Your Company'}
-                                                </h2>
-                                                <p className="text-[10px] text-gray-600 mt-0.5 line-clamp-2">
-                                                    {companyInfo?.address || ''}
-                                                </p>
-                                                <p className="text-[10px] text-gray-600 mt-0.5">
-                                                    <span className="font-medium">GST:</span> {companyInfo?.gst || '-'}
-                                                </p>
-                                                <p className="text-[10px] text-gray-600">
-                                                    <span className="font-medium">DL:</span> {companyInfo?.drugLicense || '-'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Customer Details */}
-                                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Customer</div>
-                                        <div className="font-medium text-gray-900 text-sm">
-                                            {(selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name}
-                                        </div>
-                                        <div className="text-xs text-gray-600 mt-0.5 truncate">
-                                            {getCustomerAddress()}
-                                        </div>
-                                        {isGSTCustomer && (
-                                            <div className="text-xs text-gray-500 mt-0.5">
-                                                GST: {(selectedCustomer as any).gst_number}
-                                            </div>
-                                        )}
-                                        {(selectedCustomer as any)?.drug_license_number && (
-                                            <div className="text-xs text-gray-500 mt-0.5">
-                                                DL: {(selectedCustomer as any).drug_license_number}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Return Info */}
-                                    <div className="bg-gray-100 rounded-lg p-3 border border-gray-200">
-                                        <h1 className="text-sm font-bold text-gray-900 mb-2">
+                    {/* Clean Preview - Invoice Style - Portrait A4 */}
+                    <div id="return-preview" className="bg-white max-w-[210mm] mx-auto min-h-[297mm] shadow-2xl my-6 p-8 border border-gray-200">
+                        <div>
+                            {/* Header - Top Bar + 3-Col Grid */}
+                            <div className="mb-6">
+                                {/* Top Bar: Title & Details */}
+                                <div className="flex justify-between items-end border-b border-gray-200 pb-4 mb-5 flex-wrap gap-4">
+                                    <div>
+                                        <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-tight leading-none">
                                             {isGSTCustomer ? 'CREDIT NOTE' : 'SALES RETURN'}
                                         </h1>
-                                        <div className="space-y-1">
-                                            <p className="text-xs text-gray-700">
-                                                <span className="text-gray-500">No:</span>
-                                                <span className="ml-1 font-medium">{returnData.return_no}</span>
-                                            </p>
-                                            <p className="text-xs text-gray-700">
-                                                <span className="text-gray-500">Date:</span>
-                                                <span className="ml-1 font-medium">{formatDate(returnData.return_date)}</span>
-                                            </p>
-                                            <p className="text-xs text-gray-700">
-                                                <span className="text-gray-500">Reason:</span>
-                                                <span className="ml-1 font-medium">{returnData.return_reason}</span>
-                                            </p>
+                                    </div>
+                                    <div className="flex gap-8 text-sm">
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Ref No</span>
+                                            <span className="font-bold text-gray-900 mt-0.5">{returnData.return_no}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Date</span>
+                                            <span className="font-bold text-gray-900 mt-0.5">{formatDate(returnData.return_date)}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Reason</span>
+                                            <span className="font-bold text-gray-900 capitalize mt-0.5">{returnData.return_reason || 'Return'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tiles Row: Logo | Company | Customer */}
+                                <div className="grid grid-cols-[100px_1fr_1fr] gap-4 items-stretch">
+                                    {/* Logo Tile */}
+                                    <div className="bg-white rounded-xl border border-gray-200 flex items-center justify-center p-2 shadow-sm">
+                                        {companyInfo?.logo ? (
+                                            <img
+                                                src={companyInfo?.logo}
+                                                alt={companyInfo?.name || 'Company'}
+                                                className="w-full h-full object-contain"
+                                            />
+                                        ) : (
+                                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                <span className="text-xl font-bold text-gray-400">
+                                                    {(companyInfo?.name || 'A').charAt(0).toUpperCase()}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Company Info Tile */}
+                                    <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3.5 border border-blue-200 flex flex-col justify-center shadow-sm">
+                                        <h2 className="text-sm font-bold text-gray-900 leading-tight">{companyInfo?.name || 'Your Company'}</h2>
+                                        <p className="text-[11px] text-gray-600 mt-1.5 leading-snug">{companyInfo?.address || ''}</p>
+                                        <div className="text-[10px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
+                                            <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst || '-'}</span>
+                                            <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drugLicense || '-'}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Customer Info Tile */}
+                                    <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200 flex flex-col justify-center shadow-sm">
+                                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Customer Details</div>
+                                        <div className="font-bold text-gray-900 text-sm leading-tight">
+                                            {(selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name}
+                                        </div>
+                                        <p className="text-[11px] text-gray-600 mt-1 lines-clamp-2 leading-snug">{getCustomerAddress()}</p>
+                                        <div className="text-[10px] text-gray-600 mt-1.5 flex flex-wrap gap-x-3">
+                                            {(selectedCustomer as any)?.primary_phone && (
+                                                <span>Ph. {(selectedCustomer as any).primary_phone}</span>
+                                            )}
+                                            {isGSTCustomer && (
+                                                <span><span className="font-semibold text-gray-700">GST:</span> {(selectedCustomer as any).gst_number}</span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -247,21 +240,20 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                 </div>
                             )}
 
-                            {/* Items Table - Matching Invoice layout with Pack and Free columns */}
+                            {/* Items Table - Compact columns, no Batch */}
                             <div className="mb-6">
                                 <table className="w-full border border-gray-200 text-[10px]">
                                     <thead className="bg-gray-100">
                                         <tr className="border-b border-gray-200">
-                                            <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '3%' }}>#</th>
-                                            <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '22%' }}>Product</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>Pack</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '10%' }}>Batch</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>HSN</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Exp</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Qty</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '5%' }}>Free</th>
-                                            <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '10%' }}>Rate</th>
-                                            <th className="text-center py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>GST%</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '3%' }}>#</th>
+                                            <th className="text-left py-1.5 px-2 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '30%' }}>Product</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '8%' }}>Pack</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '7%' }}>HSN</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '7%' }}>Exp</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Qty</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '6%' }}>Free</th>
+                                            <th className="text-right py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '10%' }}>Rate</th>
+                                            <th className="text-center py-1.5 px-1.5 font-semibold text-gray-700 uppercase border-r border-gray-200" style={{ width: '7%' }}>GST%</th>
                                             <th className="text-right py-1.5 px-2 font-semibold text-gray-700 uppercase" style={{ width: '12%' }}>Amount</th>
                                         </tr>
                                     </thead>
@@ -275,32 +267,29 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">{index + 1}</td>
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200">{index + 1}</td>
                                                     <td className="py-1.5 px-2 border-r border-gray-200">
                                                         <div className="font-medium text-gray-900">{item.product_name}</div>
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200 text-gray-600">
                                                         {item.pack_size || '-'}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-gray-600">
-                                                        {item.batch_number || '-'}
-                                                    </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200">
                                                         {item.hsn_code || '3004'}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200">
                                                         {formatExpiry(item.expiry_date)}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 font-medium">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200 font-medium">
                                                         {item.return_quantity}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200 text-green-600 font-medium">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200 text-green-600 font-medium">
                                                         {freeQty > 0 ? freeQty : '-'}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-right border-r border-gray-200">
+                                                    <td className="py-1.5 px-1.5 text-right border-r border-gray-200">
                                                         {formatCurrency(rate)}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-center border-r border-gray-200">
+                                                    <td className="py-1.5 px-1.5 text-center border-r border-gray-200">
                                                         {taxPercent > 0 ? `${taxPercent}%` : '-'}
                                                     </td>
                                                     <td className="py-1.5 px-2 text-right font-semibold">

@@ -1,134 +1,126 @@
-import { useState, useEffect } from 'react';
-import { settingsApi } from '../services/api';
-import { storageService, STORAGE_KEYS } from '../services/core/storageService';
+/**
+ * useCompanyDetails Hook
+ * 
+ * Provides company profile data using offline-first architecture.
+ * Data flow: Memory Cache → IndexedDB → API
+ * 
+ * Performance:
+ * - Memory cache hit: <1ms (instant)
+ * - IndexedDB hit: 5-20ms
+ * - API fallback: 200-1500ms
+ */
 
-interface BankDetails {
-    [key: string]: string | number | boolean | undefined;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { CompanyDataService, CompanyMemoryCache, type CompanyProfile } from '../services/offline/modules/company';
 
-interface CompanyDetails {
-    company_name: string;
-    company_address: string;
-    company_gst_number: string;
-    company_drug_license: string;
-    company_phone: string;
-    company_email: string;
-    company_website: string;
-    company_pan: string;
-    company_cin: string;
-    company_fssai: string;
-    billing_address: string;
-    shipping_address: string;
-    bank_details: BankDetails;
+// Re-export types for backward compatibility
+export type { CompanyProfile };
+
+export interface CompanyDetails extends CompanyProfile {
+    // Alias for backward compatibility
 }
 
 interface UseCompanyDetailsReturn {
     companyDetails: CompanyDetails;
     loading: boolean;
     error: Error | null;
-    refreshCompanyDetails: () => void;
+    refreshCompanyDetails: () => Promise<void>;
 }
 
 const defaultCompanyDetails: CompanyDetails = {
-    company_name: 'AASO Pharmaceuticals',
+    key: 'current',
+    company_name: 'Company',
     company_address: '',
+    company_city: '',
+    company_state: '',
+    company_pincode: '',
     company_gst_number: '',
     company_drug_license: '',
     company_phone: '',
+    company_alternate_phone: '',
     company_email: '',
     company_website: '',
     company_pan: '',
     company_cin: '',
     company_fssai: '',
+    company_msme: '',
+    company_logo: '',
     billing_address: '',
     shipping_address: '',
-    bank_details: {}
+    terms_and_conditions: '',
+    bank_details: {},
+    updated_at: ''
 };
 
 const useCompanyDetails = (): UseCompanyDetailsReturn => {
-    const [companyDetails, setCompanyDetails] = useState<CompanyDetails>(defaultCompanyDetails);
-    const [loading, setLoading] = useState<boolean>(true);
+    const [companyDetails, setCompanyDetails] = useState<CompanyDetails>(() => {
+        // Instant sync read from memory cache on mount
+        const cached = CompanyMemoryCache.get();
+        return cached || defaultCompanyDetails;
+    });
+    const [loading, setLoading] = useState<boolean>(!CompanyMemoryCache.isReady());
     const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
-        const fetchCompanyDetails = async () => {
-            const cached = storageService.getItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE);
-            const cacheTime = storageService.getItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME);
+        let mounted = true;
 
-            if (cached && cacheTime && (Date.now() - parseInt(cacheTime as string)) < 3600000) {
-                try {
-                    setCompanyDetails(cached as CompanyDetails);
-                    setLoading(false);
-                    return;
-                } catch {
-                    // Continue to fetch
-                }
+        const loadCompanyDetails = async () => {
+            // If memory cache is ready, we already have data from useState initializer
+            if (CompanyMemoryCache.isReady()) {
+                setLoading(false);
+                return;
             }
 
             try {
-                let response = await settingsApi.getCompanyInfo();
-                let details: Partial<CompanyDetails> = {};
+                const profile = await CompanyDataService.getProfile();
 
-                if (response?.data?.success && response.data.data) {
-                    const info = response.data.data;
-                    details = {
-                        company_name: info.org_name || info.legal_name || 'AASO Pharmaceuticals',
-                        company_address: info.registered_address || info.correspondence_address || '',
-                        company_gst_number: info.gst_number || '',
-                        company_drug_license: info.drug_license_number || '',
-                        company_phone: info.contact_numbers?.[0] || '',
-                        company_email: info.email_addresses?.[0] || '',
-                        company_website: info.website || '',
-                        company_pan: info.pan_number || '',
-                        company_cin: info.cin_number || '',
-                        company_fssai: info.fssai_number || '',
-                        billing_address: info.registered_address || '',
-                        shipping_address: info.correspondence_address || info.registered_address || '',
-                        bank_details: info.bank_details || {}
-                    };
-                } else {
-                    response = await (settingsApi as any).getSettings();
-                    if (response?.data?.success && response.data.data) {
-                        const settings = response.data.data;
-                        details = {
-                            company_name: settings.company_name || 'AASO Pharmaceuticals',
-                            company_address: settings.company_address || settings.billing_address || '',
-                            company_gst_number: settings.gst_number || settings.gst_number || '',
-                            company_drug_license: settings.drug_license || settings.drug_license_number || '',
-                            company_phone: settings.phone || settings.contact_phone || '',
-                            company_email: settings.email || settings.contact_email || '',
-                            company_website: settings.website || '',
-                            company_pan: settings.pan_number || '',
-                            company_cin: settings.cin_number || '',
-                            company_fssai: settings.fssai_number || '',
-                            billing_address: settings.billing_address || settings.company_address || '',
-                            shipping_address: settings.shipping_address || settings.company_address || '',
-                            bank_details: settings.bank_details || {}
-                        };
-                    }
-                }
-
-                if (Object.keys(details).length > 0) {
-                    const fullDetails = { ...defaultCompanyDetails, ...details };
-                    setCompanyDetails(fullDetails);
-                    storageService.setItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE, fullDetails);
-                    storageService.setItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME, Date.now().toString());
+                if (mounted && profile) {
+                    setCompanyDetails(profile);
                 }
             } catch (err) {
-                setError(err as Error);
+                console.error('[useCompanyDetails] Error loading profile:', err);
+                if (mounted) {
+                    setError(err as Error);
+                }
             } finally {
-                setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                }
             }
         };
 
-        fetchCompanyDetails();
+        loadCompanyDetails();
+
+        return () => {
+            mounted = false;
+        };
     }, []);
 
-    const refreshCompanyDetails = (): void => {
-        storageService.removeItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE);
-        storageService.removeItem(STORAGE_KEYS.COMPANY_DETAILS_CACHE_TIME);
-        window.location.reload();
-    };
+    /**
+     * Refresh company details (invalidates cache and fetches fresh)
+     * No longer requires page reload!
+     */
+    const refreshCompanyDetails = useCallback(async (): Promise<void> => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // Invalidate memory cache
+            CompanyDataService.invalidateCache();
+
+            // Fetch fresh from API
+            const profile = await CompanyDataService.fetchFromAPI();
+
+            if (profile) {
+                setCompanyDetails(profile);
+            }
+        } catch (err) {
+            console.error('[useCompanyDetails] Error refreshing:', err);
+            setError(err as Error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     return { companyDetails, loading, error, refreshCompanyDetails };
 };

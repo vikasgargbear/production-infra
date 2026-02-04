@@ -165,6 +165,13 @@ const AppContent = (): JSX.Element => {
           }
         });
       });
+
+      // COMPANY PROFILE: Warm cache for instant access in previews
+      import('./services/offline/modules/company').then(({ CompanyDataService }) => {
+        CompanyDataService.warmCache().then(() => {
+          console.log('✅ [CompanyDataService] Company profile cache warmed');
+        });
+      });
     }
 
     // OFFLINE SYNC: Trigger sync when coming back online

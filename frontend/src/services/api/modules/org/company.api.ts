@@ -27,81 +27,54 @@ export interface CompanyData {
 }
 
 // ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/company',
-    INFO: '/company/info',
-    LOGO: '/company/logo',
-    GST: '/company/gst-info',
-    BANK: '/company/bank-details'
-} as const;
-
-// ============================================
 // API Module
 // ============================================
 
 export const companyApi = {
-    getInfo: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.INFO);
-    },
-
-    updateInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.INFO, data);
-    },
-
-    uploadLogo: (logoBase64: string): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.LOGO, { logo: logoBase64 });
-    },
-
-    getLogo: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.LOGO);
-    },
-
-    deleteLogo: (): Promise<AxiosResponse> => {
-        return apiHelpers.delete(ENDPOINTS.LOGO);
-    },
-
-    getGSTInfo: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.GST);
-    },
-
-    updateGSTInfo: (data: Record<string, any>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.GST, data);
-    },
-
-    getBankDetails: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BANK);
-    },
-
-    updateBankDetails: (data: Record<string, any>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.BANK, data);
-    },
-
-    // Aliases for compatibility
+    // Full profile: company info + bank accounts + logo + QR in one call
     getCompanyProfile: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.INFO);
+        return apiHelpers.get('/company/profile');
     },
 
-    getOrganizationId: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/company/org-id');
-    },
-
+    // Basic company info (also returns logo + QR)
     getCompanyInfo: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.INFO);
+        return apiHelpers.get('/company/info');
     },
 
     updateCompanyInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(ENDPOINTS.INFO, data);
+        return apiHelpers.put('/company/info', data);
     },
 
-    // Upload QR code for payments
-    uploadQRCode: (file: File): Promise<AxiosResponse> => {
-        const formData = new FormData();
-        formData.append('qr_code', file);
-        return apiHelpers.post('/company/qr-code', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+    uploadLogo: (fileOrBase64: File | string): Promise<AxiosResponse> => {
+        if (typeof fileOrBase64 === 'string') {
+            return apiHelpers.post('/company/logo', { logo: fileOrBase64 });
+        }
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                apiHelpers.post('/company/logo', { logo: reader.result as string })
+                    .then(resolve)
+                    .catch(reject);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(fileOrBase64);
+        });
+    },
+
+    uploadQRCode: (fileOrBase64: File | string): Promise<AxiosResponse> => {
+        if (typeof fileOrBase64 === 'string') {
+            return apiHelpers.post('/company/qr-code', { qr_code: fileOrBase64 });
+        }
+        // Convert File to base64 then send as JSON
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                apiHelpers.post('/company/qr-code', { qr_code: reader.result as string })
+                    .then(resolve)
+                    .catch(reject);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(fileOrBase64);
         });
     }
 };

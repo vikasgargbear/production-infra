@@ -37,6 +37,7 @@ async def get_company_info(
                 pan_number,
                 drug_license_number,
                 fssai_number,
+                msme_number,
                 registered_address,
                 correspondence_address,
                 contact_numbers,
@@ -140,6 +141,7 @@ async def get_company_info(
                 "pan": org_data.pan_number or "",
                 "drug_license_no": org_data.drug_license_number or "",
                 "fssai_no": org_data.fssai_number or "",
+                "msme_no": org_data.msme_number or "",
                 "logo": company_logo,
                 "payment_qr_code": payment_qr,
                 # Additional fields from business_settings
@@ -274,6 +276,7 @@ async def update_company_info(
                     pan_number = :pan,
                     drug_license_number = :drug_license_no,
                     fssai_number = :fssai_no,
+                    msme_number = :msme_no,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE org_id = :org_id
                 RETURNING org_id, org_name, gst_number, pan_number
@@ -293,6 +296,7 @@ async def update_company_info(
         pan_value = company_data.get("pan") or None
         drug_license_value = company_data.get("drug_license_no") or None
         fssai_value = company_data.get("fssai_no") or None
+        msme_value = company_data.get("msme_no") or None
         
         result = db.execute(text(update_query), {
             "org_id": str(context.org_id),
@@ -304,7 +308,8 @@ async def update_company_info(
             "gst": gst_value,
             "pan": pan_value,
             "drug_license_no": drug_license_value,
-            "fssai_no": fssai_value
+            "fssai_no": fssai_value,
+            "msme_no": msme_value
         })
         
         # TenantAwareSession auto-commits
@@ -375,11 +380,13 @@ async def update_company_info(
             "credit_note_prefix": company_data.get("credit_note_prefix", "CN/"),
             "debit_note_prefix": company_data.get("debit_note_prefix", "DN/"),
             "default_terms": company_data.get("default_terms", ""),
+            "terms_and_conditions": company_data.get("default_terms", ""),  # Alias for invoice preview
             "default_footer": company_data.get("default_footer", ""),
             "print_format": company_data.get("print_format", "A4"),
             "show_signature": company_data.get("show_signature", True),
             "show_logo": company_data.get("show_logo", True),
-            "show_bank_details": company_data.get("show_bank_details", True)
+            "show_bank_details": company_data.get("show_bank_details", True),
+            "msme_no": company_data.get("msme_no", ""),  # MSME/Udyam number
         }
         
         # Update business_settings column (using CAST not :: to avoid SQLAlchemy conflict)
@@ -426,7 +433,7 @@ async def get_company_profile(
             WITH org_data AS (
                 SELECT 
                     o.org_id, o.org_name, o.legal_name, o.gst_number, o.pan_number,
-                    o.drug_license_number, o.fssai_number, o.registered_address,
+                    o.drug_license_number, o.fssai_number, o.msme_number, o.registered_address,
                     o.correspondence_address, o.contact_numbers, o.email_addresses,
                     o.website, o.business_settings, o.created_at, o.updated_at
                 FROM master.organizations o
@@ -512,7 +519,10 @@ async def get_company_profile(
                 "gst": row.gst_number or "",
                 "pan": row.pan_number or "",
                 "drug_license": row.drug_license_number or "",
+                "drug_license_no": row.drug_license_number or "",  # Alias
                 "fssai": row.fssai_number or "",
+                "fssai_no": row.fssai_number or "",  # Alias
+                "msme_no": row.msme_number or "",
                 "phone": contact_nums.get("primary", ""),
                 "email": email_addrs.get("primary", ""),
                 "website": row.website or "",
@@ -594,12 +604,12 @@ async def upload_qr_code(
             raise HTTPException(status_code=400, detail="QR code data is required")
         
         # Store QR code in system settings
-        # Table has unique constraint on (org_id, setting_category, setting_key, setting_scope)
+        # Table may have unique constraint including branch_id and user_id (NULL values)
         query = """
             INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
-            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization')
-            ON CONFLICT (org_id, setting_category, setting_key, setting_scope)
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope, branch_id, user_id)
+            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization', NULL, NULL)
+            ON CONFLICT (org_id, setting_category, setting_key, setting_scope, branch_id, user_id)
             DO UPDATE SET setting_value = :qr_code, updated_at = CURRENT_TIMESTAMP
         """
 
@@ -634,12 +644,12 @@ async def upload_logo(
             raise HTTPException(status_code=400, detail="Logo data is required")
         
         # Store logo in system settings
-        # Table has unique constraint on (org_id, setting_category, setting_key, setting_scope)
+        # Table may have unique constraint including branch_id and user_id (NULL values)
         query = """
             INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
-            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization')
-            ON CONFLICT (org_id, setting_category, setting_key, setting_scope)
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope, branch_id, user_id)
+            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization', NULL, NULL)
+            ON CONFLICT (org_id, setting_category, setting_key, setting_scope, branch_id, user_id)
             DO UPDATE SET setting_value = :logo, updated_at = CURRENT_TIMESTAMP
         """
         

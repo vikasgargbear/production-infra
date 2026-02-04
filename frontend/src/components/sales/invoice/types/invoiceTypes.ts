@@ -476,6 +476,10 @@ export interface CompanyInfo {
     company_name?: string;
     name?: string;
     address?: string;
+    city?: string;
+    state?: string;
+    state_code?: string;
+    pincode?: string;
     gst_number?: string;
     gst?: string;  // Alternative from CompanyContext
     phone?: string;
@@ -483,10 +487,17 @@ export interface CompanyInfo {
     logo?: string;
     drugLicense?: string;
     drug_license_no?: string;  // Alternative from CompanyContext
-    state?: string;
+    fssai_no?: string;
+    msme_no?: string;
     upiId?: string;
     bankAccounts?: BankAccount[];
     paymentQR?: string;
+    business_settings?: {
+        terms_and_conditions?: string;
+        default_terms?: string;
+        default_footer?: string;
+        [key: string]: any;
+    };
 }
 
 // ==================== PRODUCT INPUT ====================
