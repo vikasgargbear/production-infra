@@ -608,12 +608,12 @@ async def upload_qr_code(
             raise HTTPException(status_code=400, detail="QR code data is required")
         
         # Store QR code in system settings
-        # Table may have unique constraint including branch_id and user_id (NULL values)
+        # Use the simpler unique constraint (org_id, setting_category, setting_key)
         query = """
             INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope, branch_id, user_id)
-            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization', NULL, NULL)
-            ON CONFLICT (org_id, setting_category, setting_key, setting_scope, branch_id, user_id)
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
+            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization')
+            ON CONFLICT (org_id, setting_category, setting_key)
             DO UPDATE SET setting_value = :qr_code, updated_at = CURRENT_TIMESTAMP
         """
 
@@ -648,12 +648,12 @@ async def upload_logo(
             raise HTTPException(status_code=400, detail="Logo data is required")
         
         # Store logo in system settings
-        # Table may have unique constraint including branch_id and user_id (NULL values)
+        # Use the simpler unique constraint (org_id, setting_category, setting_key)
         query = """
             INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope, branch_id, user_id)
-            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization', NULL, NULL)
-            ON CONFLICT (org_id, setting_category, setting_key, setting_scope, branch_id, user_id)
+                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
+            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization')
+            ON CONFLICT (org_id, setting_category, setting_key)
             DO UPDATE SET setting_value = :logo, updated_at = CURRENT_TIMESTAMP
         """
         
@@ -828,3 +828,102 @@ async def update_company_settings(
         logger.error(f"Error updating company settings: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update company settings: {str(e)}")
+
+
+# ============================================
+# TEST ENDPOINT FOR DEBUGGING
+# ============================================
+@router.get("/test-save")
+@with_tenant_context
+async def test_company_save(
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Test endpoint to verify company profile save works correctly.
+    
+    Returns:
+        - Test data sent
+        - What was actually saved to database
+        - Success status
+    
+    This helps debug issues where data appears to save but doesn't persist.
+    """
+    from datetime import datetime as dt
+    
+    test_terms = f"Test Terms - Saved at {dt.now().isoformat()}"
+    test_fssai = "FSSAI-TEST-123"
+    test_msme = "MSME-TEST-456"
+    
+    test_data = {
+        "name": "Test Company Save",
+        "default_terms": test_terms,
+        "fssai_number": test_fssai,
+        "msme_number": test_msme,
+        "invoice_prefix": "TEST/",
+    }
+    
+    try:
+        # Build business_settings
+        business_settings = {
+            "tagline": "",
+            "invoice_prefix": test_data.get("invoice_prefix", "INV/"),
+            "default_terms": test_data.get("default_terms", ""),
+            "terms_and_conditions": test_data.get("default_terms", ""),
+        }
+        
+        # Update organization columns
+        db.execute(text("""
+            UPDATE master.organizations
+            SET 
+                fssai_number = :fssai,
+                msme_number = :msme,
+                business_settings = CAST(:business_settings AS jsonb),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE org_id = :org_id
+        """), {
+            "org_id": str(context.org_id),
+            "fssai": test_fssai,
+            "msme": test_msme,
+            "business_settings": json.dumps(business_settings)
+        })
+        
+        # Verify what was saved
+        saved = db.execute(text("""
+            SELECT org_name, fssai_number, msme_number, business_settings
+            FROM master.organizations
+            WHERE org_id = :org_id
+        """), {"org_id": str(context.org_id)}).fetchone()
+        
+        saved_bs = saved.business_settings if saved.business_settings else {}
+        if isinstance(saved_bs, str):
+            saved_bs = json.loads(saved_bs)
+        
+        return {
+            "test_data_sent": test_data,
+            "saved": {
+                "org_name": saved.org_name,
+                "fssai_number": saved.fssai_number,
+                "msme_number": saved.msme_number,
+                "business_settings.default_terms": saved_bs.get("default_terms"),
+                "business_settings.terms_and_conditions": saved_bs.get("terms_and_conditions"),
+            },
+            "verification": {
+                "fssai_saved_correctly": saved.fssai_number == test_fssai,
+                "msme_saved_correctly": saved.msme_number == test_msme,
+                "default_terms_saved_correctly": saved_bs.get("default_terms") == test_terms,
+                "terms_and_conditions_saved_correctly": saved_bs.get("terms_and_conditions") == test_terms,
+            },
+            "all_passed": all([
+                saved.fssai_number == test_fssai,
+                saved.msme_number == test_msme,
+                saved_bs.get("default_terms") == test_terms,
+            ])
+        }
+        
+    except Exception as e:
+        logger.error(f"Test save failed: {str(e)}")
+        return {
+            "error": str(e),
+            "all_passed": False
+        }
