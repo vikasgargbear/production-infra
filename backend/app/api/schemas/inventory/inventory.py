@@ -184,15 +184,15 @@ class StockMovementResponse(StockMovementBase):
     """Schema for stock movement response"""
     
     movement_id: int
-    org_id: UUID
-    product_name: str
-    product_code: str
+    org_id: Optional[UUID] = None
+    product_name: str = ""
+    product_code: str = ""
     batch_number: Optional[str] = None
     
     stock_before: Optional[int] = None
     stock_after: Optional[int] = None
     
-    created_at: datetime
+    created_at: Optional[datetime] = None
     created_by: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
