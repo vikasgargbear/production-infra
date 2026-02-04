@@ -44,6 +44,8 @@ async def get_company_info(
                 email_addresses,
                 website,
                 business_settings,
+                company_logo,
+                payment_qr_code,
                 created_at,
                 updated_at
             FROM master.organizations
@@ -114,17 +116,10 @@ async def get_company_info(
                 if bank.is_default_account and not default_bank:
                     default_bank = bank_obj
             
-            # Get company logo and QR code from system_settings
-            assets_query = """
-                SELECT setting_key, setting_value
-                FROM master.system_settings
-                WHERE org_id = :org_id AND setting_category = 'company'
-                  AND setting_key IN ('company_logo', 'payment_qr_code')
-            """
-            assets_result = db.execute(text(assets_query), {"org_id": str(context.org_id)})
-            assets = {row.setting_key: row.setting_value for row in assets_result}
-            company_logo = assets.get('company_logo')
-            payment_qr = assets.get('payment_qr_code')
+            
+            # Logo and QR code now come from organizations table directly
+            company_logo = org_data.company_logo
+            payment_qr = org_data.payment_qr_code
             
             # Return formatted data matching frontend expectations
             response = {
@@ -618,19 +613,11 @@ async def upload_qr_code(
         if not qr_code_base64:
             raise HTTPException(status_code=400, detail="QR code data is required")
         
-        # Store QR code in master.system_settings (same table as business.py)
-        # Uses ON CONFLICT with (org_id, setting_category, setting_key) unique constraint
+        # Store QR code directly in organizations table (cleaner architecture)
         query = """
-            INSERT INTO master.system_settings (
-                org_id, setting_category, setting_key, setting_value, 
-                setting_type, is_active
-            ) VALUES (
-                :org_id, 'company', 'payment_qr_code', :qr_code, 'image', true
-            )
-            ON CONFLICT (org_id, setting_category, setting_key) 
-            DO UPDATE SET 
-                setting_value = EXCLUDED.setting_value,
-                updated_at = CURRENT_TIMESTAMP
+            UPDATE master.organizations
+            SET payment_qr_code = :qr_code, updated_at = CURRENT_TIMESTAMP
+            WHERE org_id = :org_id
         """
 
         db.execute(text(query), {
@@ -663,19 +650,11 @@ async def upload_logo(
         if not logo_base64:
             raise HTTPException(status_code=400, detail="Logo data is required")
         
-        # Store logo in master.system_settings (same table as business.py)
-        # Uses ON CONFLICT with (org_id, setting_category, setting_key) unique constraint
+        # Store logo directly in organizations table (cleaner architecture)
         query = """
-            INSERT INTO master.system_settings (
-                org_id, setting_category, setting_key, setting_value, 
-                setting_type, is_active
-            ) VALUES (
-                :org_id, 'company', 'company_logo', :logo, 'image', true
-            )
-            ON CONFLICT (org_id, setting_category, setting_key) 
-            DO UPDATE SET 
-                setting_value = EXCLUDED.setting_value,
-                updated_at = CURRENT_TIMESTAMP
+            UPDATE master.organizations
+            SET company_logo = :logo, updated_at = CURRENT_TIMESTAMP
+            WHERE org_id = :org_id
         """
         
         db.execute(text(query), {
