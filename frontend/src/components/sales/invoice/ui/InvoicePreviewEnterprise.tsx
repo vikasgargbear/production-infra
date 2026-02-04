@@ -194,17 +194,17 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               )}
               {/* GST, DL Row */}
               <div className="text-[11px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
-                <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst || companyInfo?.gst_number || '-'}</span>
-                <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_no || companyInfo?.drugLicense || '-'}</span>
+                <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst_number || '-'}</span>
+                <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_number || '-'}</span>
               </div>
               {/* FSSAI and MSME Row */}
-              {((companyInfo as any)?.fssai_no || (companyInfo as any)?.msme_no) && (
+              {(companyInfo?.fssai_number || companyInfo?.msme_number) && (
                 <div className="text-[11px] text-gray-600 mt-1 flex flex-wrap gap-x-4">
-                  {(companyInfo as any)?.fssai_no && (
-                    <span><span className="font-semibold text-gray-700">FSSAI:</span> {(companyInfo as any).fssai_no}</span>
+                  {companyInfo?.fssai_number && (
+                    <span><span className="font-semibold text-gray-700">FSSAI:</span> {companyInfo.fssai_number}</span>
                   )}
-                  {(companyInfo as any)?.msme_no && (
-                    <span><span className="font-semibold text-gray-700">MSME:</span> {(companyInfo as any).msme_no}</span>
+                  {companyInfo?.msme_number && (
+                    <span><span className="font-semibold text-gray-700">MSME:</span> {companyInfo.msme_number}</span>
                   )}
                 </div>
               )}

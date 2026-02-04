@@ -481,14 +481,13 @@ export interface CompanyInfo {
     state_code?: string;
     pincode?: string;
     gst_number?: string;
-    gst?: string;  // Alternative from CompanyContext
+    pan_number?: string;
     phone?: string;
     email?: string;
     logo?: string;
-    drugLicense?: string;
-    drug_license_no?: string;  // Alternative from CompanyContext
-    fssai_no?: string;
-    msme_no?: string;
+    drug_license_number?: string;
+    fssai_number?: string;
+    msme_number?: string;
     upiId?: string;
     bankAccounts?: BankAccount[];
     paymentQR?: string;

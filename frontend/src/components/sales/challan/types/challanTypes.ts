@@ -187,8 +187,11 @@ export interface CompanyInfo {
     name?: string;
     address?: string;
     gst_number?: string;
+    pan_number?: string;
     logo?: string;
-    drugLicense?: string;
+    drug_license_number?: string;
+    fssai_number?: string;
+    msme_number?: string;
 }
 
 // ==================== HOOK RETURN TYPE ====================

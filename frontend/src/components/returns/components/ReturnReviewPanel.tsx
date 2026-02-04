@@ -149,8 +149,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                         <h2 className="text-sm font-bold text-gray-900 leading-tight">{companyInfo?.name || 'Your Company'}</h2>
                                         <p className="text-[11px] text-gray-600 mt-1.5 leading-snug">{companyInfo?.address || ''}</p>
                                         <div className="text-[10px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
-                                            <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst || '-'}</span>
-                                            <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drugLicense || '-'}</span>
+                                            <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst_number || '-'}</span>
+                                            <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_number || '-'}</span>
                                         </div>
                                     </div>
 

@@ -204,10 +204,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                     // Registration Details
                     pan_number: data.pan_number || '',
-                    gst_number: data.gst || '',
-                    drugLicenseNo: data.drug_license_no || '',
-                    fssaiNo: data.fssai_no || '',
-                    msmeNo: data.msme_no || '',
+                    gst_number: data.gst_number || '',
+                    drugLicenseNo: data.drug_license_number || '',
+                    fssaiNo: data.fssai_number || '',
+                    msmeNo: data.msme_number || '',
 
                     // Contact Details
                     address: data.address || '',
@@ -352,14 +352,14 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 phone: companyData.phone,
                 email: companyData.email,
                 website: companyData.website,
-                gst: companyData.gst_number,
+                gst_number: companyData.gst_number,
                 pan_number: companyData.pan_number,
                 // NOTE: DO NOT send logo here - it has its own endpoint
                 // Additional fields can be stored here
                 tagline: companyData.tagline,
-                drug_license_no: companyData.drugLicenseNo,
-                fssai_no: companyData.fssaiNo,
-                msme_no: companyData.msmeNo,
+                drug_license_number: companyData.drugLicenseNo,
+                fssai_number: companyData.fssaiNo,
+                msme_number: companyData.msmeNo,
                 state_code: companyData.stateCode,
                 alt_phone: companyData.altPhone,
                 financial_year_start: companyData.financialYearStart,

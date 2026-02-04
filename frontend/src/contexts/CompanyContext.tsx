@@ -21,16 +21,15 @@ interface CompanyInfo {
     pincode: string;
     phone: string;
     email: string;
-    gst: string;
-    gst_number?: string;  // Alias for invoice preview
-    drugLicense: string;
-    drug_license_no?: string;  // Alias for invoice preview
+    gst_number: string;
+    pan_number: string;
+    drug_license_number: string;
+    fssai_number: string;
+    msme_number: string;
     logo: string | null;
     bankAccounts: BankAccount[];
     paymentQR: string | null;
     business_settings?: BusinessSettings;
-    fssai_no?: string | null;
-    msme_no?: string | null;
 }
 
 interface CompanyContextValue {
@@ -94,16 +93,15 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                 pincode: localStorage.getItem('companyPincode') || '',
                 phone: localStorage.getItem('companyPhone') || '',
                 email: localStorage.getItem('companyEmail') || '',
-                gst: localStorage.getItem('companyGST') || '',
                 gst_number: localStorage.getItem('companyGST') || '',
-                drugLicense: localStorage.getItem('companyDrugLicense') || '',
-                drug_license_no: localStorage.getItem('companyDrugLicense') || '',
+                pan_number: localStorage.getItem('companyPan') || '',
+                drug_license_number: localStorage.getItem('companyDrugLicense') || '',
+                fssai_number: localStorage.getItem('companyFssai') || '',
+                msme_number: localStorage.getItem('companyMsme') || '',
                 logo: localStorage.getItem('companyLogo') || null,
                 bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
                 paymentQR: localStorage.getItem('companyPaymentQR') || null,
                 business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}'),
-                fssai_no: localStorage.getItem('companyFssai') || null,
-                msme_no: localStorage.getItem('companyMsme') || null,
             };
 
             const cachedOrgId = localStorage.getItem('orgId');
@@ -135,16 +133,15 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                         pincode: profileData.pincode || cachedCompanyInfo.pincode,
                         phone: profileData.phone || cachedCompanyInfo.phone,
                         email: profileData.email || cachedCompanyInfo.email,
-                        gst: profileData.gst || profileData.gstin || cachedCompanyInfo.gst,
-                        gst_number: profileData.gst || profileData.gstin || cachedCompanyInfo.gst,
-                        drugLicense: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
-                        drug_license_no: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
+                        gst_number: profileData.gst_number || cachedCompanyInfo.gst_number,
+                        pan_number: profileData.pan_number || cachedCompanyInfo.pan_number,
+                        drug_license_number: profileData.drug_license_number || cachedCompanyInfo.drug_license_number,
+                        fssai_number: profileData.fssai_number || cachedCompanyInfo.fssai_number,
+                        msme_number: profileData.msme_number || cachedCompanyInfo.msme_number,
                         logo: profileData.logo || cachedCompanyInfo.logo,
                         bankAccounts: profileData.bank_accounts || [],
                         paymentQR: profileData.payment_qr_code || null,
                         business_settings: profileData.business_settings || {},
-                        fssai_no: profileData.fssai_no || cachedCompanyInfo.fssai_no,
-                        msme_no: profileData.msme_no || cachedCompanyInfo.msme_no,
                     };
 
                     setCompanyInfo(apiCompanyInfo);
@@ -157,8 +154,11 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     localStorage.setItem('companyPincode', apiCompanyInfo.pincode);
                     localStorage.setItem('companyPhone', apiCompanyInfo.phone);
                     localStorage.setItem('companyEmail', apiCompanyInfo.email);
-                    localStorage.setItem('companyGST', apiCompanyInfo.gst);
-                    localStorage.setItem('companyDrugLicense', apiCompanyInfo.drugLicense);
+                    localStorage.setItem('companyGST', apiCompanyInfo.gst_number);
+                    localStorage.setItem('companyPan', apiCompanyInfo.pan_number);
+                    localStorage.setItem('companyDrugLicense', apiCompanyInfo.drug_license_number);
+                    localStorage.setItem('companyFssai', apiCompanyInfo.fssai_number);
+                    localStorage.setItem('companyMsme', apiCompanyInfo.msme_number);
                     localStorage.setItem('companyBankAccounts', JSON.stringify(apiCompanyInfo.bankAccounts));
                     if (apiCompanyInfo.logo) {
                         localStorage.setItem('companyLogo', apiCompanyInfo.logo);
@@ -168,12 +168,6 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                     }
                     if (apiCompanyInfo.business_settings) {
                         localStorage.setItem('companyBusinessSettings', JSON.stringify(apiCompanyInfo.business_settings));
-                    }
-                    if (apiCompanyInfo.fssai_no) {
-                        localStorage.setItem('companyFssai', apiCompanyInfo.fssai_no);
-                    }
-                    if (apiCompanyInfo.msme_no) {
-                        localStorage.setItem('companyMsme', apiCompanyInfo.msme_no);
                     }
                     // Note: org_id is already in localStorage from login/sync, no need to fetch again
                 }
@@ -191,13 +185,14 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                 pincode: '',
                 phone: '',
                 email: '',
-                gst: '',
-                drugLicense: '',
+                gst_number: '',
+                pan_number: '',
+                drug_license_number: '',
+                fssai_number: '',
+                msme_number: '',
                 logo: null,
                 bankAccounts: [],
                 paymentQR: null,
-                fssai_no: null,
-                msme_no: null
             });
         } finally {
             setLoading(false);

@@ -94,7 +94,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                             <h2 className="text-lg font-bold text-gray-900 uppercase">{companyInfo?.name || 'AASO PHARMACEUTICALS'}</h2>
                             <p className="text-sm text-gray-600">{companyInfo?.address || 'Gangapur City, Rajasthan'}</p>
                             <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gst_number || '08AAXCA4042N1Z2'}</p>
-                            {companyInfo?.drugLicense && <p className="text-sm text-gray-600">{companyInfo.drugLicense}</p>}
+                            {companyInfo?.drug_license_number && <p className="text-sm text-gray-600">{companyInfo.drug_license_number}</p>}
                         </div>
                     </div>
 

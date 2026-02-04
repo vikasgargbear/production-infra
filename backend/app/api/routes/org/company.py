@@ -137,11 +137,11 @@ async def get_company_info(
                 "phone": contact_nums.get("primary", ""),
                 "email": email_addrs.get("primary", ""),
                 "website": org_data.website or "",
-                "gst": org_data.gst_number or "",
-                "pan": org_data.pan_number or "",
-                "drug_license_no": org_data.drug_license_number or "",
-                "fssai_no": org_data.fssai_number or "",
-                "msme_no": org_data.msme_number or "",
+                "gst_number": org_data.gst_number or "",
+                "pan_number": org_data.pan_number or "",
+                "drug_license_number": org_data.drug_license_number or "",
+                "fssai_number": org_data.fssai_number or "",
+                "msme_number": org_data.msme_number or "",
                 "logo": company_logo,
                 "payment_qr_code": payment_qr,
                 # Additional fields from business_settings
@@ -292,11 +292,11 @@ async def update_company_info(
         org_name = company_data.get("name") or company_data.get("company_name") or ""
         
         # Use None instead of empty string for fields with check constraints
-        gst_value = company_data.get("gst") or company_data.get("gstin") or None
-        pan_value = company_data.get("pan") or None
-        drug_license_value = company_data.get("drug_license_no") or None
-        fssai_value = company_data.get("fssai_no") or None
-        msme_value = company_data.get("msme_no") or None
+        gst_value = company_data.get("gst_number") or company_data.get("gst") or None
+        pan_value = company_data.get("pan_number") or company_data.get("pan") or None
+        drug_license_value = company_data.get("drug_license_number") or None
+        fssai_value = company_data.get("fssai_number") or None
+        msme_value = company_data.get("msme_number") or None
         
         result = db.execute(text(update_query), {
             "org_id": str(context.org_id),
@@ -386,7 +386,7 @@ async def update_company_info(
             "show_signature": company_data.get("show_signature", True),
             "show_logo": company_data.get("show_logo", True),
             "show_bank_details": company_data.get("show_bank_details", True),
-            "msme_no": company_data.get("msme_no", ""),  # MSME/Udyam number
+            "msme_number": company_data.get("msme_number", ""),  # MSME/Udyam number
         }
         
         # Update business_settings column (using CAST not :: to avoid SQLAlchemy conflict)
@@ -516,13 +516,11 @@ async def get_company_profile(
                 "city": registered_addr.get("city", ""),
                 "state": registered_addr.get("state", ""),
                 "pincode": registered_addr.get("pincode", ""),
-                "gst": row.gst_number or "",
-                "pan": row.pan_number or "",
-                "drug_license": row.drug_license_number or "",
-                "drug_license_no": row.drug_license_number or "",  # Alias
-                "fssai": row.fssai_number or "",
-                "fssai_no": row.fssai_number or "",  # Alias
-                "msme_no": row.msme_number or "",
+                "gst_number": row.gst_number or "",
+                "pan_number": row.pan_number or "",
+                "drug_license_number": row.drug_license_number or "",
+                "fssai_number": row.fssai_number or "",
+                "msme_number": row.msme_number or "",
                 "phone": contact_nums.get("primary", ""),
                 "email": email_addrs.get("primary", ""),
                 "website": row.website or "",
