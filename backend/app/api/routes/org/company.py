@@ -302,6 +302,12 @@ async def update_company_info(
         fssai_value = company_data.get("fssai_number") or None
         msme_value = company_data.get("msme_number") or None
         
+        # DEBUG: Log key values being saved
+        logger.info(f"[CompanySave] org_name: '{org_name}'")
+        logger.info(f"[CompanySave] fssai_value: '{fssai_value}'")
+        logger.info(f"[CompanySave] msme_value: '{msme_value}'")
+        logger.info(f"[CompanySave] default_terms from request: '{company_data.get('default_terms', '')}'")
+        
         result = db.execute(text(update_query), {
             "org_id": str(context.org_id),
             "name": org_name,
@@ -315,6 +321,8 @@ async def update_company_info(
             "fssai_no": fssai_value,
             "msme_no": msme_value
         })
+        
+        logger.info(f"[CompanySave] Organization UPDATE executed, rowcount: {result.rowcount}")
         
         # TenantAwareSession auto-commits
         
