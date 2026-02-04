@@ -679,13 +679,21 @@ class InvoiceService:
         invoice_dict = dict(invoice._mapping)
         
         # Get invoice items with pack information
+        # Join on batch_id if available, otherwise fallback to batch_number
         items_result = db.execute(text("""
             SELECT
                 ii.*,
-                b.pack_type, b.pack_size, b.units_per_pack,
-                b.packages_per_box, b.pack_uom, b.base_uom
+                COALESCE(b.pack_type, b2.pack_type) as pack_type,
+                COALESCE(b.pack_size, b2.pack_size) as pack_size,
+                COALESCE(b.units_per_pack, b2.units_per_pack) as units_per_pack,
+                COALESCE(b.packages_per_box, b2.packages_per_box) as packages_per_box,
+                COALESCE(b.pack_uom, b2.pack_uom) as pack_uom,
+                COALESCE(b.base_uom, b2.base_uom) as base_uom
             FROM sales.invoice_items ii
             LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND b.org_id = :org_id
+            LEFT JOIN inventory.batches b2 ON ii.batch_number = b2.batch_number 
+                AND ii.product_id = b2.product_id AND b2.org_id = :org_id
+                AND ii.batch_id IS NULL
             WHERE ii.invoice_id = :invoice_id
             ORDER BY ii.invoice_item_id
         """), {"invoice_id": invoice_id, "org_id": org_id})

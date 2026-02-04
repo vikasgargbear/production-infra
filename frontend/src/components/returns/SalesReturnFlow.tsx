@@ -14,10 +14,14 @@ import { RotateCcw, Download, AlertCircle, User } from 'lucide-react';
 import {
   ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch, CustomerCreation
 } from '../global';
+import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
 import { getApiBaseUrl } from '../../config/apiBase';
 import offlineStorage from '../../services/offlineStorage';
+import { useCompany } from '../../contexts/CompanyContext';
+import html2pdf from 'html2pdf.js';
+import { toast } from 'react-toastify';
 
 // Import extracted components
 import { ReturnInvoiceSelector } from './components/ReturnInvoiceSelector';
@@ -39,13 +43,47 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // UI state for compact header mode
+  const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
+
+  // Determine if all required header fields are filled (for compact mode)
+  const headerComplete = Boolean(
+    returnData.return_date &&
+    returnData.return_reason &&
+    returnData.return_type &&
+    selectedCustomer
+  );
+
+  // Auto-collapse header when all details are filled
+  useEffect(() => {
+    if (headerComplete) {
+      setShowDetailsExpanded(false);
+    }
+  }, [headerComplete]);
+
+  // Success modal state (like InvoiceFlow)
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdReturnData, setCreatedReturnData] = useState<{
+    returnNumber: string;
+    creditNoteNumber?: string;
+    customerId: string | number;
+    customerName: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    totalAmount: number;
+    items: any[];
+  } | null>(null);
+
+  // Company context for success modal
+  const { companyInfo } = useCompany();
+
   // Refs
   const historyButtonRef = useRef(null);
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
   const firstInputRef = useRef<any>(null);
 
-  const toast = useToast();
+  const toastHook = useToast();
 
   // Generate return number
   const generateReturnNumber = () => {
@@ -169,7 +207,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       if (items.length > 0) {
         const mappedItems = items.map((item: any) => mapInvoiceItemToReturnItem(item));
         dispatch({ type: 'SET_RETURN_DATA', data: { items: mappedItems } });
-        toast.success(`Loaded ${items.length} items from invoice`);
+        // Items loaded silently - no toast needed
       } else {
         toast.warning('No items found in this invoice');
       }
@@ -207,6 +245,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       max_returnable_qty: totalQty,
       max_paid_qty: paidQty,
       max_free_qty: freeQty,
+      // Pack info (for display)
+      packages_per_box: item.packages_per_box,
+      units_per_pack: item.units_per_pack,
       // References
       selected: true,
       batch_id: item.batch_id,
@@ -322,15 +363,16 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   }, [dispatch]);
 
   // Add manual item
-  const handleAddManualItem = useCallback(async (product: any) => {
+  const handleAddManualItem = useCallback((product: any) => {
     if (!product) return;
 
-    if (ui.showManualEntry) {
-      await fetchBatchesForProduct(product.product_id);
-    }
+    // Batch is already selected in ProductSearch's BatchSelector modal
+    // No need for async fetch - batch data is embedded in product
 
     const sellingPrice = parseFloat(String(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0));
     const gstPercent = parseFloat(String(product.gst_percent || product.tax_rate || 0));
+
+
 
     const newItem: ReturnFormItem = {
       id: `manual-${manualItemCounter}`,
@@ -340,6 +382,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       batch_number: product.batch_number || product.selectedBatch?.batch_number || '',
       manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || undefined,
       expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || undefined,
+      // Pack info from batch
+      packages_per_box: product.packages_per_box || product.selectedBatch?.packages_per_box,
+      units_per_pack: product.units_per_pack || product.selectedBatch?.units_per_pack,
       unit_price: sellingPrice,
       tax_percent: gstPercent,
       quantity: parseFloat(String(product.quantity || product.stock || 0)),
@@ -363,7 +408,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const updatedItems = [...returnData.items, newItem];
     dispatch({ type: 'SET_RETURN_DATA', data: { items: updatedItems } });
     dispatch({ type: 'INCREMENT_MANUAL_COUNTER' });
-  }, [ui.showManualEntry, manualItemCounter, returnData.items, dispatch, fetchBatchesForProduct]);
+  }, [manualItemCounter, returnData.items, dispatch]);
 
   // Remove item
   const handleRemoveItem = useCallback((itemId: string | number) => {
@@ -424,7 +469,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       type: 'SET_RETURN_DATA',
       data: { subtotal_amount: subtotal, tax_amount: taxAmount, total_amount: total }
     });
-  }, [returnData.items, selectedCustomer, returnData.include_gst, dispatch]);
+  }, [returnData.items, selectedCustomer, returnData.withhold_gst, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {
@@ -499,22 +544,21 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       const response = await returnsApi.createSaleReturn(returnData);
 
       if (response.data) {
-        const { credit_note_no, has_gst, message } = response.data;
+        const { credit_note_no, return_no } = response.data;
 
-        if (credit_note_no) {
-          toast.success(`Sales return created successfully with GST Credit Note: ${credit_note_no}`);
-        } else if (has_gst === false) {
-          toast.success('Sales return created successfully (No GST credit note - customer does not have GST)');
-        } else {
-          toast.success(message || 'Sales return created successfully');
-        }
-      } else {
-        toast.success('Sales return created successfully');
+        // Set success modal data instead of toast + auto-close
+        setCreatedReturnData({
+          returnNumber: return_no || returnData.return_no,
+          creditNoteNumber: credit_note_no,
+          customerId: (selectedCustomer as any)?.id || (selectedCustomer as any)?.customer_id || '',
+          customerName: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name || 'Customer',
+          customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
+          customerEmail: (selectedCustomer as any)?.email || '',
+          totalAmount: returnData.total_amount || 0,
+          items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
+        });
+        setShowSuccessModal(true);
       }
-
-      setTimeout(() => {
-        onClose();
-      }, 2500);
     } catch (error: any) {
       const errorMessage = Array.isArray(error.message)
         ? error.message[0]?.msg || error.message[0] || 'Failed to create return'
@@ -528,10 +572,82 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
   };
 
-  // Handle print
+  // Handle print (from success modal)
   const handlePrint = () => {
     window.print();
   };
+
+  // Handle PDF download (like InvoiceFlow)
+  const handlePDFDownload = useCallback(() => {
+    if (!createdReturnData) return;
+
+    const element = document.getElementById('return-preview');
+    if (!element) {
+      toast.error('Unable to generate PDF - preview not found');
+      return;
+    }
+
+    const options = {
+      margin: [10, 10, 10, 10],
+      filename: `CreditNote-${createdReturnData.creditNoteNumber || createdReturnData.returnNumber}.pdf`,
+      image: { type: 'png', quality: 1 },
+      html2canvas: {
+        scale: 4,
+        useCORS: true,
+        logging: false,
+        letterRendering: true,
+        windowWidth: 794
+      },
+      jsPDF: {
+        unit: 'mm',
+        format: 'a4',
+        orientation: 'portrait',
+        compress: true
+      },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    html2pdf().set(options).from(element).save()
+      .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
+  }, [createdReturnData]);
+
+  // Handle WhatsApp share (like InvoiceFlow)
+  const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: number) => {
+    if (!phone) {
+      toast.error('No phone number available for WhatsApp');
+      return;
+    }
+
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+
+    const returnDate = new Date(returnData.return_date).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
+    const formattedAmount = amount ? `₹${amount.toLocaleString('en-IN')}` : '';
+    const docNumber = createdReturnData?.creditNoteNumber || createdReturnData?.returnNumber || returnData.return_no;
+
+    const whatsappMessage = `Dear ${customerName || 'Customer'},
+
+Your credit note ${docNumber} dated ${returnDate} for ${formattedAmount} has been created.
+
+This amount will be adjusted against your future purchases.
+
+Thank you for your business!
+${companyInfo?.name || 'Your Company'}`;
+
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
+    window.open(whatsappUrl, '_blank');
+  }, [returnData.return_date, companyInfo?.name, createdReturnData]);
+
+  // Handle thermal print (dispatch event for PrintUtility)
+  const handleThermalPrint = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('thermalPrint', {
+      detail: { type: 'credit_note', data: createdReturnData }
+    }));
+  }, [createdReturnData]);
 
   // Step 1: Create Return Form
   if (ui.currentStep === 1) {
@@ -569,57 +685,181 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
             <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-              {/* Return Info - 3-column grid with consistent h-10 heights */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <StandardDatePicker
-                  label="Return Date"
-                  value={returnData.return_date || ''}
-                  onChange={(dateStr) => {
-                    dispatch({ type: 'SET_RETURN_DATA', data: { return_date: dateStr } });
-                  }}
-                  required
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Reason <span className="text-red-500">*</span>
-                  </label>
-                  <Select
-                    value={returnData.return_reason || ''}
-                    onChange={(value) => dispatch({ type: 'SET_RETURN_DATA', data: { return_reason: String(value || '') } })}
-                    options={returnReasons}
-                    placeholder="Select reason..."
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Resolution <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={returnData.return_type || 'credit_note'}
-                    onChange={(e) => dispatch({
-                      type: 'SET_RETURN_DATA',
-                      data: {
-                        return_type: e.target.value as any,
-                        return_method: e.target.value // Keep legacy field in sync
-                      }
-                    })}
-                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  >
-                    <option value="credit_note">📝 Credit Note (Recommended)</option>
-                    <option value="replacement">🔄 Replacement</option>
-                    <option value="refund">💰 Refund (Requires Approval)</option>
-                    <option value="no_adjustment">📦 No Financial Adjustment</option>
-                  </select>
-                </div>
-              </div>
+              {/* Header Section - Compact when details filled, Expanded for editing */}
+              {headerComplete && !showDetailsExpanded ? (
+                /* COMPACT HEADER - Preview mode with edit button */
+                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6 flex-wrap">
+                      {/* Customer */}
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-blue-600" />
+                        <span className="font-semibold text-gray-900">{(selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name}</span>
+                        {(selectedCustomer as any)?.gst_number && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">GST</span>
+                        )}
+                      </div>
 
-              {/* GST Withholding Option - Only for B2B customers */}
+                      {/* Divider */}
+                      <div className="h-6 w-px bg-gray-300"></div>
+
+                      {/* Date */}
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-gray-500">Date:</span>
+                        <span className="font-medium text-gray-900">
+                          {new Date(returnData.return_date || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="h-6 w-px bg-gray-300"></div>
+
+                      {/* Reason */}
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-gray-500">Reason:</span>
+                        <span className="font-medium text-gray-900">{returnData.return_reason}</span>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="h-6 w-px bg-gray-300"></div>
+
+                      {/* Resolution */}
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-gray-500">Resolution:</span>
+                        <span className="font-medium text-gray-900">
+                          {returnData.return_type === 'credit_note' && '📝 Credit Note'}
+                          {returnData.return_type === 'replacement' && '🔄 Replacement'}
+                          {returnData.return_type === 'refund' && '💰 Refund'}
+                          {returnData.return_type === 'no_adjustment' && '📦 No Adjustment'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Edit Button */}
+                    <button
+                      onClick={() => setShowDetailsExpanded(true)}
+                      className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit Details
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* EXPANDED HEADER - Full form for editing */
+                <>
+                  {/* Return Info - 3-column grid with consistent h-10 heights */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <StandardDatePicker
+                      label="Return Date"
+                      value={returnData.return_date || ''}
+                      onChange={(dateStr) => {
+                        dispatch({ type: 'SET_RETURN_DATA', data: { return_date: dateStr } });
+                      }}
+                      required
+                    />
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Return Reason <span className="text-red-500">*</span>
+                      </label>
+                      <Select
+                        value={returnData.return_reason || ''}
+                        onChange={(value) => dispatch({ type: 'SET_RETURN_DATA', data: { return_reason: String(value || '') } })}
+                        options={returnReasons}
+                        placeholder="Select reason..."
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Return Resolution <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={returnData.return_type || 'credit_note'}
+                        onChange={(e) => dispatch({
+                          type: 'SET_RETURN_DATA',
+                          data: {
+                            return_type: e.target.value as any,
+                            return_method: e.target.value // Keep legacy field in sync
+                          }
+                        })}
+                        className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        <option value="credit_note">📝 Credit Note (Recommended)</option>
+                        <option value="replacement">🔄 Replacement</option>
+                        <option value="refund">💰 Refund (Requires Approval)</option>
+                        <option value="no_adjustment">📦 No Financial Adjustment</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Customer Section - Using global CustomerSearch like Invoice */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                        <User className="w-4 h-4 mr-2" />
+                        CUSTOMER
+                      </h3>
+                      <button
+                        onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
+                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                      >
+                        Create Customer
+                      </button>
+                    </div>
+                    {/* White card wrapper - consistent with ProductSearch */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                      <CustomerSearch
+                        ref={customerSearchRef}
+                        value={selectedCustomer as any}
+                        onChange={handleCustomerSelect as any}
+                        displayMode="compact"
+                        placeholder="Search customer by name, phone, or code..."
+                        showCreateButton={false}
+                        clearable={true}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Collapse to compact button - only when all fields are filled */}
+                  {headerComplete && (
+                    <div className="flex justify-end mb-4">
+                      <button
+                        onClick={() => setShowDetailsExpanded(false)}
+                        className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                        Collapse Details
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <ReturnInvoiceSelector
+                selectedCustomer={selectedCustomer}
+                selectedInvoice={selectedInvoice}
+                onInvoiceSelect={handleInvoiceSelect}
+                onSkipInvoice={handleSkipInvoice}
+                onChangeInvoice={() => {
+                  dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
+                  dispatch({ type: 'SET_RETURN_DATA', data: { items: [] } });
+                  dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+                }}
+                showInvoiceSection={ui.showInvoiceSection}
+                invoiceSearchRef={invoiceSearchRef}
+              />
+
+              {/* GST Withholding Option - Moved closer to items table, only for B2B */}
               {selectedCustomer && (selectedCustomer as any).gst_number && (
-                <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center justify-between">
+                <div className="mb-4 bg-white border border-gray-300 rounded-lg p-4 flex items-center justify-between shadow-sm">
                   <div>
-                    <p className="text-sm font-medium text-yellow-800">GST Treatment</p>
-                    <p className="text-xs text-yellow-600">
+                    <p className="text-sm font-semibold text-gray-800">GST Treatment</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
                       {returnData.withhold_gst
                         ? 'GST will NOT be included in return amount'
                         : 'GST will be included in return amount (standard)'
@@ -627,7 +867,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                     </p>
                   </div>
                   <label className="flex items-center cursor-pointer">
-                    <span className="text-sm text-gray-700 mr-3">Withhold GST</span>
+                    <span className="text-sm text-gray-700 mr-3 font-medium">Withhold GST</span>
                     <div className="relative">
                       <input
                         type="checkbox"
@@ -638,52 +878,15 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                         })}
                         className="sr-only"
                       />
-                      <div className={`w-11 h-6 rounded-full transition-colors ${returnData.withhold_gst ? 'bg-yellow-500' : 'bg-gray-300'
+                      <div className={`w-11 h-6 rounded-full transition-colors border ${returnData.withhold_gst ? 'bg-orange-500 border-orange-600' : 'bg-gray-200 border-gray-300'
                         }`}>
-                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${returnData.withhold_gst ? 'translate-x-5' : ''
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${returnData.withhold_gst ? 'translate-x-5' : ''
                           }`}></div>
                       </div>
                     </div>
                   </label>
                 </div>
               )}
-
-              {/* Customer Section - Using global CustomerSearch like Invoice */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
-                    <User className="w-4 h-4 mr-2" />
-                    CUSTOMER
-                  </h3>
-                  <button
-                    onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
-                    className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-                  >
-                    Create Customer
-                  </button>
-                </div>
-                {/* White card wrapper - consistent with ProductSearch */}
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                  <CustomerSearch
-                    ref={customerSearchRef}
-                    value={selectedCustomer as any}
-                    onChange={handleCustomerSelect as any}
-                    displayMode="compact"
-                    placeholder="Search customer by name, phone, or code..."
-                    showCreateButton={false}
-                    clearable={true}
-                  />
-                </div>
-              </div>
-
-              <ReturnInvoiceSelector
-                selectedCustomer={selectedCustomer}
-                selectedInvoice={selectedInvoice}
-                onInvoiceSelect={handleInvoiceSelect}
-                onSkipInvoice={handleSkipInvoice}
-                showInvoiceSection={ui.showInvoiceSection}
-                invoiceSearchRef={invoiceSearchRef}
-              />
 
               {/* Items Table */}
               <ReturnItemsTable
@@ -764,6 +967,60 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           />
         </div>
       </div>
+
+      {/* Success Modal - Same pattern as InvoiceFlow */}
+      {showSuccessModal && createdReturnData && (
+        <GenericSuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false);
+            if (onClose) onClose();
+          }}
+          title="Credit Note Created!"
+          documentNumber={createdReturnData.creditNoteNumber || createdReturnData.returnNumber}
+          documentId={createdReturnData.returnNumber}
+          documentType="credit_note"
+          customerName={createdReturnData.customerName}
+          totalAmount={createdReturnData.totalAmount}
+          autoCloseDelay={null}
+          documentData={{
+            customerPhone: createdReturnData.customerPhone,
+            customerEmail: createdReturnData.customerEmail,
+            items: createdReturnData.items,
+            totals: {
+              total_amount: createdReturnData.totalAmount
+            }
+          }}
+          partyDetails={{
+            name: createdReturnData.customerName,
+            phone: createdReturnData.customerPhone,
+            email: createdReturnData.customerEmail
+          }}
+          companyInfo={companyInfo as any}
+          onPrint={handlePrint}
+          onThermalPrint={handleThermalPrint}
+          onWhatsApp={() => handleWhatsAppShare(createdReturnData.customerPhone, createdReturnData.customerName, createdReturnData.totalAmount)}
+          onDownload={handlePDFDownload}
+          showCopy={true}
+          showQuickActions={true}
+        />
+      )}
+
+      {/* Off-screen Preview for PDF Generation */}
+      {createdReturnData && showSuccessModal && (
+        <div className="absolute left-[-9999px] top-0 w-[210mm]" id="return-preview">
+          <ReturnReviewPanel
+            returnData={returnData}
+            selectedCustomer={selectedCustomer}
+            selectedInvoice={selectedInvoice}
+            customerDues={customerDues}
+            onSave={() => { }}
+            onPrint={() => { }}
+            onBack={() => { }}
+            saving={false}
+          />
+        </div>
+      )}
     </div>
   );
 };

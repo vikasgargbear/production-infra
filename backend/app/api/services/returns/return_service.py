@@ -730,11 +730,24 @@ class ReturnService:
     ) -> int:
         """
         Insert a new sales return record and return the return_id.
+        Now includes return_method for proper financial flow handling.
         """
+        # Extract return_method from frontend data (default: credit_note)
+        return_method = return_data.get("return_method") or return_data.get("return_type") or "credit_note"
+        
+        # Validate return_method
+        valid_methods = ("credit_note", "replacement", "refund", "no_adjustment")
+        if return_method not in valid_methods:
+            return_method = "credit_note"  # Safe default
+        
+        # For refund type, require approval
+        approval_required = return_method == "refund"
+        approval_status = "pending" if approval_required else "approved"
+        
         result = db.execute(text("""
             INSERT INTO sales.sales_returns (
                 org_id, branch_id, return_number, return_date,
-                return_type, invoice_id, customer_id,
+                return_type, return_method, invoice_id, customer_id,
                 return_reason, return_category,
                 approval_required, approval_status,
                 return_amount, tax_amount, total_amount,
@@ -744,9 +757,9 @@ class ReturnService:
                 notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :return_number, :return_date,
-                'SALES', :invoice_id, :customer_id,
+                'SALES', :return_method, :invoice_id, :customer_id,
                 :reason, :category,
-                false, 'approved',
+                :approval_required, :approval_status,
                 :subtotal, :tax_amount, :total_amount,
                 :cgst_amount, :sgst_amount, :igst_amount,
                 :credit_note_no, :credit_note_date, :credit_note_status,
@@ -759,10 +772,13 @@ class ReturnService:
             "branch_id": branch_id,
             "return_number": return_number,
             "return_date": return_data["return_date"],
+            "return_method": return_method,
             "invoice_id": return_data.get("invoice_id") if return_data.get("invoice_id") else None,
             "customer_id": return_data["customer_id"],
             "reason": return_data.get("return_reason", "Customer Return"),
             "category": return_data.get("return_category", "QUALITY"),
+            "approval_required": approval_required,
+            "approval_status": approval_status,
             "subtotal": float(totals["subtotal"]),
             "tax_amount": float(totals["tax_amount"]),
             "total_amount": float(totals["total_amount"]),
@@ -934,3 +950,108 @@ class ReturnService:
         if result:
             return dict(result._mapping)
         return None
+    
+    # ==================== LEDGER INTEGRATION ====================
+    
+    @staticmethod
+    def update_customer_credit_balance(
+        db: Session,
+        customer_id: int,
+        amount: float,
+        return_method: str,
+        return_number: str
+    ) -> dict:
+        """
+        Update customer credit balance based on return_method.
+        
+        - credit_note: Add amount to customer's credit_balance
+        - replacement: No financial update (goods exchange)
+        - refund: Mark as pending refund (requires approval)
+        - no_adjustment: No financial update
+        
+        Returns: dict with updated balance and action taken
+        """
+        action_taken = "none"
+        
+        if return_method == "credit_note":
+            # Add to customer's credit balance
+            db.execute(text("""
+                UPDATE parties.customers 
+                SET credit_balance = COALESCE(credit_balance, 0) + :amount,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE customer_id = :customer_id
+            """), {"amount": amount, "customer_id": customer_id})
+            action_taken = "credit_balance_increased"
+            logger.info(f"Customer {customer_id} credit balance increased by {amount} for return {return_number}")
+            
+        elif return_method == "refund":
+            # Create pending refund entry (not immediately paid)
+            # The actual refund will be processed through payment module
+            action_taken = "refund_pending"
+            logger.info(f"Refund of {amount} pending approval for customer {customer_id}, return {return_number}")
+            
+        elif return_method == "replacement":
+            # No financial adjustment - goods will be replaced
+            action_taken = "replacement_issued"
+            logger.info(f"Replacement to be issued for customer {customer_id}, return {return_number}")
+            
+        else:  # no_adjustment
+            action_taken = "no_adjustment"
+            logger.info(f"No financial adjustment for customer {customer_id}, return {return_number}")
+        
+        # Get updated balance
+        result = db.execute(text("""
+            SELECT credit_balance, outstanding_amount
+            FROM parties.customers 
+            WHERE customer_id = :customer_id
+        """), {"customer_id": customer_id}).first()
+        
+        return {
+            "customer_id": customer_id,
+            "action": action_taken,
+            "amount": amount,
+            "credit_balance": float(result.credit_balance or 0) if result else 0,
+            "outstanding_amount": float(result.outstanding_amount or 0) if result else 0
+        }
+    
+    @staticmethod
+    def get_return_with_ledger_info(db: Session, return_id: int) -> Optional[dict]:
+        """
+        Get return details with customer ledger information.
+        Useful for verification and testing.
+        """
+        # Get return record
+        sale_return = db.execute(text("""
+            SELECT sr.*, c.customer_name, c.credit_balance, c.outstanding_amount,
+                   c.gst_number
+            FROM sales.sales_returns sr
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
+            WHERE sr.return_id = :return_id
+        """), {"return_id": return_id}).first()
+        
+        if not sale_return:
+            return None
+        
+        # Get return items
+        items = db.execute(text("""
+            SELECT sri.*, p.product_name
+            FROM sales.sales_return_items sri
+            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
+            WHERE sri.return_id = :return_id
+        """), {"return_id": return_id}).fetchall()
+        
+        # Get inventory movements
+        movements = db.execute(text("""
+            SELECT * FROM inventory.stock_movements
+            WHERE reference_type = 'SALES_RETURN' AND reference_id = :return_id
+        """), {"return_id": return_id}).fetchall()
+        
+        return {
+            "return": dict(sale_return._mapping),
+            "items": [dict(i._mapping) for i in items],
+            "customer_balance": {
+                "credit_balance": float(sale_return.credit_balance or 0),
+                "outstanding_amount": float(sale_return.outstanding_amount or 0)
+            },
+            "inventory_movements": [dict(m._mapping) for m in movements]
+        }

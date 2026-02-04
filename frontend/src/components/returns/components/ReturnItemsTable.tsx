@@ -132,6 +132,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                             <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
+                                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Pack</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry</th>
                                 {selectedInvoice && (
                                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -170,6 +171,17 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         <td className="px-3 py-2">
                                             <div className="text-sm font-medium text-gray-900">{row.product_name}</div>
                                             <div className="text-xs text-gray-500">{row.batch_number || 'No Batch'}</div>
+                                        </td>
+
+                                        {/* Pack Info */}
+                                        <td className="px-3 py-2 text-center">
+                                            <div className="text-sm text-gray-700">
+                                                {row.packages_per_box && row.units_per_pack
+                                                    ? `${row.packages_per_box}*${row.units_per_pack}`
+                                                    : row.units_per_pack && row.units_per_pack > 1
+                                                        ? `1*${row.units_per_pack}`
+                                                        : '-'}
+                                            </div>
                                         </td>
 
                                         {/* Expiry */}

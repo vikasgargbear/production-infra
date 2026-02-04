@@ -58,9 +58,9 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                     ]}
                 />
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
-                    <div className="max-w-6xl mx-auto px-6 py-6">
+                {/* Content - White background for seamless preview, matching step 1/2 width */}
+                <div className="flex-1 overflow-y-auto bg-white">
+                    <div className="max-w-6xl mx-auto px-8 py-6">
 
                         {/* Invoice Preview */}
                         <PrintUtility
@@ -295,20 +295,18 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                     </div>
                 </div>
 
-                {/* Footer */}
+                {/* Footer - Print options disabled in preview (only available after generation via success modal) */}
                 <DocumentFooter
                     totalItems={(invoice.items || []).length}
                     totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0}
                     onCancel={() => onBack(2)}
-                    onPrint={onPrint}
-                    onThermalPrint={onThermalPrint}
                     onSave={onSave}
                     onGenerate={onSave}
                     isSaving={saving}
                     cancelLabel="← Back to Details"
                     saveLabel="Generate Invoice"
                     generateLabel="Generate Invoice"
-                    showPrintOptions={true}
+                    showPrintOptions={false}  // Print only available after generation
                     showSaveOption={true}
                     showActionButtons={true}
                     documentType="invoice"

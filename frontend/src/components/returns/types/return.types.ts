@@ -86,6 +86,7 @@ export interface ReturnInvoiceSelectorProps {
     selectedInvoice: Invoice | null;
     onInvoiceSelect: (invoice: Invoice | null) => void;
     onSkipInvoice: () => void;
+    onChangeInvoice?: () => void;  // Clear selected invoice to allow re-selection
     showInvoiceSection: boolean;
     invoiceSearchRef: React.RefObject<any>;
 }

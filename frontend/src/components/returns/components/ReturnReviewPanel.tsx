@@ -100,68 +100,72 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                     {/* Clean Preview - Invoice Style - Portrait A4 */}
                     <div id="return-preview" className="bg-white max-w-[210mm] mx-auto min-h-[297mm] shadow-2xl my-6 p-8 border border-gray-200">
                         <div>
-                            {/* Header - Top Bar + 3-Col Grid */}
-                            <div className="mb-6">
-                                {/* Top Bar: Title & Details */}
-                                <div className="flex justify-between items-end border-b border-gray-200 pb-4 mb-5 flex-wrap gap-4">
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-tight leading-none">
-                                            {isGSTCustomer ? 'CREDIT NOTE' : 'SALES RETURN'}
-                                        </h1>
-                                    </div>
-                                    <div className="flex gap-8 text-sm">
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Ref No</span>
-                                            <span className="font-bold text-gray-900 mt-0.5">{returnData.return_no}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Date</span>
-                                            <span className="font-bold text-gray-900 mt-0.5">{formatDate(returnData.return_date)}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Reason</span>
-                                            <span className="font-bold text-gray-900 capitalize mt-0.5">{returnData.return_reason || 'Return'}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tiles Row: Logo | Company | Customer */}
-                                <div className="grid grid-cols-[100px_1fr_1fr] gap-4 items-stretch">
-                                    {/* Logo Tile */}
-                                    <div className="bg-white rounded-xl border border-gray-200 flex items-center justify-center p-2 shadow-sm">
+                            {/* Header Section - Match Invoice: Logo Left | Title + Credit Note Right */}
+                            <div className="mb-5">
+                                {/* Logo Left | Title + Meta Right */}
+                                <div className="flex items-center justify-between border-b-2 border-gray-800 pb-3 mb-4">
+                                    {/* Logo */}
+                                    <div className="flex items-center">
                                         {companyInfo?.logo ? (
-                                            <img
-                                                src={companyInfo?.logo}
-                                                alt={companyInfo?.name || 'Company'}
-                                                className="w-full h-full object-contain"
-                                            />
+                                            <img src={companyInfo.logo} alt="Company Logo" className="h-20 w-auto object-contain" />
                                         ) : (
-                                            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                                                <span className="text-xl font-bold text-gray-400">
-                                                    {(companyInfo?.name || 'A').charAt(0).toUpperCase()}
-                                                </span>
+                                            <div className="w-16 h-16 bg-gray-800 rounded flex items-center justify-center">
+                                                <span className="text-2xl font-bold text-white">{(companyInfo?.name || 'A').charAt(0).toUpperCase()}</span>
                                             </div>
                                         )}
                                     </div>
 
+                                    {/* Title + Details - Right aligned, stacked */}
+                                    <div className="text-right">
+                                        <h1 className="text-xl font-bold text-gray-900 uppercase tracking-wide">
+                                            {isGSTCustomer ? 'CREDIT NOTE' : 'SALES RETURN'}
+                                        </h1>
+                                        <div className="text-xs mt-1.5 space-y-0.5">
+                                            <div>
+                                                <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">
+                                                    {isGSTCustomer ? 'Credit Note No: ' : 'Return No: '}
+                                                </span>
+                                                <span className="font-bold text-gray-900">{returnData.credit_note_no || returnData.return_no}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Date: </span>
+                                                <span className="font-bold text-gray-900">{formatDate(returnData.return_date)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Reason: </span>
+                                                <span className="font-bold text-gray-900 capitalize">{returnData.return_reason || 'Return'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Company & Customer Info - 2 Column Grid (like Invoice) */}
+                                <div className="grid grid-cols-2 gap-4">
                                     {/* Company Info Tile */}
-                                    <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-xl p-3.5 border border-blue-200 flex flex-col justify-center shadow-sm">
+                                    <div className="bg-gray-50 rounded p-3 border border-gray-200">
                                         <h2 className="text-sm font-bold text-gray-900 leading-tight">{companyInfo?.name || 'Your Company'}</h2>
-                                        <p className="text-[11px] text-gray-600 mt-1.5 leading-snug">{companyInfo?.address || ''}</p>
-                                        <div className="text-[10px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
+                                        <p className="text-[11px] text-gray-600 mt-2 leading-relaxed">{companyInfo?.address || ''}</p>
+                                        {(companyInfo?.phone || companyInfo?.email) && (
+                                            <p className="text-[11px] text-gray-600 mt-1">
+                                                {companyInfo?.phone && <span>Ph: {companyInfo.phone}</span>}
+                                                {companyInfo?.phone && companyInfo?.email && <span> | </span>}
+                                                {companyInfo?.email && <span>{companyInfo.email}</span>}
+                                            </p>
+                                        )}
+                                        <div className="text-[11px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
                                             <span><span className="font-semibold text-gray-700">GST:</span> {companyInfo?.gst_number || '-'}</span>
                                             <span><span className="font-semibold text-gray-700">DL:</span> {companyInfo?.drug_license_number || '-'}</span>
                                         </div>
                                     </div>
 
                                     {/* Customer Info Tile */}
-                                    <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-200 flex flex-col justify-center shadow-sm">
+                                    <div className="bg-gray-50 rounded p-3 border border-gray-200">
                                         <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Customer Details</div>
                                         <div className="font-bold text-gray-900 text-sm leading-tight">
                                             {(selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name}
                                         </div>
-                                        <p className="text-[11px] text-gray-600 mt-1 lines-clamp-2 leading-snug">{getCustomerAddress()}</p>
-                                        <div className="text-[10px] text-gray-600 mt-1.5 flex flex-wrap gap-x-3">
+                                        <p className="text-[11px] text-gray-600 mt-2 leading-relaxed">{getCustomerAddress()}</p>
+                                        <div className="text-[11px] text-gray-600 mt-2 flex flex-wrap gap-x-4">
                                             {(selectedCustomer as any)?.primary_phone && (
                                                 <span>Ph. {(selectedCustomer as any).primary_phone}</span>
                                             )}
@@ -309,22 +313,24 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     {/* Tax Breakup for GST customers */}
                                     {isGSTCustomer && (
                                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                            <h3 className="text-xs font-semibold text-gray-700 uppercase mb-2">Tax Summary</h3>
-                                            <table className="w-full text-xs">
+                                            <h3 className="text-xs font-semibold text-gray-700 uppercase mb-2">Tax Breakup</h3>
+                                            <table className="w-full text-[11px]">
                                                 <thead>
                                                     <tr className="border-b border-gray-200">
-                                                        <th className="text-left pb-1 text-gray-500 font-medium">Taxable</th>
-                                                        <th className="text-right pb-1 text-gray-500 font-medium">CGST</th>
-                                                        <th className="text-right pb-1 text-gray-500 font-medium">SGST</th>
-                                                        <th className="text-right pb-1 text-gray-500 font-medium">Total</th>
+                                                        <th className="text-left pb-1 text-gray-600 font-medium">Rate</th>
+                                                        <th className="text-right pb-1 text-gray-600 font-medium">Taxable</th>
+                                                        <th className="text-right pb-1 text-gray-600 font-medium">CGST</th>
+                                                        <th className="text-right pb-1 text-gray-600 font-medium">SGST</th>
+                                                        <th className="text-right pb-1 text-gray-600 font-medium">IGST</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     <tr>
-                                                        <td className="pt-1 text-gray-700">{formatCurrency(returnData.subtotal_amount)}</td>
+                                                        <td className="pt-1 text-gray-700">12%</td>
+                                                        <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.subtotal_amount)}</td>
                                                         <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.tax_amount / 2)}</td>
                                                         <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.tax_amount / 2)}</td>
-                                                        <td className="pt-1 text-right font-medium text-gray-800">{formatCurrency(returnData.tax_amount)}</td>
+                                                        <td className="pt-1 text-right text-gray-700">-</td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -415,7 +421,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                 isSaving={saving}
                 saveLabel="Confirm Return"
                 showActionButtons={true}
-                showPrintOptions={true}
+                showPrintOptions={false}  // Print only available after generation in success modal
                 showSaveOption={true}
             />
         </div>

@@ -138,7 +138,14 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
           }
         }
       `}</style>
-      <div id="invoice-preview" className="bg-white max-w-[210mm] mx-auto min-h-[297mm] p-6 font-[system-ui]">
+      {/* Screen: fill more width | Print: constrain to A4 */}
+      <div
+        id="invoice-preview"
+        className={`bg-white mx-auto p-6 font-[system-ui] ${isPrintMode
+          ? 'max-w-[210mm] min-h-[297mm]'  // A4 size for print
+          : 'w-full'  // Full width, seamless with container
+          }`}
+      >
         {/* Removed: Calculation status indicator - preview no longer calculates */}
 
         {/* Header Section - Centered Logo + Title Bar + Company/Customer */}
@@ -426,42 +433,44 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 const lineTotal = taxableAmount + gstAmount;
 
                 return (
-                  <tr key={index} className="border-b border-gray-200">
-                    <td className="py-1.5 px-1 text-center text-gray-500">{index + 1}</td>
-                    <td className="py-1.5 px-2">
+                  <tr key={index} className="border-b border-gray-200" style={{ lineHeight: '1.2' }}>
+                    <td className="py-2 px-1 text-center text-gray-500" style={{ verticalAlign: 'middle' }}>{index + 1}</td>
+                    <td className="py-2 px-2" style={{ verticalAlign: 'middle' }}>
                       <span className="font-medium text-gray-900">{item.product_name}</span>
                     </td>
-                    <td className="py-1.5 px-1 text-center text-gray-600">
-                      {(item.packages_per_box || item.units_per_pack) ? `${item.packages_per_box || 1}*${item.units_per_pack || 1}` : (item.pack_size || item.pack_type || '-')}
+                    <td className="py-2 px-1 text-center text-gray-600" style={{ verticalAlign: 'middle' }}>
+                      {item.packages_per_box && item.units_per_pack
+                        ? `${item.packages_per_box}*${item.units_per_pack}`
+                        : '-'}
                     </td>
-                    <td className="py-1.5 px-1 text-center text-gray-600">
+                    <td className="py-2 px-1 text-center text-gray-600" style={{ verticalAlign: 'middle' }}>
                       {item.hsn_code || '3004'}
                     </td>
-                    <td className="py-1.5 px-1 text-center text-gray-600">
+                    <td className="py-2 px-1 text-center text-gray-600" style={{ verticalAlign: 'middle' }}>
                       {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', {
                         month: '2-digit',
                         year: '2-digit'
                       }) : '-'}
                     </td>
-                    <td className="py-1.5 px-1 text-right">
+                    <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(item.mrp || unit_price)}
                     </td>
-                    <td className="py-1.5 px-1 text-center font-medium">
+                    <td className="py-2 px-1 text-center font-medium" style={{ verticalAlign: 'middle' }}>
                       {item.quantity}
                     </td>
-                    <td className="py-1.5 px-1 text-center text-green-600 font-medium">
+                    <td className="py-2 px-1 text-center text-green-600 font-medium" style={{ verticalAlign: 'middle' }}>
                       {freeQty > 0 ? freeQty : '-'}
                     </td>
-                    <td className="py-1.5 px-1 text-right">
+                    <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(unit_price)}
                     </td>
-                    <td className="py-1.5 px-1 text-center">
+                    <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
                       {discount > 0 ? `${discount.toFixed(0)}%` : '-'}
                     </td>
-                    <td className="py-1.5 px-1 text-center">
+                    <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
                       {gstPercent > 0 ? `${gstPercent}%` : '-'}
                     </td>
-                    <td className="py-1.5 px-2 text-right font-semibold">
+                    <td className="py-2 px-2 text-right font-semibold" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(lineTotal)}
                     </td>
                   </tr>
@@ -472,23 +481,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
           {/* Bottom Section - Summary and Notes */}
           <div className="grid grid-cols-2 gap-5 mt-6">
-            {/* Left Side - Notes & Compact Signature */}
+            {/* Left Side - Tax Breakup, Notes, T&C, Signature */}
             <div className="space-y-3">
-              {/* Notes Section - Challan Style */}
-              {
-                invoice.notes && (
-                  <div className="border border-gray-300 rounded-lg overflow-hidden">
-                    <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
-                      <h3 className="text-xs font-bold text-gray-800 uppercase">Notes</h3>
-                    </div>
-                    <div className="p-3">
-                      <p className="text-xs text-gray-700 leading-relaxed">{invoice.notes}</p>
-                    </div>
-                  </div>
-                )
-              }
-
-              {/* Tax Breakup */}
+              {/* Tax Breakup - FIRST (always at top) */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-700 mb-2">Tax Breakup</h3>
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -521,21 +516,35 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 </div>
               </div>
 
-              {/* Terms & Conditions */}
+              {/* Terms & Conditions - In a box below tax */}
               {(companyInfo as any)?.business_settings?.terms_and_conditions && (
-                <div>
-                  <h3 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Terms & Conditions</h3>
-                  <p className="text-[10px] text-gray-600 leading-relaxed whitespace-pre-line">
-                    {(companyInfo as any).business_settings.terms_and_conditions}
-                  </p>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+                    <h3 className="text-[10px] font-semibold text-gray-600 uppercase">Terms & Conditions</h3>
+                  </div>
+                  <div className="p-2">
+                    <p className="text-[10px] text-gray-600 leading-relaxed whitespace-pre-line">
+                      {(companyInfo as any).business_settings.terms_and_conditions}
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* Compact Authorization */}
-              <div className="border-t border-gray-200 pt-2 mt-2">
-                <p className="text-[10px] text-gray-600">For {invoice.company_name || companyInfo?.name || 'Your Company'}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Digitally Authorized</p>
-                <p className="text-[10px] text-gray-400">ERP System Generated</p>
+              {/* Notes - Plain text, no box, below T&C */}
+              {invoice.notes && (
+                <div>
+                  <h3 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Notes</h3>
+                  <p className="text-[10px] text-gray-600 leading-relaxed">{invoice.notes}</p>
+                </div>
+              )}
+
+              {/* Compact Authorization - Single line style */}
+              <div className="text-[9px] text-gray-400 pt-1">
+                <span>For {invoice.company_name || companyInfo?.name || 'Your Company'}</span>
+                <span className="mx-1">•</span>
+                <span>Digitally Authorized</span>
+                <span className="mx-1">•</span>
+                <span>ERP Generated</span>
               </div>
             </div>
 

@@ -338,16 +338,6 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                     <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
                                 </button>
                             </div>
-
-                            {enableShare && (
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors text-sm"
-                                >
-                                    <Share2 className="w-4 h-4" />
-                                    More sharing options
-                                </button>
-                            )}
                         </div>
                     )}
 

@@ -407,9 +407,15 @@ async def create_sale_return(
                 
                 InventoryService.record_stock_movement(db, movement_data)
                 
-        # TODO: Update party ledger when table is available
-        # For now, we'll skip ledger updates to avoid errors
-        # The credit adjustment functionality will be added later
+        # Update customer ledger based on return_method
+        return_method = return_dict.get("return_method") or return_dict.get("return_type") or "credit_note"
+        ledger_result = ReturnService.update_customer_credit_balance(
+            db=db,
+            customer_id=return_dict["customer_id"],
+            amount=float(total_amount),
+            return_method=return_method,
+            return_number=return_number
+        )
             
         db.commit()
         
@@ -417,9 +423,12 @@ async def create_sale_return(
             "status": "success",
             "return_id": return_id,
             "return_number": return_number,
+            "return_method": return_method,
             "credit_note_no": credit_note_no,
             "total_amount": float(total_amount),
-            "has_gst": bool(customer.gst_number),
+            "has_gst": bool(customer.get("gst_number")),
+            "ledger_action": ledger_result.get("action"),
+            "customer_credit_balance": ledger_result.get("credit_balance"),
             "message": f"Sale return {return_number} created successfully" + (f" with credit note {credit_note_no}" if credit_note_no else "")
         }
         
@@ -501,3 +510,79 @@ async def cancel_sale_return(
         db.rollback()
         logger.error(f"Error cancelling sale return: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== TEST ENDPOINTS ====================
+
+@router.get("/test/verify-return/{return_id}")
+@with_tenant_context
+async def verify_return_flow(
+    return_id: int,
+    _: dict = Depends(PermissionChecker("sales_returns", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Test endpoint to verify return was processed correctly.
+    Returns all related data for verification:
+    - Return record with return_method
+    - Return items
+    - Customer credit balance
+    - Inventory movements
+    """
+    try:
+        result = ReturnService.get_return_with_ledger_info(db, return_id)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Return not found")
+        
+        return {
+            "status": "success",
+            "verification": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying return: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test/return-methods")
+async def get_return_methods():
+    """
+    Get all supported return methods with descriptions.
+    For testing and documentation purposes.
+    """
+    return {
+        "return_methods": [
+            {
+                "value": "credit_note",
+                "label": "Credit Note",
+                "description": "Add amount to customer's credit balance for future purchases",
+                "financial_action": "Increases customer credit_balance",
+                "approval_required": False
+            },
+            {
+                "value": "replacement",
+                "label": "Replacement",
+                "description": "Issue replacement goods (no financial transaction)",
+                "financial_action": "None - goods exchange only",
+                "approval_required": False
+            },
+            {
+                "value": "refund",
+                "label": "Cash/Bank Refund",
+                "description": "Issue cash or bank transfer refund",
+                "financial_action": "Creates pending payment voucher",
+                "approval_required": True
+            },
+            {
+                "value": "no_adjustment",
+                "label": "No Adjustment",
+                "description": "Return for inventory purposes only (no financial impact)",
+                "financial_action": "None",
+                "approval_required": False
+            }
+        ]
+    }

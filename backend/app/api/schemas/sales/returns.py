@@ -105,6 +105,13 @@ class SalesReturnCreate(BaseModel):
     return_category: str = Field(default="QUALITY", description="Return category")
     
     notes: Optional[str] = Field(None, max_length=1000)
+    
+    # B2B GST handling - when true, GST is NOT included in credit/refund amount
+    withhold_gst: bool = Field(
+        default=False, 
+        description="For B2B returns: if True, GST is withheld (not included in return amount)"
+    )
+    
     items: List[SalesReturnItem] = Field(..., min_length=1)
 
     @field_validator("return_method")

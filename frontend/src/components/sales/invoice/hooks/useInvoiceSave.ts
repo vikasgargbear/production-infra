@@ -131,9 +131,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 // OFFLINE-FIRST: Immediately deduct stock from local IndexedDB
                 await deductStockLocally(invoice.items);
 
-                toast.success('✅ Invoice saved offline - Will sync when online', {
-                    autoClose: 5000,
-                });
+                // Success modal provides feedback - no toast needed
+                console.log('[Invoice] ✅ Invoice saved offline');
 
                 const createdData: CreatedInvoiceData = {
                     invoiceId: tempId,
@@ -228,7 +227,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 await offlineDB.addToSyncQueue('invoices', tempId, 'create', localInvoice);
             }
 
-            toast.success('✅ Invoice created successfully');
+            // Success modal provides feedback - no toast needed
+            console.log('[Invoice] ✅ Invoice created successfully');
         } catch (error) {
             const err = error as { response?: { status?: number; data?: { detail?: { error?: string; product_id?: number; required_quantity?: number; available_quantity?: number } } }; code?: string; message?: string };
             console.error('[Invoice] Save failed:', error);
@@ -285,9 +285,8 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                     await offlineDB.add('invoices', offlineInvoice);
                     await offlineDB.addToSyncQueue('invoices', tempId, 'create', offlineInvoice as unknown as null);
 
-                    toast.success('✅ Invoice saved locally - will sync when server is back', {
-                        autoClose: 5000,
-                    });
+                    // Success modal provides feedback - no toast needed
+                    console.log('[Invoice] ✅ Invoice saved locally - will sync when server is back');
 
                     const createdData: CreatedInvoiceData = {
                         invoiceId: tempId,

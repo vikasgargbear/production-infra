@@ -17,7 +17,7 @@
  */
 
 import offlineDB from '../core/offlineDatabase';
-import { productsApi, customersApi } from '../../api';
+import { productsApi, customersApi, invoicesApi } from '../../api';
 import { employeesApi } from '../../api/modules/master/employees.api';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -530,13 +530,120 @@ class SyncPullService {
         }
     }
 
+    // ==================== INVOICE SYNC ====================
+
+    /**
+     * Sync invoices from last 30 days for offline returns
+     * Stores invoices with items for return workflows
+     */
+    async syncInvoices(options: {
+        daysBack?: number;
+    } = {}): Promise<SyncResult> {
+        const { daysBack = 30 } = options;
+
+        if (!this.isAuthenticated()) {
+            return { success: false, itemsSynced: 0, error: 'Not authenticated' };
+        }
+
+        try {
+            console.log(`[SyncPull] Syncing invoices from last ${daysBack} days...`);
+
+            // Calculate date range
+            const fromDate = new Date();
+            fromDate.setDate(fromDate.getDate() - daysBack);
+            const fromDateStr = fromDate.toISOString().split('T')[0];
+
+            // Fetch invoices
+            const response = await invoicesApi.getAll({
+                from_date: fromDateStr,
+                limit: 500, // Reasonable limit for 30 days
+                sort: 'created_at',
+                order: 'desc'
+            });
+
+            const invoices = response?.data?.invoices || response?.data || [];
+
+            if (!Array.isArray(invoices)) {
+                console.warn('[SyncPull] Invalid invoice response format');
+                return { success: false, itemsSynced: 0, error: 'Invalid response format' };
+            }
+
+            if (invoices.length === 0) {
+                console.log('[SyncPull] No invoices to sync');
+                return { success: true, itemsSynced: 0 };
+            }
+
+            // Transform invoices for IndexedDB
+            const transformedInvoices = invoices.map((invoice: any) => this.transformInvoice(invoice));
+
+            // Store in IndexedDB
+            await offlineDB.bulkLoad('invoices', transformedInvoices);
+
+            console.log(`[SyncPull] ✅ Synced ${invoices.length} invoices`);
+            return { success: true, itemsSynced: invoices.length };
+
+        } catch (error: any) {
+            console.error('[SyncPull] Invoice sync failed:', error);
+            return { success: false, itemsSynced: 0, error: error.message };
+        }
+    }
+
+    /**
+     * Transform invoice from API format to IndexedDB format
+     */
+    private transformInvoice(invoice: any): any {
+        const invoiceId = String(invoice.invoice_id || invoice.id);
+
+        // Transform items if present
+        const items = (invoice.items || []).map((item: any) => ({
+            invoice_item_id: item.invoice_item_id || item.id,
+            product_id: item.product_id,
+            product_name: item.product_name || '',
+            batch_id: item.batch_id,
+            batch_number: item.batch_number || '',
+            quantity: parseFloat(item.quantity) || 0,
+            free_quantity: parseFloat(item.free_quantity) || 0,
+            unit_price: parseFloat(item.unit_price || item.sale_price) || 0,
+            mrp: parseFloat(item.mrp || item.mrp_per_unit) || 0,
+            discount_percent: parseFloat(item.discount_percent) || 0,
+            gst_percent: parseFloat(item.gst_percent || item.tax_percent) || 0,
+            line_total: parseFloat(item.line_total || item.amount) || 0,
+            hsn_code: item.hsn_code || '',
+            unit: item.unit || 'PCS'
+        }));
+
+        return {
+            id: invoiceId,
+            invoice_id: invoiceId,
+            invoice_number: invoice.invoice_number || '',
+            invoice_date: invoice.invoice_date || null,
+            customer_id: String(invoice.customer_id || ''),
+            customer_name: invoice.customer_name || '',
+            subtotal_amount: parseFloat(invoice.subtotal_amount) || 0,
+            tax_amount: parseFloat(invoice.tax_amount) || 0,
+            total_amount: parseFloat(invoice.total_amount) || 0,
+            paid_amount: parseFloat(invoice.paid_amount) || 0,
+            balance_amount: parseFloat(invoice.balance_amount) || 0,
+            payment_status: invoice.payment_status || 'unpaid',
+            items: items,
+            items_count: items.length,
+            // Search fields
+            _search_number: (invoice.invoice_number || '').toLowerCase(),
+            _search_customer: (invoice.customer_name || '').toLowerCase(),
+            // Metadata
+            created_at: invoice.created_at || null,
+            updated_at: invoice.updated_at || new Date().toISOString(),
+            sync_status: 'synced'
+        };
+    }
+
     /**
      * Full sync - downloads all data after login
      * Called once after authentication
      */
     async fullSync(options: {
         onProgress?: (progress: SyncProgress) => void;
-    } = {}): Promise<{ products: SyncResult; customers: SyncResult; employees: SyncResult }> {
+    } = {}): Promise<{ products: SyncResult; customers: SyncResult; employees: SyncResult; invoices: SyncResult }> {
         console.log('[SyncPull] Starting full sync...');
 
         const productResult = await this.syncProducts({
@@ -550,13 +657,17 @@ class SyncPullService {
 
         const employeeResult = await this.syncEmployees();
 
+        // Sync invoices for offline returns (last 30 days)
+        const invoiceResult = await this.syncInvoices();
+
         console.log('[SyncPull] Full sync complete:', {
             products: productResult.itemsSynced,
             customers: customerResult.itemsSynced,
-            employees: employeeResult.itemsSynced
+            employees: employeeResult.itemsSynced,
+            invoices: invoiceResult.itemsSynced
         });
 
-        return { products: productResult, customers: customerResult, employees: employeeResult };
+        return { products: productResult, customers: customerResult, employees: employeeResult, invoices: invoiceResult };
     }
 
     // ==================== BATCH RESERVATIONS ====================

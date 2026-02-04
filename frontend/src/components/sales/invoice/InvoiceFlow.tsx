@@ -137,26 +137,47 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     }, []);
 
     const handleThermalPrint = useCallback(() => {
-        console.log('Thermal print not implemented yet');
-        toast.info('Thermal print functionality coming soon');
+        // Trigger thermal print using PrintUtility if available
+        const printEvent = new CustomEvent('thermalPrint', { detail: { size: '80mm' } });
+        document.dispatchEvent(printEvent);
     }, []);
 
     const handlePDFDownload = useCallback((invoiceData: CreatedInvoiceData) => {
-        const element = document.querySelector('.invoice-preview');
-        if (!element) return;
+        // Try to find the hidden invoice preview by ID
+        const element = document.getElementById('invoice-preview');
+        if (!element) {
+            toast.error('Unable to generate PDF - preview not found');
+            console.error('[PDF] Could not find #invoice-preview element');
+            return;
+        }
 
+        // Maximum quality settings for html2pdf
         const options = {
-            margin: 1,
+            margin: [10, 10, 10, 10],  // [top, left, bottom, right]
             filename: `Invoice-${invoiceData.invoiceNumber || 'draft'}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            image: { type: 'png', quality: 1 },
+            html2canvas: {
+                scale: 4,  // Higher = sharper (max practical is 4)
+                useCORS: true,
+                logging: false,
+                letterRendering: true,  // Crisp text rendering
+                windowWidth: 794  // A4 width in pixels (210mm at 96dpi)
+            },
+            jsPDF: {
+                unit: 'mm',
+                format: 'a4',
+                orientation: 'portrait',
+                compress: true
+            },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
         };
 
-        html2pdf().set(options).from(element).save();
+        // Silent PDF generation - only show errors
+        html2pdf().set(options).from(element).save()
+            .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
     }, []);
 
-    const handleWhatsAppShare = useCallback((phone: string | undefined) => {
+    const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: number) => {
         if (!phone) {
             toast.error('No phone number available for WhatsApp');
             return;
@@ -172,10 +193,22 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             cleanPhone = '91' + cleanPhone.substring(1);
         }
 
-        const whatsappMessage = `Your invoice is ready! Invoice #${invoice.invoice_number}`;
+        // Personalized message with customer name, invoice number, amount, and date
+        const invoiceDate = new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric'
+        });
+        const formattedAmount = amount ? `₹${amount.toLocaleString('en-IN')}` : '';
+
+        const whatsappMessage = `Dear ${customerName || 'Customer'},
+
+Your invoice ${invoice.invoice_number} dated ${invoiceDate} for ${formattedAmount} is ready.
+
+Thank you for your business!
+${companyInfo?.name || 'Your Company'}`;
+
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank');
-    }, [invoice.invoice_number]);
+    }, [invoice.invoice_number, invoice.invoice_date, companyInfo?.name]);
 
     // Step navigation handlers
     const handleContinueFromStep1 = useCallback(async () => {
@@ -356,7 +389,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                 />
             )}
 
-            {/* Success Modal */}
+            {/* Success Modal - Stays open for print/whatsapp actions */}
             {showSuccessModal && createdInvoiceData && (
                 <GenericSuccessModal
                     isOpen={showSuccessModal}
@@ -370,7 +403,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                     documentType="invoice"
                     customerName={createdInvoiceData.customerName}
                     totalAmount={createdInvoiceData.totalAmount}
-                    autoCloseDelay={5}
+                    autoCloseDelay={null}  // No auto-close - user must manually close
                     documentData={{
                         customerPhone: createdInvoiceData.customerPhone,
                         customerEmail: createdInvoiceData.customerEmail,
@@ -387,15 +420,20 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                     companyInfo={companyInfo}
                     onPrint={handlePrint}
                     onThermalPrint={handleThermalPrint}
-                    onWhatsApp={() => handleWhatsAppShare(createdInvoiceData.customerPhone)}
+                    onWhatsApp={() => handleWhatsAppShare(
+                        createdInvoiceData.customerPhone,
+                        createdInvoiceData.customerName,
+                        createdInvoiceData.totalAmount
+                    )}
                     onDownload={() => handlePDFDownload(createdInvoiceData)}
                     showCopy={true}
+                    showQuickActions={true}
                 />
             )}
 
-            {/* Hidden Invoice Preview for PDF Generation */}
+            {/* Off-screen Invoice Preview for PDF Generation - must be in DOM but not visible */}
             {createdInvoiceData && showSuccessModal && (
-                <div className="hidden">
+                <div className="absolute left-[-9999px] top-0 w-[210mm]">
                     <InvoicePreview
                         invoice={{
                             ...invoice,
