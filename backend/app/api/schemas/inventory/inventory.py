@@ -175,7 +175,8 @@ class StockMovementBase(BaseModel):
 
 class StockMovementCreate(StockMovementBase):
     """Schema for recording stock movement"""
-    pass
+    org_id: Optional[UUID] = Field(None, description="Organization ID (set by service if not provided)")
+    created_by: Optional[int] = Field(None, description="User ID who created the movement")
 
 
 class StockMovementResponse(StockMovementBase):
