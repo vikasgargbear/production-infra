@@ -1,36 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { companyApi } from '../services/api';
-
-interface BankAccount {
-    id?: number;
-    account_number?: string;
-    bank_name?: string;
-    ifsc_code?: string;
-    branch_name?: string;
-}
-
-interface BusinessSettings {
-    [key: string]: any;
-}
-
-interface CompanyInfo {
-    name: string;
-    address: string;
-    city: string;
-    state: string;
-    pincode: string;
-    phone: string;
-    email: string;
-    gst_number: string;
-    pan_number: string;
-    drug_license_number: string;
-    fssai_number: string;
-    msme_number: string;
-    logo: string | null;
-    bankAccounts: BankAccount[];
-    paymentQR: string | null;
-    business_settings?: BusinessSettings;
-}
+import type { CompanyContextInfo as CompanyInfo, BankAccount, BusinessSettings } from '../types/common/company.types';
 
 interface CompanyContextValue {
     companyInfo: CompanyInfo | null;

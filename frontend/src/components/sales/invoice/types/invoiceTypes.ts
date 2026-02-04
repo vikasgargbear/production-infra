@@ -471,33 +471,8 @@ export interface DateRange {
 
 // ==================== COMPANY INFO ====================
 
-/** Company/Organization information */
-export interface CompanyInfo {
-    company_name?: string;
-    name?: string;
-    address?: string;
-    city?: string;
-    state?: string;
-    state_code?: string;
-    pincode?: string;
-    gst_number?: string;
-    pan_number?: string;
-    phone?: string;
-    email?: string;
-    logo?: string;
-    drug_license_number?: string;
-    fssai_number?: string;
-    msme_number?: string;
-    upiId?: string;
-    bankAccounts?: BankAccount[];
-    paymentQR?: string;
-    business_settings?: {
-        terms_and_conditions?: string;
-        default_terms?: string;
-        default_footer?: string;
-        [key: string]: any;
-    };
-}
+// Re-export from shared types - single source of truth
+export type { CompanyInfo, BankAccount as SharedBankAccount, BusinessSettings } from '../../../../types/common/company.types';
 
 // ==================== PRODUCT INPUT ====================
 

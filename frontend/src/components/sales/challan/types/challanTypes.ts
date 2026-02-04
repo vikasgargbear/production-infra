@@ -182,17 +182,8 @@ export interface CreatedChallanData {
 
 // ==================== COMPANY INFO ====================
 
-/** Company information for preview/print */
-export interface CompanyInfo {
-    name?: string;
-    address?: string;
-    gst_number?: string;
-    pan_number?: string;
-    logo?: string;
-    drug_license_number?: string;
-    fssai_number?: string;
-    msme_number?: string;
-}
+// Re-export from shared types - single source of truth
+export type { CompanyInfo } from '../../../../types/common/company.types';
 
 // ==================== HOOK RETURN TYPE ====================
 
