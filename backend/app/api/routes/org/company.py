@@ -165,7 +165,11 @@ async def get_company_info(
                 # ALL bank accounts as array (frontend expects this)
                 "bank_accounts": bank_accounts,
                 # Nested business_settings for CompanyContext
-                "business_settings": business_settings
+                # Ensure terms_and_conditions is always present (alias of default_terms)
+                "business_settings": {
+                    **business_settings,
+                    "terms_and_conditions": business_settings.get("terms_and_conditions") or business_settings.get("default_terms", ""),
+                }
             }
             
             # Add default bank details as flat fields for backward compatibility

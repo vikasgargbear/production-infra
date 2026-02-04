@@ -26,7 +26,7 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours for development
 
 # Password hashing
 # Configure bcrypt to avoid 72-byte initialization issues
