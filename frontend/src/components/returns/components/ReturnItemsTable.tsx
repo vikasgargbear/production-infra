@@ -176,11 +176,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Pack Info */}
                                         <td className="px-3 py-2 text-center">
                                             <div className="text-sm text-gray-700">
-                                                {row.packages_per_box && row.units_per_pack
-                                                    ? `${row.packages_per_box}*${row.units_per_pack}`
-                                                    : row.units_per_pack && row.units_per_pack > 1
-                                                        ? `1*${row.units_per_pack}`
-                                                        : '-'}
+                                                {`${row.packages_per_box || 1}*${row.units_per_pack || 1}`}
                                             </div>
                                         </td>
 

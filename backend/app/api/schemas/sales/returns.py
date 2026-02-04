@@ -66,7 +66,7 @@ class SalesReturnItem(BaseModel):
     quantity: Optional[Decimal] = Field(None, description="Alias for return_quantity")
     free_quantity: Decimal = Field(default=Decimal("0"), ge=0, description="Free items in return (no credit)")
     
-    rate: Decimal = Field(..., ge=0, description="Unit rate")
+    unit_price: Decimal = Field(..., ge=0, description="Unit price")
     mrp: Optional[Decimal] = Field(None, ge=0, description="MRP per unit")
     
     # Optional manual override - if provided, use this instead of calculated value
