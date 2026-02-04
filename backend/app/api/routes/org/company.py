@@ -117,7 +117,7 @@ async def get_company_info(
             # Get company logo and QR code from system_settings
             assets_query = """
                 SELECT setting_key, setting_value
-                FROM system_config.system_settings
+                FROM master.system_settings
                 WHERE org_id = :org_id AND setting_category = 'company'
                   AND setting_key IN ('company_logo', 'payment_qr_code')
             """
@@ -464,13 +464,13 @@ async def get_company_profile(
             ),
             qr_data AS (
                 SELECT setting_value as qr_code
-                FROM system_config.system_settings
+                FROM master.system_settings
                 WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'payment_qr_code'
                 LIMIT 1
             ),
             logo_data AS (
                 SELECT setting_value as logo
-                FROM system_config.system_settings
+                FROM master.system_settings
                 WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'company_logo'
                 LIMIT 1
             )
@@ -607,21 +607,22 @@ async def upload_qr_code(
         if not qr_code_base64:
             raise HTTPException(status_code=400, detail="QR code data is required")
         
-        # Store QR code in system settings
-        # Use DELETE + INSERT since the table may not have a suitable unique constraint
-        delete_query = """
-            DELETE FROM system_config.system_settings
-            WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'payment_qr_code'
-        """
-        db.execute(text(delete_query), {"org_id": str(context.org_id)})
-        
-        insert_query = """
-            INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
-            VALUES (:org_id, 'company', 'payment_qr_code', 'Payment QR Code', :qr_code, 'image', 'organization')
+        # Store QR code in master.system_settings (same table as business.py)
+        # Uses ON CONFLICT with (org_id, setting_category, setting_key) unique constraint
+        query = """
+            INSERT INTO master.system_settings (
+                org_id, setting_category, setting_key, setting_value, 
+                setting_type, is_active
+            ) VALUES (
+                :org_id, 'company', 'payment_qr_code', :qr_code, 'image', true
+            )
+            ON CONFLICT (org_id, setting_category, setting_key) 
+            DO UPDATE SET 
+                setting_value = EXCLUDED.setting_value,
+                updated_at = CURRENT_TIMESTAMP
         """
 
-        db.execute(text(insert_query), {
+        db.execute(text(query), {
             "org_id": str(context.org_id),
             "qr_code": qr_code_base64
         })
@@ -651,21 +652,22 @@ async def upload_logo(
         if not logo_base64:
             raise HTTPException(status_code=400, detail="Logo data is required")
         
-        # Store logo in system settings
-        # Use DELETE + INSERT since the table may not have a suitable unique constraint
-        delete_query = """
-            DELETE FROM system_config.system_settings
-            WHERE org_id = :org_id AND setting_category = 'company' AND setting_key = 'company_logo'
+        # Store logo in master.system_settings (same table as business.py)
+        # Uses ON CONFLICT with (org_id, setting_category, setting_key) unique constraint
+        query = """
+            INSERT INTO master.system_settings (
+                org_id, setting_category, setting_key, setting_value, 
+                setting_type, is_active
+            ) VALUES (
+                :org_id, 'company', 'company_logo', :logo, 'image', true
+            )
+            ON CONFLICT (org_id, setting_category, setting_key) 
+            DO UPDATE SET 
+                setting_value = EXCLUDED.setting_value,
+                updated_at = CURRENT_TIMESTAMP
         """
-        db.execute(text(delete_query), {"org_id": str(context.org_id)})
         
-        insert_query = """
-            INSERT INTO system_config.system_settings
-                (org_id, setting_category, setting_key, setting_name, setting_value, setting_type, setting_scope)
-            VALUES (:org_id, 'company', 'company_logo', 'Company Logo', :logo, 'image', 'organization')
-        """
-        
-        db.execute(text(insert_query), {
+        db.execute(text(query), {
             "org_id": str(context.org_id),
             "logo": logo_base64
         })
@@ -691,7 +693,7 @@ async def get_logo(
     try:
         query = """
             SELECT setting_value
-            FROM system_config.system_settings
+            FROM master.system_settings
             WHERE org_id = :org_id AND setting_key = 'company_logo'
             LIMIT 1
         """
@@ -726,7 +728,7 @@ async def delete_logo(
     """Delete company logo"""
     try:
         query = """
-            DELETE FROM system_config.system_settings
+            DELETE FROM master.system_settings
             WHERE org_id = :org_id AND setting_key = 'company_logo'
         """
         
@@ -754,7 +756,7 @@ async def get_company_settings(
             SELECT 
                 setting_key, 
                 setting_value
-            FROM system_config.system_settings
+            FROM master.system_settings
             WHERE org_id = :org_id
         """
         
@@ -815,7 +817,7 @@ async def update_company_settings(
                 value = json.dumps(value)
             
             query = """
-                INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
+                INSERT INTO master.system_settings (org_id, setting_key, setting_value)
                 VALUES (:org_id, :key, :value)
                 ON CONFLICT (org_id, setting_key)
                 DO UPDATE SET setting_value = :value, updated_at = CURRENT_TIMESTAMP
