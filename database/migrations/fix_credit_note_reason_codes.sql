@@ -7,11 +7,10 @@ DROP CONSTRAINT IF EXISTS credit_notes_reason_code_check;
 ALTER TABLE financial.credit_notes 
 ADD CONSTRAINT credit_notes_reason_code_check 
 CHECK (reason_code IN (
-    -- Original credit note reasons
+    -- Return reasons (from useReturnReasons.ts)
+    'NOT_REQUIRED', 'EXPIRED', 'WRONG_ITEM', 'QUALITY_ISSUE',
+    'SHORT_EXPIRY', 'BATCH_RECALL', 'DAMAGED_IN_TRANSIT', 'DAMAGED', 'OTHER',
+    -- Additional credit note reasons
     'SALES_RETURN', 'DAMAGED_GOODS', 'EXPIRED_GOODS', 
-    'WRONG_BILLING', 'RATE_DIFFERENCE', 'QUALITY_ISSUE',
-    'SHORT_SUPPLY', 'DISCOUNT_ADJUSTMENT', 'OTHER',
-    -- Return-specific reasons (from frontend)
-    'DAMAGED', 'EXPIRED', 'WRONG_ITEM', 'NOT_REQUIRED',
-    'DAMAGED_IN_TRANSIT', 'SHORT_EXPIRY', 'BATCH_RECALL'
+    'WRONG_BILLING', 'RATE_DIFFERENCE', 'SHORT_SUPPLY', 'DISCOUNT_ADJUSTMENT'
 ));
