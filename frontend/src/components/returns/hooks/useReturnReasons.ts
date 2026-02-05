@@ -34,15 +34,15 @@ const CACHE_KEY = 'return_reasons_cache';
 const CACHE_DURATION = 3600000; // 1 hour
 
 const DEFAULT_REASONS: ReturnReason[] = [
-    { value: 'DAMAGED', label: 'Damaged Product' },
-    { value: 'EXPIRED', label: 'Expired Product' },
+    { value: 'NOT_REQUIRED', label: 'Not Required' },
     { value: 'WRONG_ITEM', label: 'Wrong Item Delivered' },
     { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-    { value: 'NOT_REQUIRED', label: 'Not Required' },
-    { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
     { value: 'SHORT_EXPIRY', label: 'Short Expiry' },
     { value: 'BATCH_RECALL', label: 'Batch Recall' },
-    { value: 'OTHER', label: 'Other' }
+    { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
+    { value: 'OTHER', label: 'Other' },
+    { value: 'DAMAGED', label: 'Damaged Product' },
+    { value: 'EXPIRED', label: 'Expired Product' }
 ];
 
 // ============================================================================
