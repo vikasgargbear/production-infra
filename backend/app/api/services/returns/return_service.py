@@ -19,10 +19,13 @@ from ....core.utils.constants import ReturnStatus, DispositionType
 
 logger = logging.getLogger(__name__)
 
-# Damaged reasons for inventory disposition decisions
-DAMAGED_REASONS = [
-    "damaged", "broken", "expired", "expiry", "quality issue", "defective",
-    "contaminated", "leaking", "melted", "manufacturing defect"
+# Damaged/non-restockable reasons for inventory disposition decisions
+# These match the frontend dropdown values exactly
+NON_RESTOCK_REASONS = [
+    "expired product", "expired",
+    "damaged product", "damaged", "broken",
+    "quality issue", "defective",
+    "contaminated", "manufacturing defect"
 ]
 
 
@@ -255,12 +258,12 @@ class ReturnService:
     ) -> Tuple[str, bool]:
         """
         Determine item disposition based on reason and restock flag.
-        Uses DAMAGED_REASONS constant for consistency.
+        Uses NON_RESTOCK_REASONS constant for consistency.
         
         Returns:
             Tuple of (disposition, is_damaged)
         """
-        is_damaged = any(reason in return_reason.lower() for reason in DAMAGED_REASONS)
+        is_damaged = any(reason in return_reason.lower() for reason in NON_RESTOCK_REASONS)
         
         if explicit_restock is False or is_damaged:
             disposition = "DESTROY" if is_damaged else "QUARANTINE"
