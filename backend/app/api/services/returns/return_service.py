@@ -823,20 +823,26 @@ class ReturnService:
         Validate return quantity against already returned amounts.
         Returns (max_returnable, already_returned).
         """
+        logger.info(f"Validating return quantity for invoice_item_id={invoice_item_id}, requested_qty={return_qty}")
+        
         result = db.execute(text("""
             SELECT 
+                ii.invoice_item_id,
                 ii.quantity as invoice_qty,
                 COALESCE(SUM(sri.return_quantity), 0) as already_returned
             FROM sales.invoice_items ii
             LEFT JOIN sales.sales_return_items sri 
                 ON ii.invoice_item_id = sri.invoice_item_id
             WHERE ii.invoice_item_id = :invoice_item_id
-            GROUP BY ii.quantity
+            GROUP BY ii.invoice_item_id, ii.quantity
         """), {"invoice_item_id": invoice_item_id}).fetchone()
         
         if result:
             max_returnable = float(result.invoice_qty) - float(result.already_returned)
+            logger.info(f"Found invoice_item: qty={result.invoice_qty}, already_returned={result.already_returned}, max_returnable={max_returnable}")
             return (max_returnable, float(result.already_returned))
+        
+        logger.warning(f"Invoice item {invoice_item_id} not found in sales.invoice_items")
         return (0, 0)
     
     @staticmethod
