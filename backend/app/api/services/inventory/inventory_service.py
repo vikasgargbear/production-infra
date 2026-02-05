@@ -119,13 +119,13 @@ class InventoryService:
                 "quantity_in": batch_dict["quantity_received"]
             })
             
-            db.commit()
+            # Note: We do NOT commit here - caller controls transaction
             
             # Return created batch
             return InventoryService.get_batch(db, batch_id)
             
         except Exception as e:
-            db.rollback()
+            # Caller handles rollback
             logger.error(f"Error creating batch: {str(e)}")
             raise
     
@@ -210,7 +210,11 @@ class InventoryService:
         db: Session, 
         movement_data: StockMovementCreate
     ) -> StockMovementResponse:
-        """Record a stock movement with comprehensive field support"""
+        """Record a stock movement with comprehensive field support.
+        
+        Note: This method does NOT commit the transaction - the caller is
+        responsible for calling db.commit() to maintain transaction atomicity.
+        """
         try:
             # Get current stock levels
             if movement_data.batch_id:
@@ -297,7 +301,8 @@ class InventoryService:
                     "batch_id": movement_data.batch_id
                 })
             
-            db.commit()
+            # Note: We do NOT commit here - caller controls transaction
+            # This ensures atomicity when called from returns, invoices, etc.
             
             # Build response
             movement_response = {
