@@ -10,6 +10,28 @@ import { useCompany } from '../../../contexts/CompanyContext';
 import { ModuleHeader, DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
+// Return reason value to label mapping
+const RETURN_REASON_LABELS: Record<string, string> = {
+    'NOT_REQUIRED': 'Not Required',
+    'EXPIRED': 'Expired Product',
+    'WRONG_PRODUCT': 'Wrong Product Delivered',
+    'QUALITY_ISSUE': 'Quality Issue',
+    'EXCESS_STOCK': 'Excess Stock',
+    'RATE_DIFFERENCE': 'Rate Difference',
+    'CUSTOMER_RETURN': 'Customer Return',
+    'DAMAGED': 'Damaged Product',
+    'OTHER': 'Other',
+    'DUPLICATE_ORDER': 'Duplicate Order',
+    'PRICE_ISSUE': 'Price Issue'
+};
+
+const getReasonLabel = (reason: string): string => {
+    if (!reason) return 'Return';
+    // Strip (Restocks) or (No Restock) suffix if present, then look up
+    const cleanReason = reason.replace(/\s*\((Restocks|No Restock)\)/i, '').toUpperCase();
+    return RETURN_REASON_LABELS[cleanReason] || reason.replace(/_/g, ' ');
+};
+
 export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     returnData,
     selectedCustomer,
@@ -133,7 +155,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                             </div>
                                             <div>
                                                 <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Reason: </span>
-                                                <span className="font-bold text-gray-900 capitalize">{returnData.return_reason || 'Return'}</span>
+                                                <span className="font-bold text-gray-900">{getReasonLabel(returnData.return_reason)}</span>
                                             </div>
                                         </div>
                                     </div>
