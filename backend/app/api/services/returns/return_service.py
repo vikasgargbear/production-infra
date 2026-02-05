@@ -292,6 +292,7 @@ class ReturnService:
         sgst_amount = Decimal("0")
         igst_amount = Decimal("0")
         total_amount = Decimal("0")
+        total_return_quantity = Decimal("0")
         
         for item in items:
             # Handle both return_quantity and quantity field names
@@ -318,6 +319,7 @@ class ReturnService:
             sgst_amount += item_sgst
             igst_amount += item_igst
             total_amount += taxable_amount + item_tax
+            total_return_quantity += qty
         
         return {
             "subtotal": subtotal,
@@ -325,7 +327,8 @@ class ReturnService:
             "cgst_amount": cgst_amount,
             "sgst_amount": sgst_amount,
             "igst_amount": igst_amount,
-            "total_amount": total_amount
+            "total_amount": total_amount,
+            "total_return_quantity": total_return_quantity
         }
     
     # ==================== READ OPERATIONS ====================
@@ -754,6 +757,7 @@ class ReturnService:
                 cgst_amount, sgst_amount, igst_amount,
                 credit_note_number, credit_note_date, credit_note_status,
                 adjusted_amount, pending_amount,
+                return_quantity,
                 notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :return_number, :return_date,
@@ -764,6 +768,7 @@ class ReturnService:
                 :cgst_amount, :sgst_amount, :igst_amount,
                 :credit_note_no, :credit_note_date, :credit_note_status,
                 0, :total_amount,
+                :return_quantity,
                 :notes, :created_by
             )
             RETURNING return_id
@@ -785,6 +790,7 @@ class ReturnService:
             "cgst_amount": float(totals["cgst_amount"]),
             "sgst_amount": float(totals["sgst_amount"]),
             "igst_amount": float(totals["igst_amount"]),
+            "return_quantity": float(totals.get("total_return_quantity", 0)),
             "credit_note_no": credit_note_no,
             "credit_note_date": return_data["return_date"] if credit_note_no else None,
             "credit_note_status": "issued" if credit_note_no else None,
