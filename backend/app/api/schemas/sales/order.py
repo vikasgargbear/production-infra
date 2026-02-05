@@ -133,15 +133,15 @@ class OrderBase(BaseModel):
     shipping_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
     
     # Order details
-    order_type: str = Field(default="sales", description="Order type")
-    payment_terms: str = Field(default="credit", description="Payment terms")
+    order_type: Optional[str] = Field(default="sales", description="Order type")
+    payment_terms: Optional[str] = Field(default="credit", description="Payment terms")
     notes: Optional[str] = Field(None, max_length=1000)
-    
+
     # Charges
-    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
-    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    delivery_charges: Decimal = Field(default=Decimal("0"), ge=0)
-    other_charges: Decimal = Field(default=Decimal("0"), ge=0)
+    discount_percent: Optional[Decimal] = Field(default=Decimal("0"), ge=0, le=100)
+    discount_amount: Optional[Decimal] = Field(default=Decimal("0"), ge=0)
+    delivery_charges: Optional[Decimal] = Field(default=Decimal("0"), ge=0)
+    other_charges: Optional[Decimal] = Field(default=Decimal("0"), ge=0)
 
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 
