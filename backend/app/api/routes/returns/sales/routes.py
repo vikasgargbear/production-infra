@@ -428,7 +428,7 @@ async def create_sale_return(
             "total_amount": float(total_amount),
             "has_gst": bool(customer.get("gst_number")),
             "ledger_action": ledger_result.get("action"),
-            "customer_credit_balance": ledger_result.get("credit_balance"),
+            "customer_outstanding": ledger_result.get("current_outstanding"),
             "message": f"Sale return {return_number} created successfully" + (f" with credit note {credit_note_no}" if credit_note_no else "")
         }
         

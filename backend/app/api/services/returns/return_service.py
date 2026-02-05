@@ -974,15 +974,15 @@ class ReturnService:
         action_taken = "none"
         
         if return_method == "credit_note":
-            # Add to customer's credit balance
+            # Reduce customer's outstanding balance (credit note reduces what they owe)
             db.execute(text("""
                 UPDATE parties.customers 
-                SET credit_balance = COALESCE(credit_balance, 0) + :amount,
+                SET current_outstanding = COALESCE(current_outstanding, 0) - :amount,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE customer_id = :customer_id
             """), {"amount": amount, "customer_id": customer_id})
-            action_taken = "credit_balance_increased"
-            logger.info(f"Customer {customer_id} credit balance increased by {amount} for return {return_number}")
+            action_taken = "outstanding_reduced"
+            logger.info(f"Customer {customer_id} outstanding reduced by {amount} for return {return_number}")
             
         elif return_method == "refund":
             # Create pending refund entry (not immediately paid)
@@ -1001,7 +1001,7 @@ class ReturnService:
         
         # Get updated balance
         result = db.execute(text("""
-            SELECT credit_balance, outstanding_amount
+            SELECT current_outstanding
             FROM parties.customers 
             WHERE customer_id = :customer_id
         """), {"customer_id": customer_id}).first()
@@ -1010,8 +1010,7 @@ class ReturnService:
             "customer_id": customer_id,
             "action": action_taken,
             "amount": amount,
-            "credit_balance": float(result.credit_balance or 0) if result else 0,
-            "outstanding_amount": float(result.outstanding_amount or 0) if result else 0
+            "current_outstanding": float(result.current_outstanding or 0) if result else 0
         }
     
     @staticmethod
@@ -1022,7 +1021,7 @@ class ReturnService:
         """
         # Get return record
         sale_return = db.execute(text("""
-            SELECT sr.*, c.customer_name, c.credit_balance, c.outstanding_amount,
+            SELECT sr.*, c.customer_name, c.current_outstanding,
                    c.gst_number
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
@@ -1042,16 +1041,15 @@ class ReturnService:
         
         # Get inventory movements
         movements = db.execute(text("""
-            SELECT * FROM inventory.stock_movements
-            WHERE reference_type = 'SALES_RETURN' AND reference_id = :return_id
+            SELECT * FROM inventory.inventory_movements
+            WHERE reference_type = 'sales_return' AND reference_id = :return_id
         """), {"return_id": return_id}).fetchall()
         
         return {
             "return": dict(sale_return._mapping),
             "items": [dict(i._mapping) for i in items],
             "customer_balance": {
-                "credit_balance": float(sale_return.credit_balance or 0),
-                "outstanding_amount": float(sale_return.outstanding_amount or 0)
+                "current_outstanding": float(sale_return.current_outstanding or 0)
             },
             "inventory_movements": [dict(m._mapping) for m in movements]
         }

@@ -229,6 +229,8 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
     return {
       ...item,
+      // Use invoice_item_id as unique id for this item
+      id: item.invoice_item_id || `inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       // Original invoice quantities
       quantity: totalQty,
       paid_quantity: paidQty,
@@ -412,7 +414,17 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Remove item
   const handleRemoveItem = useCallback((itemId: string | number) => {
-    const updatedItems = returnData.items.filter(item => item.id !== itemId);
+    console.log('handleRemoveItem called with:', itemId);
+    console.log('Current items:', returnData.items.map(i => ({ id: i.id, invoice_item_id: i.invoice_item_id })));
+
+    const updatedItems = returnData.items.filter((item, index) => {
+      // Match by id, invoice_item_id, or index
+      if (item.id === itemId) return false;
+      if (item.invoice_item_id === itemId) return false;
+      if (index === itemId) return false;
+      return true;
+    });
+    console.log('After filter, items count:', updatedItems.length);
     dispatch({ type: 'SET_RETURN_DATA', data: { items: updatedItems } });
   }, [returnData.items, dispatch]);
 
