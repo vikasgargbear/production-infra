@@ -732,7 +732,7 @@ class CreditNoteService:
             "tax_amount": tax_amount,
             "total_amount": total_amount,
             "reason_code": reason_code,
-            "reason": reason,
+            "reason": reason or f"Sales return - {reason_code}",
             "notes": f"Credit note for sales return {return_number}",
             "is_gst_applicable": is_gst_applicable,
             "cgst_amount": cgst_amount,
