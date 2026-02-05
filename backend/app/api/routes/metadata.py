@@ -170,13 +170,13 @@ async def get_return_reasons(_: dict = Depends(PermissionChecker("master", "view
     """Get all return reason options"""
     return {
         "sales_return_reasons": [
+            {"value": "NOT_REQUIRED", "label": "Not Required"},
             {"value": "EXPIRED", "label": "Expired Product"},
-            {"value": "DAMAGED", "label": "Damaged Product"},
             {"value": "WRONG_PRODUCT", "label": "Wrong Product Delivered"},
             {"value": "QUALITY_ISSUE", "label": "Quality Issue"},
-            {"value": "NOT_REQUIRED", "label": "Not Required"},
             {"value": "DUPLICATE_ORDER", "label": "Duplicate Order"},
             {"value": "PRICE_ISSUE", "label": "Price Issue"},
+            {"value": "DAMAGED", "label": "Damaged Product"},
             {"value": "OTHER", "label": "Other Reason"}
         ],
         "purchase_return_reasons": [
