@@ -225,7 +225,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const totalQty = parseFloat(item.quantity || 0);
     const freeQty = parseFloat(item.free_quantity || 0);
     const paidQty = totalQty - freeQty;
-    const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0);
+    // Calculate GST: prefer individual rates, fallback to gst_percent or tax_percent
+    const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0)
+      || item.gst_percent || item.tax_percent || item.gst_rate || 0;
 
     return {
       ...item,
