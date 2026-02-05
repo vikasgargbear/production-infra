@@ -281,6 +281,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">#</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Product</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">HSN</th>
+                  <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Pack</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Batch</th>
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Expiry</th>
                   <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Qty</th>
@@ -319,6 +320,11 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
                       <td className="py-3 px-2 text-sm">{index + 1}</td>
                       <td className="py-3 px-2 text-sm font-medium">{item.product_name}</td>
                       <td className="py-3 px-2 text-sm">{item.hsn_code || '-'}</td>
+                      <td className="py-3 px-2 text-sm text-center">
+                        {item.packages_per_box && item.units_per_pack
+                          ? `${item.packages_per_box}×${item.units_per_pack}`
+                          : item.pack_size || '-'}
+                      </td>
                       <td className="py-3 px-2 text-sm">{item.batch_number || '-'}</td>
                       <td className="py-3 px-2 text-sm">
                         {item.expiry_date ? formatDate(item.expiry_date) : '-'}
