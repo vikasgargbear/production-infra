@@ -105,15 +105,15 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   useEffect(() => {
     const loadReturnReasons = async () => {
       const defaultReasons: ReturnReason[] = [
-        { value: 'NOT_REQUIRED', label: 'Not Required' },
-        { value: 'EXPIRED', label: 'Expired Product' },
-        { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-        { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-        { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-        { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-        { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
-        { value: 'DAMAGED', label: 'Damaged Product' },
-        { value: 'OTHER', label: 'Other' }
+        { value: 'NOT_REQUIRED', label: 'Not Required (Restocks)' },
+        { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
+        { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered (Restocks)' },
+        { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
+        { value: 'EXCESS_STOCK', label: 'Excess Stock (Restocks)' },
+        { value: 'RATE_DIFFERENCE', label: 'Rate Difference (Restocks)' },
+        { value: 'CUSTOMER_RETURN', label: 'Customer Return (Restocks)' },
+        { value: 'DAMAGED', label: 'Damaged Product (No Restock)' },
+        { value: 'OTHER', label: 'Other (Restocks)' }
       ];
       dispatch({ type: 'SET_RETURN_REASONS', reasons: defaultReasons });
 

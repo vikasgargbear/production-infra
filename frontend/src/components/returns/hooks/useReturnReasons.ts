@@ -34,15 +34,15 @@ const CACHE_KEY = 'return_reasons_cache';
 const CACHE_DURATION = 3600000; // 1 hour
 
 const DEFAULT_REASONS: ReturnReason[] = [
-    { value: 'NOT_REQUIRED', label: 'Not Required' },
-    { value: 'EXPIRED', label: 'Expired Product' },
-    { value: 'WRONG_ITEM', label: 'Wrong Item Delivered' },
-    { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-    { value: 'SHORT_EXPIRY', label: 'Short Expiry' },
-    { value: 'BATCH_RECALL', label: 'Batch Recall' },
-    { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
-    { value: 'DAMAGED', label: 'Damaged Product' },
-    { value: 'OTHER', label: 'Other' }
+    { value: 'NOT_REQUIRED', label: 'Not Required (Restocks)' },
+    { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
+    { value: 'WRONG_ITEM', label: 'Wrong Item Delivered (Restocks)' },
+    { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
+    { value: 'SHORT_EXPIRY', label: 'Short Expiry (Restocks)' },
+    { value: 'BATCH_RECALL', label: 'Batch Recall (Restocks)' },
+    { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit (No Restock)' },
+    { value: 'DAMAGED', label: 'Damaged Product (No Restock)' },
+    { value: 'OTHER', label: 'Other (Restocks)' }
 ];
 
 // ============================================================================

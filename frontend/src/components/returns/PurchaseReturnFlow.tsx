@@ -107,16 +107,16 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     const loadReturnReasons = async () => {
       // First set default reasons immediately
       const defaultReasons = [
-        { value: 'NOT_ORDERED', label: 'Product Not Ordered' },
-        { value: 'EXPIRED', label: 'Expired Product' },
-        { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
-        { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-        { value: 'EXCESS_ORDER', label: 'Excess Order' },
-        { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
-        { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
-        { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
-        { value: 'DAMAGED', label: 'Damaged/Defective Product' },
-        { value: 'OTHER', label: 'Other' }
+        { value: 'NOT_ORDERED', label: 'Product Not Ordered (Restocks)' },
+        { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
+        { value: 'WRONG_PRODUCT', label: 'Wrong Product Received (Restocks)' },
+        { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
+        { value: 'EXCESS_ORDER', label: 'Excess Order (Restocks)' },
+        { value: 'NEAR_EXPIRY', label: 'Near Expiry (Restocks)' },
+        { value: 'RATE_DISPUTE', label: 'Rate Dispute (Restocks)' },
+        { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue (Restocks)' },
+        { value: 'DAMAGED', label: 'Damaged/Defective Product (No Restock)' },
+        { value: 'OTHER', label: 'Other (Restocks)' }
       ];
       setReturnReasons(defaultReasons);
 

@@ -170,25 +170,25 @@ async def get_return_reasons(_: dict = Depends(PermissionChecker("master", "view
     """Get all return reason options"""
     return {
         "sales_return_reasons": [
-            {"value": "NOT_REQUIRED", "label": "Not Required"},
-            {"value": "EXPIRED", "label": "Expired Product"},
-            {"value": "WRONG_PRODUCT", "label": "Wrong Product Delivered"},
-            {"value": "QUALITY_ISSUE", "label": "Quality Issue"},
-            {"value": "DUPLICATE_ORDER", "label": "Duplicate Order"},
-            {"value": "PRICE_ISSUE", "label": "Price Issue"},
-            {"value": "DAMAGED", "label": "Damaged Product"},
-            {"value": "OTHER", "label": "Other Reason"}
+            {"value": "NOT_REQUIRED", "label": "Not Required (Restocks)", "restocks": True},
+            {"value": "EXPIRED", "label": "Expired Product (No Restock)", "restocks": False},
+            {"value": "WRONG_PRODUCT", "label": "Wrong Product Delivered (Restocks)", "restocks": True},
+            {"value": "QUALITY_ISSUE", "label": "Quality Issue (Restocks)", "restocks": True},
+            {"value": "DUPLICATE_ORDER", "label": "Duplicate Order (Restocks)", "restocks": True},
+            {"value": "PRICE_ISSUE", "label": "Price Issue (Restocks)", "restocks": True},
+            {"value": "DAMAGED", "label": "Damaged Product (No Restock)", "restocks": False},
+            {"value": "OTHER", "label": "Other Reason (Restocks)", "restocks": True}
         ],
         "purchase_return_reasons": [
-            {"value": "NOT_ORDERED", "label": "Product Not Ordered"},
-            {"value": "EXPIRED", "label": "Expired Product"},
-            {"value": "WRONG_PRODUCT", "label": "Wrong Product Received"},
-            {"value": "QUALITY_ISSUE", "label": "Quality Issue"},
-            {"value": "EXCESS_QUANTITY", "label": "Excess Quantity"},
-            {"value": "SHORT_EXPIRY", "label": "Short Expiry"},
-            {"value": "PRICE_MISMATCH", "label": "Price Mismatch"},
-            {"value": "DAMAGED", "label": "Damaged/Defective Product"},
-            {"value": "OTHER", "label": "Other Reason"}
+            {"value": "NOT_ORDERED", "label": "Product Not Ordered (Restocks)", "restocks": True},
+            {"value": "EXPIRED", "label": "Expired Product (No Restock)", "restocks": False},
+            {"value": "WRONG_PRODUCT", "label": "Wrong Product Received (Restocks)", "restocks": True},
+            {"value": "QUALITY_ISSUE", "label": "Quality Issue (Restocks)", "restocks": True},
+            {"value": "EXCESS_QUANTITY", "label": "Excess Quantity (Restocks)", "restocks": True},
+            {"value": "SHORT_EXPIRY", "label": "Short Expiry (Restocks)", "restocks": True},
+            {"value": "PRICE_MISMATCH", "label": "Price Mismatch (Restocks)", "restocks": True},
+            {"value": "DAMAGED", "label": "Damaged/Defective Product (No Restock)", "restocks": False},
+            {"value": "OTHER", "label": "Other Reason (Restocks)", "restocks": True}
         ]
     }
 
