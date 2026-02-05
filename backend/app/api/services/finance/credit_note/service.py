@@ -700,15 +700,6 @@ class CreditNoteService:
         # Calculate total amount
         total_amount = float(credit_amount) + float(tax_amount)
         
-        # Get current outstanding before update
-        outstanding_result = db.execute(text("""
-            SELECT COALESCE(current_outstanding, 0) as current_outstanding
-            FROM parties.customers
-            WHERE customer_id = :customer_id
-        """), {"customer_id": customer_id}).first()
-        
-        previous_outstanding = float(outstanding_result.current_outstanding) if outstanding_result else 0.0
-        
         # Use provided date or current date
         credit_note_date = return_date if return_date else date_type.today()
         
@@ -752,19 +743,37 @@ class CreditNoteService:
         
         credit_note_id = result.scalar()
         
-        # 2. Update customer outstanding (reduce by credit note amount)
+        # 2. Insert into financial.customer_outstanding (single source of truth)
+        # Credit notes have NEGATIVE original_amount (reduces what customer owes)
         db.execute(text("""
-            UPDATE parties.customers 
-            SET current_outstanding = COALESCE(current_outstanding, 0) - :amount,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE customer_id = :customer_id
+            INSERT INTO financial.customer_outstanding (
+                org_id, customer_id, document_type, document_id, document_number,
+                document_date, original_amount, outstanding_amount, paid_amount,
+                due_date, status
+            ) VALUES (
+                :org_id, :customer_id, 'credit_note', :credit_note_id, :credit_note_number,
+                :credit_note_date, :negative_amount, :negative_amount, 0,
+                :credit_note_date, 'open'
+            )
         """), {
-            "amount": total_amount,
-            "customer_id": customer_id
+            "org_id": org_id,
+            "customer_id": customer_id,
+            "credit_note_id": credit_note_id,
+            "credit_note_number": credit_note_number,
+            "credit_note_date": credit_note_date,
+            "negative_amount": -total_amount  # Negative to reduce outstanding
         })
         
-        # Calculate new outstanding
-        new_outstanding = previous_outstanding - total_amount
+        # Get updated total outstanding from financial.customer_outstanding
+        outstanding_result = db.execute(text("""
+            SELECT COALESCE(SUM(outstanding_amount), 0) as total_outstanding
+            FROM financial.customer_outstanding
+            WHERE customer_id = :customer_id 
+            AND status IN ('open', 'partial')
+        """), {"customer_id": customer_id}).first()
+        
+        new_outstanding = float(outstanding_result.total_outstanding) if outstanding_result else 0.0
+        previous_outstanding = new_outstanding + total_amount  # Calculate what it was before
         
         logger.info(
             f"Created credit note {credit_note_number} for return {return_number}. "
