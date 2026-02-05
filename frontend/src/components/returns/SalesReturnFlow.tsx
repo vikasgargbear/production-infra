@@ -106,14 +106,14 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const loadReturnReasons = async () => {
       const defaultReasons: ReturnReason[] = [
         { value: 'NOT_REQUIRED', label: 'Not Required' },
+        { value: 'EXPIRED', label: 'Expired Product' },
         { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
         { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
         { value: 'EXCESS_STOCK', label: 'Excess Stock' },
         { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
         { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
-        { value: 'OTHER', label: 'Other' },
         { value: 'DAMAGED', label: 'Damaged Product' },
-        { value: 'EXPIRED', label: 'Expired Product' }
+        { value: 'OTHER', label: 'Other' }
       ];
       dispatch({ type: 'SET_RETURN_REASONS', reasons: defaultReasons });
 

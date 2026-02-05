@@ -35,14 +35,14 @@ const CACHE_DURATION = 3600000; // 1 hour
 
 const DEFAULT_REASONS: ReturnReason[] = [
     { value: 'NOT_REQUIRED', label: 'Not Required' },
+    { value: 'EXPIRED', label: 'Expired Product' },
     { value: 'WRONG_ITEM', label: 'Wrong Item Delivered' },
     { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
     { value: 'SHORT_EXPIRY', label: 'Short Expiry' },
     { value: 'BATCH_RECALL', label: 'Batch Recall' },
     { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
-    { value: 'OTHER', label: 'Other' },
     { value: 'DAMAGED', label: 'Damaged Product' },
-    { value: 'EXPIRED', label: 'Expired Product' }
+    { value: 'OTHER', label: 'Other' }
 ];
 
 // ============================================================================
