@@ -380,16 +380,16 @@ class OrderService:
         total = count_result.scalar() or 0
 
         # Fetch orders with customer info
+        # Using actual columns from sales.orders table
         orders_result = db.execute(text(f"""
             SELECT
                 o.order_id, o.org_id, o.order_number, o.order_date, o.order_status,
                 o.customer_id, c.customer_name, c.customer_code, c.primary_phone as customer_phone,
                 o.subtotal_amount, o.tax_amount, o.final_amount as total_amount,
                 COALESCE(o.paid_amount, 0) as paid_amount,
-                COALESCE(o.final_amount, 0) - COALESCE(o.paid_amount, 0) as balance_amount,
-                o.delivery_date, o.billing_address, o.shipping_address,
-                o.notes, o.order_type, o.payment_terms,
-                o.discount_percent, o.discount_amount, o.delivery_charges, o.other_charges,
+                COALESCE(o.balance_amount, 0) as balance_amount,
+                o.delivery_date, o.notes, o.order_type, o.payment_terms,
+                o.discount_amount, o.items_count,
                 o.created_at, o.updated_at, o.confirmed_at, o.delivered_at, o.created_by
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -405,9 +405,9 @@ class OrderService:
             items_result = db.execute(text("""
                 SELECT
                     oi.order_item_id, oi.order_id, oi.product_id, oi.product_name,
-                    oi.product_code, oi.batch_number, oi.quantity, oi.free_quantity,
+                    oi.hsn_code, oi.batch_number, oi.quantity, oi.free_quantity,
                     oi.unit_price, oi.mrp, oi.discount_percent, oi.discount_amount,
-                    oi.tax_percent, oi.tax_amount, oi.cgst_amount, oi.sgst_amount, oi.igst_amount,
+                    oi.tax_percent, oi.tax_amount,
                     oi.uom, oi.pack_type, oi.line_total
                 FROM sales.order_items oi
                 WHERE oi.order_id = :order_id
@@ -435,16 +435,16 @@ class OrderService:
         from sqlalchemy import text
 
         # Fetch order with customer info
+        # Using actual columns from sales.orders table
         order_result = db.execute(text("""
             SELECT
                 o.order_id, o.org_id, o.order_number, o.order_date, o.order_status,
                 o.customer_id, c.customer_name, c.customer_code, c.primary_phone as customer_phone,
                 o.subtotal_amount, o.tax_amount, o.final_amount as total_amount,
                 COALESCE(o.paid_amount, 0) as paid_amount,
-                COALESCE(o.final_amount, 0) - COALESCE(o.paid_amount, 0) as balance_amount,
-                o.delivery_date, o.billing_address, o.shipping_address,
-                o.notes, o.order_type, o.payment_terms,
-                o.discount_percent, o.discount_amount, o.delivery_charges, o.other_charges,
+                COALESCE(o.balance_amount, 0) as balance_amount,
+                o.delivery_date, o.notes, o.order_type, o.payment_terms,
+                o.discount_amount, o.items_count,
                 o.created_at, o.updated_at, o.confirmed_at, o.delivered_at, o.created_by
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -457,13 +457,13 @@ class OrderService:
 
         order_dict = dict(row._mapping)
 
-        # Get items
+        # Get items using actual columns from sales.order_items table
         items_result = db.execute(text("""
             SELECT
                 oi.order_item_id, oi.order_id, oi.product_id, oi.product_name,
-                oi.product_code, oi.batch_number, oi.quantity, oi.free_quantity,
+                oi.hsn_code, oi.batch_number, oi.quantity, oi.free_quantity,
                 oi.unit_price, oi.mrp, oi.discount_percent, oi.discount_amount,
-                oi.tax_percent, oi.tax_amount, oi.cgst_amount, oi.sgst_amount, oi.igst_amount,
+                oi.tax_percent, oi.tax_amount,
                 oi.uom, oi.pack_type, oi.line_total
             FROM sales.order_items oi
             WHERE oi.order_id = :order_id
