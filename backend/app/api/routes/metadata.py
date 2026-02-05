@@ -180,14 +180,14 @@ async def get_return_reasons(_: dict = Depends(PermissionChecker("master", "view
             {"value": "OTHER", "label": "Other Reason"}
         ],
         "purchase_return_reasons": [
+            {"value": "NOT_ORDERED", "label": "Product Not Ordered"},
             {"value": "EXPIRED", "label": "Expired Product"},
-            {"value": "DAMAGED", "label": "Damaged/Defective Product"},
             {"value": "WRONG_PRODUCT", "label": "Wrong Product Received"},
             {"value": "QUALITY_ISSUE", "label": "Quality Issue"},
             {"value": "EXCESS_QUANTITY", "label": "Excess Quantity"},
             {"value": "SHORT_EXPIRY", "label": "Short Expiry"},
-            {"value": "NOT_ORDERED", "label": "Product Not Ordered"},
             {"value": "PRICE_MISMATCH", "label": "Price Mismatch"},
+            {"value": "DAMAGED", "label": "Damaged/Defective Product"},
             {"value": "OTHER", "label": "Other Reason"}
         ]
     }

@@ -799,10 +799,10 @@ ${companyInfo?.name || 'Your Company'}`;
                         })}
                         className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                       >
-                        <option value="credit_note">📝 Credit Note (Recommended)</option>
-                        <option value="replacement">🔄 Replacement</option>
-                        <option value="refund">💰 Refund (Requires Approval)</option>
-                        <option value="no_adjustment">📦 No Financial Adjustment</option>
+                        <option value="credit_note">Credit Note (Recommended)</option>
+                        <option value="replacement">Replacement</option>
+                        <option value="refund">Refund (Requires Approval)</option>
+                        <option value="no_adjustment">No Financial Adjustment</option>
                       </select>
                     </div>
                   </div>

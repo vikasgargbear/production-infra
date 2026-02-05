@@ -107,14 +107,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     const loadReturnReasons = async () => {
       // First set default reasons immediately
       const defaultReasons = [
+        { value: 'NOT_ORDERED', label: 'Product Not Ordered' },
         { value: 'EXPIRED', label: 'Expired Product' },
-        { value: 'DAMAGED', label: 'Damaged/Defective Product' },
         { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
         { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
         { value: 'EXCESS_ORDER', label: 'Excess Order' },
         { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
         { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
         { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
+        { value: 'DAMAGED', label: 'Damaged/Defective Product' },
         { value: 'OTHER', label: 'Other' }
       ];
       setReturnReasons(defaultReasons);
