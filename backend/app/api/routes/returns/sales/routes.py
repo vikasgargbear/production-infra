@@ -22,6 +22,7 @@ from ....services.document_number_service import DocumentNumberService
 from ....services.compliance.gst_service import GSTService
 from ....services.inventory.inventory_service import InventoryService
 from ....services.returns.return_service import ReturnService
+from ....services.finance.credit_note.service import CreditNoteService  # Finance integration
 from ....schemas.inventory.inventory import StockMovementCreate
 from ....schemas.sales.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
 from .....core.utils.branch_utils import get_default_branch_id
@@ -409,13 +410,41 @@ async def create_sale_return(
                 
         # Update customer ledger based on return_method
         return_method = return_dict.get("return_method") or return_dict.get("return_type") or "credit_note"
-        ledger_result = ReturnService.update_customer_credit_balance(
-            db=db,
-            customer_id=return_dict["customer_id"],
-            amount=float(total_amount),
-            return_method=return_method,
-            return_number=return_number
-        )
+        
+        # Use Finance module for credit note creation + outstanding update
+        # This ensures proper audit trail in sales.credit_notes
+        if return_method == "credit_note":
+            ledger_result = CreditNoteService.create_credit_note_for_return(
+                db=db,
+                org_id=org_id,
+                branch_id=branch_id,
+                customer_id=return_dict["customer_id"],
+                return_id=return_id,
+                return_number=return_number,
+                credit_amount=float(subtotal),
+                tax_amount=float(tax_amount),
+                cgst_amount=float(cgst_amount),
+                sgst_amount=float(sgst_amount),
+                igst_amount=float(igst_amount),
+                reason_code=return_dict.get("return_reason", "NOT_REQUIRED"),
+                reason=return_dict.get("notes", ""),
+                invoice_id=return_dict.get("invoice_id"),
+                invoice_number=return_dict.get("invoice_number"),
+                return_date=return_dict.get("return_date", str(date.today())),
+                is_gst_applicable=bool(customer.get("gst_number")),
+                created_by=created_by
+            )
+            # Use the credit note number from Finance service
+            credit_note_no = ledger_result.get("credit_note_number", credit_note_no)
+        else:
+            # For replacement/refund methods, use legacy approach (no credit note)
+            ledger_result = ReturnService.update_customer_credit_balance(
+                db=db,
+                customer_id=return_dict["customer_id"],
+                amount=float(total_amount),
+                return_method=return_method,
+                return_number=return_number
+            )
             
         db.commit()
         
@@ -425,10 +454,12 @@ async def create_sale_return(
             "return_number": return_number,
             "return_method": return_method,
             "credit_note_no": credit_note_no,
+            "credit_note_id": ledger_result.get("credit_note_id"),
             "total_amount": float(total_amount),
             "has_gst": bool(customer.get("gst_number")),
             "ledger_action": ledger_result.get("action"),
-            "customer_outstanding": ledger_result.get("current_outstanding"),
+            "previous_outstanding": ledger_result.get("previous_outstanding"),
+            "customer_outstanding": ledger_result.get("new_outstanding") or ledger_result.get("current_outstanding"),
             "message": f"Sale return {return_number} created successfully" + (f" with credit note {credit_note_no}" if credit_note_no else "")
         }
         

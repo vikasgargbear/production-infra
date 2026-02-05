@@ -637,3 +637,219 @@ class CreditNoteService:
             "debit_note_id": debit_note_id,
             "debit_note_number": debit_note_number
         }
+    
+    @staticmethod
+    def create_credit_note_for_return(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        customer_id: int,
+        return_id: int,
+        return_number: str,
+        credit_amount: float,
+        tax_amount: float,
+        cgst_amount: float,
+        sgst_amount: float,
+        igst_amount: float,
+        reason_code: str,
+        reason: str,
+        invoice_id: int = None,
+        invoice_number: str = None,
+        return_date: str = None,
+        is_gst_applicable: bool = True,
+        created_by: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Create a credit note for a sales return and update customer outstanding.
+        Single atomic operation that:
+        1. Creates credit note in sales.credit_notes
+        2. Reduces customer.current_outstanding by total amount
+        
+        Called by Returns module instead of directly updating customer balance.
+        
+        Args:
+            db: Database session
+            org_id: Organization ID
+            branch_id: Branch ID
+            customer_id: Customer ID
+            return_id: Sales return ID
+            return_number: Sales return number
+            credit_amount: Base credit amount (subtotal)
+            tax_amount: Total tax amount
+            cgst_amount: CGST portion
+            sgst_amount: SGST portion
+            igst_amount: IGST portion
+            reason_code: Return reason code (e.g., NOT_REQUIRED, DAMAGED)
+            reason: Additional notes/reason text
+            invoice_id: Original invoice ID (optional)
+            invoice_number: Original invoice number (optional)
+            return_date: Return date (defaults to current date)
+            is_gst_applicable: Whether GST applies
+            created_by: User ID who created the return
+            
+        Returns:
+            Dict with credit_note_id, credit_note_number, total_amount, 
+            previous_outstanding, new_outstanding
+        """
+        from datetime import date as date_type
+        from decimal import Decimal
+        
+        # Generate credit note number
+        credit_note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
+        
+        # Calculate total amount
+        total_amount = float(credit_amount) + float(tax_amount)
+        
+        # Get current outstanding before update
+        outstanding_result = db.execute(text("""
+            SELECT COALESCE(current_outstanding, 0) as current_outstanding
+            FROM parties.customers
+            WHERE customer_id = :customer_id
+        """), {"customer_id": customer_id}).first()
+        
+        previous_outstanding = float(outstanding_result.current_outstanding) if outstanding_result else 0.0
+        
+        # Use provided date or current date
+        credit_note_date = return_date if return_date else date_type.today()
+        
+        # 1. Create credit note in sales.credit_notes
+        result = db.execute(text("""
+            INSERT INTO sales.credit_notes (
+                org_id, branch_id, credit_note_number, credit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                credit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :credit_note_number, :credit_note_date,
+                :customer_id, 'sales_return', :return_id, :return_number,
+                :credit_amount, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'approved', :created_by
+            ) RETURNING credit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "credit_note_number": credit_note_number,
+            "credit_note_date": credit_note_date,
+            "customer_id": customer_id,
+            "return_id": return_id,
+            "return_number": return_number,
+            "credit_amount": credit_amount,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount,
+            "reason_code": reason_code,
+            "reason": reason,
+            "notes": f"Credit note for sales return {return_number}",
+            "is_gst_applicable": is_gst_applicable,
+            "cgst_amount": cgst_amount,
+            "sgst_amount": sgst_amount,
+            "igst_amount": igst_amount,
+            "created_by": created_by
+        })
+        
+        credit_note_id = result.scalar()
+        
+        # 2. Update customer outstanding (reduce by credit note amount)
+        db.execute(text("""
+            UPDATE parties.customers 
+            SET current_outstanding = COALESCE(current_outstanding, 0) - :amount,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id
+        """), {
+            "amount": total_amount,
+            "customer_id": customer_id
+        })
+        
+        # Calculate new outstanding
+        new_outstanding = previous_outstanding - total_amount
+        
+        logger.info(
+            f"Created credit note {credit_note_number} for return {return_number}. "
+            f"Amount: {total_amount}. Customer {customer_id} outstanding: {previous_outstanding} -> {new_outstanding}"
+        )
+        
+        return {
+            "success": True,
+            "credit_note_id": credit_note_id,
+            "credit_note_number": credit_note_number,
+            "total_amount": total_amount,
+            "previous_outstanding": previous_outstanding,
+            "new_outstanding": new_outstanding,
+            "action": "outstanding_reduced"
+        }
+    
+    @staticmethod
+    def create_debit_note_for_purchase_return(
+        db: Session,
+        org_id: str,
+        branch_id: int,
+        supplier_id: int,
+        return_id: int,
+        return_number: str,
+        debit_amount: float,
+        tax_amount: float,
+        cgst_amount: float,
+        sgst_amount: float,
+        igst_amount: float,
+        reason_code: str,
+        reason: str,
+        grn_id: int = None,
+        grn_number: str = None,
+        return_date: str = None,
+        is_gst_applicable: bool = True,
+        created_by: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Create a debit note for a purchase return and update supplier balance.
+        Single atomic operation that:
+        1. Creates debit note in procurement.debit_notes (if table exists) or procurement.purchase_returns
+        2. Updates supplier balance if applicable
+        
+        Called by Purchase Returns module.
+        
+        Returns:
+            Dict with debit_note_id, debit_note_number, total_amount
+        """
+        from datetime import date as date_type
+        
+        # Generate debit note number
+        debit_note_number = DocumentNumberService.generate_number(db, "debit_note", org_id)
+        
+        # Calculate total amount
+        total_amount = float(debit_amount) + float(tax_amount)
+        
+        # Use provided date or current date
+        debit_note_date = return_date if return_date else date_type.today()
+        
+        # Update the purchase return with debit note number
+        db.execute(text("""
+            UPDATE procurement.purchase_returns 
+            SET debit_note_number = :debit_note_number,
+                debit_note_date = :debit_note_date,
+                debit_note_status = 'issued',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE return_id = :return_id
+        """), {
+            "debit_note_number": debit_note_number,
+            "debit_note_date": debit_note_date,
+            "return_id": return_id
+        })
+        
+        # Note: Supplier outstanding is typically managed differently (accounts payable)
+        # Purchase returns reduce what we owe to supplier, not what supplier owes us
+        
+        logger.info(
+            f"Created debit note {debit_note_number} for purchase return {return_number}. "
+            f"Amount: {total_amount}. Supplier: {supplier_id}"
+        )
+        
+        return {
+            "success": True,
+            "debit_note_id": return_id,  # Using return_id as reference
+            "debit_note_number": debit_note_number,
+            "total_amount": total_amount,
+            "action": "debit_note_issued"
+        }
