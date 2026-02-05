@@ -300,7 +300,7 @@ class OrderService:
         Returns True if update was applied.
         """
         from sqlalchemy import text
-        
+
         # SECURITY: Allowlist of updatable fields to prevent SQL injection
         ALLOWED_FIELDS = {
             'customer_id', 'customer_name', 'order_date', 'delivery_date',
@@ -308,27 +308,182 @@ class OrderService:
             'discount_percent', 'order_status', 'payment_status', 'priority',
             'sales_person_id', 'total_amount', 'final_amount'
         }
-        
+
         update_fields = []
         params = {"order_id": order_id, "org_id": org_id}
-        
+
         for field, value in update_data.items():
             if value is not None and field in ALLOWED_FIELDS:
                 update_fields.append(f"{field} = :{field}")
                 params[field] = value
-        
+
         if not update_fields:
             return False
-        
+
         # Add updated timestamp
         update_fields.append("updated_at = CURRENT_TIMESTAMP")
-        
+
         # Execute update
         update_query = f"""
-            UPDATE sales.orders 
+            UPDATE sales.orders
             SET {', '.join(update_fields)}
             WHERE order_id = :order_id AND org_id = :org_id
         """
-        
+
         db.execute(text(update_query), params)
         return True
+
+    @staticmethod
+    def list_orders(
+        db: Session,
+        org_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        customer_id: int = None,
+        status: str = None,
+        from_date: date = None,
+        to_date: date = None,
+        order_type: str = "regular"
+    ) -> Dict[str, Any]:
+        """
+        List sales orders with filters and pagination.
+        Returns dict with orders list and total count.
+        """
+        from sqlalchemy import text
+
+        # Build WHERE clause
+        where_clauses = ["o.org_id = :org_id"]
+        params = {"org_id": org_id, "limit": limit, "skip": skip}
+
+        if customer_id:
+            where_clauses.append("o.customer_id = :customer_id")
+            params["customer_id"] = customer_id
+
+        if status:
+            where_clauses.append("o.order_status = :status")
+            params["status"] = status
+
+        if from_date:
+            where_clauses.append("o.order_date >= :from_date")
+            params["from_date"] = from_date
+
+        if to_date:
+            where_clauses.append("o.order_date <= :to_date")
+            params["to_date"] = to_date
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Count total
+        count_result = db.execute(text(f"""
+            SELECT COUNT(*) FROM sales.orders o WHERE {where_sql}
+        """), params)
+        total = count_result.scalar() or 0
+
+        # Fetch orders with customer info
+        orders_result = db.execute(text(f"""
+            SELECT
+                o.order_id, o.org_id, o.order_number, o.order_date, o.order_status,
+                o.customer_id, c.customer_name, c.customer_code, c.primary_phone as customer_phone,
+                o.subtotal_amount, o.tax_amount, o.final_amount as total_amount,
+                COALESCE(o.paid_amount, 0) as paid_amount,
+                COALESCE(o.final_amount, 0) - COALESCE(o.paid_amount, 0) as balance_amount,
+                o.delivery_date, o.billing_address, o.shipping_address,
+                o.notes, o.order_type, o.payment_terms,
+                o.discount_percent, o.discount_amount, o.delivery_charges, o.other_charges,
+                o.created_at, o.updated_at, o.confirmed_at, o.delivered_at, o.created_by
+            FROM sales.orders o
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE {where_sql}
+            ORDER BY o.order_date DESC, o.order_id DESC
+            LIMIT :limit OFFSET :skip
+        """), params)
+
+        orders = []
+        for row in orders_result:
+            order_dict = dict(row._mapping)
+            # Get items for this order
+            items_result = db.execute(text("""
+                SELECT
+                    oi.order_item_id, oi.order_id, oi.product_id, oi.product_name,
+                    oi.product_code, oi.batch_number, oi.quantity, oi.free_quantity,
+                    oi.unit_price, oi.mrp, oi.discount_percent, oi.discount_amount,
+                    oi.tax_percent, oi.tax_amount, oi.cgst_amount, oi.sgst_amount, oi.igst_amount,
+                    oi.uom, oi.pack_type, oi.line_total
+                FROM sales.order_items oi
+                WHERE oi.order_id = :order_id
+            """), {"order_id": order_dict["order_id"]})
+
+            order_dict["items"] = [dict(item._mapping) for item in items_result]
+            orders.append(order_dict)
+
+        return {
+            "orders": orders,
+            "total": total
+        }
+
+    @staticmethod
+    def get_order_with_items(
+        db: Session,
+        org_id: str,
+        order_id: int,
+        order_type: str = "sales"
+    ) -> Dict[str, Any]:
+        """
+        Get single order with all items.
+        Returns order dict or None if not found.
+        """
+        from sqlalchemy import text
+
+        # Fetch order with customer info
+        order_result = db.execute(text("""
+            SELECT
+                o.order_id, o.org_id, o.order_number, o.order_date, o.order_status,
+                o.customer_id, c.customer_name, c.customer_code, c.primary_phone as customer_phone,
+                o.subtotal_amount, o.tax_amount, o.final_amount as total_amount,
+                COALESCE(o.paid_amount, 0) as paid_amount,
+                COALESCE(o.final_amount, 0) - COALESCE(o.paid_amount, 0) as balance_amount,
+                o.delivery_date, o.billing_address, o.shipping_address,
+                o.notes, o.order_type, o.payment_terms,
+                o.discount_percent, o.discount_amount, o.delivery_charges, o.other_charges,
+                o.created_at, o.updated_at, o.confirmed_at, o.delivered_at, o.created_by
+            FROM sales.orders o
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE o.order_id = :order_id AND o.org_id = :org_id
+        """), {"order_id": order_id, "org_id": org_id})
+
+        row = order_result.fetchone()
+        if not row:
+            return None
+
+        order_dict = dict(row._mapping)
+
+        # Get items
+        items_result = db.execute(text("""
+            SELECT
+                oi.order_item_id, oi.order_id, oi.product_id, oi.product_name,
+                oi.product_code, oi.batch_number, oi.quantity, oi.free_quantity,
+                oi.unit_price, oi.mrp, oi.discount_percent, oi.discount_amount,
+                oi.tax_percent, oi.tax_amount, oi.cgst_amount, oi.sgst_amount, oi.igst_amount,
+                oi.uom, oi.pack_type, oi.line_total
+            FROM sales.order_items oi
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
+
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+
+        return order_dict
+
+    @staticmethod
+    def get_employees(db: Session, org_id: str) -> List[Dict[str, Any]]:
+        """Get list of employees for Created By dropdown."""
+        from sqlalchemy import text
+
+        result = db.execute(text("""
+            SELECT user_id, full_name, email, role
+            FROM auth.users
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY full_name
+            LIMIT 50
+        """), {"org_id": org_id})
+
+        return [dict(row._mapping) for row in result]
