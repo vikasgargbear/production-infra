@@ -263,7 +263,7 @@ async def create_sale_return(
             # Calculate item values
             return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
             free_qty = Decimal(str(item.get("free_quantity", 0)))
-            unit_price = Decimal(str(item.get("rate", 0)))
+            unit_price = Decimal(str(item.get("unit_price", item.get("rate", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             
             # Calculate creditable quantity (only paid items get credit, not free items)

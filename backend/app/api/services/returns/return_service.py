@@ -296,7 +296,7 @@ class ReturnService:
         for item in items:
             # Handle both return_quantity and quantity field names
             qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
-            rate = Decimal(str(item.get("rate", 0)))
+            rate = Decimal(str(item.get("unit_price") or item.get("rate", 0)))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
             
