@@ -600,21 +600,25 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
 
     const options = {
-      margin: [10, 10, 10, 10],
+      margin: [5, 5, 5, 5],  // Smaller margins for more content space
       filename: `CreditNote-${createdReturnData.creditNoteNumber || createdReturnData.returnNumber}.pdf`,
-      image: { type: 'png', quality: 1 },
+      image: { type: 'jpeg', quality: 1 },  // JPEG with max quality often renders better
       html2canvas: {
-        scale: 4,
+        scale: 3,  // Reduced scale - too high can cause blurry output
         useCORS: true,
         logging: false,
         letterRendering: true,
-        windowWidth: 794
+        windowWidth: 794,  // A4 width in pixels at 96dpi
+        dpi: 300,  // Higher DPI for print quality
+        scrollX: 0,
+        scrollY: -window.scrollY  // Capture from current scroll position
       },
       jsPDF: {
         unit: 'mm',
         format: 'a4',
         orientation: 'portrait',
-        compress: true
+        compress: false,  // Disable compression for sharper text
+        precision: 16  // Higher precision
       },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
