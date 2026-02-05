@@ -149,13 +149,14 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       if (response.data?.invoices) {
         // Transform backend data to component format
+        // Backend returns: final_amount, balance_amount, days_overdue
         const transformedInvoices: Invoice[] = response.data.invoices.map((invoice: any) => ({
           id: invoice.invoice_id,
           invoiceNumber: invoice.invoice_number,
           invoiceDate: invoice.invoice_date,
           dueDate: invoice.due_date,
-          totalAmount: parseFloat(invoice.total_amount || 0),
-          pendingAmount: parseFloat(invoice.pending_amount || 0),
+          totalAmount: parseFloat(invoice.final_amount || invoice.total_amount || 0),
+          pendingAmount: parseFloat(invoice.balance_amount || invoice.pending_amount || 0),
           daysOverdue: invoice.days_overdue || 0,
           type: invoice.type || 'Sales Invoice'
         }));

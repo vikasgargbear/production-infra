@@ -49,10 +49,11 @@ class LedgerService:
         TenantAwareSession auto-filters by org_id on all tables.
         """
         if party_type == PartyType.CUSTOMER.value:
-            # Customer statement (TenantAwareSession auto-adds org_id)
+            # Customer statement with all transaction types
+            # TenantAwareSession auto-adds org_id
             query = """
                 WITH all_transactions AS (
-                    -- Invoices (Debit)
+                    -- Invoices (Debit - increases what customer owes)
                     SELECT 
                         i.invoice_id as id,
                         i.invoice_date as date,
@@ -70,7 +71,7 @@ class LedgerService:
                     
                     UNION ALL
                     
-                    -- Payments (Credit)
+                    -- Payments (Credit - reduces what customer owes)
                     SELECT 
                         p.payment_id as id,
                         p.payment_date as date,
@@ -85,6 +86,42 @@ class LedgerService:
                     AND UPPER(p.payment_status) != UPPER(:cancelled_payment)
                     AND (:from_date IS NULL OR p.payment_date >= :from_date)
                     AND (:to_date IS NULL OR p.payment_date <= :to_date)
+                    
+                    UNION ALL
+                    
+                    -- Credit Notes (Credit - reduces what customer owes)
+                    SELECT 
+                        cn.credit_note_id as id,
+                        cn.credit_note_date as date,
+                        'Credit Note' as type,
+                        cn.credit_note_number as reference,
+                        CONCAT('Credit Note #', cn.credit_note_number, ' - ', COALESCE(cn.reason, '')) as description,
+                        0::numeric as debit,
+                        cn.total_amount as credit,
+                        3 as sort_order
+                    FROM financial.credit_notes cn
+                    WHERE cn.customer_id = :party_id
+                    AND cn.status = 'approved'
+                    AND (:from_date IS NULL OR cn.credit_note_date >= :from_date)
+                    AND (:to_date IS NULL OR cn.credit_note_date <= :to_date)
+                    
+                    UNION ALL
+                    
+                    -- Debit Notes (Debit - increases what customer owes)
+                    SELECT 
+                        dn.debit_note_id as id,
+                        dn.debit_note_date as date,
+                        'Debit Note' as type,
+                        dn.debit_note_number as reference,
+                        CONCAT('Debit Note #', dn.debit_note_number, ' - ', COALESCE(dn.reason, '')) as description,
+                        dn.total_amount as debit,
+                        0::numeric as credit,
+                        4 as sort_order
+                    FROM financial.debit_notes dn
+                    WHERE dn.customer_id = :party_id
+                    AND dn.status = 'approved'
+                    AND (:from_date IS NULL OR dn.debit_note_date >= :from_date)
+                    AND (:to_date IS NULL OR dn.debit_note_date <= :to_date)
                 )
                 SELECT * FROM all_transactions
                 ORDER BY date DESC, sort_order
@@ -538,18 +575,37 @@ class LedgerService:
     
     @staticmethod
     def get_opening_balance_customer(db: Session, org_id: str, party_id: int, as_of_date: date) -> float:
-        """Calculate opening balance for customer as of date."""
+        """Calculate opening balance for customer as of date (includes credit/debit notes)."""
         result = db.execute(text("""
-            SELECT COALESCE(SUM(CASE WHEN type = 'invoice' THEN amount ELSE 0 END), 0) -
-                   COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as opening_balance
+            SELECT 
+                COALESCE(SUM(CASE WHEN type IN ('invoice', 'debit_note') THEN amount ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN type IN ('payment', 'credit_note') THEN amount ELSE 0 END), 0) as opening_balance
             FROM (
+                -- Invoices (debit)
                 SELECT 'invoice' as type, final_amount as amount FROM sales.invoices
                 WHERE customer_id = :party_id AND org_id = :org_id
                 AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
+                
                 UNION ALL
+                
+                -- Payments (credit)
                 SELECT 'payment' as type, payment_amount as amount FROM financial.payments
                 WHERE party_id = :party_id AND party_type = :customer_type AND org_id = :org_id
                 AND payment_date < :as_of_date AND payment_status != :cancelled_status
+                
+                UNION ALL
+                
+                -- Credit Notes (credit - reduces balance)
+                SELECT 'credit_note' as type, total_amount as amount FROM financial.credit_notes
+                WHERE customer_id = :party_id AND org_id = :org_id
+                AND credit_note_date < :as_of_date AND status = 'approved'
+                
+                UNION ALL
+                
+                -- Debit Notes (debit - increases balance)
+                SELECT 'debit_note' as type, total_amount as amount FROM financial.debit_notes
+                WHERE customer_id = :party_id AND org_id = :org_id
+                AND debit_note_date < :as_of_date AND status = 'approved'
             ) combined
         """), {"party_id": party_id, "org_id": org_id, "as_of_date": as_of_date,
                "cancelled_status": InvoiceStatus.CANCELLED.value, "customer_type": PartyType.CUSTOMER.value})

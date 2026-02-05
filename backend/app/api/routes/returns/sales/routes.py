@@ -412,7 +412,7 @@ async def create_sale_return(
         return_method = return_dict.get("return_method") or return_dict.get("return_type") or "credit_note"
         
         # Use Finance module for credit note creation + outstanding update
-        # This ensures proper audit trail in sales.credit_notes
+        # This ensures proper audit trail in financial.credit_notes
         if return_method == "credit_note":
             ledger_result = CreditNoteService.create_credit_note_for_return(
                 db=db,

@@ -361,7 +361,7 @@ async def get_invoice_items_for_notes(
         logger.error(f"Error fetching invoice items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 # ============= NEW CREDIT/DEBIT NOTE ENDPOINTS =============
-# These endpoints work with the new sales.credit_notes and sales.debit_notes tables
+# These endpoints work with the new financial.credit_notes and financial.debit_notes tables
 
 
 @router.get("/credit-note-reasons")

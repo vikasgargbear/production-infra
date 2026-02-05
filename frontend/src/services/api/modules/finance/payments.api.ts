@@ -114,7 +114,8 @@ export const paymentsApi = {
 
     // Get outstanding invoices for a party
     getOutstandingInvoices: (partyId: number, partyType: 'customer' | 'supplier' = 'customer'): Promise<AxiosResponse> => {
-        return apiHelpers.get('/invoices/outstanding', { params: { party_id: partyId, party_type: partyType } });
+        // Backend endpoint is at /payments/outstanding and expects customer_id
+        return apiHelpers.get('/payments/outstanding', { params: { customer_id: partyId } });
     },
 
     // Get unreconciled transactions for bank reconciliation

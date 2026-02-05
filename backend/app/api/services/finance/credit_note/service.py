@@ -517,7 +517,7 @@ class CreditNoteService:
         created_by: int = 1
     ) -> Dict[str, Any]:
         """
-        Create a credit note in sales.credit_notes table.
+        Create a credit note in financial.credit_notes table.
         Used by sales module for customer credit notes.
         """
         # Generate credit note number
@@ -528,7 +528,7 @@ class CreditNoteService:
         
         # Create credit note
         result = db.execute(text("""
-            INSERT INTO sales.credit_notes (
+            INSERT INTO financial.credit_notes (
                 org_id, branch_id, credit_note_number, credit_note_date,
                 customer_id, reference_type, reference_id, reference_number,
                 credit_amount, tax_amount, total_amount,
@@ -582,7 +582,7 @@ class CreditNoteService:
         created_by: int = 1
     ) -> Dict[str, Any]:
         """
-        Create a debit note in sales.debit_notes table.
+        Create a debit note in financial.debit_notes table.
         Used by sales module for customer debit notes.
         """
         # Generate debit note number
@@ -593,7 +593,7 @@ class CreditNoteService:
         
         # Create debit note
         result = db.execute(text("""
-            INSERT INTO sales.debit_notes (
+            INSERT INTO financial.debit_notes (
                 org_id, branch_id, debit_note_number, debit_note_date,
                 customer_id, reference_type, reference_id, reference_number,
                 debit_amount, tax_amount, total_amount,
@@ -662,7 +662,7 @@ class CreditNoteService:
         """
         Create a credit note for a sales return and update customer outstanding.
         Single atomic operation that:
-        1. Creates credit note in sales.credit_notes
+        1. Creates credit note in financial.credit_notes
         2. Reduces customer.current_outstanding by total amount
         
         Called by Returns module instead of directly updating customer balance.
@@ -703,9 +703,9 @@ class CreditNoteService:
         # Use provided date or current date
         credit_note_date = return_date if return_date else date_type.today()
         
-        # 1. Create credit note in sales.credit_notes
+        # 1. Create credit note in financial.credit_notes
         result = db.execute(text("""
-            INSERT INTO sales.credit_notes (
+            INSERT INTO financial.credit_notes (
                 org_id, branch_id, credit_note_number, credit_note_date,
                 customer_id, reference_type, reference_id, reference_number,
                 credit_amount, tax_amount, total_amount,
