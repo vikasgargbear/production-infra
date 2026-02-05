@@ -22,7 +22,7 @@ interface ChallanParams {
 }
 
 const ENDPOINTS = {
-    BASE: '/challan',
+    BASE: '/challan/',
     DETAILS: (id: ChallanId) => `/challan/${id}`,
     BY_ORDER: (orderId: number | string) => `/challan/order/${orderId}`,
     BY_CUSTOMER: (customerId: number | string) => `/challan/customer/${customerId}`,

@@ -23,7 +23,7 @@ interface OrderParams {
 }
 
 const ENDPOINTS = {
-  BASE: '/sales-orders',
+  BASE: '/sales-orders/',
   DETAILS: (id: OrderId) => `/sales-orders/${id}`,
   ITEMS: (id: OrderId) => `/sales-orders/${id}/items`,
   SEARCH: '/sales-orders/search',
