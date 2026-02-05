@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Damaged/non-restockable reasons for inventory disposition decisions
 # These match the frontend dropdown values exactly
+# Quality Issue -> RESTOCK (customer complaint, product still sellable)
 NON_RESTOCK_REASONS = [
     "expired product", "expired",
     "damaged product", "damaged", "broken",
-    "quality issue", "defective",
     "contaminated", "manufacturing defect"
 ]
 

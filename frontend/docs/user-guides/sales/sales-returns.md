@@ -93,6 +93,24 @@ Before confirming, review:
 
 ---
 
+## Stock Disposition by Return Reason
+
+When items are returned, they are handled differently based on the reason:
+
+| Return Reason | Stock Action | Disposition |
+|---------------|--------------|-------------|
+| **Expired Product** | ❌ Not restocked | DESTROY |
+| **Damaged Product** | ❌ Not restocked | DESTROY |
+| **Wrong Product Delivered** | ✅ Restocked | RESTOCK |
+| **Quality Issue** | ✅ Restocked | RESTOCK |
+| **Not Required** | ✅ Restocked | RESTOCK |
+| **Duplicate Order** | ✅ Restocked | RESTOCK |
+| **Price Issue** | ✅ Restocked | RESTOCK |
+
+> 💡 **Note**: Items marked DESTROY are tracked in `quantity_returned` but not added to `quantity_available`.
+
+---
+
 ## After Processing
 
 ### Print Credit Note
