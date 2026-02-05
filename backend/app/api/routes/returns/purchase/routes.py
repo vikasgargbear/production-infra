@@ -262,3 +262,176 @@ async def create_purchase_return(
         db.rollback()
         logger.error(f"Error creating purchase return: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test/validate/{return_id}")
+@with_tenant_context
+async def validate_purchase_return_data(
+    return_id: int,
+    _: dict = Depends(PermissionChecker("purchase_returns", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """
+    Validate that all fields in a purchase return are correctly populated.
+    Returns detailed validation report with pass/fail status for each field.
+    """
+    try:
+        # Fetch the return header
+        header_query = text("""
+            SELECT 
+                return_id, return_number, return_date,
+                supplier_invoice_id, grn_id, supplier_id,
+                return_reason, detailed_reason,
+                return_amount, tax_amount, total_amount,
+                cgst_amount, sgst_amount, igst_amount,
+                debit_note_number, debit_note_status,
+                notes, created_by,
+                created_at, updated_at
+            FROM procurement.purchase_returns
+            WHERE return_id = :return_id
+        """)
+        result = db.execute(header_query, {"return_id": return_id}).mappings().first()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Return {return_id} not found")
+        
+        header = dict(result)
+        
+        # Fetch return items
+        items_query = text("""
+            SELECT 
+                return_item_id, return_id, grn_item_id,
+                product_id, batch_id, batch_number,
+                return_quantity, damaged_quantity, saleable_quantity,
+                unit_price, return_value, tax_amount,
+                item_return_reason, disposition,
+                created_at
+            FROM procurement.purchase_return_items
+            WHERE return_id = :return_id
+        """)
+        items_result = db.execute(items_query, {"return_id": return_id}).mappings().all()
+        items = [dict(item) for item in items_result]
+        
+        # Validation checks
+        validations = {
+            "header": {},
+            "items": [],
+            "summary": {"passed": 0, "failed": 0, "warnings": 0}
+        }
+        
+        # Header validations
+        header_checks = {
+            "return_number": (header.get("return_number") is not None, "Return number assigned"),
+            "return_date": (header.get("return_date") is not None, "Return date set"),
+            "supplier_id": (header.get("supplier_id") is not None, "Supplier linked"),
+            "return_reason": (header.get("return_reason") is not None, "Return reason specified"),
+            "return_amount": (header.get("return_amount") and float(header.get("return_amount", 0)) > 0, "Return amount (subtotal) > 0"),
+            "tax_amount": (header.get("tax_amount") is not None, "Tax amount calculated"),
+            "total_amount": (header.get("total_amount") and float(header.get("total_amount", 0)) > 0, "Total amount > 0"),
+            "cgst_or_igst": (
+                (header.get("cgst_amount") and float(header.get("cgst_amount", 0)) > 0) or 
+                (header.get("igst_amount") and float(header.get("igst_amount", 0)) > 0) or
+                float(header.get("tax_amount", 0)) == 0,
+                "Tax breakdown (CGST/SGST or IGST) populated"
+            ),
+            "debit_note_number": (header.get("debit_note_number") is not None, "Debit note number generated"),
+            "amounts_match": (
+                abs(float(header.get("return_amount", 0)) + float(header.get("tax_amount", 0)) - float(header.get("total_amount", 0))) < 0.01,
+                "return_amount + tax_amount = total_amount"
+            )
+        }
+        
+        for field, (passed, description) in header_checks.items():
+            validations["header"][field] = {
+                "passed": passed,
+                "description": description,
+                "value": str(header.get(field.split("_")[0] if "_or_" not in field else field, "N/A"))
+            }
+            if passed:
+                validations["summary"]["passed"] += 1
+            else:
+                validations["summary"]["failed"] += 1
+        
+        # Items validations
+        for idx, item in enumerate(items):
+            item_checks = {
+                "product_id": (item.get("product_id") is not None, "Product linked"),
+                "return_quantity": (item.get("return_quantity") and float(item.get("return_quantity", 0)) > 0, "Return qty > 0"),
+                "unit_price": (item.get("unit_price") and float(item.get("unit_price", 0)) > 0, "Unit price > 0"),
+                "return_value": (item.get("return_value") and float(item.get("return_value", 0)) > 0, "Return value calculated"),
+                "tax_amount": (item.get("tax_amount") is not None, "Tax amount calculated"),
+                "disposition": (item.get("disposition") in ["RESTOCK", "DESTROY", "QUARANTINE", "RETURN_TO_SUPPLIER"], "Valid disposition"),
+                "qty_match": (
+                    abs(float(item.get("damaged_quantity", 0)) + float(item.get("saleable_quantity", 0)) - float(item.get("return_quantity", 0))) < 0.01,
+                    "damaged_qty + saleable_qty = return_qty"
+                ),
+                "value_calc": (
+                    abs(float(item.get("return_quantity", 0)) * float(item.get("unit_price", 0)) - float(item.get("return_value", 0))) < 0.01,
+                    "return_value = qty × unit_price"
+                )
+            }
+            
+            item_validation = {"item_id": item.get("return_item_id"), "checks": {}}
+            for field, (passed, description) in item_checks.items():
+                item_validation["checks"][field] = {
+                    "passed": passed,
+                    "description": description,
+                    "value": str(item.get(field.split("_")[0] if field not in ["return_quantity", "unit_price", "return_value", "tax_amount", "qty_match", "value_calc"] else field, "N/A"))
+                }
+                if passed:
+                    validations["summary"]["passed"] += 1
+                else:
+                    validations["summary"]["failed"] += 1
+            
+            validations["items"].append(item_validation)
+        
+        # Overall status
+        validations["overall_status"] = "PASS" if validations["summary"]["failed"] == 0 else "FAIL"
+        
+        return {
+            "return_id": return_id,
+            "return_number": header.get("return_number"),
+            "header_data": header,
+            "items_data": items,
+            "validations": validations
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating purchase return {return_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test/return-methods")
+async def get_purchase_return_methods():
+    """
+    Get all supported purchase return methods with descriptions.
+    For testing and documentation purposes.
+    """
+    return {
+        "return_methods": [
+            {
+                "value": "debit_note",
+                "label": "Debit Note",
+                "description": "Create debit note against supplier for future purchases",
+                "financial_action": "Increases supplier debit balance",
+                "approval_required": False
+            },
+            {
+                "value": "replacement",
+                "label": "Replacement",
+                "description": "Request replacement goods from supplier (no financial transaction)",
+                "financial_action": "None - goods exchange only",
+                "approval_required": False
+            },
+            {
+                "value": "refund",
+                "label": "Refund",
+                "description": "Request cash or bank refund from supplier",
+                "financial_action": "Creates pending receivable",
+                "approval_required": True
+            }
+        ]
+    }
