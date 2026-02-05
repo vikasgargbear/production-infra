@@ -436,6 +436,13 @@ async def create_sale_return(
             )
             # Use the credit note number from Finance service
             credit_note_no = ledger_result.get("credit_note_number", credit_note_no)
+            
+            # Sync credit note number back to sales_returns table
+            db.execute(text("""
+                UPDATE sales.sales_returns 
+                SET credit_note_number = :credit_note_no
+                WHERE return_id = :return_id
+            """), {"credit_note_no": credit_note_no, "return_id": return_id})
         else:
             # For replacement/refund methods, use legacy approach (no credit note)
             ledger_result = ReturnService.update_customer_credit_balance(
