@@ -118,7 +118,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
-                <div className="max-w-7xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                     {/* Clean Preview - matches full container width */}
                     <div id="return-preview" className="bg-white shadow-2xl my-6 p-8 border border-gray-200">
                         <div>
