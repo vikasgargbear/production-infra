@@ -33,6 +33,9 @@ import { useSalesReturnState } from './hooks/useSalesReturnState';
 import type { SalesReturnFlowProps, ReturnFormData, ReturnFormItem, ReturnReason } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
 
+// Import offline-first helpers
+import { saveReturnOffline, type OfflineSalesReturnData } from './utils/offlineReturnSaveHelpers';
+
 const API_BASE_URL = getApiBaseUrl();
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
@@ -549,38 +552,102 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
   };
 
-  // Handle save
+  // Handle save - OFFLINE-FIRST PATTERN
+  // 1. Save to IndexedDB immediately (instant)
+  // 2. Show success to user
+  // 3. Sync to server in background
   const handleSaveReturn = async () => {
     if (!validateReturn()) return;
 
     setSaving(true);
+
     try {
-      const response = await returnsApi.createSaleReturn(returnData);
+      // Prepare offline return data
+      const offlineData: OfflineSalesReturnData = {
+        customer_id: (selectedCustomer as any)?.customer_id || (selectedCustomer as any)?.id,
+        customer_name: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name,
+        invoice_id: (selectedInvoice as any)?.invoice_id,
+        invoice_number: (selectedInvoice as any)?.invoice_number,
+        return_date: returnData.return_date,
+        return_reason: returnData.return_reason,
+        return_method: returnData.return_method || 'credit_note',
+        items: returnData.items
+          .filter(item => item.selected && item.return_quantity > 0)
+          .map(item => ({
+            product_id: item.product_id,
+            batch_id: item.batch_id,
+            batch_number: item.batch_number,
+            return_quantity: item.return_quantity,
+            unit_price: item.unit_price,
+            return_value: item.return_value || 0,
+            tax_amount: item.tax_amount || 0,
+            tax_percent: item.tax_percent || 0,
+            disposition: item.disposition || 'RESTOCK',
+            reason: item.return_reason || returnData.return_reason
+          })),
+        subtotal: returnData.subtotal_amount || 0,
+        tax_amount: returnData.tax_amount || 0,
+        total_amount: returnData.total_amount || 0,
+        notes: returnData.return_reason_notes
+      };
 
-      if (response.data) {
-        const { credit_note_no, return_no } = response.data;
+      // STEP 1: Save locally first (instant, <100ms)
+      const offlineResult = await saveReturnOffline(offlineData);
 
-        // Set success modal data instead of toast + auto-close
-        setCreatedReturnData({
-          returnNumber: return_no || returnData.return_no,
-          creditNoteNumber: credit_note_no,
-          customerId: (selectedCustomer as any)?.id || (selectedCustomer as any)?.customer_id || '',
-          customerName: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name || 'Customer',
-          customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
-          customerEmail: (selectedCustomer as any)?.email || '',
-          totalAmount: returnData.total_amount || 0,
-          items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
+      // STEP 2: Show success immediately
+      setCreatedReturnData({
+        returnNumber: offlineResult.return_number,
+        creditNoteNumber: offlineResult.credit_note_number,
+        customerId: offlineData.customer_id as string,
+        customerName: offlineData.customer_name || 'Customer',
+        customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
+        customerEmail: (selectedCustomer as any)?.email || '',
+        totalAmount: returnData.total_amount || 0,
+        items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
+      });
+      setShowSuccessModal(true);
+
+      // STEP 3: Sync to server in background (non-blocking)
+      returnsApi.createSaleReturn(returnData)
+        .then(response => {
+          if (response.data) {
+            console.log('[SalesReturnFlow] ✅ Return synced to server:', response.data.return_no);
+            // TODO: Update local record with server IDs
+          }
+        })
+        .catch(syncError => {
+          console.warn('[SalesReturnFlow] ⚠️ Background sync will retry later:', syncError.message);
+          // Return is already saved locally, sync queue will retry
         });
-        setShowSuccessModal(true);
-      }
-    } catch (error: any) {
-      const errorMessage = Array.isArray(error.message)
-        ? error.message[0]?.msg || error.message[0] || 'Failed to create return'
-        : typeof error.message === 'object'
-          ? JSON.stringify(error.message)
-          : error.message || 'Failed to create return';
 
-      toast.error(errorMessage);
+    } catch (error: any) {
+      // Fallback: If offline save fails, try server directly
+      console.warn('[SalesReturnFlow] Offline save failed, trying server directly:', error.message);
+
+      try {
+        const response = await returnsApi.createSaleReturn(returnData);
+        if (response.data) {
+          const { credit_note_no, return_no } = response.data;
+          setCreatedReturnData({
+            returnNumber: return_no || returnData.return_no,
+            creditNoteNumber: credit_note_no,
+            customerId: (selectedCustomer as any)?.id || (selectedCustomer as any)?.customer_id || '',
+            customerName: (selectedCustomer as any)?.customer_name || (selectedCustomer as any)?.name || 'Customer',
+            customerPhone: (selectedCustomer as any)?.phone || (selectedCustomer as any)?.mobile || '',
+            customerEmail: (selectedCustomer as any)?.email || '',
+            totalAmount: returnData.total_amount || 0,
+            items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
+          });
+          setShowSuccessModal(true);
+        }
+      } catch (serverError: any) {
+        const errorMessage = Array.isArray(serverError.message)
+          ? serverError.message[0]?.msg || serverError.message[0] || 'Failed to create return'
+          : typeof serverError.message === 'object'
+            ? JSON.stringify(serverError.message)
+            : serverError.message || 'Failed to create return';
+        toast.error(errorMessage);
+      }
     } finally {
       setSaving(false);
     }

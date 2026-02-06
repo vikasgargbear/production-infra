@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 10;  // Bumped for company_profile store
+const DB_VERSION = 11;  // Bumped for sales_returns and purchase_returns stores
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -94,6 +94,18 @@ export interface OfflineSchema extends DBSchema {
             bank_details: any;
             updated_at: string;
         };
+    };
+    // Sales Returns store for offline-first returns
+    sales_returns: {
+        key: string;  // temp_id or return_id
+        value: any;
+        indexes: { 'return_number': string; 'customer_id': string; 'sync_status': string; 'created_at': string };
+    };
+    // Purchase Returns store for offline-first returns
+    purchase_returns: {
+        key: string;  // temp_id or return_id
+        value: any;
+        indexes: { 'return_number': string; 'supplier_id': string; 'sync_status': string; 'created_at': string };
     };
 }
 
@@ -256,6 +268,24 @@ class OfflineDatabase {
                 // Company Profile store (for offline-first company info access)
                 if (!db.objectStoreNames.contains('company_profile')) {
                     db.createObjectStore('company_profile', { keyPath: 'key' });
+                }
+
+                // Sales Returns store (for offline-first returns)
+                if (!db.objectStoreNames.contains('sales_returns')) {
+                    const salesReturnStore = db.createObjectStore('sales_returns', { keyPath: 'temp_id' });
+                    salesReturnStore.createIndex('return_number', 'return_number');
+                    salesReturnStore.createIndex('customer_id', 'customer_id');
+                    salesReturnStore.createIndex('sync_status', 'sync_status');
+                    salesReturnStore.createIndex('created_at', 'created_at');
+                }
+
+                // Purchase Returns store (for offline-first returns)
+                if (!db.objectStoreNames.contains('purchase_returns')) {
+                    const purchaseReturnStore = db.createObjectStore('purchase_returns', { keyPath: 'temp_id' });
+                    purchaseReturnStore.createIndex('return_number', 'return_number');
+                    purchaseReturnStore.createIndex('supplier_id', 'supplier_id');
+                    purchaseReturnStore.createIndex('sync_status', 'sync_status');
+                    purchaseReturnStore.createIndex('created_at', 'created_at');
                 }
             },
         });
