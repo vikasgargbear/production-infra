@@ -398,16 +398,25 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     return status;
   };
 
+  // Columns ordered to match Invoice History: Date, Doc #, Party, Amount, Status
   const columns = [
+    {
+      key: 'return_date',
+      header: 'Date',
+      render: (value: string, returnItem: Return) => (
+        <div className="text-gray-700">{formatDate(returnItem.return_date)}</div>
+      ),
+      width: '110px',
+    },
     {
       key: 'return_no',
       header: 'Return #',
       render: (value: string, returnItem: Return) => (
-        <div className="font-medium text-gray-900">
+        <div className="text-sm text-gray-600">
           {returnItem.return_no}
         </div>
       ),
-      width: '120px',
+      width: '140px',
     },
     {
       key: 'return_type',
@@ -415,9 +424,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       render: (value: string, returnItem: Return) => (
         <div className="flex items-center space-x-2">
           {returnItem.return_type === 'sales' ? (
-            <Package className="w-4 h-4 text-blue-600" />
+            <Package className="w-4 h-4 text-red-500" />
           ) : (
-            <RotateCcw className="w-4 h-4 text-green-600" />
+            <Truck className="w-4 h-4 text-orange-500" />
           )}
           <span className="text-gray-900 capitalize">
             {returnItem.return_type === 'sales' ? 'Sales' : 'Purchase'}
@@ -428,16 +437,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     },
     {
       key: 'customer_supplier',
-      header: 'Customer/Supplier',
+      header: 'Party',
       render: (value: string, returnItem: Return) => (
-        <div className="text-gray-900">
+        <div className="font-medium text-gray-900">
           {returnItem.return_type === 'sales'
             ? returnItem.customer_name || 'Unknown Customer'
             : returnItem.supplier_name || 'Unknown Supplier'
           }
         </div>
       ),
-      width: '180px',
     },
     {
       key: 'original_document_no',
@@ -448,18 +456,11 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       width: '140px',
     },
     {
-      key: 'return_date',
-      header: 'Return Date',
-      render: (value: string, returnItem: Return) => (
-        <div className="text-gray-600">{formatDate(returnItem.return_date)}</div>
-      ),
-      width: '120px',
-    },
-    {
       key: 'total_amount',
       header: 'Amount',
+      align: 'right' as const,
       render: (value: number, returnItem: Return) => (
-        <div className="font-medium text-gray-900">
+        <div className="font-semibold text-gray-900 text-right">
           {formatCurrency(returnItem.total_amount)}
         </div>
       ),
@@ -551,7 +552,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           icon={returnTypeConfig[returnType].icon}
           iconColor={returnTypeConfig[returnType].iconColor}
           onClose={onClose}
-          historyType="return"
           showSaveDraft={false}
           onSaveDraft={() => { }}
           additionalActions={[
