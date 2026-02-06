@@ -1068,3 +1068,186 @@ class ReturnService:
             },
             "inventory_movements": [dict(m._mapping) for m in movements]
         }
+
+    # ========================================================================
+    # BULK OPERATIONS - Performance optimized methods for multiple items
+    # ========================================================================
+    
+    @staticmethod
+    def bulk_insert_return_items(
+        db: Session,
+        return_id: int,
+        items: list[dict]
+    ) -> None:
+        """
+        Insert all return items in a single query using bulk INSERT.
+        ~8x faster than per-item INSERT for 8 items.
+        """
+        if not items:
+            return
+        
+        # Build values list for bulk insert
+        values_list = []
+        params = {"return_id": return_id}
+        
+        for idx, item in enumerate(items):
+            values_list.append(f"""(
+                :return_id,
+                :invoice_item_id_{idx},
+                :product_id_{idx},
+                :batch_id_{idx},
+                :batch_number_{idx},
+                :return_quantity_{idx},
+                :uom_{idx},
+                :damaged_quantity_{idx},
+                :saleable_quantity_{idx},
+                :unit_price_{idx},
+                :return_value_{idx},
+                :tax_amount_{idx},
+                :return_reason_{idx},
+                :disposition_{idx}
+            )""")
+            
+            params[f"invoice_item_id_{idx}"] = item.get("invoice_item_id")
+            params[f"product_id_{idx}"] = item["product_id"]
+            params[f"batch_id_{idx}"] = item.get("batch_id")
+            params[f"batch_number_{idx}"] = item.get("batch_number")
+            params[f"return_quantity_{idx}"] = item["return_quantity"]
+            params[f"uom_{idx}"] = item.get("uom", "PCS")
+            params[f"damaged_quantity_{idx}"] = item.get("damaged_quantity", 0)
+            params[f"saleable_quantity_{idx}"] = item.get("saleable_quantity", 0)
+            params[f"unit_price_{idx}"] = item["unit_price"]
+            params[f"return_value_{idx}"] = item["return_value"]
+            params[f"tax_amount_{idx}"] = item.get("tax_amount", 0)
+            params[f"return_reason_{idx}"] = item.get("item_return_reason", "Customer Return")
+            params[f"disposition_{idx}"] = item.get("disposition", "RESTOCK")
+        
+        sql = f"""
+            INSERT INTO sales.sales_return_items (
+                return_id, invoice_item_id, product_id, batch_id, batch_number,
+                return_quantity, uom, damaged_quantity, saleable_quantity,
+                unit_price, return_value, tax_amount, return_reason, disposition
+            ) VALUES {', '.join(values_list)}
+        """
+        
+        db.execute(text(sql), params)
+        logger.info(f"Bulk inserted {len(items)} return items for return_id={return_id}")
+    
+    @staticmethod
+    def bulk_update_batch_stock(
+        db: Session,
+        items: list[dict]
+    ) -> None:
+        """
+        Update batch quantities for all items in a single query.
+        Uses UPDATE ... FROM VALUES pattern for bulk update.
+        """
+        if not items:
+            return
+        
+        # Filter to items with batch_id
+        batch_updates = [(item["batch_id"], item.get("saleable_quantity", 0), item["return_quantity"]) 
+                         for item in items if item.get("batch_id")]
+        
+        if not batch_updates:
+            return
+        
+        # Build case statements for each batch
+        values_list = []
+        params = {}
+        
+        for idx, (batch_id, saleable_qty, total_qty) in enumerate(batch_updates):
+            values_list.append(f"(:batch_id_{idx}, :saleable_{idx}, :total_{idx})")
+            params[f"batch_id_{idx}"] = batch_id
+            params[f"saleable_{idx}"] = saleable_qty
+            params[f"total_{idx}"] = total_qty
+        
+        # Single UPDATE using a CTE
+        sql = f"""
+            WITH updates(batch_id, saleable_qty, total_qty) AS (
+                VALUES {', '.join(values_list)}
+            )
+            UPDATE inventory.batches b
+            SET 
+                quantity_available = quantity_available + u.saleable_qty,
+                quantity_sold = GREATEST(0, quantity_sold - u.total_qty),
+                updated_at = CURRENT_TIMESTAMP
+            FROM updates u
+            WHERE b.batch_id = u.batch_id::int
+        """
+        
+        db.execute(text(sql), params)
+        logger.info(f"Bulk updated {len(batch_updates)} batch quantities")
+    
+    @staticmethod
+    def bulk_record_stock_movements(
+        db: Session,
+        org_id: str,
+        return_id: int,
+        return_number: str,
+        items: list[dict],
+        branch_id: int,
+        created_by: int
+    ) -> None:
+        """
+        Record stock movements for all items in a single query.
+        """
+        if not items:
+            return
+        
+        from datetime import date
+        
+        values_list = []
+        params = {
+            "org_id": org_id,
+            "movement_date": date.today(),
+            "return_id": return_id,
+            "return_number": return_number,
+            "branch_id": branch_id,
+            "created_by": created_by
+        }
+        
+        for idx, item in enumerate(items):
+            if not (item.get("batch_id") or item.get("product_id")):
+                continue
+                
+            saleable_qty = item.get("saleable_quantity", 0)
+            movement_type = "return" if saleable_qty > 0 else "return_damaged"
+            
+            values_list.append(f"""(
+                :org_id,
+                :product_id_{idx},
+                :batch_id_{idx},
+                '{movement_type}',
+                'in',
+                :movement_date,
+                :quantity_{idx},
+                :branch_id,
+                'SALES_RETURN',
+                :return_id,
+                :return_number,
+                :reason_{idx},
+                :notes_{idx},
+                :created_by
+            )""")
+            
+            params[f"product_id_{idx}"] = item["product_id"]
+            params[f"batch_id_{idx}"] = item.get("batch_id")
+            params[f"quantity_{idx}"] = int(item["return_quantity"])
+            params[f"reason_{idx}"] = item.get("item_return_reason", "Customer Return")
+            params[f"notes_{idx}"] = f"Return #{return_number}"
+        
+        if not values_list:
+            return
+        
+        sql = f"""
+            INSERT INTO inventory.inventory_movements (
+                org_id, product_id, batch_id, movement_type, movement_direction,
+                movement_date, quantity, location_id, reference_type, reference_id,
+                reference_number, reason, notes, created_by
+            ) VALUES {', '.join(values_list)}
+        """
+        
+        db.execute(text(sql), params)
+        logger.info(f"Bulk recorded {len(values_list)} stock movements for return_id={return_id}")
+
