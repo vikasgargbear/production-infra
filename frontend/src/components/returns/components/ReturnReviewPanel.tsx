@@ -119,8 +119,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
             {/* Main Content - Scrollable */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
                 <div className="max-w-7xl mx-auto">
-                    {/* Clean Preview - Invoice Style - Portrait A4 */}
-                    <div id="return-preview" className="bg-white max-w-5xl mx-auto min-h-[297mm] shadow-2xl my-6 p-8 border border-gray-200">
+                    {/* Clean Preview - matches full container width */}
+                    <div id="return-preview" className="bg-white shadow-2xl my-6 p-8 border border-gray-200">
                         <div>
                             {/* Header Section - Match Invoice: Logo Left | Title + Credit Note Right */}
                             <div className="mb-5">
