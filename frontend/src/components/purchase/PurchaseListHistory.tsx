@@ -8,12 +8,13 @@
  * - Cleaner, more maintainable code structure
  */
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
-  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical
+  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical,
+  FileText, ClipboardList, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
-import { supplierInvoicesApi } from '../../services/api';
+import { supplierInvoicesApi, purchasesApi, grnApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { useCompany } from '../../contexts/CompanyContext';
 import { toast } from 'react-toastify';
@@ -22,12 +23,39 @@ import { toast } from 'react-toastify';
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
 import type { PurchaseListHistoryProps, PurchaseOrder } from './purchaselisthistory/types/purchasehistory.types';
 
+// Document type configuration
+type DocumentType = 'supplier_invoice' | 'purchase_order' | 'grn';
+
+const documentTypeConfig = {
+  supplier_invoice: {
+    label: 'Supplier Invoices',
+    icon: FileText,
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
+  },
+  purchase_order: {
+    label: 'Purchase Orders',
+    icon: ClipboardList,
+    activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    iconColor: 'text-purple-600'
+  },
+  grn: {
+    label: 'GRN',
+    icon: Truck,
+    activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    iconColor: 'text-emerald-600'
+  }
+};
+
 const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, purchases, selectedIds, filters, ui, pagination, loading } = usePurchaseListHistoryState();
 
-  // Fetch purchases from backend
-  const fetchPurchases = useCallback(async (page = 1, searchFilters: any = {}) => {
+  // Document type state - default to supplier_invoice
+  const [documentType, setDocumentType] = useState<DocumentType>('supplier_invoice');
+
+  // Fetch documents from backend based on document type
+  const fetchDocuments = useCallback(async (page = 1, searchFilters: any = {}, docType: DocumentType = documentType) => {
     dispatch({ type: 'SET_LOADING', loading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
@@ -42,55 +70,125 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         searchParams.search = searchFilters.search.trim();
       }
 
-      const response = await supplierInvoicesApi.getAll(searchParams);
-      const responseData = response?.data || response;
+      let response;
+      let transformedData: PurchaseOrder[] = [];
 
-      // Handle both array response and object with invoices key
-      const invoicesData = Array.isArray(responseData) ? responseData :
-        (responseData?.invoices || responseData?.data?.invoices || []);
+      if (docType === 'supplier_invoice') {
+        response = await supplierInvoicesApi.getAll(searchParams);
+        const responseData = response?.data;
+        console.log('[Supplier Invoice API] Raw response:', responseData);
 
-      if (invoicesData.length >= 0) {
-        const transformedPurchases: PurchaseOrder[] = invoicesData.map((invoice: any) => ({
-          id: invoice.supplier_invoice_id?.toString() || invoice.invoice_number,
-          po_number: invoice.invoice_number || invoice.supplier_invoice_number,
-          po_date: invoice.invoice_date || invoice.created_at,
-          supplier_id: invoice.supplier_id?.toString() || '',
+        const invoicesData = Array.isArray(responseData) ? responseData :
+          (responseData?.invoices || []);
+
+        transformedData = invoicesData.map((invoice: any) => ({
+          id: String(invoice.supplier_invoice_id),
+          po_number: invoice.invoice_number,
+          po_date: invoice.invoice_date,
+          supplier_id: String(invoice.supplier_id),
           supplier_name: invoice.supplier_name,
-          total_amount: invoice.invoice_total || invoice.total_amount || 0,
-          paid_amount: invoice.paid_amount || 0,
-          pending_amount: (invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0),
-          payment_status: invoice.payment_status || (invoice.paid_amount >= invoice.invoice_total ? 'paid' : 'pending'),
+          total_amount: Number(invoice.invoice_total || invoice.total_amount || 0),
+          paid_amount: Number(invoice.paid_amount || 0),
+          pending_amount: Number((invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0)),
+          payment_status: invoice.payment_status || 'pending',
           status: invoice.status || 'confirmed',
-          items_count: invoice.items_count || invoice.item_count || 0,
-          created_at: invoice.created_at || invoice.invoice_date,
-          updated_at: invoice.updated_at || invoice.invoice_date
+          items_count: invoice.items_count || 0,
+          created_at: invoice.created_at,
+          updated_at: invoice.updated_at
         }));
 
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedPurchases });
-
-        const total = responseData.total || responseData.data?.total || 0;
+        const total = responseData?.total || transformedData.length;
+        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
         dispatch({
           type: 'SET_PAGINATION',
-          pagination: {
-            total,
-            page,
-            total_pages: Math.ceil(total / pagination.per_page)
-          }
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
         });
-      } else {
-        // Empty array is valid - just means no invoices yet
+
+      } else if (docType === 'purchase_order') {
+        response = await purchasesApi.getOrders(searchParams);
+        const responseData = response?.data;
+        console.log('[Purchase Order API] Raw response:', responseData);
+
+        const ordersData = Array.isArray(responseData) ? responseData :
+          (responseData?.orders || responseData?.purchases || []);
+
+        transformedData = ordersData.map((order: any) => ({
+          id: String(order.po_id || order.purchase_order_id),
+          po_number: order.po_number || order.order_number,
+          po_date: order.po_date || order.order_date,
+          supplier_id: String(order.supplier_id),
+          supplier_name: order.supplier_name,
+          total_amount: Number(order.total_amount || order.final_amount || 0),
+          paid_amount: Number(order.paid_amount || 0),
+          pending_amount: Number(order.pending_amount || 0),
+          payment_status: order.payment_status || 'pending',
+          status: order.status || order.po_status || 'draft',
+          items_count: order.items_count || order.items?.length || 0,
+          created_at: order.created_at,
+          updated_at: order.updated_at
+        }));
+
+        const total = responseData?.total || transformedData.length;
+        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
+        dispatch({
+          type: 'SET_PAGINATION',
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
+        });
+
+      } else if (docType === 'grn') {
+        response = await grnApi.getAll(searchParams);
+        const responseData = response?.data;
+        console.log('[GRN API] Raw response:', responseData);
+
+        const grnData = Array.isArray(responseData) ? responseData :
+          (responseData?.grns || responseData?.data || []);
+
+        transformedData = grnData.map((grn: any) => ({
+          id: String(grn.grn_id),
+          po_number: grn.grn_number,
+          po_date: grn.grn_date,
+          supplier_id: String(grn.supplier_id),
+          supplier_name: grn.supplier_name,
+          total_amount: Number(grn.total_amount || 0),
+          paid_amount: 0,
+          pending_amount: Number(grn.total_amount || 0),
+          payment_status: 'received',
+          status: grn.status || 'completed',
+          items_count: grn.items_count || grn.items?.length || 0,
+          created_at: grn.created_at,
+          updated_at: grn.updated_at
+        }));
+
+        const total = responseData?.total || transformedData.length;
+        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
+        dispatch({
+          type: 'SET_PAGINATION',
+          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
+        });
       }
+
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to fetch purchases. Please try again.' });
+      console.error(`Failed to fetch ${docType}:`, error);
+      dispatch({ type: 'SET_ERROR', error: `Failed to fetch ${documentTypeConfig[docType].label}. Please try again.` });
+      dispatch({ type: 'SET_PURCHASES', purchases: [] });
     } finally {
       dispatch({ type: 'SET_LOADING', loading: false });
     }
-  }, [dispatch, pagination.per_page]);
+  }, [dispatch, pagination.per_page, documentType]);
 
-  // Load purchases on mount
+  // Alias for backward compatibility
+  const fetchPurchases = fetchDocuments;
+
+  // Load documents on mount and when document type changes
   useEffect(() => {
-    fetchPurchases();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchDocuments(1, {}, documentType);
+  }, [documentType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle document type change
+  const handleDocumentTypeChange = (type: DocumentType) => {
+    setDocumentType(type);
+    dispatch({ type: 'CLEAR_SELECTION' });
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -116,7 +214,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     dispatch({ type: 'SET_REFRESHING', refreshing: true });
 
     try {
-      await fetchPurchases(pagination.page, buildSearchParams());
+      await fetchDocuments(pagination.page, buildSearchParams(), documentType);
     } finally {
       dispatch({ type: 'SET_REFRESHING', refreshing: false });
     }
@@ -132,7 +230,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
 
     setTimeout(() => {
-      fetchPurchases(1, { ...buildSearchParams(), search: query });
+      fetchDocuments(1, { ...buildSearchParams(), search: query }, documentType);
     }, 500);
   };
 
@@ -301,8 +399,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           title="Purchase History"
           documentNumber=""
           status="active"
-          icon={Package}
-          iconColor="text-blue-600"
+          icon={documentTypeConfig[documentType].icon}
+          iconColor={documentTypeConfig[documentType].iconColor}
           onClose={onClose}
           showSaveDraft={false}
           onSaveDraft={() => { }}
@@ -324,6 +422,33 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
             }
           ] as any}
         />
+
+        {/* Document Type Tabs */}
+        <div className="px-6 py-3 bg-white border-b border-gray-200">
+          <div className="flex space-x-1">
+            {(Object.keys(documentTypeConfig) as DocumentType[]).map((type) => {
+              const config = documentTypeConfig[type];
+              const Icon = config.icon;
+              const isActive = documentType === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => handleDocumentTypeChange(type)}
+                  className={`
+                    flex items-center px-4 py-2 rounded-lg font-medium transition-all text-sm border
+                    ${isActive
+                      ? config.activeClass
+                      : 'text-gray-600 hover:bg-gray-50 border-transparent'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">

@@ -2,11 +2,35 @@ import React, { useState, useEffect } from 'react';
 import {
   Download, Eye, Edit, Printer,
   MoreHorizontal, Package, RotateCcw,
-  X, Check, AlertCircle, RefreshCw, XCircle
+  X, Check, AlertCircle, RefreshCw, XCircle, Users, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
 import { returnsApi } from '../../services/api';
 import CancelDocumentModal from '../global/modals/CancelDocumentModal';
+
+// Return type configuration for visual tabs
+type ReturnType = 'all' | 'sales' | 'purchase';
+
+const returnTypeConfig = {
+  all: {
+    label: 'All Returns',
+    icon: RotateCcw,
+    activeClass: 'bg-gray-100 text-gray-700 border-gray-300',
+    iconColor: 'text-gray-600'
+  },
+  sales: {
+    label: 'Sales Returns',
+    icon: Users,
+    activeClass: 'bg-red-50 text-red-700 border-red-200',
+    iconColor: 'text-red-600'
+  },
+  purchase: {
+    label: 'Purchase Returns',
+    icon: Truck,
+    activeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+    iconColor: 'text-orange-600'
+  }
+};
 
 interface ReturnsListHistoryProps {
   onClose?: () => void;
@@ -79,6 +103,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     per_page: 25,
     total_pages: 0
   });
+
+  // Return type state - default to all
+  const [returnType, setReturnType] = useState<ReturnType>('all');
 
   // State for real data
   const [returns, setReturns] = useState<Return[]>([]);
@@ -251,10 +278,16 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     }
   };
 
-  // Load returns on component mount
+  // Load returns on component mount and when return type changes
   useEffect(() => {
-    fetchReturns();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchReturns(1, { return_type: returnType });
+  }, [returnType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle return type change
+  const handleReturnTypeChange = (type: ReturnType) => {
+    setReturnType(type);
+    setSelectedReturns([]);
+  };
 
   // Refresh returns
   const handleRefresh = () => {
@@ -515,8 +548,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           title="Returns History"
           documentNumber=""
           status="active"
-          icon={RotateCcw}
-          iconColor="text-blue-600"
+          icon={returnTypeConfig[returnType].icon}
+          iconColor={returnTypeConfig[returnType].iconColor}
           onClose={onClose}
           historyType="return"
           showSaveDraft={false}
@@ -536,6 +569,33 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             }
           ] as any}
         />
+
+        {/* Return Type Tabs */}
+        <div className="px-6 py-3 bg-white border-b border-gray-200">
+          <div className="flex space-x-1">
+            {(Object.keys(returnTypeConfig) as ReturnType[]).map((type) => {
+              const config = returnTypeConfig[type];
+              const Icon = config.icon;
+              const isActive = returnType === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => handleReturnTypeChange(type)}
+                  className={`
+                    flex items-center px-4 py-2 rounded-lg font-medium transition-all text-sm border
+                    ${isActive
+                      ? config.activeClass
+                      : 'text-gray-600 hover:bg-gray-50 border-transparent'
+                    }
+                  `}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">

@@ -60,9 +60,9 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
     },
     {
       id: 'purchase-history',
-      label: 'All Purchases',
+      label: 'Purchase History',
       fullLabel: 'Purchase History',
-      description: 'View purchase history',
+      description: 'Invoices, Orders & GRN',
       icon: List,
       color: 'gray',
       component: PurchaseListHistory
