@@ -163,7 +163,7 @@ class TenantQueryBuilder:
         'purchase_returns',
         
         # ===== FINANCIAL SCHEMA =====
-        'payments', 'payment_allocations', 'payment_methods',
+        'payments', 'payment_methods',
         'journal_entries', 'journal_entry_lines',
         'expense_claims', 'expense_claim_items',
         'credit_debit_notes', 'customer_outstanding', 'supplier_outstanding',

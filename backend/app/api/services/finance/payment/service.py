@@ -680,7 +680,7 @@ class PaymentService:
                         payment_id, reference_type, reference_id, reference_number,
                         allocated_amount, source_type, created_by
                     ) VALUES (
-                        :payment_id, 'invoice', :reference_id, :reference_number,
+                        :payment_id, 'INVOICE', :reference_id, :reference_number,
                         :allocated_amount, 'payment', :created_by
                     )
                 """), {
