@@ -16,6 +16,7 @@ import logging
 from ..inventory.inventory_service import InventoryService
 from ...schemas.inventory.inventory import StockMovementCreate
 from ....core.utils.constants import ReturnStatus, DispositionType
+from ....core.utils.branch_utils import resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -254,22 +255,30 @@ class ReturnService:
     @staticmethod
     def determine_disposition(
         return_reason: str,
-        explicit_restock: Optional[bool] = None
+        explicit_restock: Optional[bool] = None,
+        return_type: str = "sales"
     ) -> Tuple[str, bool]:
         """
-        Determine item disposition based on reason and restock flag.
+        Determine item disposition based on reason, restock flag, and return type.
         Uses NON_RESTOCK_REASONS constant for consistency.
-        
+
+        Args:
+            return_reason: The reason for return
+            explicit_restock: Override restock decision (True/False/None)
+            return_type: 'sales' or 'purchase' — determines non-damaged disposition
+
         Returns:
             Tuple of (disposition, is_damaged)
         """
         is_damaged = any(reason in return_reason.lower() for reason in NON_RESTOCK_REASONS)
-        
+
         if explicit_restock is False or is_damaged:
-            disposition = "DESTROY" if is_damaged else "QUARANTINE"
+            disposition = DispositionType.DESTROY.value if is_damaged else DispositionType.QUARANTINE.value
+        elif return_type == "purchase":
+            disposition = DispositionType.RETURN_TO_SUPPLIER.value
         else:
-            disposition = "RESTOCK"
-        
+            disposition = DispositionType.RESTOCK.value
+
         return disposition, is_damaged
 
     @staticmethod
@@ -1251,16 +1260,18 @@ class ReturnService:
         """
         if not items:
             return
-        
+
         from datetime import date
-        
+
+        location_id = resolve_location_id(db, org_id, branch_id)
+
         values_list = []
         params = {
             "org_id": org_id,
             "movement_date": date.today(),
             "return_id": return_id,
             "return_number": return_number,
-            "branch_id": branch_id,
+            "location_id": location_id,
             "created_by": created_by
         }
         
@@ -1279,7 +1290,7 @@ class ReturnService:
                 'in',
                 :movement_date,
                 :quantity_{idx},
-                :branch_id,
+                :location_id,
                 'SALES_RETURN',
                 :return_id,
                 :return_number,

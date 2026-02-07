@@ -21,7 +21,7 @@ from ....services.returns.return_service import ReturnService
 from ....services.returns.purchase_return.service import PurchaseReturnService
 from ....services.finance.credit_note.service import CreditNoteService
 from ....schemas.inventory.inventory import StockMovementCreate
-from .....core.utils.branch_utils import get_default_branch_id
+from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +176,8 @@ async def create_purchase_return(
             "notes": return_dict.get("notes"), "created_by": user_id
         })
 
+        location_id = resolve_location_id(db, org_id, branch_id)
+
         for item in selected_items:
             invoice_item_id = item.get("invoice_item_id")
             grn_item_id = item.get("grn_item_id")
@@ -210,9 +212,7 @@ async def create_purchase_return(
                                                                   source_item_id=grn_item_id, source_type="grn")
 
             item_return_reason = item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
-            disposition, is_damaged = ReturnService.determine_disposition(item_return_reason)
-            if not is_damaged:
-                disposition = "RETURN_TO_SUPPLIER"
+            disposition, is_damaged = ReturnService.determine_disposition(item_return_reason, return_type="purchase")
             damaged_qty = round(float(return_qty), 2) if is_damaged else 0
             saleable_qty = 0 if is_damaged else round(float(return_qty), 2)
 
@@ -231,7 +231,7 @@ async def create_purchase_return(
                 movement_data = StockMovementCreate(
                     org_id=uuid.UUID(org_id), product_id=item["product_id"], batch_id=batch_id,
                     movement_type='PURCHASE_RETURN', movement_direction="out", movement_date=date.today(),
-                    quantity=precise_qty, base_quantity=precise_qty, location_id=branch_id,
+                    quantity=precise_qty, base_quantity=precise_qty, location_id=location_id,
                     reference_type="PURCHASE_RETURN", reference_id=return_id, reference_number=return_number,
                     reason=item_return_reason, notes=f"Purchase Return #{return_number} to {supplier['supplier_name']}",
                     created_by=user_id
