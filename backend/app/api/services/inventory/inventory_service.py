@@ -300,7 +300,40 @@ class InventoryService:
                     "quantity_change": quantity_change,
                     "batch_id": movement_data.batch_id
                 })
-            
+
+            # Update location_wise_stock if location_id provided
+            if movement_data.location_id and movement_data.org_id:
+                org_id_str = str(movement_data.org_id)
+                existing = db.execute(text("""
+                    SELECT stock_id FROM inventory.location_wise_stock
+                    WHERE org_id = :org_id AND product_id = :product_id
+                    AND location_id = :location_id
+                    AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
+                """), {
+                    "org_id": org_id_str,
+                    "product_id": movement_data.product_id,
+                    "location_id": movement_data.location_id,
+                    "batch_id": movement_data.batch_id
+                }).scalar()
+
+                if existing:
+                    if direction == 'in':
+                        InventoryService.update_location_stock_increase(
+                            db, existing, movement_data.quantity,
+                            str(movement_data.movement_date)
+                        )
+                    else:
+                        InventoryService.update_location_stock_decrease(
+                            db, existing, movement_data.quantity,
+                            str(movement_data.movement_date)
+                        )
+                elif direction == 'in':
+                    InventoryService.insert_location_stock(
+                        db, org_id_str, movement_data.location_id,
+                        movement_data.product_id, movement_data.batch_id,
+                        movement_data.quantity, str(movement_data.movement_date)
+                    )
+
             # Note: We do NOT commit here - caller controls transaction
             # This ensures atomicity when called from returns, invoices, etc.
             
@@ -353,7 +386,83 @@ class InventoryService:
         )
         
         return InventoryService.record_stock_movement(db, movement_data)
-    
+
+    @staticmethod
+    def record_stock_transfer(
+        db: Session,
+        org_id: UUID,
+        product_id: int,
+        batch_id: int,
+        quantity: float,
+        source_location_id: int,
+        destination_location_id: int,
+        movement_date: date = None,
+        reason: str = "Stock transfer",
+        created_by: int = None
+    ) -> dict:
+        """
+        Atomic stock transfer between two locations.
+        Creates two movements (out from source, in to destination)
+        and updates location_wise_stock for both.
+        """
+        from datetime import date as date_type
+        if not movement_date:
+            movement_date = date_type.today()
+
+        org_id_str = str(org_id)
+
+        # Validate source has sufficient stock
+        source_stock = InventoryService.get_location_wise_stock(
+            db, org_id_str, product_id, source_location_id, batch_id
+        )
+        if not source_stock or source_stock["quantity_available"] < quantity:
+            available = source_stock["quantity_available"] if source_stock else 0
+            raise ValueError(f"Insufficient stock at source location. Available: {available}")
+
+        # 1. OUT movement from source
+        out_movement = StockMovementCreate(
+            org_id=org_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            movement_type="transfer_out",
+            movement_direction="out",
+            movement_date=movement_date,
+            quantity=quantity,
+            reference_type="stock_transfer",
+            location_id=source_location_id,
+            transfer_type="inter_location",
+            reason=reason,
+            created_by=created_by
+        )
+        out_result = InventoryService.record_stock_movement(db, out_movement)
+
+        # 2. IN movement to destination
+        in_movement = StockMovementCreate(
+            org_id=org_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            movement_type="transfer_in",
+            movement_direction="in",
+            movement_date=movement_date,
+            quantity=quantity,
+            reference_type="stock_transfer",
+            location_id=destination_location_id,
+            transfer_type="inter_location",
+            reason=reason,
+            created_by=created_by
+        )
+        in_result = InventoryService.record_stock_movement(db, in_movement)
+
+        return {
+            "out_movement_id": out_result.movement_id,
+            "in_movement_id": in_result.movement_id,
+            "product_id": product_id,
+            "batch_id": batch_id,
+            "quantity": quantity,
+            "source_location_id": source_location_id,
+            "destination_location_id": destination_location_id
+        }
+
     @staticmethod
     def get_expiry_alerts(
         db: Session, 
@@ -758,10 +867,11 @@ class InventoryService:
     
     @staticmethod
     def update_location_stock_increase(db: Session, stock_id: int, quantity: float, movement_date: str) -> None:
-        """Increase location stock quantity."""
+        """Increase location stock quantity (both on_hand and available)."""
         db.execute(text("""
-            UPDATE inventory.location_wise_stock 
+            UPDATE inventory.location_wise_stock
             SET quantity_on_hand = quantity_on_hand + :quantity,
+                quantity_available = quantity_available + :quantity,
                 last_movement_date = :movement_date, updated_at = CURRENT_TIMESTAMP
             WHERE stock_id = :stock_id
         """), {"quantity": quantity, "movement_date": movement_date, "stock_id": stock_id})

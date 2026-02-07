@@ -153,26 +153,52 @@ class LedgerService:
                 "transaction_count": len(transactions)
             }
         else:
-            # Supplier statement - only show payments (supplier_invoices table may not exist)
+            # Supplier statement with all transaction types (mirrors customer pattern)
             # TenantAwareSession auto-adds org_id
             query = """
-                SELECT 
-                    p.payment_id as id,
-                    p.payment_date as date,
-                    'Payment' as type,
-                    p.payment_number as reference,
-                    CONCAT('Payment #', p.payment_number) as description,
-                    p.payment_amount as debit,
-                    0::numeric as credit,
-                    1 as sort_order
-                FROM financial.payments p
-                WHERE p.party_id = :party_id AND UPPER(p.party_type) = UPPER(:supplier_type)
-                AND UPPER(p.payment_status) != UPPER(:cancelled_payment)
-                AND (:from_date IS NULL OR p.payment_date >= :from_date)
-                AND (:to_date IS NULL OR p.payment_date <= :to_date)
-                ORDER BY p.payment_date DESC
+                WITH all_transactions AS (
+                    -- Supplier Outstanding entries (Debit - what we owe: invoices/GRNs)
+                    SELECT
+                        so.outstanding_id as id,
+                        so.document_date as date,
+                        CASE so.document_type
+                            WHEN 'invoice' THEN 'Invoice'
+                            WHEN 'grn' THEN 'GRN'
+                            ELSE INITCAP(REPLACE(so.document_type, '_', ' '))
+                        END as type,
+                        so.document_number as reference,
+                        CONCAT(INITCAP(REPLACE(so.document_type, '_', ' ')), ' #', so.document_number) as description,
+                        CASE WHEN so.original_amount >= 0 THEN so.original_amount ELSE 0::numeric END as debit,
+                        CASE WHEN so.original_amount < 0 THEN ABS(so.original_amount) ELSE 0::numeric END as credit,
+                        1 as sort_order
+                    FROM financial.supplier_outstanding so
+                    WHERE so.supplier_id = :party_id
+                    AND so.status != 'cancelled'
+                    AND (:from_date IS NULL OR so.document_date >= :from_date)
+                    AND (:to_date IS NULL OR so.document_date <= :to_date)
+
+                    UNION ALL
+
+                    -- Payments to supplier (Credit - reduces what we owe)
+                    SELECT
+                        p.payment_id as id,
+                        p.payment_date as date,
+                        'Payment' as type,
+                        p.payment_number as reference,
+                        CONCAT('Payment #', p.payment_number) as description,
+                        0::numeric as debit,
+                        p.payment_amount as credit,
+                        2 as sort_order
+                    FROM financial.payments p
+                    WHERE p.party_id = :party_id AND UPPER(p.party_type) = UPPER(:supplier_type)
+                    AND UPPER(p.payment_status) != UPPER(:cancelled_payment)
+                    AND (:from_date IS NULL OR p.payment_date >= :from_date)
+                    AND (:to_date IS NULL OR p.payment_date <= :to_date)
+                )
+                SELECT * FROM all_transactions
+                ORDER BY date DESC, sort_order
             """
-            
+
             result = db.execute(text(query), {
                 "party_id": party_id,
                 "from_date": from_date,
@@ -180,18 +206,18 @@ class LedgerService:
                 "cancelled_payment": PaymentRecordStatus.CANCELLED.value,
                 "supplier_type": PartyType.SUPPLIER.value
             })
-            
+
             transactions = []
             running_balance = Decimal("0")
-            
+
             for row in result:
                 trans = dict(row._mapping)
-                running_balance = running_balance - Decimal(str(trans['debit']))
+                running_balance = running_balance + Decimal(str(trans['debit'])) - Decimal(str(trans['credit']))
                 trans['running_balance'] = float(running_balance)
-                trans['balance_type'] = 'Dr' if running_balance < 0 else 'Nil'
+                trans['balance_type'] = 'Cr' if running_balance > 0 else ('Dr' if running_balance < 0 else 'Nil')
                 trans['display_balance'] = float(abs(running_balance))
                 transactions.append(trans)
-            
+
             return {
                 "transactions": transactions,
                 "final_balance": float(running_balance),
@@ -614,15 +640,32 @@ class LedgerService:
     
     @staticmethod
     def get_opening_balance_supplier(db: Session, org_id: str, party_id: int, as_of_date: date) -> float:
-        """Calculate opening balance for supplier as of date."""
+        """Calculate opening balance for supplier as of date (includes debit notes from supplier_outstanding)."""
         result = db.execute(text("""
-            SELECT COALESCE(SUM(CASE WHEN type = 'invoice' THEN amount ELSE 0 END), 0) -
-                   COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as opening_balance
+            SELECT
+                COALESCE(SUM(CASE WHEN type = 'outstanding_positive' THEN amount ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN type = 'outstanding_negative' THEN amount ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as opening_balance
             FROM (
-                SELECT 'invoice' as type, final_amount as amount FROM purchases.supplier_invoices
+                -- Positive outstanding entries (invoices/GRNs - what we owe)
+                SELECT 'outstanding_positive' as type, original_amount as amount
+                FROM financial.supplier_outstanding
                 WHERE supplier_id = :party_id AND org_id = :org_id
-                AND invoice_date < :as_of_date AND invoice_status != :cancelled_status
+                AND document_date < :as_of_date AND status != 'cancelled'
+                AND original_amount >= 0
+
                 UNION ALL
+
+                -- Negative outstanding entries (debit notes - reduces what we owe)
+                SELECT 'outstanding_negative' as type, ABS(original_amount) as amount
+                FROM financial.supplier_outstanding
+                WHERE supplier_id = :party_id AND org_id = :org_id
+                AND document_date < :as_of_date AND status != 'cancelled'
+                AND original_amount < 0
+
+                UNION ALL
+
+                -- Payments (reduces what we owe)
                 SELECT 'payment' as type, payment_amount as amount FROM financial.payments
                 WHERE party_id = :party_id AND party_type = :supplier_type AND org_id = :org_id
                 AND payment_date < :as_of_date AND payment_status != :cancelled_status

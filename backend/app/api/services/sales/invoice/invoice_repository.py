@@ -161,7 +161,8 @@ class InvoiceRepository:
         paid_amount: Decimal = Decimal("0"),
         payment_status: str = "pending",
         credit_amount: Optional[Decimal] = None,
-        salesperson_id: Optional[int] = None
+        salesperson_id: Optional[int] = None,
+        invoice_status: str = "posted"
     ) -> int:
         """
         Create invoice record.
@@ -207,7 +208,7 @@ class InvoiceRepository:
                 :freight, :insurance, :other,
                 :round_off, :final, :amount_in_words,
                 :payment_terms, :due_date, :notes,
-                'posted', :payment_status, :paid_amount,
+                :invoice_status, :payment_status, :paid_amount,
                 :credit_amount,
                 :salesperson_id,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -239,6 +240,7 @@ class InvoiceRepository:
             "payment_terms": payment_terms,
             "due_date": due_date,
             "notes": notes,
+            "invoice_status": invoice_status,
             "payment_status": payment_status,
             "paid_amount": paid_amount,
             "credit_amount": credit_amount,
@@ -256,11 +258,11 @@ class InvoiceRepository:
         batch_ids: List[int]
     ) -> tuple[Dict[int, str], Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
         """
-        Batch fetch products, batches, and FIFO batches.
+        Batch fetch products, batches, and FEFO batches (First-Expiry-First-Out).
         Eliminates N+1 query problem.
         
         Returns:
-            Tuple of (products_lookup, batches_lookup, fifo_batches)
+            Tuple of (products_lookup, batches_lookup, fefo_batches)
         """
         # Fetch product names and HSN codes
         products_lookup = {}
@@ -295,11 +297,11 @@ class InvoiceRepository:
                 for row in batch_result.fetchall()
             }
         
-        # Fetch FIFO batches for products without batch_id
+        # Fetch FEFO batches (First-Expiry-First-Out) for products without batch_id
         products_needing_batches = [pid for pid in product_ids if pid not in [b.get("product_id") for b in batches_lookup.values()]]
-        fifo_batches = {}
+        fefo_batches = {}
         if products_needing_batches:
-            fifo_result = db.execute(text("""
+            fefo_result = db.execute(text("""
                 SELECT DISTINCT ON (product_id) 
                     product_id, batch_id, batch_number, mrp_per_unit, 
                     manufacturing_date, expiry_date, cost_per_unit
@@ -309,7 +311,7 @@ class InvoiceRepository:
                     AND quantity_available > 0
                 ORDER BY product_id, expiry_date NULLS LAST, batch_id
             """), {"product_ids": products_needing_batches, "org_id": org_id})
-            fifo_batches = {
+            fefo_batches = {
                 row[0]: {
                     "batch_id": row[1],
                     "batch_number": row[2],
@@ -318,10 +320,10 @@ class InvoiceRepository:
                     "exp_date": row[5],
                     "cost_per_unit": row[6]
                 }
-                for row in fifo_result.fetchall()
+                for row in fefo_result.fetchall()
             }
         
-        return products_lookup, batches_lookup, fifo_batches
+        return products_lookup, batches_lookup, fefo_batches
     
     @staticmethod
     def validate_stock_availability(

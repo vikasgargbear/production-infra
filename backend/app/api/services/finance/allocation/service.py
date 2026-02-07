@@ -45,7 +45,29 @@ class AllocationService:
             VALUES (:org_id, :payment_id, :invoice_id, :amount, 'manual')
             RETURNING allocation_id
         """), {"org_id": org_id, "payment_id": payment_id, "invoice_id": invoice_id, "amount": amount})
-        return result.scalar()
+        
+        allocation_id = result.scalar()
+        
+        # Update invoice outstanding in financial.customer_outstanding
+        db.execute(text("""
+            UPDATE financial.customer_outstanding
+            SET outstanding_amount = outstanding_amount - :amount,
+                paid_amount = COALESCE(paid_amount, 0) + :amount,
+                status = CASE 
+                    WHEN outstanding_amount - :amount <= 0 THEN 'paid'
+                    ELSE 'partial'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE document_type = 'invoice' 
+            AND document_id = :invoice_id
+            AND org_id = :org_id
+        """), {
+            "amount": amount,
+            "invoice_id": invoice_id,
+            "org_id": org_id
+        })
+        
+        return allocation_id
     
     @staticmethod
     def get_payment_status(db: Session, payment_id: int) -> Optional[Dict[str, Any]]:

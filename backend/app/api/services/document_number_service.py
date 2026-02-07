@@ -172,90 +172,56 @@ class DocumentNumberService:
     @staticmethod
     def generate_number(db: Session, document_type: str, org_id: Optional[str] = None) -> str:
         """
-        Generate a unique document number for the specified type
-        
+        Generate a unique document number using atomic database sequences.
+
+        Uses INSERT ... ON CONFLICT DO UPDATE on public.document_number_sequences
+        to guarantee uniqueness even under concurrent requests.
+
         Args:
             db: Database session
             document_type: Type of document (invoice, purchase_order, etc.)
             org_id: Organization ID (optional, for multi-tenant systems)
-            
+
         Returns:
-            Generated document number in format PREFIX-YYXXXXXX
+            Generated document number in format PREFIX-YYYYMMDDNNNN
         """
         try:
-            # Get configuration for document type
             config = DOCUMENT_CONFIGS.get(document_type)
             if not config:
                 raise ValueError(f"Unknown document type: {document_type}")
-            
-            # Get current year (last 2 digits)
+
             now = datetime.now()
-            date_prefix = now.strftime("%Y%m%d")  # Full date: YYYYMMDD (e.g., 20251214)
-            
-            # Build the pattern for searching existing numbers
-            pattern = f"{config['prefix']}-{date_prefix}%"
-            
-            # Build query based on whether org_id is provided
-            if org_id and "org_id" in get_table_columns(db, config['table']):
-                query = f"""
-                    SELECT {config['column']} 
-                    FROM {config['table']}
-                    WHERE {config['column']} LIKE :pattern
-                    AND org_id = :org_id
-                    ORDER BY {config['id_column']} DESC
-                    LIMIT 1
-                """
-                params = {"pattern": pattern, "org_id": org_id}
-            else:
-                query = f"""
-                    SELECT {config['column']} 
-                    FROM {config['table']}
-                    WHERE {config['column']} LIKE :pattern
-                    ORDER BY {config['id_column']} DESC
-                    LIMIT 1
-                """
-                params = {"pattern": pattern}
-            
-            # Execute query
-            result = db.execute(text(query), params)
-            latest = result.first()
-            
-            # Calculate next sequence number
-            if latest and latest[0]:
-                # Extract sequence number from existing format
-                # Format: PREFIX-YYYYMMDD#### where YYYYMMDD is date and #### is sequence
-                parts = latest[0].split('-')
-                if len(parts) >= 2:
-                    try:
-                        # Remove the date prefix (8 digits) from the number part
-                        number_with_date = parts[-1]
-                        # Check if it starts with the date prefix
-                        if number_with_date.startswith(date_prefix):
-                            # Extract just the sequence number (remove date prefix)
-                            current_seq = int(number_with_date[len(date_prefix):])
-                        else:
-                            # Different date or old format, start at 1
-                            current_seq = 0
-                        
-                        # Increment for next sequence
-                        next_seq = current_seq + 1
-                    except (ValueError, IndexError):
-                        next_seq = 1
-                else:
-                    next_seq = 1
-            else:
-                # First document of the day
-                next_seq = 1
-            
-            # Generate the document number (4-digit sequence, zero-padded)
+            date_prefix = now.strftime("%Y%m%d")  # YYYYMMDD
+
+            # Atomic: INSERT new row or INCREMENT existing sequence in one statement
+            # ON CONFLICT guarantees no race condition — PostgreSQL locks the row during UPDATE
+            result = db.execute(text("""
+                INSERT INTO public.document_number_sequences
+                    (document_type, org_id, year_prefix, last_sequence_number, last_generated_number, created_at, updated_at)
+                VALUES
+                    (:doc_type, :org_id, :date_prefix, 1, :generated, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (document_type, org_id, year_prefix)
+                DO UPDATE SET
+                    last_sequence_number = document_number_sequences.last_sequence_number + 1,
+                    last_generated_number = :prefix || '-' || :date_prefix || LPAD((document_number_sequences.last_sequence_number + 1)::text, 4, '0'),
+                    updated_at = CURRENT_TIMESTAMP
+                RETURNING last_sequence_number
+            """), {
+                "doc_type": document_type,
+                "org_id": org_id,
+                "date_prefix": date_prefix,
+                "prefix": config['prefix'],
+                "generated": f"{config['prefix']}-{date_prefix}0001"
+            })
+
+            next_seq = result.scalar()
             document_number = f"{config['prefix']}-{date_prefix}{next_seq:04d}"
-            
-            logger.info(f"Generated {document_type} number: {document_number}")
+
+            logger.info(f"Generated {document_type} number: {document_number} (atomic)")
             return document_number
-            
+
         except Exception as e:
             logger.error(f"Error generating {document_type} number: {e}")
-            # SECURITY: No fallback - proper error must be raised
             raise ValueError(f"Failed to generate {document_type} number: {e}")
     
     @staticmethod
@@ -300,17 +266,24 @@ class DocumentNumberService:
         return True
 
 
+_table_columns_cache: Dict[str, list] = {}
+
 def get_table_columns(db: Session, table_name: str) -> list:
-    """Helper to get columns of a table"""
+    """Helper to get columns of a table (cached - columns don't change at runtime)"""
+    if table_name in _table_columns_cache:
+        return _table_columns_cache[table_name]
+
     try:
         schema, table = table_name.split('.')
         result = db.execute(text("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_schema = :schema 
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema
             AND table_name = :table
         """), {"schema": schema, "table": table})
-        return [row[0] for row in result]
+        columns = [row[0] for row in result]
+        _table_columns_cache[table_name] = columns
+        return columns
     except:
         return []
 

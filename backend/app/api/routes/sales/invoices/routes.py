@@ -100,12 +100,24 @@ def process_inventory_background(
                 InvoiceService.update_invoice_totals(db, invoice_id, invoice_totals)
                 logger.info(f"✅ [BACKGROUND] Updated totals for invoice {invoice_id}")
             
-            # 4. Update customer outstanding balance
+            # 4. Create customer outstanding entry in financial.customer_outstanding
             if invoice_totals:
                 customer_id = invoice_totals.get("customer_id")
                 final_amount = invoice_totals.get("final_amount", 0)
+                invoice_number = invoice_totals.get("invoice_number")
+                invoice_date = invoice_totals.get("invoice_date")
+                due_date = invoice_totals.get("due_date")
                 if customer_id and final_amount:
-                    InvoiceService.update_customer_outstanding(db, customer_id, final_amount)
+                    InvoiceService.update_customer_outstanding(
+                        db, 
+                        customer_id, 
+                        final_amount,
+                        invoice_id=invoice_id,
+                        invoice_number=invoice_number,
+                        invoice_date=invoice_date,
+                        org_id=org_id,
+                        due_date=due_date
+                    )
             
             db.commit()
             logger.info(f"✅ [BACKGROUND] Completed async processing for invoice {invoice_id}")

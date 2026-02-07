@@ -19,6 +19,7 @@ from ....services.compliance.gst_service import GSTService
 from ....services.inventory.inventory_service import InventoryService
 from ....services.returns.return_service import ReturnService
 from ....services.returns.purchase_return.service import PurchaseReturnService
+from ....services.finance.credit_note.service import CreditNoteService
 from ....schemas.inventory.inventory import StockMovementCreate
 from .....core.utils.branch_utils import get_default_branch_id
 
@@ -58,7 +59,8 @@ async def list_purchase_returns(
             limit=limit,
             supplier_id=supplier_id,
             from_date=from_date,
-            to_date=to_date
+            to_date=to_date,
+            org_id=str(context.org_id)
         )
         return result
     except Exception as e:
@@ -76,7 +78,7 @@ async def get_purchase_return_detail(
 ):
     """Get purchase return details by ID"""
     try:
-        result = PurchaseReturnService.get_purchase_return_detail(db, return_id)
+        result = PurchaseReturnService.get_purchase_return_detail(db, return_id, org_id=str(context.org_id))
         if not result:
             raise HTTPException(status_code=404, detail="Purchase return not found")
         return result
@@ -130,71 +132,56 @@ async def create_purchase_return(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Create a new purchase return with validation, batch tracking, and inventory movements"""
+    """Create a new purchase return with validation, batch tracking, inventory movements, and debit note"""
     org_id = str(context.org_id)
     user_id = context.user_id
     branch_id = context.primary_branch_id
-    
+
     try:
         return_dict = return_data.dict()
         if not return_dict["items"]:
             raise HTTPException(status_code=400, detail="At least one item must be returned")
-        
+
+        # Pre-filter to selected items with return_quantity
+        selected_items = [i for i in return_dict["items"] if i.get("selected") and i.get("return_quantity")]
+        if not selected_items:
+            raise HTTPException(status_code=400, detail="At least one item must be selected for return")
+
         return_number = DocumentNumberService.generate_number(db, "purchase_return", org_id)
-        
+
         if not branch_id:
             try:
                 branch_id = get_default_branch_id(db, org_id)
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
-        
+
         supplier = PurchaseReturnService.get_supplier(db, return_dict["supplier_id"])
-        debit_note_no = None
-        if supplier and supplier.get("gst_number"):
-            debit_note_no = DocumentNumberService.generate_number(db, "debit_note", org_id)
-        
-        subtotal, tax_amount, cgst_amount, sgst_amount, igst_amount, total_amount = (Decimal("0"),)*6
-        
-        for item in return_dict["items"]:
-            if not item.get("selected") or not item.get("return_quantity", 0):
-                continue
-            qty = Decimal(str(item.get("return_quantity", 0)))
-            rate = Decimal(str(item.get("unit_price", 0)))
-            discount_percent = Decimal(str(item.get("discount_percent", 0)))
-            base_value = qty * rate
-            discount_amount_item = base_value * discount_percent / 100
-            taxable_value = base_value - discount_amount_item
-            tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            gst = GSTService.calculate_gst_components(taxable_value, tax_percent, "CGST/SGST")
-            item_tax = gst["total_tax_amount"]
-            subtotal += taxable_value
-            tax_amount += item_tax
-            cgst_amount += gst["cgst_amount"]
-            sgst_amount += gst["sgst_amount"]
-            total_amount += taxable_value + item_tax
-        
+
+        # Determine GST type (intra-state vs inter-state) instead of hardcoding
+        gst_type = GSTService.determine_gst_type(db, context.org_id, supplier_id=return_dict["supplier_id"])
+
+        # Use DRY totals calculation from ReturnService (handles CGST/SGST vs IGST correctly)
+        totals = ReturnService.calculate_return_totals(selected_items, gst_type)
+
         return_id = PurchaseReturnService.create_purchase_return(db, {
             "org_id": org_id, "branch_id": branch_id, "return_number": return_number,
             "return_date": return_dict["return_date"], "supplier_invoice_id": return_dict.get("supplier_invoice_id"),
             "grn_id": return_dict.get("grn_id"), "supplier_id": return_dict["supplier_id"],
             "return_reason": return_dict.get("return_reason"), "detailed_reason": return_dict.get("notes"),
-            "return_amount": float(subtotal), "tax_amount": float(tax_amount), "total_amount": float(total_amount),
-            "cgst_amount": float(cgst_amount), "sgst_amount": float(sgst_amount), "igst_amount": float(igst_amount),
-            "debit_note_number": debit_note_no, "debit_note_status": "issued" if debit_note_no else "pending",
+            "return_amount": float(totals["subtotal"]), "tax_amount": float(totals["tax_amount"]),
+            "total_amount": float(totals["total_amount"]),
+            "cgst_amount": float(totals["cgst_amount"]), "sgst_amount": float(totals["sgst_amount"]),
+            "igst_amount": float(totals["igst_amount"]),
+            "debit_note_number": None, "debit_note_status": "pending",
             "notes": return_dict.get("notes"), "created_by": user_id
         })
-        
-        supplier_invoice_id = return_dict.get("supplier_invoice_id")
-        
-        for item in return_dict["items"]:
-            if not item.get("selected") or not item.get("return_quantity", 0):
-                continue
-            
+
+        for item in selected_items:
             invoice_item_id = item.get("invoice_item_id")
             grn_item_id = item.get("grn_item_id")
             return_qty = Decimal(str(item.get("return_quantity", 0)))
             unit_price = Decimal(str(item.get("unit_price", 0)))
-            
+
             if invoice_item_id:
                 already_returned = PurchaseReturnService.get_invoice_item_returnable(db, invoice_item_id)
                 if not already_returned and grn_item_id:
@@ -204,54 +191,76 @@ async def create_purchase_return(
                     if return_qty > max_returnable:
                         product_name = item.get("product_name", "Product")
                         raise HTTPException(status_code=400, detail=f"Cannot return {return_qty} units of {product_name}. Max: {max_returnable}")
-            
-            base_value = return_qty * unit_price
+
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent_provided = "tax_percent" in item and item["tax_percent"] is not None
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            
+
             if not tax_percent_provided:
                 tax_percent = ReturnService.resolve_tax_from_supplier_invoice(db, invoice_item_id, grn_item_id, tax_percent_explicitly_provided=tax_percent_provided)
-            
+
             return_calc = ReturnService.calculate_return_value(return_qty, unit_price, discount_percent, tax_percent)
             return_value = return_calc["return_value"]
-            gst = GSTService.calculate_gst_components(return_value, tax_percent, "CGST/SGST")
+            gst = GSTService.calculate_gst_components(return_value, tax_percent, gst_type)
             item_tax_amount = gst["total_tax_amount"]
-            
+
             batch_id, batch_number = ReturnService.resolve_batch(db, product_id=item["product_id"],
                                                                   batch_number=item.get("batch_number"),
                                                                   batch_id=item.get("batch_id"),
                                                                   source_item_id=grn_item_id, source_type="grn")
-            
+
             item_return_reason = item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
             disposition, is_damaged = ReturnService.determine_disposition(item_return_reason)
             if not is_damaged:
                 disposition = "RETURN_TO_SUPPLIER"
-            damaged_qty = float(return_qty) if is_damaged else 0
-            saleable_qty = 0 if is_damaged else float(return_qty)
-            
+            damaged_qty = round(float(return_qty), 2) if is_damaged else 0
+            saleable_qty = 0 if is_damaged else round(float(return_qty), 2)
+
             PurchaseReturnService.insert_return_item(db, {
                 "return_id": return_id, "grn_item_id": grn_item_id, "product_id": item["product_id"],
-                "batch_id": batch_id, "batch_number": batch_number, "return_quantity": float(return_qty),
+                "batch_id": batch_id, "batch_number": batch_number, "return_quantity": round(float(return_qty), 2),
                 "uom": item.get("unit", "PCS"), "damaged_quantity": damaged_qty, "saleable_quantity": saleable_qty,
-                "unit_price": float(unit_price), "return_value": float(return_value),
-                "tax_amount": float(item_tax_amount), "item_return_reason": item_return_reason, "disposition": disposition
+                "unit_price": round(float(unit_price), 2), "return_value": round(float(return_value), 2),
+                "tax_amount": round(float(item_tax_amount), 2), "item_return_reason": item_return_reason, "disposition": disposition
             })
-            
-            if batch_id and disposition == "RETURN_TO_SUPPLIER":
-                PurchaseReturnService.update_batch_stock_for_return(db, batch_id, float(return_qty))
-            
+
+            # Record inventory movement (handles quantity_available via batch update internally)
+            # NOTE: Do NOT also call update_batch_stock_for_return -- that would double-deduct
             if batch_id or item["product_id"]:
+                precise_qty = round(float(return_qty), 2)
                 movement_data = StockMovementCreate(
                     org_id=uuid.UUID(org_id), product_id=item["product_id"], batch_id=batch_id,
                     movement_type='PURCHASE_RETURN', movement_direction="out", movement_date=date.today(),
-                    quantity=int(float(return_qty)), base_quantity=int(float(return_qty)), location_id=branch_id,
+                    quantity=precise_qty, base_quantity=precise_qty, location_id=branch_id,
                     reference_type="PURCHASE_RETURN", reference_id=return_id, reference_number=return_number,
                     reason=item_return_reason, notes=f"Purchase Return #{return_number} to {supplier['supplier_name']}",
                     created_by=user_id
                 )
                 InventoryService.record_stock_movement(db, movement_data)
-        
+
+            # Track quantity_returned separately (record_stock_movement only handles quantity_available)
+            if batch_id and disposition == "RETURN_TO_SUPPLIER":
+                db.execute(text("""
+                    UPDATE inventory.batches
+                    SET quantity_returned = COALESCE(quantity_returned, 0) + :return_qty,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE batch_id = :batch_id
+                """), {"return_qty": round(float(return_qty), 2), "batch_id": batch_id})
+
+        # Create debit note + supplier outstanding (mirrors credit note pattern for sales returns)
+        debit_note_result = CreditNoteService.create_debit_note_for_purchase_return(
+            db=db, org_id=org_id, branch_id=branch_id,
+            supplier_id=return_dict["supplier_id"], return_id=return_id, return_number=return_number,
+            debit_amount=float(totals["subtotal"]), tax_amount=float(totals["tax_amount"]),
+            cgst_amount=float(totals["cgst_amount"]), sgst_amount=float(totals["sgst_amount"]),
+            igst_amount=float(totals["igst_amount"]),
+            reason_code=return_dict.get("return_reason", "Quality Issue"),
+            reason=return_dict.get("notes", ""),
+            return_date=return_dict["return_date"],
+            created_by=user_id
+        )
+        debit_note_no = debit_note_result.get("debit_note_number")
+
         db.commit()
         return {"success": True, "return_id": return_id, "return_number": return_number,
                 "debit_note_number": debit_note_no, "message": f"Purchase return {return_number} created successfully"}
@@ -261,6 +270,47 @@ async def create_purchase_return(
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating purchase return: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{return_id}")
+@with_tenant_context
+async def cancel_purchase_return(
+    return_id: int,
+    _: dict = Depends(PermissionChecker("purchase_returns", "delete")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
+):
+    """Cancel a purchase return and reverse all side effects"""
+    org_id = str(context.org_id)
+    try:
+        # Check if return exists
+        purchase_return = PurchaseReturnService.get_purchase_return_status(db, return_id)
+        if not purchase_return:
+            raise HTTPException(status_code=404, detail="Purchase return not found")
+
+        if purchase_return.get("approval_status") == "cancelled":
+            raise HTTPException(status_code=400, detail="Purchase return already cancelled")
+
+        # Use service method to cancel and reverse all side effects
+        PurchaseReturnService.cancel_purchase_return(
+            db=db,
+            return_id=return_id,
+            return_number=purchase_return.get("return_number"),
+            org_id=org_id
+        )
+
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Purchase return {purchase_return.get('return_number')} cancelled successfully"
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error cancelling purchase return: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

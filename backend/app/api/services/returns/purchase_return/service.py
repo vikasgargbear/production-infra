@@ -136,7 +136,8 @@ class PurchaseReturnService:
         limit: int = 25,
         supplier_id: int = None,
         from_date: str = None,
-        to_date: str = None
+        to_date: str = None,
+        org_id: str = None
     ) -> Dict[str, Any]:
         """List purchase returns with filters and pagination."""
         query = """
@@ -158,9 +159,9 @@ class PurchaseReturnService:
                 s.supplier_name as party_name
             FROM procurement.purchase_returns pr
             LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id AND s.org_id = pr.org_id
-            WHERE pr.org_id = pr.org_id
+            WHERE pr.org_id = :org_id
         """
-        params = {"skip": skip, "limit": limit}
+        params = {"skip": skip, "limit": limit, "org_id": org_id}
         count_conditions = ""
         
         if supplier_id:
@@ -217,20 +218,20 @@ class PurchaseReturnService:
                 "item_count": item_counts.get(ret.return_id, 0)
             })
         
-        count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE pr.org_id = pr.org_id{count_conditions}"
+        count_query = f"SELECT COUNT(*) FROM procurement.purchase_returns pr WHERE pr.org_id = :org_id{count_conditions}"
         total = db.execute(text(count_query), params).scalar()
         
         return {"total": total, "returns": result}
     
     @staticmethod
-    def get_purchase_return_detail(db: Session, return_id: int) -> Optional[Dict[str, Any]]:
+    def get_purchase_return_detail(db: Session, return_id: int, org_id: str = None) -> Optional[Dict[str, Any]]:
         """Get detailed purchase return with items."""
         purchase_return = db.execute(text("""
             SELECT pr.*, s.supplier_name as party_name, s.gst_number as party_gst
             FROM procurement.purchase_returns pr
             LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id AND s.org_id = pr.org_id
-            WHERE pr.org_id = pr.org_id AND pr.return_id = :return_id
-        """), {"return_id": return_id}).first()
+            WHERE pr.org_id = :org_id AND pr.return_id = :return_id
+        """), {"return_id": return_id, "org_id": org_id}).first()
         
         if not purchase_return:
             return None
@@ -244,5 +245,82 @@ class PurchaseReturnService:
         
         result = dict(purchase_return._mapping)
         result["items"] = [dict(item._mapping) for item in items]
-        
+
         return result
+
+    @staticmethod
+    def get_purchase_return_status(db: Session, return_id: int) -> Optional[Dict[str, Any]]:
+        """Get purchase return status for cancel validation."""
+        result = db.execute(text("""
+            SELECT return_id, return_number, approval_status, debit_note_number
+            FROM procurement.purchase_returns
+            WHERE return_id = :return_id
+        """), {"return_id": return_id}).first()
+
+        if result:
+            return dict(result._mapping)
+        return None
+
+    @staticmethod
+    def cancel_purchase_return(
+        db: Session,
+        return_id: int,
+        return_number: str = None,
+        org_id: str = None
+    ) -> Dict[str, Any]:
+        """
+        Cancel purchase return and reverse all side effects:
+        1. Reverse batch stock (re-add qty_available, reduce qty_returned) for RETURN_TO_SUPPLIER items
+        2. Delete inventory movements
+        3. Void supplier outstanding entry for debit note
+        4. Mark return as cancelled
+        """
+        # Get return items for batch reversal
+        items = db.execute(
+            text("SELECT * FROM procurement.purchase_return_items WHERE return_id = :return_id"),
+            {"return_id": return_id}
+        ).fetchall()
+
+        # 1. Reverse batch stock (only RETURN_TO_SUPPLIER items had qty deducted)
+        for item in items:
+            if item.batch_id and item.disposition == "RETURN_TO_SUPPLIER":
+                return_qty = float(item.return_quantity or 0)
+                db.execute(text("""
+                    UPDATE inventory.batches
+                    SET quantity_available = quantity_available + :return_qty,
+                        quantity_returned = GREATEST(0, COALESCE(quantity_returned, 0) - :return_qty),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE batch_id = :batch_id
+                """), {
+                    "return_qty": return_qty,
+                    "batch_id": item.batch_id
+                })
+
+        # 2. Delete inventory movements for this purchase return
+        db.execute(text("""
+            DELETE FROM inventory.inventory_movements
+            WHERE reference_id = :return_id
+              AND reference_type = 'PURCHASE_RETURN'
+        """), {"return_id": return_id})
+
+        # 3. Void supplier outstanding entry (if debit note was created)
+        if org_id:
+            db.execute(text("""
+                UPDATE financial.supplier_outstanding
+                SET status = 'cancelled', outstanding_amount = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE document_type = 'debit_note'
+                  AND document_id = :return_id
+                  AND org_id = :org_id
+            """), {"return_id": return_id, "org_id": org_id})
+
+        # 4. Mark return as cancelled
+        db.execute(text("""
+            UPDATE procurement.purchase_returns
+            SET approval_status = 'cancelled',
+                debit_note_status = 'cancelled',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE return_id = :return_id
+        """), {"return_id": return_id})
+
+        return {"success": True, "return_number": return_number}

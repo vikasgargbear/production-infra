@@ -54,7 +54,7 @@ class WriteoffService:
     def insert_writeoff(db: Session, org_id: str, data: Dict[str, Any]) -> None:
         """Insert a new writeoff record."""
         db.execute(text("""
-            INSERT INTO stock_writeoffs (
+            INSERT INTO inventory.stock_writeoffs (
                 writeoff_id, org_id, writeoff_number, writeoff_date,
                 reason, reason_notes, total_cost_value, total_itc_reversal,
                 requires_itc_reversal, status, created_by, branch_id
@@ -69,7 +69,7 @@ class WriteoffService:
     def insert_writeoff_item(db: Session, data: Dict[str, Any]) -> None:
         """Insert a writeoff item."""
         db.execute(text("""
-            INSERT INTO stock_writeoff_items (
+            INSERT INTO inventory.stock_writeoff_items (
                 item_id, writeoff_id, product_id, batch_id,
                 quantity, cost_price, gst_percent
             ) VALUES (
@@ -92,16 +92,16 @@ class WriteoffService:
     
     @staticmethod
     def insert_stock_movement(db: Session, data: Dict[str, Any]) -> None:
-        """Insert stock movement record for writeoff."""
+        """Insert stock movement record for writeoff into inventory.inventory_movements."""
         db.execute(text("""
-            INSERT INTO inventory.stock_movements (
-                org_id, movement_date, movement_type,
+            INSERT INTO inventory.inventory_movements (
+                org_id, movement_date, movement_type, movement_direction,
                 product_id, batch_id, quantity, reference_type,
-                reference_id, reason, created_by, branch_id
+                reference_id, reason, created_by
             ) VALUES (
-                :org_id, :date, 'write_off',
+                :org_id, :date, 'writeoff', 'out',
                 :product_id, :batch_id, :quantity, 'stock_writeoff',
-                :writeoff_id, :reason, :created_by, :branch_id
+                :writeoff_id, :reason, :created_by
             )
         """), data)
     
@@ -109,7 +109,7 @@ class WriteoffService:
     def insert_gst_adjustment(db: Session, data: Dict[str, Any]) -> None:
         """Insert GST ITC adjustment record."""
         db.execute(text("""
-            INSERT INTO gst_adjustments (
+            INSERT INTO compliance.gst_adjustments (
                 adjustment_id, org_id, adjustment_date, adjustment_type,
                 reference_type, reference_id, amount, description
             ) VALUES (
@@ -131,13 +131,13 @@ class WriteoffService:
                 w.reason, w.reason_notes, w.total_cost_value, w.total_itc_reversal,
                 w.requires_itc_reversal, w.status,
                 COUNT(wi.item_id) as item_count
-            FROM stock_writeoffs w
-            LEFT JOIN stock_writeoff_items wi ON w.writeoff_id = wi.writeoff_id
+            FROM inventory.stock_writeoffs w
+            LEFT JOIN inventory.stock_writeoff_items wi ON w.writeoff_id = wi.writeoff_id
             WHERE w.org_id = :org_id
         """
         params = {"org_id": org_id, "limit": limit, "offset": offset}
         
-        count_query = "SELECT COUNT(*) FROM stock_writeoffs WHERE org_id = :org_id"
+        count_query = "SELECT COUNT(*) FROM inventory.stock_writeoffs WHERE org_id = :org_id"
         
         if from_date:
             query += " AND w.writeoff_date >= :from_date"
@@ -171,7 +171,7 @@ class WriteoffService:
     def get_writeoff(db: Session, org_id: str, writeoff_id: str) -> Optional[Dict[str, Any]]:
         """Get writeoff by ID."""
         result = db.execute(text("""
-            SELECT * FROM stock_writeoffs
+            SELECT * FROM inventory.stock_writeoffs
             WHERE writeoff_id = :id AND org_id = :org_id
         """), {"id": writeoff_id, "org_id": org_id})
         row = result.fetchone()
@@ -183,7 +183,7 @@ class WriteoffService:
         result = db.execute(text("""
             SELECT 
                 wi.*, p.product_name, b.batch_number
-            FROM stock_writeoff_items wi
+            FROM inventory.stock_writeoff_items wi
             LEFT JOIN inventory.products p ON wi.product_id = p.product_id
             LEFT JOIN inventory.batches b ON wi.batch_id = b.batch_id
             WHERE wi.writeoff_id = :id
@@ -202,13 +202,13 @@ class WriteoffService:
                 COUNT(*) as writeoff_count,
                 SUM(total_cost_value) as total_cost,
                 SUM(total_itc_reversal) as total_itc_reversed
-            FROM stock_writeoffs
+            FROM inventory.stock_writeoffs
             WHERE org_id = :org_id AND requires_itc_reversal = true
         """
         params = {"org_id": org_id}
         
         total_query = """
-            SELECT SUM(total_itc_reversal) FROM stock_writeoffs
+            SELECT SUM(total_itc_reversal) FROM inventory.stock_writeoffs
             WHERE org_id = :org_id AND requires_itc_reversal = true
         """
         

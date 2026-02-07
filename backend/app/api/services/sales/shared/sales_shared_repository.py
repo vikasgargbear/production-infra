@@ -260,30 +260,84 @@ class SalesSharedRepository:
         db: Session,
         customer_id: int,
         amount: float,
-        operation: str = "add"
+        operation: str = "add",
+        org_id: str = None,
+        document_type: str = "invoice",
+        document_id: int = None,
+        document_number: str = None,
+        document_date: date = None
     ) -> None:
         """
-        Update customer's outstanding balance.
-        Used by: Invoice, Credit Note
+        Update customer's outstanding balance in financial.customer_outstanding.
+        Single source of truth for customer balances.
         
         Args:
-            operation: "add" or "subtract"
+            operation: "add" (new invoice) or "subtract" (payment/credit note)
+            document_type: 'invoice', 'credit_note', 'payment', 'debit_note'
         """
+        from datetime import date as date_type
+        
+        doc_date = document_date if document_date else date_type.today()
+        
         if operation == "add":
+            # Insert new outstanding entry
             db.execute(text("""
-                UPDATE parties.customers 
-                SET current_outstanding = COALESCE(current_outstanding, 0) + :amount,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE customer_id = :customer_id
-            """), {"customer_id": customer_id, "amount": amount})
+                INSERT INTO financial.customer_outstanding (
+                    org_id, customer_id, document_type, document_id, document_number,
+                    document_date, original_amount, outstanding_amount, paid_amount,
+                    due_date, status
+                ) VALUES (
+                    :org_id, :customer_id, :document_type, :document_id, :document_number,
+                    :document_date, :amount, :amount, 0,
+                    :document_date, 'open'
+                )
+            """), {
+                "org_id": org_id,
+                "customer_id": customer_id,
+                "document_type": document_type,
+                "document_id": document_id,
+                "document_number": document_number,
+                "document_date": doc_date,
+                "amount": amount
+            })
         elif operation == "subtract":
-            db.execute(text("""
-                UPDATE parties.customers 
-                SET current_outstanding = COALESCE(current_outstanding, 0) - :amount,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE customer_id = :customer_id
-            """), {"customer_id": customer_id, "amount": amount})
+            # For subtract operation on invoice (payment applied), update existing entry
+            # For credit notes, insert negative entry
+            if document_type == "credit_note":
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount, paid_amount,
+                        due_date, status
+                    ) VALUES (
+                        :org_id, :customer_id, :document_type, :document_id, :document_number,
+                        :document_date, :negative_amount, :negative_amount, 0,
+                        :document_date, 'open'
+                    )
+                """), {
+                    "org_id": org_id,
+                    "customer_id": customer_id,
+                    "document_type": document_type,
+                    "document_id": document_id,
+                    "document_number": document_number,
+                    "document_date": doc_date,
+                    "negative_amount": -amount
+                })
+            else:
+                # Generic subtract - reduce outstanding on matching invoice
+                db.execute(text("""
+                    UPDATE financial.customer_outstanding 
+                    SET outstanding_amount = GREATEST(0, outstanding_amount - :amount),
+                        paid_amount = paid_amount + :amount,
+                        status = CASE WHEN outstanding_amount - :amount <= 0 THEN 'paid' ELSE 'partial' END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE document_id = :document_id AND document_type = 'invoice'
+                """), {
+                    "amount": amount,
+                    "document_id": document_id
+                })
         else:
             raise ValueError(f"Invalid operation: {operation}")
         
         logger.info(f"✅ Updated customer {customer_id} outstanding: {operation} ₹{amount}")
+

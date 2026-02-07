@@ -205,12 +205,12 @@ class ReturnService:
         Returns:
             Dict with base_value, discount_amount, return_value, tax_amount, total
         """
-        base_value = quantity * unit_price
-        discount_amount = base_value * discount_percent / 100
-        return_value = base_value - discount_amount
-        tax_amount = return_value * tax_percent / 100
-        total = return_value + tax_amount
-        
+        base_value = round(quantity * unit_price, 2)
+        discount_amount = round(base_value * discount_percent / 100, 2)
+        return_value = round(base_value - discount_amount, 2)
+        tax_amount = round(return_value * tax_percent / 100, 2)
+        total = round(return_value + tax_amount, 2)
+
         return {
             "base_value": base_value,
             "discount_amount": discount_amount,
@@ -325,13 +325,13 @@ class ReturnService:
             total_return_quantity += qty
         
         return {
-            "subtotal": subtotal,
-            "tax_amount": tax_amount,
-            "cgst_amount": cgst_amount,
-            "sgst_amount": sgst_amount,
-            "igst_amount": igst_amount,
-            "total_amount": total_amount,
-            "total_return_quantity": total_return_quantity
+            "subtotal": round(subtotal, 2),
+            "tax_amount": round(tax_amount, 2),
+            "cgst_amount": round(cgst_amount, 2),
+            "sgst_amount": round(sgst_amount, 2),
+            "igst_amount": round(igst_amount, 2),
+            "total_amount": round(total_amount, 2),
+            "total_return_quantity": round(total_return_quantity, 2)
         }
     
     # ==================== READ OPERATIONS ====================
@@ -343,7 +343,8 @@ class ReturnService:
         limit: int = 20,
         party_id: str = None,
         from_date: str = None,
-        to_date: str = None
+        to_date: str = None,
+        org_id: str = None
     ) -> Dict[str, Any]:
         """
         List sales returns with filters.
@@ -382,9 +383,9 @@ class ReturnService:
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id AND i.org_id = sr.org_id
-            WHERE sr.org_id = sr.org_id
+            WHERE sr.org_id = :org_id
         """
-        params = {"skip": skip, "limit": limit}
+        params = {"skip": skip, "limit": limit, "org_id": org_id}
         count_conditions = ""
         
         if party_id:
@@ -457,7 +458,7 @@ class ReturnService:
             result.append(return_dict)
         
         # Get total count
-        count_query = f"SELECT COUNT(*) FROM sales.sales_returns sr WHERE sr.org_id = sr.org_id{count_conditions}"
+        count_query = f"SELECT COUNT(*) FROM sales.sales_returns sr WHERE sr.org_id = :org_id{count_conditions}"
         total = db.execute(text(count_query), params).scalar()
         
         return {"total": total, "returns": result}
@@ -466,7 +467,8 @@ class ReturnService:
     def get_returnable_invoices(
         db: Session,
         party_id: str = None,
-        invoice_number: str = None
+        invoice_number: str = None,
+        org_id: str = None
     ) -> Dict[str, Any]:
         """Get invoices available for return."""
         query = """
@@ -479,9 +481,9 @@ class ReturnService:
             FROM sales.invoices i
             LEFT JOIN parties.customers c ON i.customer_id = c.customer_id AND c.org_id = i.org_id
             LEFT JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
-            WHERE i.org_id = i.org_id AND i.invoice_status = 'generated'
+            WHERE i.org_id = :org_id AND i.invoice_status = 'posted'
         """
-        params = {}
+        params = {"org_id": org_id}
         
         if party_id:
             query += " AND i.customer_id = :party_id"
@@ -540,7 +542,7 @@ class ReturnService:
     def get_returnable_items(db: Session, invoice_id: int) -> Dict[str, Any]:
         """Get invoice items with returnable quantities."""
         items = db.execute(text("""
-            SELECT 
+            SELECT
                 ii.invoice_item_id, ii.product_id, p.product_name,
                 ii.batch_id, ii.batch_number,
                 ii.quantity as invoice_quantity, ii.free_quantity,
@@ -553,6 +555,10 @@ class ReturnService:
             FROM sales.invoice_items ii
             JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id
+                AND sri.return_id IN (
+                    SELECT return_id FROM sales.sales_returns
+                    WHERE return_status != 'CANCELLED' AND approval_status != 'cancelled'
+                )
             WHERE ii.invoice_id = :invoice_id
             GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
             HAVING ii.quantity - COALESCE(SUM(sri.return_quantity), 0) > 0
@@ -611,6 +617,8 @@ class ReturnService:
                 FROM sales.sales_return_items sri
                 JOIN sales.sales_returns sr ON sri.return_id = sr.return_id
                 WHERE sr.invoice_id = :invoice_id
+                  AND sr.return_status != 'CANCELLED'
+                  AND sr.approval_status != 'cancelled'
                 GROUP BY sri.product_id, sri.batch_id
             ) ret ON (ret.product_id = ii.product_id 
                      AND (ret.batch_id = ii.batch_id OR (ret.batch_id IS NULL AND ii.batch_id IS NULL)))
@@ -638,7 +646,7 @@ class ReturnService:
         return {"invoice": dict(invoice._mapping), "items": result_items}
     
     @staticmethod
-    def get_return_detail(db: Session, return_id: str) -> Dict[str, Any]:
+    def get_return_detail(db: Session, return_id: str, org_id: str = None) -> Dict[str, Any]:
         """Get detailed return with items."""
         sale_return = db.execute(text("""
             SELECT sr.*, c.customer_name as party_name, c.gst_number as party_gst,
@@ -646,8 +654,8 @@ class ReturnService:
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id AND c.org_id = sr.org_id
             LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id AND i.org_id = sr.org_id
-            WHERE sr.org_id = sr.org_id AND sr.return_id = :return_id AND sr.return_type = 'SALES'
-        """), {"return_id": return_id}).first()
+            WHERE sr.org_id = :org_id AND sr.return_id = :return_id AND sr.return_type = 'SALES'
+        """), {"return_id": return_id, "org_id": org_id}).first()
         
         if not sale_return:
             return None
@@ -662,7 +670,7 @@ class ReturnService:
                    (SELECT batch_number FROM inventory.batches WHERE batch_id = sri.batch_id LIMIT 1) as batch_number,
                    (SELECT expiry_date FROM inventory.batches WHERE batch_id = sri.batch_id LIMIT 1) as expiry_date
             FROM sales.sales_return_items sri
-            WHERE sri.return_id = :return_id AND sri.return_item_id = sri.return_item_id
+            WHERE sri.return_id = :return_id
         """), {"return_id": return_id}).fetchall()
         
         result = dict(sale_return._mapping)
@@ -674,36 +682,82 @@ class ReturnService:
     def cancel_sales_return(
         db: Session,
         return_id: str,
-        return_number: str = None
+        return_number: str = None,
+        org_id: str = None
     ) -> Dict[str, Any]:
-        """Cancel return and reverse inventory."""
+        """
+        Cancel return and reverse all side effects:
+        1. Reverse batch stock (quantity_available, quantity_returned)
+        2. Delete inventory movements
+        3. Void credit note and customer outstanding entry
+        4. Mark return as CANCELLED
+        """
         from ....core.utils.constants import ReturnStatus
-        
-        # Get return items
+
+        # Get return items for batch reversal
         items = db.execute(
             text("SELECT * FROM sales.sales_return_items WHERE return_id = :return_id"),
             {"return_id": return_id}
         ).fetchall()
-        
-        # Reverse batch stock
+
+        # 1. Reverse batch stock (only saleable items were added to quantity_available)
         for item in items:
             if item.batch_id:
+                saleable_qty = float(item.saleable_quantity or 0)
+                total_qty = float(item.return_quantity or 0)
                 db.execute(text("""
-                    UPDATE inventory.batches 
-                    SET quantity_available = quantity_available - :quantity,
-                        quantity_returned = quantity_returned - :quantity,
+                    UPDATE inventory.batches
+                    SET quantity_available = GREATEST(0, quantity_available - :saleable_qty),
+                        quantity_returned = GREATEST(0, COALESCE(quantity_returned, 0) - :total_qty),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE batch_id = :batch_id
-                """), {"quantity": item.return_quantity, "batch_id": item.batch_id})
-        
-        # Update return status
+                """), {
+                    "saleable_qty": saleable_qty,
+                    "total_qty": total_qty,
+                    "batch_id": item.batch_id
+                })
+
+        # 2. Delete inventory movements for this return
         db.execute(text("""
-            UPDATE sale_returns 
+            DELETE FROM inventory.inventory_movements
+            WHERE reference_id = :return_id
+              AND reference_type = 'SALES_RETURN'
+        """), {"return_id": return_id})
+
+        # 3. Void credit note and customer outstanding (if credit note was created)
+        if org_id:
+            # Void the credit note
+            db.execute(text("""
+                UPDATE financial.credit_notes
+                SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+                WHERE reference_type = 'sales_return'
+                  AND reference_id = :return_id
+                  AND org_id = :org_id
+            """), {"return_id": return_id, "org_id": org_id})
+
+            # Void the customer outstanding entry for this credit note
+            db.execute(text("""
+                UPDATE financial.customer_outstanding
+                SET status = 'cancelled', outstanding_amount = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE document_type = 'credit_note'
+                  AND org_id = :org_id
+                  AND document_id IN (
+                      SELECT credit_note_id FROM financial.credit_notes
+                      WHERE reference_type = 'sales_return'
+                        AND reference_id = :return_id
+                        AND org_id = :org_id
+                  )
+            """), {"return_id": return_id, "org_id": org_id})
+
+        # 4. Mark return as cancelled
+        db.execute(text("""
+            UPDATE sales.sales_returns
             SET return_status = :cancelled_status,
                 updated_at = CURRENT_TIMESTAMP
             WHERE return_id = :return_id
         """), {"return_id": return_id, "cancelled_status": ReturnStatus.CANCELLED.value})
-        
+
         return {"success": True, "return_number": return_number}
     
     # ==================== CREATE RETURN HELPER METHODS ====================
@@ -835,13 +889,17 @@ class ReturnService:
         logger.info(f"Validating return quantity for invoice_item_id={invoice_item_id}, requested_qty={return_qty}")
         
         result = db.execute(text("""
-            SELECT 
+            SELECT
                 ii.invoice_item_id,
                 ii.quantity as invoice_qty,
                 COALESCE(SUM(sri.return_quantity), 0) as already_returned
             FROM sales.invoice_items ii
-            LEFT JOIN sales.sales_return_items sri 
+            LEFT JOIN sales.sales_return_items sri
                 ON ii.invoice_item_id = sri.invoice_item_id
+                AND sri.return_id IN (
+                    SELECT return_id FROM sales.sales_returns
+                    WHERE return_status != 'CANCELLED' AND approval_status != 'cancelled'
+                )
             WHERE ii.invoice_item_id = :invoice_item_id
             GROUP BY ii.invoice_item_id, ii.quantity
         """), {"invoice_item_id": invoice_item_id}).fetchone()
@@ -957,8 +1015,8 @@ class ReturnService:
         Returns dict with return_id, return_number, return_status or None.
         """
         result = db.execute(text("""
-            SELECT return_id, return_number, return_status 
-            FROM sale_returns 
+            SELECT return_id, return_number, return_status
+            FROM sales.sales_returns
             WHERE return_id = :return_id
         """), {"return_id": return_id}).first()
         
@@ -1057,7 +1115,7 @@ class ReturnService:
         # Get inventory movements
         movements = db.execute(text("""
             SELECT * FROM inventory.inventory_movements
-            WHERE reference_type = 'sales_return' AND reference_id = :return_id
+            WHERE reference_type = 'SALES_RETURN' AND reference_id = :return_id
         """), {"return_id": return_id}).fetchall()
         
         return {
@@ -1126,7 +1184,7 @@ class ReturnService:
             INSERT INTO sales.sales_return_items (
                 return_id, invoice_item_id, product_id, batch_id, batch_number,
                 return_quantity, uom, damaged_quantity, saleable_quantity,
-                unit_price, return_value, tax_amount, return_reason, disposition
+                unit_price, return_value, tax_amount, item_return_reason, disposition
             ) VALUES {', '.join(values_list)}
         """
         
@@ -1163,14 +1221,16 @@ class ReturnService:
             params[f"total_{idx}"] = total_qty
         
         # Single UPDATE using a CTE
+        # quantity_available increases by saleable_qty (restockable items go back on shelf)
+        # quantity_returned tracks total items returned (saleable + damaged)
         sql = f"""
             WITH updates(batch_id, saleable_qty, total_qty) AS (
                 VALUES {', '.join(values_list)}
             )
             UPDATE inventory.batches b
-            SET 
+            SET
                 quantity_available = quantity_available + u.saleable_qty,
-                quantity_sold = GREATEST(0, quantity_sold - u.total_qty),
+                quantity_returned = COALESCE(quantity_returned, 0) + u.total_qty,
                 updated_at = CURRENT_TIMESTAMP
             FROM updates u
             WHERE b.batch_id = u.batch_id::int
@@ -1233,7 +1293,7 @@ class ReturnService:
             
             params[f"product_id_{idx}"] = item["product_id"]
             params[f"batch_id_{idx}"] = item.get("batch_id")
-            params[f"quantity_{idx}"] = int(item["return_quantity"])
+            params[f"quantity_{idx}"] = item["return_quantity"]  # already rounded to 2 decimals
             params[f"reason_{idx}"] = item.get("item_return_reason", "Customer Return")
             params[f"notes_{idx}"] = f"Return #{return_number}"
         

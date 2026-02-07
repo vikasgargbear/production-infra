@@ -384,15 +384,34 @@ class PaymentService:
         
         payment = result.fetchone()
         
-        # Update customer outstanding
+        # Update customer outstanding in financial.customer_outstanding
+        # Insert payment entry with negative amount OR reduce invoice outstanding
+        db.execute(text("""
+            INSERT INTO financial.customer_outstanding (
+                org_id, customer_id, document_type, document_id, document_number,
+                document_date, original_amount, outstanding_amount, paid_amount,
+                due_date, status
+            ) VALUES (
+                :org_id, :customer_id, 'payment', :payment_id, :receipt_number,
+                :payment_date, :negative_amount, :negative_amount, 0,
+                :payment_date, 'open'
+            )
+        """), {
+            "org_id": org_id,
+            "customer_id": customer_id,
+            "payment_id": payment.payment_id,
+            "receipt_number": payment.payment_number,
+            "payment_date": payment_date or date.today(),
+            "negative_amount": -float(amount)  # Negative to reduce outstanding
+        })
+        
+        # Update last_payment_date on customer (this is metadata, not balance)
         db.execute(text("""
             UPDATE parties.customers
-            SET current_outstanding = GREATEST(0, current_outstanding - :amount),
-                last_payment_date = :payment_date,
+            SET last_payment_date = :payment_date,
                 updated_at = CURRENT_TIMESTAMP
             WHERE customer_id = :customer_id
         """), {
-            "amount": amount,
             "payment_date": payment_date or date.today(),
             "customer_id": customer_id
         })
@@ -625,11 +644,11 @@ class PaymentService:
         payment = db.execute(text("""
             SELECT payment_id, amount, customer_id, payment_type
             FROM financial.payments
-            WHERE payment_id = :payment_id AND payment_status = 'completed'
+            WHERE payment_id = :payment_id AND payment_status IN ('completed', 'cleared')
         """), {"payment_id": payment_id}).first()
-        
+
         if not payment:
-            raise ValueError("Payment not found or not completed")
+            raise ValueError("Payment not found or not in a valid status for allocation")
         
         total_allocated = 0
         
@@ -670,7 +689,7 @@ class PaymentService:
                     "created_by": user_id
                 })
                 
-                # Update invoice paid amount
+                # Update invoice paid amount in sales.invoices (legacy/compatibility)
                 db.execute(text("""
                     UPDATE sales.invoices
                     SET paid_amount = COALESCE(paid_amount, 0) + :amount,
@@ -682,6 +701,25 @@ class PaymentService:
                 """), {
                     "amount": actual_allocation,
                     "invoice_id": invoice_id
+                })
+                
+                # Update invoice outstanding in financial.customer_outstanding (single source of truth)
+                db.execute(text("""
+                    UPDATE financial.customer_outstanding
+                    SET outstanding_amount = outstanding_amount - :amount,
+                        paid_amount = COALESCE(paid_amount, 0) + :amount,
+                        status = CASE 
+                            WHEN outstanding_amount - :amount <= 0 THEN 'paid'
+                            ELSE 'partial'
+                        END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE document_type = 'invoice' 
+                    AND document_id = :invoice_id
+                    AND org_id = :org_id
+                """), {
+                    "amount": actual_allocation,
+                    "invoice_id": invoice_id,
+                    "org_id": org_id
                 })
                 
                 total_allocated += actual_allocation

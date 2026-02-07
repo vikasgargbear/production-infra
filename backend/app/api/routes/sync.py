@@ -141,7 +141,11 @@ async def get_full_sync_data(
                 c.customer_type,
                 c.credit_limit,
                 c.credit_days,
-                c.current_outstanding,
+                COALESCE((
+                    SELECT SUM(outstanding_amount) 
+                    FROM financial.customer_outstanding co
+                    WHERE co.customer_id = c.customer_id AND co.status IN ('open', 'partial')
+                ), 0) as current_outstanding,
                 c.customer_category,
                 c.is_active,
                 c.updated_at,
@@ -369,7 +373,11 @@ async def get_delta_sync(
                     c.customer_type,
                     c.credit_limit,
                     c.credit_days,
-                    c.current_outstanding,
+                    COALESCE((
+                        SELECT SUM(outstanding_amount) 
+                        FROM financial.customer_outstanding co
+                        WHERE co.customer_id = c.customer_id AND co.status IN ('open', 'partial')
+                    ), 0) as current_outstanding,
                     c.customer_category,
                     c.is_active,
                     c.updated_at,

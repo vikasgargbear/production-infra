@@ -77,7 +77,8 @@ async def get_sale_returns(
             limit=limit,
             party_id=party_id,
             from_date=from_date,
-            to_date=to_date
+            to_date=to_date,
+            org_id=org_id
         )
         
     except Exception as e:
@@ -102,7 +103,8 @@ async def get_returnable_invoices(
         return ReturnService.get_returnable_invoices(
             db=db,
             party_id=party_id,
-            invoice_number=invoice_number
+            invoice_number=invoice_number,
+            org_id=org_id
         )
         
     except Exception as e:
@@ -259,22 +261,51 @@ async def create_sale_return(
         # This replaces the per-item loop for ~10x performance improvement
         # ====================================================================
         
-        # Step 1: Prepare all items for bulk operations (no DB queries in this loop)
+        # Step 0: Validate return quantities against invoice (prevent over-returns)
+        if return_dict.get("invoice_id"):
+            for item in return_dict["items"]:
+                invoice_item_id = item.get("invoice_item_id")
+                if invoice_item_id:
+                    return_qty = float(item.get("return_quantity", item.get("quantity", 0)))
+                    max_returnable, already_returned = ReturnService.validate_return_quantity(
+                        db, invoice_item_id, return_qty
+                    )
+                    if return_qty > max_returnable:
+                        product_name = item.get("product_name", f"product {item.get('product_id')}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Return quantity ({return_qty}) exceeds returnable quantity ({max_returnable}) "
+                                   f"for {product_name}. Already returned: {already_returned}."
+                        )
+
+        # Step 1: Prepare all items for bulk operations
         prepared_items = []
         for item in return_dict["items"]:
             # Get invoice_item_id if returning from invoice
             invoice_item_id = item.get("invoice_item_id") if return_dict.get("invoice_id") else None
-            
+
+            # Resolve batch_id from invoice item if frontend didn't send it
+            item_batch_id = item.get("batch_id")
+            item_batch_number = item.get("batch_number")
+            if not item_batch_id and invoice_item_id:
+                item_batch_id, item_batch_number = ReturnService.resolve_batch(
+                    db, item["product_id"],
+                    batch_number=item_batch_number,
+                    batch_id=item_batch_id,
+                    source_item_id=invoice_item_id,
+                    source_type="sales_invoice"
+                )
+
             # Calculate item values
             return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
             free_qty = Decimal(str(item.get("free_quantity", 0)))
             unit_price = Decimal(str(item.get("unit_price", item.get("rate", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            
+
             # Calculate creditable quantity (only paid items get credit, not free items)
             creditable_qty = max(Decimal("0"), return_qty - free_qty)
-            
+
             # Calculate return value - check for manual override first
             if "return_value" in item and item["return_value"] is not None:
                 return_value = Decimal(str(item["return_value"]))
@@ -283,43 +314,85 @@ async def create_sale_return(
                     creditable_qty, unit_price, discount_percent, tax_percent
                 )
                 return_value = return_calc["return_value"]
-            
+
             # Calculate tax using GSTService for consistency
-            gst = GSTService.calculate_gst_components(return_value, tax_percent, "CGST/SGST")
+            gst = GSTService.calculate_gst_components(return_value, tax_percent, gst_type)
             item_tax_amount = gst["total_tax_amount"]
-            
+            item_cgst = float(gst["cgst_amount"])
+            item_sgst = float(gst["sgst_amount"])
+            item_igst = float(gst["igst_amount"])
+
             # Determine disposition
             item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
             should_restock = item.get("restock", None)
             disposition, is_damaged = ReturnService.determine_disposition(
                 item_return_reason, explicit_restock=should_restock
             )
-            
+
             # Set quantities based on disposition
             if is_damaged or should_restock is False:
-                damaged_qty = float(return_qty)
+                damaged_qty = round(float(return_qty), 2)
                 saleable_qty = 0
             else:
                 damaged_qty = 0
-                saleable_qty = float(return_qty)
-            
-            # Prepare item for bulk insert (use batch_id/batch_number from frontend directly)
+                saleable_qty = round(float(return_qty), 2)
+
+            # Prepare item for bulk insert — all monetary values rounded to 2 decimals
             prepared_items.append({
                 "invoice_item_id": invoice_item_id,
                 "product_id": item["product_id"],
-                "batch_id": item.get("batch_id"),
-                "batch_number": item.get("batch_number"),
-                "return_quantity": float(return_qty),
+                "batch_id": int(item_batch_id) if item_batch_id and str(item_batch_id).isdigit() else None,
+                "batch_number": item_batch_number,
+                "return_quantity": round(float(return_qty), 2),
                 "uom": item.get("unit", item.get("uom", "PCS")),
                 "damaged_quantity": damaged_qty,
                 "saleable_quantity": saleable_qty,
-                "unit_price": float(unit_price),
-                "return_value": float(return_value),
-                "tax_amount": float(item_tax_amount),
+                "unit_price": round(float(unit_price), 2),
+                "return_value": round(float(return_value), 2),
+                "tax_amount": round(float(item_tax_amount), 2),
+                "cgst_amount": round(item_cgst, 2),
+                "sgst_amount": round(item_sgst, 2),
+                "igst_amount": round(item_igst, 2),
                 "item_return_reason": item_return_reason,
                 "disposition": disposition
             })
         
+        # Recompute header totals from prepared items (RET-11)
+        # calculate_return_totals uses full return_quantity, but per-item values use
+        # creditable_qty (excluding free items). Header must match sum of items.
+        subtotal = round(sum(item["return_value"] for item in prepared_items), 2)
+        tax_amount = round(sum(item["tax_amount"] for item in prepared_items), 2)
+        total_amount = round(subtotal + tax_amount, 2)
+        cgst_amount = round(sum(item["cgst_amount"] for item in prepared_items), 2)
+        sgst_amount = round(sum(item["sgst_amount"] for item in prepared_items), 2)
+        igst_amount = round(sum(item["igst_amount"] for item in prepared_items), 2)
+        total_return_quantity = round(sum(item["return_quantity"] for item in prepared_items), 2)
+
+        totals = {
+            "subtotal": subtotal,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount,
+            "cgst_amount": cgst_amount,
+            "sgst_amount": sgst_amount,
+            "igst_amount": igst_amount,
+            "total_return_quantity": total_return_quantity
+        }
+
+        # Update header record with corrected totals (header was inserted before item prep)
+        db.execute(text("""
+            UPDATE sales.sales_returns
+            SET return_amount = :subtotal, tax_amount = :tax_amount,
+                total_amount = :total_amount, pending_amount = :total_amount,
+                cgst_amount = :cgst_amount, sgst_amount = :sgst_amount,
+                igst_amount = :igst_amount, return_quantity = :return_quantity
+            WHERE return_id = :return_id
+        """), {
+            "subtotal": subtotal, "tax_amount": tax_amount,
+            "total_amount": total_amount, "cgst_amount": cgst_amount,
+            "sgst_amount": sgst_amount, "igst_amount": igst_amount,
+            "return_quantity": total_return_quantity, "return_id": return_id
+        })
+
         # Step 2: Execute bulk operations (3 DB queries instead of ~48)
         ReturnService.bulk_insert_return_items(db, return_id, prepared_items)
         ReturnService.bulk_update_batch_stock(db, prepared_items)
@@ -411,7 +484,7 @@ async def get_sale_return_detail(
     """
     try:
         # Use service method for return detail
-        result = ReturnService.get_return_detail(db=db, return_id=return_id)
+        result = ReturnService.get_return_detail(db=db, return_id=return_id, org_id=org_id)
         
         if not result:
             raise HTTPException(status_code=404, detail="Sale return not found")
@@ -446,11 +519,12 @@ async def cancel_sale_return(
         if sale_return.get("return_status") == ReturnStatus.CANCELLED.value:
             raise HTTPException(status_code=400, detail="Return already cancelled")
         
-        # Use service method to cancel and reverse inventory
+        # Use service method to cancel and reverse all side effects
         ReturnService.cancel_sales_return(
             db=db,
             return_id=return_id,
-            return_number=sale_return.get("return_number")
+            return_number=sale_return.get("return_number"),
+            org_id=org_id
         )
         
         db.commit()

@@ -814,28 +814,29 @@ class CreditNoteService:
         """
         Create a debit note for a purchase return and update supplier balance.
         Single atomic operation that:
-        1. Creates debit note in procurement.debit_notes (if table exists) or procurement.purchase_returns
-        2. Updates supplier balance if applicable
-        
+        1. Updates procurement.purchase_returns with debit note number
+        2. Creates debit note in financial.debit_notes with supplier_id
+        3. Inserts into financial.supplier_outstanding (negative amount)
+
         Called by Purchase Returns module.
-        
+
         Returns:
             Dict with debit_note_id, debit_note_number, total_amount
         """
         from datetime import date as date_type
-        
+
         # Generate debit note number
         debit_note_number = DocumentNumberService.generate_number(db, "debit_note", org_id)
-        
+
         # Calculate total amount
         total_amount = float(debit_amount) + float(tax_amount)
-        
+
         # Use provided date or current date
         debit_note_date = return_date if return_date else date_type.today()
-        
-        # Update the purchase return with debit note number
+
+        # 1. Update the purchase return with debit note number
         db.execute(text("""
-            UPDATE procurement.purchase_returns 
+            UPDATE procurement.purchase_returns
             SET debit_note_number = :debit_note_number,
                 debit_note_date = :debit_note_date,
                 debit_note_status = 'issued',
@@ -846,18 +847,75 @@ class CreditNoteService:
             "debit_note_date": debit_note_date,
             "return_id": return_id
         })
-        
-        # Note: Supplier outstanding is typically managed differently (accounts payable)
-        # Purchase returns reduce what we owe to supplier, not what supplier owes us
-        
+
+        # 2. Create debit note in financial.debit_notes with supplier_id
+        result = db.execute(text("""
+            INSERT INTO financial.debit_notes (
+                org_id, branch_id, debit_note_number, debit_note_date,
+                supplier_id, reference_type, reference_id, reference_number,
+                debit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :debit_note_number, :debit_note_date,
+                :supplier_id, 'PURCHASE_RETURN', :return_id, :return_number,
+                :debit_amount, :tax_amount, :total_amount,
+                'PURCHASE_RETURN', :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'approved', :created_by
+            ) RETURNING debit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "debit_note_number": debit_note_number,
+            "debit_note_date": debit_note_date,
+            "supplier_id": supplier_id,
+            "return_id": return_id,
+            "return_number": return_number,
+            "debit_amount": debit_amount,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount,
+            "reason": reason or f"Purchase return - {reason_code}",
+            "notes": f"Debit note for purchase return {return_number}",
+            "is_gst_applicable": is_gst_applicable,
+            "cgst_amount": cgst_amount,
+            "sgst_amount": sgst_amount,
+            "igst_amount": igst_amount,
+            "created_by": created_by
+        })
+
+        debit_note_id = result.scalar()
+
+        # 3. Insert into financial.supplier_outstanding (reduces what we owe supplier)
+        # Negative amount = reduces payable (mirrors credit note pattern for customers)
+        db.execute(text("""
+            INSERT INTO financial.supplier_outstanding (
+                org_id, supplier_id, document_type, document_id, document_number,
+                document_date, original_amount, outstanding_amount, paid_amount,
+                due_date, status
+            ) VALUES (
+                :org_id, :supplier_id, 'debit_note', :debit_note_id, :debit_note_number,
+                :debit_note_date, :negative_amount, :negative_amount, 0,
+                :debit_note_date, 'open'
+            )
+        """), {
+            "org_id": org_id,
+            "supplier_id": supplier_id,
+            "debit_note_id": debit_note_id,
+            "debit_note_number": debit_note_number,
+            "debit_note_date": debit_note_date,
+            "negative_amount": -total_amount  # Negative to reduce payable
+        })
+
         logger.info(
-            f"Created debit note {debit_note_number} for purchase return {return_number}. "
-            f"Amount: {total_amount}. Supplier: {supplier_id}"
+            f"Created debit note {debit_note_number} (ID: {debit_note_id}) for purchase return {return_number}. "
+            f"Amount: {total_amount}. Supplier: {supplier_id}. Supplier outstanding updated."
         )
-        
+
         return {
             "success": True,
-            "debit_note_id": return_id,  # Using return_id as reference
+            "debit_note_id": debit_note_id,
             "debit_note_number": debit_note_number,
             "total_amount": total_amount,
             "action": "debit_note_issued"

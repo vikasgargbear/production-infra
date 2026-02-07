@@ -181,7 +181,11 @@ class InvoiceService:
             
             # Get salesperson_id - canonical name, no aliases
             salesperson_id = getattr(invoice_data, 'salesperson_id', None)
-            
+
+            # 6.6. Determine invoice status (draft vs posted)
+            is_draft = getattr(invoice_data, 'save_as_draft', False)
+            invoice_status = 'draft' if is_draft else 'posted'
+
             # 7. Create invoice
             invoice_id = InvoiceRepository.create_invoice(
                 db=db,
@@ -202,7 +206,8 @@ class InvoiceService:
                 paid_amount=paid_amount,
                 payment_status=payment_status,
                 credit_amount=credit_amount,
-                salesperson_id=salesperson_id
+                salesperson_id=salesperson_id,
+                invoice_status=invoice_status
             )
             
             # 8. Prepare invoice items data
@@ -275,20 +280,57 @@ class InvoiceService:
                         WHERE invoice_id = :invoice_id
                     """), {"challan_id": challan_id, "invoice_id": invoice_id})
             
-            # 9.5. Update batch quantities and timestamps (for delta sync)
-            batch_deductions = []
-            for item in items:
-                if item.get('batch_id') and item.get('quantity'):
-                    batch_deductions.append({
-                        "batch_id": item['batch_id'],
-                        "quantity": item['quantity']
-                    })
-            
-            if batch_deductions:
-                # This method sets updated_at = CURRENT_TIMESTAMP on batches
-                InventoryService.bulk_update_batch_quantities(db, batch_deductions, org_id)
-                logger.info(f"✅ Updated {len(batch_deductions)} batch quantities for delta sync")
-            
+            # 9.5-9.7: Inventory & financial ops (skip for drafts)
+            if not is_draft:
+                # 9.5. Validate and deduct batch quantities
+                batch_deductions = []
+                for item_data in invoice_items_data:
+                    batch_id = item_data.get('batch_id')
+                    qty = item_data.get('quantity', 0)
+                    if batch_id and qty:
+                        batch_deductions.append({
+                            "batch_id": batch_id,
+                            "quantity": qty,
+                            "product_id": item_data['product_id']
+                        })
+
+                if batch_deductions:
+                    InvoiceRepository.validate_stock_availability(db, org_id, batch_deductions)
+                    InventoryService.bulk_update_batch_quantities(db, batch_deductions, org_id)
+                    logger.info(f"✅ Updated {len(batch_deductions)} batch quantities for delta sync")
+
+                # 9.6. Record inventory movements (audit trail)
+                movement_records = []
+                for item_data in invoice_items_data:
+                    if item_data.get('product_id'):
+                        movement_records.append({
+                            "org_id": org_id,
+                            "product_id": item_data["product_id"],
+                            "batch_id": item_data.get("batch_id"),
+                            "quantity": item_data.get("base_quantity", item_data["quantity"]),
+                            "pack_type": item_data.get("pack_type"),
+                            "base_quantity": item_data.get("base_quantity", item_data["quantity"]),
+                            "unit_cost": item_data.get("unit_price", 0),
+                            "total_cost": item_data.get("line_total", 0)
+                        })
+
+                if movement_records:
+                    InventoryService.bulk_insert_movements(db, movement_records, invoice_id, actual_user_id)
+                    logger.info(f"✅ Recorded {len(movement_records)} inventory movements")
+
+                # 9.7. Create customer outstanding entry
+                InvoiceService.update_customer_outstanding(
+                    db=db,
+                    customer_id=invoice_data.customer_id,
+                    amount=float(final_amount),
+                    invoice_id=invoice_id,
+                    invoice_number=invoice_number,
+                    invoice_date=invoice_data.invoice_date,
+                    org_id=org_id,
+                    due_date=due_date,
+                    paid_amount=float(paid_amount)
+                )
+
             # 10. Commit transaction
             db.commit()
             
@@ -331,7 +373,7 @@ class InvoiceService:
         ]
         
         # Batch fetch products and batches
-        products_lookup, batches_lookup, fifo_batches = InvoiceRepository.get_products_and_batches(
+        products_lookup, batches_lookup, fefo_batches = InvoiceRepository.get_products_and_batches(
             db, org_id, product_ids, batch_ids
         )
         
@@ -365,14 +407,14 @@ class InvoiceService:
                     mfg_date = batch_info.get("mfg_date")
                     exp_date = batch_info.get("exp_date") or exp_date
             elif not batch_id:
-                # Use FIFO batch
-                fifo = fifo_batches.get(product_id)
-                if fifo:
-                    batch_id = fifo.get("batch_id")
-                    batch_number = fifo.get("batch_number")
-                    mrp = fifo.get("mrp", mrp)
-                    mfg_date = fifo.get("mfg_date")
-                    exp_date = fifo.get("exp_date") or exp_date
+                # Use FEFO batch (First-Expiry-First-Out)
+                fefo = fefo_batches.get(product_id)
+                if fefo:
+                    batch_id = fefo.get("batch_id")
+                    batch_number = fefo.get("batch_number")
+                    mrp = fefo.get("mrp", mrp)
+                    mfg_date = fefo.get("mfg_date")
+                    exp_date = fefo.get("exp_date") or exp_date
             
             # Get calculated values from totals (now properly returned)
             calc = line_calculations[i] if i < len(line_calculations) else {}
@@ -392,28 +434,29 @@ class InvoiceService:
                 "product_id": product_id,
                 "product_name": product_name,
                 "hsn_code": hsn_code,
+                "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
                 "batch_number": batch_number or item.get("batch_number"),
                 "manufacturing_date": mfg_date or item.get("manufacturing_date"),
                 "expiry_date": exp_date,
-                "quantity": float(item.get("quantity", 0)) + float(item.get("free_quantity", 0)),
+                "quantity": round(float(item.get("quantity", 0)) + float(item.get("free_quantity", 0)), 2),
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
                 "pack_size": int(item.get("pack_size", 1)),
-                "base_quantity": float(item.get("quantity", 0)),
-                "mrp": float(mrp),
-                "unit_price": float(item.get("unit_price", 0)),
-                "discount_percent": float(item.get("discount_percent", 0)),
-                "discount_amount": calc.get("discount_amount", 0),
-                "taxable_amount": calc.get("taxable_amount", 0),
-                "igst_rate": calc.get("igst_percent", 0),
-                "igst_amount": calc.get("igst_amount", 0),
-                "cgst_rate": calc.get("cgst_percent", 0),
-                "cgst_amount": calc.get("cgst_amount", 0),
-                "sgst_rate": calc.get("sgst_percent", 0),
-                "sgst_amount": calc.get("sgst_amount", 0),
-                "total_tax_amount": total_tax_amount,
-                "line_total": line_total,
-                "free_quantity": float(item.get("free_quantity", 0))
+                "base_quantity": round(float(item.get("quantity", 0)), 2),
+                "mrp": round(float(mrp), 2),
+                "unit_price": round(float(item.get("unit_price", 0)), 2),
+                "discount_percent": round(float(item.get("discount_percent", 0)), 2),
+                "discount_amount": round(float(calc.get("discount_amount", 0)), 2),
+                "taxable_amount": round(float(calc.get("taxable_amount", 0)), 2),
+                "igst_rate": round(float(calc.get("igst_percent", 0)), 2),
+                "igst_amount": round(float(calc.get("igst_amount", 0)), 2),
+                "cgst_rate": round(float(calc.get("cgst_percent", 0)), 2),
+                "cgst_amount": round(float(calc.get("cgst_amount", 0)), 2),
+                "sgst_rate": round(float(calc.get("sgst_percent", 0)), 2),
+                "sgst_amount": round(float(calc.get("sgst_amount", 0)), 2),
+                "total_tax_amount": round(float(total_tax_amount), 2),
+                "line_total": round(float(line_total), 2),
+                "free_quantity": round(float(item.get("free_quantity", 0)), 2)
             })
         
         return invoice_items_data
@@ -451,48 +494,57 @@ class InvoiceService:
         """
         Calculate all invoice totals from item list.
         Uses shared/calculations.calculate_line_item() for IDENTICAL logic to frontend.
-        
-        This ensures frontend EnterpriseCalculator and backend use the same formulas.
+
+        GST Compliance (Section 15 CGST Act):
+        - Scheme discount is applied to pre-tax subtotal
+        - When scheme discount exists, GST is recalculated per-item on reduced taxable amounts
+        - This ensures per-item CGST/SGST match GSTR-1 filing requirements
         """
         # Calculate each line item
-        subtotal = 0
+        pre_tax_subtotal = 0  # Sum of per-item taxable amounts (before GST)
         item_discount = 0
         cgst = 0
         sgst = 0
         igst = 0
-        calculated_items = []  # Store individual calculations
-        
+        calculated_items = []
+
         for item in items:
             # Check if line_total is pre-calculated (from frontend with full calculation)
             if item.get('line_total'):
-                line_total = float(item.get('line_total', 0) or 0)
-                item_disc = float(item.get('discount_amount', 0) or 0)
-                item_cgst = float(item.get('cgst_amount', 0) or 0)
-                item_sgst = float(item.get('sgst_amount', 0) or 0)
-                item_igst = float(item.get('igst_amount', 0) or 0)
-                
-                # Store the pre-calculated values
+                item_disc = round(float(item.get('discount_amount', 0) or 0), 2)
+                item_cgst = round(float(item.get('cgst_amount', 0) or 0), 2)
+                item_sgst = round(float(item.get('sgst_amount', 0) or 0), 2)
+                item_igst = round(float(item.get('igst_amount', 0) or 0), 2)
+                item_taxable = round(float(item.get('taxable_amount', 0) or 0), 2)
+                item_tax_total = round(item_cgst + item_sgst + item_igst, 2)
+
+                # Derive taxable_amount if frontend didn't send it
+                if item_taxable == 0 and float(item.get('line_total', 0) or 0) > 0:
+                    item_taxable = round(float(item.get('line_total', 0) or 0) - item_tax_total, 2)
+
+                line_total = round(item_taxable + item_tax_total, 2)
+
                 calculated_items.append({
                     'line_total': line_total,
                     'discount_amount': item_disc,
-                    'taxable_amount': float(item.get('taxable_amount', 0) or 0),
+                    'taxable_amount': item_taxable,
                     'cgst_amount': item_cgst,
                     'sgst_amount': item_sgst,
                     'igst_amount': item_igst,
-                    'cgst_percent': float(item.get('cgst_rate', 0) or item.get('cgst_percent', 0) or 0),
-                    'sgst_percent': float(item.get('sgst_rate', 0) or item.get('sgst_percent', 0) or 0),
-                    'igst_percent': float(item.get('igst_rate', 0) or item.get('igst_percent', 0) or 0),
-                    'total_tax_amount': item_cgst + item_sgst + item_igst
+                    'cgst_percent': round(float(item.get('cgst_rate', 0) or item.get('cgst_percent', 0) or 0), 2),
+                    'sgst_percent': round(float(item.get('sgst_rate', 0) or item.get('sgst_percent', 0) or 0), 2),
+                    'igst_percent': round(float(item.get('igst_rate', 0) or item.get('igst_percent', 0) or 0), 2),
+                    'total_tax_amount': item_tax_total
                 })
+
+                pre_tax_subtotal += item_taxable
             else:
                 # Use shared calculator for consistent calculations
-                # Same formulas as frontend EnterpriseCalculator.calculateItem()
                 quantity = float(item.get('quantity', 0) or 0)
                 unit_price = float(item.get('unit_price', 0) or 0)
                 discount_pct = float(item.get('discount_percent', 0) or 0)
                 gst_pct = float(item.get('gst_percent', 0) or 0)
-                
-                # Use shared calculator function
+
                 calculated = calculate_line_item(
                     quantity=quantity,
                     unit_price=unit_price,
@@ -500,14 +552,13 @@ class InvoiceService:
                     gst_percent=gst_pct,
                     gst_type=gst_type
                 )
-                
+
                 line_total = calculated['line_total']
                 item_disc = calculated['discount_amount']
                 item_cgst = calculated['cgst_amount']
                 item_sgst = calculated['sgst_amount']
                 item_igst = calculated['igst_amount']
-                
-                # Store calculated values with percent rates
+
                 calculated_items.append({
                     **calculated,
                     'cgst_percent': gst_pct / 2 if gst_type == "CGST/SGST" else 0,
@@ -515,39 +566,72 @@ class InvoiceService:
                     'igst_percent': gst_pct if gst_type == "IGST" else 0,
                     'total_tax_amount': calculated['total_tax']
                 })
-            
-            subtotal += line_total
+
+                pre_tax_subtotal += calculated['taxable_amount']
+
             item_discount += item_disc
             cgst += item_cgst
             sgst += item_sgst
             igst += item_igst
-        
+
         # Invoice-level discount (scheme_discount)
-        # Always calculate both amount and percentage for clarity in reports
+        # Applied to pre-tax subtotal per GST Section 15 (CGST Act)
         if discount_type == 'percentage' and discount_percent > 0:
-            scheme_discount = subtotal * (discount_percent / 100)
+            scheme_discount = pre_tax_subtotal * (discount_percent / 100)
             scheme_discount_percent = discount_percent
         elif discount_type in ('amount', 'fixed') and discount_amount > 0:
             scheme_discount = discount_amount
-            # Calculate equivalent percentage for reports
-            scheme_discount_percent = (discount_amount / subtotal * 100) if subtotal > 0 else 0
+            scheme_discount_percent = (discount_amount / pre_tax_subtotal * 100) if pre_tax_subtotal > 0 else 0
         else:
             scheme_discount = 0
             scheme_discount_percent = 0
-        
-        # Taxable amount after scheme discount
-        taxable_amount = subtotal - scheme_discount
+
+        # If scheme discount exists, apportion across items and recalculate GST
+        # This ensures per-item CGST/SGST amounts match GSTR-1 filing requirements
+        if scheme_discount > 0 and pre_tax_subtotal > 0:
+            cgst = 0
+            sgst = 0
+            igst = 0
+
+            for calc in calculated_items:
+                item_taxable = calc.get('taxable_amount', 0)
+                if item_taxable <= 0:
+                    continue
+
+                proportion = item_taxable / pre_tax_subtotal
+                item_scheme_disc = round(scheme_discount * proportion, 2)
+                adjusted_taxable = item_taxable - item_scheme_disc
+
+                # Recalculate GST on adjusted taxable amount
+                new_cgst = round(adjusted_taxable * calc.get('cgst_percent', 0) / 100, 2)
+                new_sgst = round(adjusted_taxable * calc.get('sgst_percent', 0) / 100, 2)
+                new_igst = round(adjusted_taxable * calc.get('igst_percent', 0) / 100, 2)
+                new_tax = new_cgst + new_sgst + new_igst
+
+                calc['taxable_amount'] = adjusted_taxable
+                calc['cgst_amount'] = new_cgst
+                calc['sgst_amount'] = new_sgst
+                calc['igst_amount'] = new_igst
+                calc['total_tax_amount'] = new_tax
+                calc['line_total'] = adjusted_taxable + new_tax
+
+                cgst += new_cgst
+                sgst += new_sgst
+                igst += new_igst
+
+        # Taxable amount = pre-tax subtotal after scheme discount
+        taxable_amount = pre_tax_subtotal - scheme_discount
         total_tax = cgst + sgst + igst
-        
+
         # Amount before rounding
-        amount_before_round = taxable_amount + freight_charges + insurance_charges + other_charges
-        
+        amount_before_round = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
+
         # Round to nearest integer (Indian practice)
         final_amount = round(amount_before_round)
         round_off_amount = final_amount - amount_before_round
-        
+
         return {
-            'subtotal_amount': round(subtotal, 2),
+            'subtotal_amount': round(pre_tax_subtotal, 2),
             'discount_amount': round(item_discount, 2),
             'scheme_discount': round(scheme_discount, 2),
             'scheme_discount_percent': round(scheme_discount_percent, 2),
@@ -561,7 +645,7 @@ class InvoiceService:
             'other_charges': other_charges,
             'round_off_amount': round(round_off_amount, 2),
             'final_amount': final_amount,
-            'calculated_items': calculated_items,  # Return individual calculations
+            'calculated_items': calculated_items,
         }
     
     @staticmethod
@@ -804,7 +888,7 @@ class InvoiceService:
                 FROM sales.invoice_items
                 WHERE invoice_id = :invoice_id
             """), {"invoice_id": invoice_id})
-            
+
             for item in items_result:
                 if item[1]:  # Has batch_id
                     db.execute(text("""
@@ -817,7 +901,25 @@ class InvoiceService:
                         "quantity": item[2],
                         "org_id": org_id
                     })
-        
+
+            # Remove inventory movements for this invoice (batch qty already restored above)
+            db.execute(text("""
+                DELETE FROM inventory.inventory_movements
+                WHERE reference_id = :invoice_id
+                  AND reference_type = 'invoice'
+                  AND org_id = :org_id
+            """), {"invoice_id": invoice_id, "org_id": org_id})
+
+        # Void customer outstanding entry
+        db.execute(text("""
+            UPDATE financial.customer_outstanding
+            SET status = 'cancelled', outstanding_amount = 0,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE document_id = :invoice_id
+              AND document_type = 'invoice'
+              AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+
         return {"success": True, "invoice_id": invoice_id}
     
     # ==================== BACKGROUND TASK METHODS ====================
@@ -860,28 +962,67 @@ class InvoiceService:
     def update_customer_outstanding(
         db: Session,
         customer_id: int,
-        amount: float
+        amount: float,
+        invoice_id: int = None,
+        invoice_number: str = None,
+        invoice_date: date = None,
+        org_id: str = None,
+        due_date: date = None,
+        paid_amount: float = 0
     ) -> bool:
         """
-        Update customer's outstanding balance after invoice creation.
-        Used by async processing tasks.
-        
+        Create outstanding entry in financial.customer_outstanding after invoice creation.
+        This is the single source of truth for customer balances.
+
         Args:
-            customer_id: Customer ID to update
-            amount: Amount to add to outstanding balance
+            customer_id: Customer ID
+            amount: Full invoice amount (original_amount)
+            invoice_id: Invoice ID for document reference
+            invoice_number: Invoice number for document reference
+            invoice_date: Invoice date
+            org_id: Organization ID
+            due_date: Payment due date (optional)
+            paid_amount: Amount already paid at invoice creation (split payments)
         """
+        from datetime import date as date_type
+
         try:
+            doc_date = invoice_date if invoice_date else date_type.today()
+            payment_due = due_date if due_date else doc_date
+            outstanding = amount - paid_amount
+
+            if outstanding <= 0:
+                status = 'paid'
+            elif paid_amount > 0:
+                status = 'partial'
+            else:
+                status = 'open'
+
             db.execute(text("""
-                UPDATE parties.customers 
-                SET current_outstanding = COALESCE(current_outstanding, 0) + :amount,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE customer_id = :customer_id
+                INSERT INTO financial.customer_outstanding (
+                    org_id, customer_id, document_type, document_id, document_number,
+                    document_date, original_amount, outstanding_amount, paid_amount,
+                    due_date, status
+                ) VALUES (
+                    :org_id, :customer_id, 'invoice', :invoice_id, :invoice_number,
+                    :invoice_date, :amount, :outstanding, :paid_amount,
+                    :due_date, :status
+                )
             """), {
+                "org_id": org_id,
                 "customer_id": customer_id,
-                "amount": amount
+                "invoice_id": invoice_id,
+                "invoice_number": invoice_number or f"INV-{invoice_id}",
+                "invoice_date": doc_date,
+                "amount": amount,
+                "outstanding": outstanding,
+                "paid_amount": paid_amount,
+                "due_date": payment_due,
+                "status": status
             })
-            logger.info(f"✅ Updated customer {customer_id} outstanding by +{amount}")
+
+            logger.info(f"✅ Created outstanding entry for invoice {invoice_number}, customer {customer_id}, amount ₹{amount}, outstanding ₹{outstanding}")
             return True
         except Exception as e:
-            logger.warning(f"⚠️ Could not update customer outstanding: {e}")
+            logger.warning(f"⚠️ Could not create outstanding entry: {e}")
             return False

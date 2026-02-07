@@ -221,6 +221,7 @@ class InvoiceCreateRequest(BaseModel):
     # Other
     notes: Optional[str] = Field(None, max_length=1000)
     gst_type: Optional[str] = Field(default="CGST/SGST")
+    save_as_draft: bool = Field(default=False, description="Save as draft instead of posting")
     
     # Transport/Delivery details - for auto-creating challan
     transport_company: Optional[str] = Field(None, max_length=100, description="Transporter name")

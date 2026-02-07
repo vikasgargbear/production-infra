@@ -858,6 +858,25 @@ class CustomerService:
                         "user_id": user_id
                     })
                     
+                    # Update invoice outstanding in financial.customer_outstanding
+                    db.execute(text("""
+                        UPDATE financial.customer_outstanding
+                        SET outstanding_amount = outstanding_amount - :amount,
+                            paid_amount = COALESCE(paid_amount, 0) + :amount,
+                            status = CASE 
+                                WHEN outstanding_amount - :amount <= 0 THEN 'paid'
+                                ELSE 'partial'
+                            END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE document_type = 'INVOICE' 
+                        AND document_id = :invoice_id
+                        AND org_id = :org_id
+                    """), {
+                        "amount": allocation_amount,
+                        "invoice_id": invoice_id,
+                        "org_id": str(org_id)
+                    })
+                    
                     remaining_amount -= allocation_amount
         else:
             # Auto-allocate using FIFO (oldest invoices first)
@@ -895,6 +914,25 @@ class CustomerService:
                     "invoice_number": invoice.document_number,
                     "amount": allocation_amount,
                     "user_id": user_id
+                })
+                
+                # Update invoice outstanding in financial.customer_outstanding
+                db.execute(text("""
+                    UPDATE financial.customer_outstanding
+                    SET outstanding_amount = outstanding_amount - :amount,
+                        paid_amount = COALESCE(paid_amount, 0) + :amount,
+                        status = CASE 
+                            WHEN outstanding_amount - :amount <= 0 THEN 'paid'
+                            ELSE 'partial'
+                        END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE document_type = 'INVOICE' 
+                    AND document_id = :invoice_id
+                    AND org_id = :org_id
+                """), {
+                    "amount": allocation_amount,
+                    "invoice_id": invoice.document_id,
+                    "org_id": str(org_id)
                 })
                 
                 remaining_amount -= allocation_amount
@@ -1063,7 +1101,12 @@ class CustomerService:
                 c.customer_id, c.customer_code, c.customer_name, c.customer_type,
                 c.primary_phone, c.primary_email, c.secondary_phone, c.whatsapp_number,
                 c.gst_number, c.pan_number, c.drug_license_number, c.drug_license_validity,
-                c.credit_limit, c.credit_days, c.current_outstanding,
+                c.credit_limit, c.credit_days,
+                COALESCE((
+                    SELECT SUM(outstanding_amount) 
+                    FROM financial.customer_outstanding 
+                    WHERE customer_id = c.customer_id AND status IN ('open', 'partial')
+                ), 0) as current_outstanding,
                 c.contact_person_name, c.contact_person_phone, c.contact_person_email,
                 c.business_type, c.customer_category, c.customer_grade,
                 c.is_active, c.created_at, c.updated_at

@@ -166,7 +166,7 @@ class TenantQueryBuilder:
         'payments', 'payment_allocations', 'payment_methods',
         'journal_entries', 'journal_entry_lines',
         'expense_claims', 'expense_claim_items',
-        'credit_debit_notes', 'customer_outstanding',
+        'credit_debit_notes', 'customer_outstanding', 'supplier_outstanding',
         'chart_of_accounts',
         
         # ===== MASTER SCHEMA =====
