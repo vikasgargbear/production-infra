@@ -43,10 +43,11 @@ export interface StockAdjustmentData {
 export interface StockTransferData {
     product_id: number;
     batch_id?: number;
-    from_location: string;
-    to_location: string;
+    source_location: number;
+    destination_location: number;
     quantity: number;
-    notes?: string;
+    movement_date: string;
+    reason?: string;
 }
 
 // ============================================
