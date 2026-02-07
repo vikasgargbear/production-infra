@@ -90,6 +90,46 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
     const isGSTCustomer = (selectedCustomer as any)?.gst_number;
 
+    // Build dynamic tax breakup grouped by rate
+    const taxBreakup = useMemo(() => {
+        const rateMap: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> = {};
+        selectedItems.forEach(item => {
+            const qty = parseFloat(String(item.return_quantity || 0));
+            const freeQty = parseFloat(String(item.return_free_qty || 0));
+            const paidQty = Math.max(0, qty - freeQty);
+            const rate = parseFloat(String(item.unit_price || 0));
+            const discPercent = parseFloat(String(item.discount_percent || 0));
+            const taxPercent = parseFloat(String(item.tax_percent || 0));
+            if (taxPercent <= 0 || paidQty <= 0) return;
+
+            const baseAmount = paidQty * rate;
+            const discountAmount = (baseAmount * discPercent) / 100;
+            const taxable = baseAmount - discountAmount;
+
+            // Read original invoice rates to determine CGST/SGST vs IGST
+            const igstRate = parseFloat(String(item.igst_rate || 0));
+            const cgstRate = parseFloat(String(item.cgst_rate || 0));
+            const sgstRate = parseFloat(String(item.sgst_rate || 0));
+
+            if (!rateMap[taxPercent]) {
+                rateMap[taxPercent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
+            }
+            rateMap[taxPercent].taxable += taxable;
+
+            if (igstRate > 0) {
+                // Inter-state: full tax as IGST
+                rateMap[taxPercent].igst += (taxable * igstRate) / 100;
+            } else {
+                // Intra-state: split CGST/SGST
+                rateMap[taxPercent].cgst += (taxable * cgstRate) / 100;
+                rateMap[taxPercent].sgst += (taxable * sgstRate) / 100;
+            }
+        });
+        return Object.entries(rateMap)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([rate, vals]) => ({ rate: Number(rate), ...vals }));
+    }, [selectedItems]);
+
     // Handle save with notes
     const handleSave = () => {
         // Update returnData with notes before save
@@ -286,10 +326,15 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     <tbody>
                                         {selectedItems.map((item, index) => {
                                             const qty = parseFloat(String(item.return_quantity || 0));
-                                            const rate = parseFloat(String(item.unit_price || 0));
-                                            const taxPercent = parseFloat(String(item.tax_percent || 0));
                                             const freeQty = parseFloat(String(item.return_free_qty || 0));
-                                            const lineTotal = qty * rate * (1 + taxPercent / 100);
+                                            const paidQty = Math.max(0, qty - freeQty);
+                                            const rate = parseFloat(String(item.unit_price || 0));
+                                            const discPercent = parseFloat(String(item.discount_percent || 0));
+                                            const taxPercent = parseFloat(String(item.tax_percent || 0));
+                                            const baseAmount = paidQty * rate;
+                                            const discountAmount = (baseAmount * discPercent) / 100;
+                                            const taxableAmount = baseAmount - discountAmount;
+                                            const lineTotal = taxableAmount + (taxableAmount * taxPercent / 100);
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">
@@ -333,7 +378,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                 {/* Left - Notes & Tax Breakup */}
                                 <div className="space-y-4">
                                     {/* Tax Breakup for GST customers */}
-                                    {isGSTCustomer && (
+                                    {isGSTCustomer && taxBreakup.length > 0 && (
                                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                                             <h3 className="text-xs font-semibold text-gray-700 uppercase mb-2">Tax Breakup</h3>
                                             <table className="w-full text-[11px]">
@@ -347,13 +392,15 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <tr>
-                                                        <td className="pt-1 text-gray-700">12%</td>
-                                                        <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.subtotal_amount)}</td>
-                                                        <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.tax_amount / 2)}</td>
-                                                        <td className="pt-1 text-right text-gray-700">{formatCurrency(returnData.tax_amount / 2)}</td>
-                                                        <td className="pt-1 text-right text-gray-700">-</td>
-                                                    </tr>
+                                                    {taxBreakup.map((row, idx) => (
+                                                        <tr key={idx}>
+                                                            <td className="pt-1 text-gray-700">{row.rate}%</td>
+                                                            <td className="pt-1 text-right text-gray-700">{formatCurrency(row.taxable)}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{row.cgst > 0 ? formatCurrency(row.cgst) : '-'}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{row.sgst > 0 ? formatCurrency(row.sgst) : '-'}</td>
+                                                            <td className="pt-1 text-right text-gray-700">{row.igst > 0 ? formatCurrency(row.igst) : '-'}</td>
+                                                        </tr>
+                                                    ))}
                                                 </tbody>
                                             </table>
                                         </div>
