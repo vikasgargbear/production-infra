@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ....core.utils.constants import ProductDefaults, PackDefaults, SourceType
+from .....core.utils.constants import ProductDefaults, PackDefaults, SourceType
 
 logger = logging.getLogger(__name__)
 

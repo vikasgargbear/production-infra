@@ -19,7 +19,7 @@ import re
 
 from ...compliance.gst_service import GSTService
 from ...document_number_service import DocumentNumberService
-from ....core.utils.constants import (
+from .....core.utils.constants import (
     ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
     TaxRates, SourceType,
 )
