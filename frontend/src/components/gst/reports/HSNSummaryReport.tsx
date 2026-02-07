@@ -8,7 +8,6 @@ import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
 import { invoicesApi, gstApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface HSNSummaryReportProps {
     dateRange: DateRange;
@@ -99,10 +98,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
                 const totalTax = hsnArray.reduce((s, h) => s + h.tax_amount, 0);
                 setTotals({ quantity: totalQty, taxable: totalTaxable, tax: totalTax });
 
-                await offlineStorage.storeOffline(`hsn_${dateRange.from}_${dateRange.to}`, hsnArray, { critical: true });
-
             } catch (err) {
-                console.error('HSN load error:', err);
                 setError('Failed to load HSN summary');
             } finally {
                 setLoading(false);

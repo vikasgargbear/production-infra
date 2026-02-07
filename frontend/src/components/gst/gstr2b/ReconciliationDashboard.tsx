@@ -19,7 +19,6 @@ import {
     ChevronUp
 } from 'lucide-react';
 import { apiClient } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 // ==================== TYPES ====================
 
@@ -97,26 +96,9 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
             setSummary(statusResponse.data?.summary || null);
             setMismatches(statusResponse.data?.mismatches || mismatchResponse.data?.mismatches || []);
 
-            // Cache for offline use
-            await offlineStorage.storeOffline('gstr2b_reconciliation', {
-                summary: statusResponse.data?.summary,
-                mismatches: statusResponse.data?.mismatches || mismatchResponse.data?.mismatches || []
-            }, { critical: true });
-
         } catch (err) {
-            console.error('[ReconciliationDashboard] Load error:', err);
-
-            // Try offline fallback
-            const cached = await offlineStorage.getOffline('gstr2b_reconciliation', { critical: true });
-            if (cached && cached.data) {
-                setSummary(cached.data.summary);
-                setMismatches(cached.data.mismatches || []);
-                setError('Using cached data. Some information may be outdated.');
-            } else {
-                // No data available - show empty state
-                setSummary(null);
-                setMismatches([]);
-            }
+            setSummary(null);
+            setMismatches([]);
         } finally {
             setIsLoading(false);
         }

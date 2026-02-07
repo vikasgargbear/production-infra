@@ -39,7 +39,6 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
             setInvoices(data);
             return data;
         } catch (err) {
-            console.error('Failed to load invoices:', err);
             setError('Failed to load invoice data');
             return [];
         }
@@ -57,7 +56,6 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
             setPurchases(data);
             return data;
         } catch (err) {
-            console.error('Failed to load purchases:', err);
             setError('Failed to load purchase data');
             return [];
         }
@@ -75,7 +73,6 @@ export function useGSTData(dateRange: DateRange): GSTDataResult {
             setCreditDebitNotes(data);
             return data;
         } catch (err) {
-            console.error('Failed to load credit/debit notes:', err);
             return [];
         }
     }, [dateRange.from, dateRange.to]);

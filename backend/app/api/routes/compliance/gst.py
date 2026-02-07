@@ -6,19 +6,24 @@ PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text, and_, extract, func
+from sqlalchemy import text
 from typing import Dict, List, Optional, Any
 from datetime import datetime, date
 import calendar
 from decimal import Decimal
+import logging
 
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
-from ....core.security.permissions import PermissionChecker  # RBAC
+from ....core.security.permissions import PermissionChecker
 from ....core.utils.branch_utils import get_default_branch_id
 from ...services.compliance.gst_service import GSTService
+from ...services.compliance.gst_engine import GSTType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["GST"])
+
 
 def get_current_period():
     """Get current GST period (month/year)"""
@@ -29,17 +34,62 @@ def get_current_period():
         "period_name": f"{calendar.month_name[now.month]} {now.year}"
     }
 
+
 def get_organization_gstin(db: Session, org_id: str) -> Optional[str]:
-    """Get organization GSTIN from company settings"""
+    """Get organization GSTIN from master.organizations"""
     try:
-        company_query = text("""
-            SELECT gstin FROM master.organizations
-            WHERE org_id = :org_id
-        """)
-        result = db.execute(company_query, {'org_id': org_id}).fetchone()
+        result = db.execute(text(
+            "SELECT gst_number FROM master.organizations WHERE org_id = :org_id"
+        ), {'org_id': org_id}).fetchone()
         return result.gst_number if result else None
-    except:
+    except Exception as e:
+        logger.warning(f"Failed to load org GSTIN for {org_id}: {e}")
         return None
+
+
+def parse_period(period: str) -> dict:
+    """Parse period string into year, month, and SQL date condition.
+    Returns dict with keys: year, month (or None), date_condition, target_date
+    """
+    now = datetime.now()
+
+    if period == "current":
+        return {
+            "year": now.year, "month": now.month, "target_date": now,
+            "date_condition": "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
+        }
+    elif period == "previous":
+        target = datetime(now.year - 1, 12, 1) if now.month == 1 else datetime(now.year, now.month - 1, 1)
+        return {
+            "year": target.year, "month": target.month, "target_date": target,
+            "date_condition": "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
+        }
+    elif period == "quarter":
+        current_quarter = (now.month - 1) // 3 + 1
+        start_month = (current_quarter - 1) * 3 + 1
+        end_month = current_quarter * 3
+        return {
+            "year": now.year, "month": None, "target_date": now,
+            "date_condition": f"AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) BETWEEN {start_month} AND {end_month}"
+        }
+    elif period == "year":
+        return {
+            "year": now.year, "month": None, "target_date": now,
+            "date_condition": "AND EXTRACT(year FROM invoice_date) = :year"
+        }
+    else:
+        try:
+            year, month = map(int, period.split('-'))
+            target = datetime(year, month, 1)
+            return {
+                "year": year, "month": month, "target_date": target,
+                "date_condition": "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
+            }
+        except Exception:
+            return {
+                "year": now.year, "month": now.month, "target_date": now,
+                "date_condition": "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
+            }
 
 @router.get("/dashboard")
 @with_tenant_context
@@ -55,57 +105,16 @@ async def get_gst_dashboard(
     org_id = str(context.org_id)
     try:
         branch_id = get_default_branch_id(db, org_id)
-        org_gstin = get_organization_gstin(db, org_id)
+        parsed = parse_period(period)
+        date_condition = parsed["date_condition"]
 
-        # Commit any pending transactions to avoid abort state
-        db.commit()
+        # Build query params
+        query_params = {'org_id': org_id, 'branch_id': branch_id, 'year': parsed["year"]}
+        if parsed["month"]:
+            query_params['month'] = parsed["month"]
 
-        # Parse period
-        if period == "current":
-            target_date = datetime.now()
-            year_filter = target_date.year
-            month_filter = target_date.month
-            date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
-        elif period == "previous":
-            now = datetime.now()
-            if now.month == 1:
-                target_date = datetime(now.year - 1, 12, 1)
-            else:
-                target_date = datetime(now.year, now.month - 1, 1)
-            year_filter = target_date.year
-            month_filter = target_date.month
-            date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
-        elif period == "quarter":
-            # Current quarter
-            now = datetime.now()
-            current_quarter = (now.month - 1) // 3 + 1
-            start_month = (current_quarter - 1) * 3 + 1
-            end_month = current_quarter * 3
-            year_filter = now.year
-            month_filter = None
-            date_condition = f"AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) BETWEEN {start_month} AND {end_month}"
-        elif period == "year":
-            # Current year
-            now = datetime.now()
-            year_filter = now.year
-            month_filter = None
-            date_condition = "AND EXTRACT(year FROM invoice_date) = :year"
-        else:
-            # Parse YYYY-MM format
-            try:
-                year, month = map(int, period.split('-'))
-                target_date = datetime(year, month, 1)
-                year_filter = year
-                month_filter = month
-                date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
-            except:
-                target_date = datetime.now()
-                year_filter = target_date.year
-                month_filter = target_date.month
-                date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
-
-        # OPTIMIZED QUERY: Get aggregated tax totals from sales invoices (output tax)
-        sales_query = text(f"""
+        # Output tax from sales invoices (exclude cancelled/void)
+        sales_result = db.execute(text(f"""
             SELECT
                 COUNT(*) as total_invoices,
                 COALESCE(SUM(subtotal_amount - COALESCE(discount_amount, 0)), 0) as total_taxable,
@@ -115,123 +124,74 @@ async def get_gst_dashboard(
                 COUNT(CASE WHEN customer_id IS NOT NULL THEN 1 END) as b2b_count,
                 COUNT(CASE WHEN customer_id IS NULL THEN 1 END) as b2c_count
             FROM sales.invoices
-            WHERE org_id = :org_id
-                AND branch_id = :branch_id
+            WHERE org_id = :org_id AND branch_id = :branch_id
+                AND invoice_status NOT IN ('cancelled', 'void')
                 {date_condition}
-        """)
+        """), query_params).fetchone()
 
-        # OPTIMIZED QUERY: Get aggregated tax totals from supplier invoices (input credit)
-        purchases_query = text(f"""
+        # Input credit from supplier invoices (exclude cancelled)
+        purchase_date_condition = date_condition.replace('invoice_date', 'invoice_date')
+        purchases_result = db.execute(text(f"""
             SELECT
                 COUNT(*) as total_supplier_invoices,
-                COALESCE(SUM(subtotal_amount - COALESCE(discount_amount, 0)), 0) as total_purchase_taxable,
+                COALESCE(SUM(taxable_amount), 0) as total_purchase_taxable,
                 COALESCE(SUM(cgst_amount), 0) as total_purchase_cgst,
                 COALESCE(SUM(sgst_amount), 0) as total_purchase_sgst,
                 COALESCE(SUM(igst_amount), 0) as total_purchase_igst,
                 COUNT(DISTINCT supplier_id) as total_suppliers
             FROM procurement.supplier_invoices
-            WHERE org_id = :org_id
-                AND branch_id = :branch_id
-                {date_condition.replace('invoice_date', 'invoice_date')}
-        """)
+            WHERE org_id = :org_id AND branch_id = :branch_id
+                AND invoice_status != 'cancelled'
+                {purchase_date_condition}
+        """), query_params).fetchone()
 
-        # Prepare query parameters
-        query_params = {
-            'org_id': org_id,
-            'branch_id': branch_id,
-            'year': year_filter
-        }
-        if month_filter:
-            query_params['month'] = month_filter
+        # Process sales
+        total_invoices = sales_result.total_invoices if sales_result else 0
+        total_taxable = Decimal(str(sales_result.total_taxable)) if sales_result else Decimal('0')
+        total_cgst = Decimal(str(sales_result.total_cgst)) if sales_result else Decimal('0')
+        total_sgst = Decimal(str(sales_result.total_sgst)) if sales_result else Decimal('0')
+        total_igst = Decimal(str(sales_result.total_igst)) if sales_result else Decimal('0')
+        total_output_tax = total_cgst + total_sgst + total_igst
+        b2b_count = sales_result.b2b_count if sales_result else 0
+        b2c_count = sales_result.b2c_count if sales_result else 0
 
-        # Execute optimized queries
-        sales_result = db.execute(sales_query, query_params).fetchone()
-        purchases_result = db.execute(purchases_query, query_params).fetchone()
+        # Process purchases
+        total_supplier_invoices = purchases_result.total_supplier_invoices if purchases_result else 0
+        total_purchase_taxable = Decimal(str(purchases_result.total_purchase_taxable)) if purchases_result else Decimal('0')
+        total_purchase_cgst = Decimal(str(purchases_result.total_purchase_cgst)) if purchases_result else Decimal('0')
+        total_purchase_sgst = Decimal(str(purchases_result.total_purchase_sgst)) if purchases_result else Decimal('0')
+        total_purchase_igst = Decimal(str(purchases_result.total_purchase_igst)) if purchases_result else Decimal('0')
+        total_suppliers = purchases_result.total_suppliers if purchases_result else 0
+        input_credit = total_purchase_cgst + total_purchase_sgst + total_purchase_igst
 
-        # Process sales data (output tax)
-        if sales_result:
-            total_invoices = sales_result.total_invoices
-            total_taxable = Decimal(str(sales_result.total_taxable))
-            total_cgst = Decimal(str(sales_result.total_cgst))
-            total_sgst = Decimal(str(sales_result.total_sgst))
-            total_igst = Decimal(str(sales_result.total_igst))
-            total_output_tax = total_cgst + total_sgst + total_igst
-            b2b_count = sales_result.b2b_count
-            b2c_count = sales_result.b2c_count
-        else:
-            total_invoices = 0
-            total_taxable = Decimal('0')
-            total_cgst = Decimal('0')
-            total_sgst = Decimal('0')
-            total_igst = Decimal('0')
-            total_output_tax = Decimal('0')
-            b2b_count = 0
-            b2c_count = 0
-
-        # Process purchases data (input credit)
-        if purchases_result:
-            total_supplier_invoices = purchases_result.total_supplier_invoices
-            total_purchase_taxable = Decimal(str(purchases_result.total_purchase_taxable))
-            total_purchase_cgst = Decimal(str(purchases_result.total_purchase_cgst))
-            total_purchase_sgst = Decimal(str(purchases_result.total_purchase_sgst))
-            total_purchase_igst = Decimal(str(purchases_result.total_purchase_igst))
-            total_suppliers = purchases_result.total_suppliers
-            input_credit = total_purchase_cgst + total_purchase_sgst + total_purchase_igst
-        else:
-            total_supplier_invoices = 0
-            total_purchase_taxable = Decimal('0')
-            total_purchase_cgst = Decimal('0')
-            total_purchase_sgst = Decimal('0')
-            total_purchase_igst = Decimal('0')
-            total_suppliers = 0
-            input_credit = Decimal('0')
-
-        # Calculate net tax payable
         net_payable = total_output_tax - input_credit
 
-        # Compliance score based on filing status
-        compliance_score = 85  # TODO: Calculate based on actual filing status
-
         return {
-            "taxPayable": float(total_output_tax),
             "outputTax": float(total_output_tax),
             "inputCredit": float(input_credit),
-            "inputTax": float(input_credit),
             "netPayable": float(net_payable),
-            "complianceScore": compliance_score,
             "period": get_current_period(),
             "summary": {
                 "total_invoices": total_invoices,
                 "total_suppliers": total_suppliers,
-                "total_supplier_invoices": total_supplier_invoices if 'total_supplier_invoices' in locals() else 0,
+                "total_supplier_invoices": total_supplier_invoices,
                 "total_taxable": float(total_taxable),
-                "total_purchase_taxable": float(total_purchase_taxable) if 'total_purchase_taxable' in locals() else 0,
+                "total_purchase_taxable": float(total_purchase_taxable),
                 "b2b_transactions": b2b_count,
                 "b2c_transactions": b2c_count,
-                "export_transactions": 0,  # No exports for now
                 "cgst_amount": float(total_cgst),
                 "sgst_amount": float(total_sgst),
                 "igst_amount": float(total_igst),
-                "purchase_cgst_amount": float(total_purchase_cgst) if 'total_purchase_cgst' in locals() else 0,
-                "purchase_sgst_amount": float(total_purchase_sgst) if 'total_purchase_sgst' in locals() else 0,
-                "purchase_igst_amount": float(total_purchase_igst) if 'total_purchase_igst' in locals() else 0
+                "purchase_cgst_amount": float(total_purchase_cgst),
+                "purchase_sgst_amount": float(total_purchase_sgst),
+                "purchase_igst_amount": float(total_purchase_igst)
             }
         }
 
     except Exception as e:
-        # Rollback any failed transaction
+        logger.error(f"GST dashboard error: {e}")
         db.rollback()
-        # Return default structure with zeros on error
-        return {
-            "taxPayable": 0,
-            "outputTax": 0,
-            "inputCredit": 0,
-            "inputTax": 0,
-            "netPayable": 0,
-            "complianceScore": 0,
-            "period": get_current_period(),
-            "error": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/returns/status")
 @with_tenant_context
@@ -241,70 +201,48 @@ async def get_returns_status(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get GST returns filing status - OPTIMIZED VERSION
-    """
+    """Get GST returns filing status with real output + input tax data"""
     org_id = str(context.org_id)
     try:
-        # PERFORMANCE OPTIMIZATION: Don't recalculate entire dashboard
-        # Just get basic tax amounts quickly with lightweight query
-
         branch_id = get_default_branch_id(db, org_id)
-        db.commit()
+        parsed = parse_period(period)
+        target_date = parsed["target_date"]
 
-        # Parse period quickly
-        if period == "current":
-            target_date = datetime.now()
-        elif period == "previous":
-            now = datetime.now()
-            if now.month == 1:
-                target_date = datetime(now.year - 1, 12, 1)
-            else:
-                target_date = datetime(now.year, now.month - 1, 1)
-        else:
-            try:
-                year, month = map(int, period.split('-'))
-                target_date = datetime(year, month, 1)
-            except:
-                target_date = datetime.now()
+        params = {
+            'org_id': org_id, 'branch_id': branch_id,
+            'year': target_date.year, 'month': target_date.month
+        }
 
-        # FAST QUERY: Get only the tax totals we need
-        tax_summary_query = text("""
-            SELECT
-                COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_output_tax,
-                COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_input_credit
+        # Output tax from sales
+        output_result = db.execute(text("""
+            SELECT COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_output_tax
             FROM sales.invoices
-            WHERE org_id = :org_id
-                AND branch_id = :branch_id
+            WHERE org_id = :org_id AND branch_id = :branch_id
+                AND invoice_status NOT IN ('cancelled', 'void')
                 AND EXTRACT(year FROM invoice_date) = :year
                 AND EXTRACT(month FROM invoice_date) = :month
-        """)
+        """), params).fetchone()
 
-        result = db.execute(tax_summary_query, {
-            'org_id': org_id,
-            'branch_id': branch_id,
-            'year': target_date.year,
-            'month': target_date.month
-        }).fetchone()
+        # Input credit from supplier invoices
+        input_result = db.execute(text("""
+            SELECT COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_input_credit
+            FROM procurement.supplier_invoices
+            WHERE org_id = :org_id AND branch_id = :branch_id
+                AND invoice_status != 'cancelled'
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+        """), params).fetchone()
 
-        total_output_tax = float(result.total_output_tax) if result else 0
-        total_input_credit = 0  # Simplified for now
+        total_output_tax = float(output_result.total_output_tax) if output_result else 0
+        total_input_credit = float(input_result.total_input_credit) if input_result else 0
         net_payable = total_output_tax - total_input_credit
 
-        # Generate due dates (Indian GST due dates)
-        current_date = datetime.now()
-
-        # GSTR-1 due date: 11th of next month
-        if current_date.month == 12:
-            gstr1_due = datetime(current_date.year + 1, 1, 11)
-        else:
-            gstr1_due = datetime(current_date.year, current_date.month + 1, 11)
-
-        # GSTR-3B due date: 20th of next month
-        if current_date.month == 12:
-            gstr3b_due = datetime(current_date.year + 1, 1, 20)
-        else:
-            gstr3b_due = datetime(current_date.year, current_date.month + 1, 20)
+        # Due dates (Indian GST calendar)
+        now = datetime.now()
+        next_month = now.month + 1 if now.month < 12 else 1
+        next_year = now.year if now.month < 12 else now.year + 1
+        gstr1_due = datetime(next_year, next_month, 11)
+        gstr3b_due = datetime(next_year, next_month, 20)
 
         return {
             "gstr1": {
@@ -319,20 +257,16 @@ async def get_returns_status(
                 "dueDate": gstr3b_due.strftime("%d %b %Y"),
                 "filedDate": None
             },
-            "gstr2a": {
+            "gstr2b": {
                 "status": "available",
                 "amount": total_input_credit,
-                "lastUpdated": current_date.strftime("%d %b %Y")
+                "lastUpdated": now.strftime("%d %b %Y")
             }
         }
 
     except Exception as e:
-        return {
-            "gstr1": {"status": "pending", "amount": 0, "dueDate": None, "filedDate": None},
-            "gstr3b": {"status": "pending", "amount": 0, "dueDate": None, "filedDate": None},
-            "gstr2a": {"status": "available", "amount": 0, "lastUpdated": None},
-            "error": str(e)
-        }
+        logger.error(f"Returns status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/returns/{return_type}")
 @with_tenant_context
@@ -428,25 +362,13 @@ async def verify_gst_data(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Verify GST data for accuracy and compliance
-    """
+    """Verify GST data for accuracy and compliance"""
     org_id = str(context.org_id)
     try:
-        # Parse period
-        if period == "current":
-            target_date = datetime.now()
-        else:
-            try:
-                year, month = map(int, period.split('-'))
-                target_date = datetime(year, month, 1)
-            except:
-                target_date = datetime.now()
-
+        parsed = parse_period(period)
+        target_date = parsed["target_date"]
         branch_id = get_default_branch_id(db, org_id)
-        db.commit()
 
-        # Get invoices for verification
         verification_query = text("""
             SELECT
                 invoice_id, invoice_number, customer_id, customer_name,
@@ -455,6 +377,7 @@ async def verify_gst_data(
             FROM sales.invoices
             WHERE org_id = :org_id
                 AND branch_id = :branch_id
+                AND invoice_status NOT IN ('cancelled', 'void')
                 AND EXTRACT(year FROM invoice_date) = :year
                 AND EXTRACT(month FROM invoice_date) = :month
             ORDER BY invoice_date DESC
@@ -507,8 +430,8 @@ async def verify_gst_data(
         }
 
     except Exception as e:
-        db.rollback()
-        return {"error": str(e)}
+        logger.error(f"GST verification error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reconcile")
 @with_tenant_context
@@ -518,17 +441,12 @@ async def reconcile_gst_data(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Auto-reconcile GST data with GSTR-2A
-    """
+    """Auto-reconcile GST data with GSTR-2A"""
     org_id = str(context.org_id)
     try:
-        # Parse period
-        year, month = map(int, period.split('-'))
-        target_date = datetime(year, month, 1)
-
+        parsed = parse_period(period)
+        target_date = parsed["target_date"]
         branch_id = get_default_branch_id(db, org_id)
-        db.commit()
 
         # Get purchase invoices for reconciliation
         purchase_query = text("""
@@ -583,8 +501,8 @@ async def reconcile_gst_data(
         }
 
     except Exception as e:
-        db.rollback()
-        return {"error": str(e)}
+        logger.error(f"GST reconciliation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/compliance/status")
 @with_tenant_context
@@ -593,20 +511,10 @@ async def get_compliance_status(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get GST compliance status
-    """
+    """Get GST compliance status"""
     org_id = str(context.org_id)
     try:
-        # Clear any previous transaction state
-        try:
-            db.rollback()
-        except:
-            pass
-            
-        # Check basic compliance requirements
         org_gstin = get_organization_gstin(db, org_id)
-        db.commit()  # Commit after reading org settings
 
         issues = []
         score = 100
@@ -618,11 +526,11 @@ async def get_compliance_status(
             issues.append("Invalid GSTIN format")
             score -= 20
 
-        # Check recent invoices for GST compliance
         recent_invoices_query = text("""
             SELECT invoice_id, customer_id, final_amount
             FROM sales.invoices
             WHERE org_id = :org_id
+                AND invoice_status NOT IN ('cancelled', 'void')
                 AND invoice_date >= DATE_TRUNC('month', CURRENT_DATE)
             LIMIT 100
         """)
@@ -664,10 +572,7 @@ async def get_compliance_status(
         }
 
     except Exception as e:
-        try:
-            db.rollback()
-        except:
-            pass
+        logger.error(f"Compliance status error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/settings")
@@ -677,9 +582,7 @@ async def get_gst_settings(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Get GST configuration settings
-    """
+    """Get GST configuration settings"""
     org_id = str(context.org_id)
     try:
         org_gstin = get_organization_gstin(db, org_id)
@@ -687,7 +590,7 @@ async def get_gst_settings(
         state_name = GSTService.get_state_name(state_code) if state_code else None
 
         return {
-            "gstin": org_gstin or "",
+            "gst_number": org_gstin or "",
             "state_code": state_code or "",
             "state": state_name or "",
             "is_valid": GSTService.validate_gstin(org_gstin) if org_gstin else False,
@@ -701,34 +604,27 @@ async def get_gst_settings(
         }
 
     except Exception as e:
+        logger.error(f"GST settings error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Additional routes for comprehensive GST functionality
 @router.get("/metrics")
 @with_tenant_context
 async def get_gst_metrics(
     period: str = Query("current"),
-    _: dict = Depends(PermissionChecker("gst", "view")),  # RBAC
+    _: dict = Depends(PermissionChecker("gst", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Get detailed GST metrics"""
+    """Get GST metrics — delegates to dashboard endpoint"""
     dashboard_data = await get_gst_dashboard(period, _, db, context)
-
+    summary = dashboard_data.get("summary", {})
     return {
         "currentMonth": {
-            "sales": dashboard_data["summary"]["total_taxable"],
-            "purchases": 0,  # TODO: Add purchase data
-            "outputTax": dashboard_data["outputTax"],
-            "inputTax": dashboard_data["inputTax"],
-            "netTax": dashboard_data["netPayable"]
-        },
-        "previousMonth": {
-            "sales": 0,  # TODO: Calculate previous month
-            "purchases": 0,
-            "outputTax": 0,
-            "inputTax": 0,
-            "netTax": 0
+            "sales": summary.get("total_taxable", 0),
+            "purchases": summary.get("total_purchase_taxable", 0),
+            "outputTax": dashboard_data.get("outputTax", 0),
+            "inputTax": dashboard_data.get("inputCredit", 0),
+            "netTax": dashboard_data.get("netPayable", 0)
         }
     }
 

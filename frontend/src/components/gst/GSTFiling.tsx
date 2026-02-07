@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   FileText, ExternalLink, Calendar, AlertCircle,
-  Download, Eye, CheckCircle, Clock
+  Download, Eye, CheckCircle, Clock, Info
 } from 'lucide-react';
 
 interface GSTFilingProps {
@@ -10,6 +10,7 @@ interface GSTFilingProps {
 
 const GSTFiling: React.FC<GSTFilingProps> = () => {
   const [selectedReturn, setSelectedReturn] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'preview' | 'file'; returnName: string } | null>(null);
 
   const gstReturns = [
     {
@@ -42,11 +43,11 @@ const GSTFiling: React.FC<GSTFilingProps> = () => {
   ];
 
   const handlePreview = (returnType: string) => {
-    alert(`Preview for ${returnType} will show calculated data from your invoices. This feature connects to the GST portal for actual filing.`);
+    setActionMessage({ type: 'preview', returnName: returnType });
   };
 
   const handleFile = (returnType: string) => {
-    alert(`For actual filing, this would redirect to the official GST portal (https://gst.gov.in). Current data is calculated from your real invoices and purchases.`);
+    setActionMessage({ type: 'file', returnName: returnType });
   };
 
   const getStatusColor = (status: string) => {
@@ -86,6 +87,37 @@ const GSTFiling: React.FC<GSTFilingProps> = () => {
           </div>
         </div>
       </div>
+
+      {/* Action Message */}
+      {actionMessage && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start">
+              <Info className="h-5 w-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-amber-800">
+                {actionMessage.type === 'preview' ? (
+                  <>
+                    <p className="font-medium">Preview: {actionMessage.returnName}</p>
+                    <p>Data is calculated from your real invoices. View the Reports tab for detailed breakdowns.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">Filing: {actionMessage.returnName}</p>
+                    <p>For actual filing, visit the official GST portal at{' '}
+                      <a href="https://gst.gov.in" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                        gst.gov.in
+                      </a>
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+            <button onClick={() => setActionMessage(null)} className="text-sm text-amber-600 hover:text-amber-800 underline ml-4">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* GST Returns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

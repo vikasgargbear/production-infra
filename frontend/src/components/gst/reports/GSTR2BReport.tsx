@@ -5,10 +5,9 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { DataTable } from '../../global';
-import type { DateRange, GSTR1Data } from '../types';
+import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
 import { gstApi, apiClient } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTR2BReportProps {
     dateRange: DateRange;
@@ -63,17 +62,10 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
                         }
                     });
 
-                    await offlineStorage.storeOffline(`gstr2b_${dateRange.from}_${dateRange.to}`, response, { critical: true });
                 }
             } catch (err) {
-                console.error('GSTR2B load error:', err);
                 setError('Failed to load GSTR-2B data');
 
-                const offline = await offlineStorage.getOffline(`gstr2b_${dateRange.from}_${dateRange.to}`, { critical: true });
-                if (offline && !offlineStorage.isDataStale(offline, 120)) {
-                    setData(offline.data);
-                    setError('Using offline data');
-                }
             } finally {
                 setLoading(false);
             }
@@ -104,7 +96,6 @@ const GSTR2BReport: React.FC<GSTR2BReportProps> = ({ dateRange, refreshTrigger }
             }));
             setCurrentPage(page);
         } catch (err) {
-            console.error('Pagination error:', err);
         }
     };
 

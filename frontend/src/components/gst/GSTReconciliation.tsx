@@ -1,316 +1,138 @@
 import React, { useState, useEffect } from 'react';
 import {
-  RefreshCw,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Download,
-  Filter,
-  Search,
-  Loader2,
-  AlertCircle
+  RefreshCw, AlertTriangle, CheckCircle, XCircle,
+  Download, Search, Loader2, AlertCircle, Info
 } from 'lucide-react';
-import { gstApi, invoicesApi, purchasesApi, reportsApi } from '../../services/api';
-import offlineStorage from '../../services/offlineStorage';
+import { invoicesApi, purchasesApi } from '../../services/api';
 
 interface ReconciliationItem {
   id: number;
-  supplierGSTIN?: string;
-  supplierName?: string;
+  partyGSTIN: string;
+  partyName: string;
   invoiceNumber: string;
   invoiceDate: string;
-  ourAmount: number;
-  gstPortalAmount: number;
-  ourGST: number;
-  portalGST: number;
-  status: 'matched' | 'mismatched' | 'missing';
-}
-
-interface ReconciliationData {
-  matched: number;
-  mismatched: number;
-  missing: number;
-  total: number;
-  items: ReconciliationItem[];
+  taxableAmount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  totalTax: number;
+  totalAmount: number;
 }
 
 type ActiveTab = 'purchase' | 'sales';
 
-interface StatusConfig {
-  color: string;
-  icon: React.ComponentType<{ className?: string }>;
-  text: string;
-}
-
 const GSTReconciliation: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('purchase');
-  const [reconciliationData, setReconciliationData] = useState<Record<ActiveTab, ReconciliationData>>({
-    purchase: { matched: 0, mismatched: 0, missing: 0, total: 0, items: [] },
-    sales: { matched: 0, mismatched: 0, missing: 0, total: 0, items: [] }
-  });
+  const [purchaseItems, setPurchaseItems] = useState<ReconciliationItem[]>([]);
+  const [salesItems, setSalesItems] = useState<ReconciliationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'mismatched' | 'missing'>('all');
 
-  // Load reconciliation data with offline fallback
-  const loadReconciliationData = async () => {
+  const loadData = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Get current month data
       const now = new Date();
       const fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const toDate = now.toISOString().split('T')[0];
 
-      // Load GST dashboard data for reconciliation base
-      const dashboardData = await gstApi.dashboard.getSummary('current');
+      const [invoiceResponse, purchaseResponse] = await Promise.allSettled([
+        invoicesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 }),
+        purchasesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 })
+      ]);
 
-      // Load real invoice and purchase data
-      let invoices = [];
-      let purchases = [];
-
-      try {
-        const [invoiceResponse, purchaseResponse] = await Promise.all([
-          invoicesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 }),
-          purchasesApi.getAll({ from_date: fromDate, to_date: toDate, limit: 1000 })
-        ]) as [any, any];
-
-        invoices = Array.isArray(invoiceResponse) ? invoiceResponse :
-          (invoiceResponse as any)?.invoices || (invoiceResponse as any)?.data?.invoices || [];
-
-        purchases = Array.isArray(purchaseResponse) ? purchaseResponse :
-          (purchaseResponse as any)?.purchases || (purchaseResponse as any)?.data?.purchases || [];
-
-        console.log(`[GST Reconciliation] Loaded ${invoices.length} invoices and ${purchases.length} purchases for reconciliation`);
-      } catch (err) {
-        console.error('[GST Reconciliation] Failed to load detailed data:', err);
-        invoices = [];
-        purchases = [];
+      // Process sales invoices
+      if (invoiceResponse.status === 'fulfilled') {
+        const raw = invoiceResponse.value;
+        const invoices = Array.isArray(raw) ? raw : (raw as any)?.invoices || (raw as any)?.data?.invoices || [];
+        setSalesItems(invoices.map((inv: any, i: number) => ({
+          id: i + 1,
+          partyGSTIN: inv.customer_gst_number || inv.gst_number || '',
+          partyName: inv.customer_name || 'Walk-in Customer',
+          invoiceNumber: inv.invoice_number || `INV-${i + 1}`,
+          invoiceDate: inv.invoice_date || '',
+          taxableAmount: inv.taxable_amount || inv.subtotal_amount || 0,
+          cgst: inv.cgst_amount || 0,
+          sgst: inv.sgst_amount || 0,
+          igst: inv.igst_amount || 0,
+          totalTax: (inv.cgst_amount || 0) + (inv.sgst_amount || 0) + (inv.igst_amount || 0),
+          totalAmount: inv.final_amount || 0,
+        })));
       }
 
-      // Transform real purchase data into reconciliation items
-      const purchaseItems: ReconciliationItem[] = purchases.map((purchase, index) => {
-        const ourAmount = (purchase as any).total_amount || 0;
-        const ourGST = ((purchase as any).cgst_amount || 0) + ((purchase as any).sgst_amount || 0) + ((purchase as any).igst_amount || 0);
+      // Process purchase invoices
+      if (purchaseResponse.status === 'fulfilled') {
+        const raw = purchaseResponse.value;
+        const purchases = Array.isArray(raw) ? raw : (raw as any)?.purchases || (raw as any)?.data?.purchases || [];
+        setPurchaseItems(purchases.map((p: any, i: number) => ({
+          id: i + 1,
+          partyGSTIN: p.supplier_gst_number || p.gst_number || '',
+          partyName: p.supplier_name || `Supplier ${i + 1}`,
+          invoiceNumber: p.invoice_number || p.supplier_invoice_number || p.purchase_no || `PUR-${i + 1}`,
+          invoiceDate: p.invoice_date || p.purchase_date || '',
+          taxableAmount: p.taxable_amount || p.subtotal_amount || 0,
+          cgst: p.cgst_amount || 0,
+          sgst: p.sgst_amount || 0,
+          igst: p.igst_amount || 0,
+          totalTax: (p.cgst_amount || 0) + (p.sgst_amount || 0) + (p.igst_amount || 0),
+          totalAmount: p.total_amount || p.invoice_total || 0,
+        })));
+      }
 
-        // For now, assume portal amounts match our amounts (in real implementation, this would come from GST portal API)
-        // Add small random variance to simulate real-world mismatches (5% chance of mismatch)
-        const hasVariance = Math.random() < 0.05;
-        const variance = hasVariance ? Math.floor(Math.random() * (ourAmount * 0.02)) : 0; // Up to 2% variance
-
-        const gstPortalAmount = ourAmount + variance;
-        const portalGST = ourGST + Math.floor(variance * 0.18);
-
-        const status: 'matched' | 'mismatched' | 'missing' = variance > 10 ? 'mismatched' : 'matched';
-
-        return {
-          id: index + 1,
-          supplierGSTIN: (purchase as any).supplier_gst_number || (purchase as any).gst_number || 'N/A',
-          supplierName: (purchase as any).supplier_name || `Supplier ${index + 1}`,
-          invoiceNumber: (purchase as any).invoice_number || (purchase as any).invoice_number || (purchase as any).purchase_no || `PUR-${index + 1}`,
-          invoiceDate: (purchase as any).invoice_date || (purchase as any).purchase_date || (purchase as any).created_at?.split('T')[0] || fromDate,
-          ourAmount,
-          gstPortalAmount,
-          ourGST,
-          portalGST,
-          status
-        };
-      });
-
-      // Transform real invoice data into reconciliation items
-      const salesItems: ReconciliationItem[] = invoices.map((invoice, index) => {
-        const ourAmount = (invoice as any).final_amount || 0;
-        const ourGST = ((invoice as any).cgst_amount || 0) + ((invoice as any).sgst_amount || 0) + ((invoice as any).igst_amount || 0);
-
-        // For now, assume portal amounts match our amounts (in real implementation, this would come from GST portal API)
-        // Add small random variance to simulate real-world mismatches (3% chance of mismatch for sales)
-        const hasVariance = Math.random() < 0.03;
-        const variance = hasVariance ? Math.floor(Math.random() * (ourAmount * 0.01)) : 0; // Up to 1% variance
-
-        const gstPortalAmount = ourAmount + variance;
-        const portalGST = ourGST + Math.floor(variance * 0.18);
-
-        const status: 'matched' | 'mismatched' | 'missing' = variance > 5 ? 'mismatched' : 'matched';
-
-        return {
-          id: index + 1,
-          supplierGSTIN: (invoice as any).customer_gst_number || (invoice as any).gst_number || 'N/A',
-          supplierName: (invoice as any).customer_name || `Customer ${index + 1}`,
-          invoiceNumber: (invoice as any).invoice_number || (invoice as any).invoice_number || `INV-${index + 1}`,
-          invoiceDate: (invoice as any).invoice_date || (invoice as any).created_at?.split('T')[0] || fromDate,
-          ourAmount,
-          gstPortalAmount,
-          ourGST,
-          portalGST,
-          status
-        };
-      });
-
-      const data: Record<ActiveTab, ReconciliationData> = {
-        purchase: {
-          matched: purchaseItems.filter(item => item.status === 'matched').length,
-          mismatched: purchaseItems.filter(item => item.status === 'mismatched').length,
-          missing: purchaseItems.filter(item => item.status === 'missing').length,
-          total: purchaseItems.length,
-          items: purchaseItems
-        },
-        sales: {
-          matched: salesItems.filter(item => item.status === 'matched').length,
-          mismatched: salesItems.filter(item => item.status === 'mismatched').length,
-          missing: salesItems.filter(item => item.status === 'missing').length,
-          total: salesItems.length,
-          items: salesItems
-        }
-      };
-
-      setReconciliationData(data);
-
-      // Store data offline for future use
-      await offlineStorage.storeOffline('gst_reconciliation', data, {
-        critical: true,
-        persistent: true
-      });
-
+      if (invoiceResponse.status === 'rejected' && purchaseResponse.status === 'rejected') {
+        setError('Failed to load invoice data. Please try again.');
+      }
     } catch (err) {
-
-      // Try to load from offline storage instead of using mock data
-      const offlineData = await offlineStorage.getOffline('gst_reconciliation', { critical: true });
-
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for GST data
-        setReconciliationData(offlineData.data);
-
-        // Show offline indicator
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        // No offline data available - show proper error instead of mock data
-        setError('Unable to load GST reconciliation data. Please check your connection and try again.');
-        setReconciliationData({
-          purchase: { matched: 0, mismatched: 0, missing: 0, total: 0, items: [] },
-          sales: { matched: 0, mismatched: 0, missing: 0, total: 0, items: [] }
-        });
-      }
+      setError(`Unable to load data: ${(err as Error)?.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Refresh reconciliation data
   const handleRefresh = async () => {
     setRefreshing(true);
-    setError(null);
-
-    try {
-      await loadReconciliationData();
-    } catch (error) {
-      setError('Failed to refresh data. Please try again.');
-    } finally {
-      setRefreshing(false);
-    }
+    await loadData();
+    setRefreshing(false);
   };
 
-  // Auto-reconcile with GST portal
-  const handleAutoReconcile = async () => {
-    try {
-      setRefreshing(true);
+  useEffect(() => { loadData(); }, []);
 
-      // For now, just reload the data to simulate reconciliation
-      // In real implementation, this would call GST portal APIs
-      await loadReconciliationData();
-      setError(null);
+  const items = activeTab === 'purchase' ? purchaseItems : salesItems;
+  const filtered = items.filter(item => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return item.invoiceNumber.toLowerCase().includes(term) ||
+      item.partyName.toLowerCase().includes(term) ||
+      item.partyGSTIN.toLowerCase().includes(term);
+  });
 
-    } catch (err) {
-      setError(`Auto-reconciliation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setRefreshing(false);
-    }
+  const totalTax = filtered.reduce((sum, item) => sum + item.totalTax, 0);
+  const totalAmount = filtered.reduce((sum, item) => sum + item.totalAmount, 0);
+
+  const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const handleExport = () => {
+    const header = 'Invoice No,Date,Party,GSTIN,Taxable,CGST,SGST,IGST,Total Tax,Total Amount\n';
+    const rows = filtered.map(item =>
+      `${item.invoiceNumber},${item.invoiceDate},"${item.partyName}",${item.partyGSTIN},${item.taxableAmount},${item.cgst},${item.sgst},${item.igst},${item.totalTax},${item.totalAmount}`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gst_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
-
-  // Get status badge configuration
-  const getStatusBadge = (status: ReconciliationItem['status']) => {
-    const config: Record<ReconciliationItem['status'], StatusConfig> = {
-      matched: { color: 'green', icon: CheckCircle, text: 'Matched' },
-      mismatched: { color: 'yellow', icon: AlertTriangle, text: 'Mismatch' },
-      missing: { color: 'red', icon: XCircle, text: 'Missing' }
-    };
-
-    const statusConfig = config[status] || config.missing;
-    const Icon = statusConfig.icon;
-
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${statusConfig.color}-100 text-${statusConfig.color}-800`}>
-        <Icon className="w-3 h-3 mr-1" />
-        {statusConfig.text}
-      </span>
-    );
-  };
-
-  // Filter items based on search and status
-  const getFilteredItems = () => {
-    let items = reconciliationData[activeTab].items;
-
-    if (searchTerm) {
-      items = items.filter(item =>
-        item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.supplierName && item.supplierName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (item.supplierGSTIN && item.supplierGSTIN.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      items = items.filter(item => item.status === statusFilter);
-    }
-
-    return items;
-  };
-
-  // Export reconciliation data
-  const handleExport = async () => {
-    try {
-      // Export current reconciliation data as CSV
-      const data = reconciliationData[activeTab];
-      const csvHeader = 'Invoice No,Date,Supplier,GSTIN,Our Amount,Portal Amount,Our GST,Portal GST,Status\n';
-      const csvRows = data.items.map(item =>
-        `${item.invoiceNumber},${item.invoiceDate},"${item.supplierName}",${item.supplierGSTIN},${item.ourAmount},${item.gstPortalAmount},${item.ourGST},${item.portalGST},${item.status}`
-      ).join('\n');
-
-      const csvContent = csvHeader + csvRows;
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `gst_reconciliation_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError('Failed to export data. Please try again.');
-    }
-  };
-
-  // Load data on component mount
-  useEffect(() => {
-    loadReconciliationData();
-  }, []);
-
-  // Clear old offline data periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      offlineStorage.clearOldData(24); // Clear data older than 24 hours
-    }, 60 * 60 * 1000); // Check every hour
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const filteredItems = getFilteredItems();
-  const currentData = reconciliationData[activeTab];
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">Loading GST reconciliation data...</span>
+        <span className="ml-2 text-gray-600">Loading GST data...</span>
       </div>
     );
   }
@@ -321,47 +143,42 @@ const GSTReconciliation: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">GST Reconciliation</h1>
-          <p className="text-gray-600">Reconcile GST data with portal records</p>
+          <p className="text-gray-600">Review your GST data for filing</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-          <button
-            onClick={handleAutoReconcile}
-            disabled={refreshing}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Auto Reconcile
+            Refresh
           </button>
         </div>
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-              <span className="text-red-800">{error}</span>
-            </div>
-            <button
-              onClick={() => setError(null)}
-              className="text-sm text-red-600 hover:text-red-800 underline"
-            >
-              Dismiss
-            </button>
+      {/* Portal Integration Notice */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start">
+          <Info className="h-5 w-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium">Books Data Only</p>
+            <p>This shows your invoice and purchase data from books. To reconcile against the GST portal, upload your GSTR-2B file in the "2B Upload" tab.</p>
           </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+            <span className="text-red-800">{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-sm text-red-600 hover:text-red-800 underline">Dismiss</button>
         </div>
       )}
 
-      {/* Tab Navigation */}
+      {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {(['purchase', 'sales'] as const).map((tab) => (
@@ -371,191 +188,107 @@ const GSTReconciliation: React.FC = () => {
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+              }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} Reconciliation
+              {tab === 'purchase' ? 'Purchase (Input Tax)' : 'Sales (Output Tax)'}
             </button>
           ))}
         </nav>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{currentData.total}</p>
-            </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
+          <p className="text-sm font-medium text-gray-600">Total Invoices</p>
+          <p className="text-2xl font-bold text-gray-900">{filtered.length}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Matched</p>
-              <p className="text-2xl font-bold text-green-600">{currentData.matched}</p>
-            </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
+          <p className="text-sm font-medium text-gray-600">Total Tax</p>
+          <p className="text-2xl font-bold text-blue-600">{fmt(totalTax)}</p>
         </div>
-
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Mismatched</p>
-              <p className="text-2xl font-bold text-yellow-600">{currentData.mismatched}</p>
-            </div>
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Missing</p>
-              <p className="text-2xl font-bold text-red-600">{currentData.missing}</p>
-            </div>
-            <div className="p-3 bg-red-100 rounded-lg">
-              <XCircle className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
+          <p className="text-sm font-medium text-gray-600">Total Amount</p>
+          <p className="text-2xl font-bold text-gray-900">{fmt(totalAmount)}</p>
         </div>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search invoices..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="matched">Matched</option>
-              <option value="mismatched">Mismatched</option>
-              <option value="missing">Missing</option>
-            </select>
-
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </button>
-          </div>
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex items-center justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by invoice, party, or GSTIN..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
         </div>
+        <button
+          onClick={handleExport}
+          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 ml-3"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export CSV
+        </button>
       </div>
 
-      {/* Reconciliation Items Table */}
+      {/* Data Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
-            {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Items ({filteredItems.length})
+            {activeTab === 'purchase' ? 'Purchase' : 'Sales'} Invoices ({filtered.length})
           </h3>
         </div>
 
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
             <AlertTriangle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-            <p>No reconciliation items found</p>
-            {currentData.items.length > 0 && (
-              <p className="text-sm text-gray-400 mt-1">Try adjusting your filters</p>
-            )}
+            <p>No invoices found for this period</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Invoice Details
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Supplier
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Our Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Portal Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    GST Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Party</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Taxable</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">CGST</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">SGST</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">IGST</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map((item) => (
+                {filtered.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{item.invoiceNumber}</div>
-                        <div className="text-sm text-gray-500">{item.invoiceDate}</div>
-                      </div>
+                      <div className="text-sm font-medium text-gray-900">{item.invoiceNumber}</div>
+                      <div className="text-sm text-gray-500">{item.invoiceDate}</div>
                     </td>
-
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {item.supplierName || 'Unknown'}
-                        </div>
-                        {item.supplierGSTIN && (
-                          <div className="text-xs text-gray-500 font-mono">{item.supplierGSTIN}</div>
-                        )}
-                      </div>
+                      <div className="text-sm font-medium text-gray-900">{item.partyName}</div>
+                      {item.partyGSTIN && <div className="text-xs text-gray-500 font-mono">{item.partyGSTIN}</div>}
                     </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        ₹{item.ourAmount.toLocaleString()}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        ₹{item.gstPortalAmount.toLocaleString()}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div>Our: ₹{item.ourGST.toLocaleString()}</div>
-                        <div>Portal: ₹{item.portalGST.toLocaleString()}</div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(item.status)}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">{fmt(item.taxableAmount)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">{item.cgst > 0 ? fmt(item.cgst) : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">{item.sgst > 0 ? fmt(item.sgst) : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">{item.igst > 0 ? fmt(item.igst) : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">{fmt(item.totalAmount)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td colSpan={2} className="px-6 py-3 text-sm font-semibold text-gray-900">Total</td>
+                  <td className="px-6 py-3 text-right text-sm font-semibold">{fmt(filtered.reduce((s, i) => s + i.taxableAmount, 0))}</td>
+                  <td className="px-6 py-3 text-right text-sm font-semibold">{fmt(filtered.reduce((s, i) => s + i.cgst, 0))}</td>
+                  <td className="px-6 py-3 text-right text-sm font-semibold">{fmt(filtered.reduce((s, i) => s + i.sgst, 0))}</td>
+                  <td className="px-6 py-3 text-right text-sm font-semibold">{fmt(filtered.reduce((s, i) => s + i.igst, 0))}</td>
+                  <td className="px-6 py-3 text-right text-sm font-semibold">{fmt(totalAmount)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

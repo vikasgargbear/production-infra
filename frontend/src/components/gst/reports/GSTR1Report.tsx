@@ -1,20 +1,19 @@
 /**
  * GSTR1 Report - Outward Supplies
- * 
+ *
  * Shows B2B and B2C invoices with credit/debit note adjustments
  */
 
 import React, { useState, useEffect } from 'react';
-import { Loader2, Download, AlertCircle } from 'lucide-react';
-import { Button, DataTable } from '../../global';
-import type { DateRange, GSTR1Data, CreditDebitNote } from '../types';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { DataTable } from '../../global';
+import type { DateRange, GSTR1Data } from '../types';
 import {
     transformInvoicesToGSTR1,
     applyNoteAdjustments,
     formatCurrency
 } from '../utils';
 import { gstApi, invoicesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTR1ReportProps {
     dateRange: DateRange;
@@ -49,8 +48,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
             });
             const responseData = response?.data || response;
             return responseData?.notes || [];
-        } catch (err) {
-            console.error('Failed to load credit/debit notes:', err);
+        } catch {
             return [];
         }
     };
@@ -69,52 +67,17 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
 
                 setCreditDebitNotes(notes);
 
-                // Fetch customer data for GSTIN
-                let customerData: Record<string, any> = {};
-                try {
-                    const { customersApi } = await import('../../../services/api');
-                    const customerIds = [...new Set(invoices.map(inv => inv.customer_id).filter(Boolean))];
-
-                    for (const customerId of customerIds) {
-                        try {
-                            const customer = await customersApi.getById(customerId);
-                            const customerObj = customer?.data || customer;
-                            if (customerObj) {
-                                customerData[customerId as string] = customerObj;
-                            }
-                        } catch {
-                            // Skip failed customer lookups
-                        }
-                    }
-                } catch {
-                    // Continue without customer data
-                }
-
-                // Transform to GSTR1 format
-                const baseData = transformInvoicesToGSTR1(invoices, customerData);
+                // Invoices already contain customer_gst_number and customer_name
+                // from the backend join - no separate customer API calls needed
+                const baseData = transformInvoicesToGSTR1(invoices);
                 const adjustedSummary = applyNoteAdjustments(baseData.summary, notes);
 
                 setData({
                     ...baseData,
                     summary: adjustedSummary
                 });
-
-                // Cache offline
-                await offlineStorage.storeOffline(`gstr1_${dateRange.from}_${dateRange.to}`, {
-                    ...baseData,
-                    summary: adjustedSummary
-                }, { critical: true });
-
             } catch (err) {
-                console.error('GSTR1 load error:', err);
                 setError('Failed to load GSTR1 data');
-
-                // Try offline
-                const offline = await offlineStorage.getOffline(`gstr1_${dateRange.from}_${dateRange.to}`, { critical: true });
-                if (offline && !offlineStorage.isDataStale(offline, 120)) {
-                    setData(offline.data);
-                    setError('Using offline data');
-                }
             } finally {
                 setLoading(false);
             }

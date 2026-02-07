@@ -8,7 +8,6 @@ import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
 import { invoicesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface PartyWiseReportProps {
     dateRange: DateRange;
@@ -84,10 +83,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                     tax: partyArray.reduce((s, p) => s + p.total_tax, 0)
                 });
 
-                await offlineStorage.storeOffline(`party_${dateRange.from}_${dateRange.to}`, partyArray, { critical: true });
-
             } catch (err) {
-                console.error('Party-wise load error:', err);
                 setError('Failed to load party-wise data');
             } finally {
                 setLoading(false);

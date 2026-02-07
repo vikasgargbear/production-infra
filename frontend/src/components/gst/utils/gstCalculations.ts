@@ -43,15 +43,10 @@ export function determineGstType(
 
     // If either state is missing, default to intra-state (safer for compliance)
     if (!normalizedCompanyState || !normalizedPartyState) {
-        console.log('[GST] Missing state info, defaulting to CGST/SGST');
         return 'CGST/SGST';
     }
 
-    const isInterState = normalizedCompanyState !== normalizedPartyState;
-    const gstType: GstType = isInterState ? 'IGST' : 'CGST/SGST';
-
-    console.log(`[GST] Company: ${normalizedCompanyState}, Party: ${normalizedPartyState} → ${gstType}`);
-    return gstType;
+    return normalizedCompanyState !== normalizedPartyState ? 'IGST' : 'CGST/SGST';
 }
 
 // =============================================================================

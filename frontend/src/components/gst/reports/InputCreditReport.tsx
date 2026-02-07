@@ -8,7 +8,6 @@ import { DataTable } from '../../global';
 import type { DateRange } from '../types';
 import { formatCurrency } from '../utils';
 import { purchasesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface InputCreditReportProps {
     dateRange: DateRange;
@@ -72,10 +71,7 @@ const InputCreditReport: React.FC<InputCreditReportProps> = ({ dateRange, refres
                     total: items.reduce((s, i) => s + i.total_itc, 0)
                 });
 
-                await offlineStorage.storeOffline(`itc_${dateRange.from}_${dateRange.to}`, items, { critical: true });
-
             } catch (err) {
-                console.error('ITC load error:', err);
                 setError('Failed to load input credit data');
             } finally {
                 setLoading(false);

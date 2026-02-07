@@ -9,7 +9,6 @@ import { Loader2, AlertCircle, TrendingUp, TrendingDown, IndianRupee } from 'luc
 import type { DateRange } from '../types';
 import { formatCurrency, calculateNetPayable } from '../utils';
 import { invoicesApi, purchasesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTR3BReportProps {
     dateRange: DateRange;
@@ -68,13 +67,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger }
 
                 setNetPayable(calculateNetPayable(outTotal, inTotal));
 
-                await offlineStorage.storeOffline(`gstr3b_${dateRange.from}_${dateRange.to}`, {
-                    outputTax: { cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal },
-                    inputCredit: { cgst: inCgst, sgst: inSgst, igst: inIgst, total: inTotal }
-                }, { critical: true });
-
             } catch (err) {
-                console.error('GSTR3B load error:', err);
                 setError('Failed to load GSTR-3B data');
             } finally {
                 setLoading(false);

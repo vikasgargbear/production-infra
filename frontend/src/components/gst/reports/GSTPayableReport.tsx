@@ -7,7 +7,6 @@ import { Loader2, AlertCircle, IndianRupee, TrendingUp, TrendingDown } from 'luc
 import type { DateRange } from '../types';
 import { formatCurrency, calculateNetPayable } from '../utils';
 import { invoicesApi, purchasesApi } from '../../../services/api';
-import offlineStorage from '../../../services/offlineStorage';
 
 interface GSTPayableReportProps {
     dateRange: DateRange;
@@ -62,7 +61,6 @@ const GSTPayableReport: React.FC<GSTPayableReportProps> = ({ dateRange, refreshT
                 setInputCredit({ cgst: inCgst, sgst: inSgst, igst: inIgst, total: inCgst + inSgst + inIgst });
 
             } catch (err) {
-                console.error('GST Payable load error:', err);
                 setError('Failed to load GST payable data');
             } finally {
                 setLoading(false);

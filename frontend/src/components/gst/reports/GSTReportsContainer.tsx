@@ -7,11 +7,11 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    BarChart3, Download, Calendar, RefreshCw, Loader2
+    BarChart3, Calendar, RefreshCw
 } from 'lucide-react';
 import { Button, DatePicker } from '../../global';
 import type { DateRange, GSTReportType, ReportTypeConfig } from '../types';
-import { getFinancialYearRange, formatCurrency } from '../utils';
+import { getFinancialYearRange } from '../utils';
 
 // Import individual reports
 import GSTR1Report from './GSTR1Report';
@@ -20,7 +20,6 @@ import GSTR3BReport from './GSTR3BReport';
 import HSNSummaryReport from './HSNSummaryReport';
 import PartyWiseReport from './PartyWiseReport';
 import GSTPayableReport from './GSTPayableReport';
-import InputCreditReport from './InputCreditReport';
 
 interface GSTReportsContainerProps {
     onClose?: () => void;
@@ -37,6 +36,16 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         };
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    // Static Tailwind class maps (dynamic classes like `bg-${color}-100` are purged by Tailwind)
+    const activeStyles: Record<string, string> = {
+        green: 'bg-green-100 text-green-700 border-green-500',
+        blue: 'bg-blue-100 text-blue-700 border-blue-500',
+        purple: 'bg-purple-100 text-purple-700 border-purple-500',
+        amber: 'bg-amber-100 text-amber-700 border-amber-500',
+        teal: 'bg-teal-100 text-teal-700 border-teal-500',
+        red: 'bg-red-100 text-red-700 border-red-500',
+    };
 
     // Report type configurations
     const reportTypes: ReportTypeConfig[] = [
@@ -134,12 +143,6 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         setRefreshTrigger(prev => prev + 1);
     };
 
-    // Handle export
-    const handleExport = (format: 'excel' | 'pdf') => {
-        console.log(`Export ${selectedReport} as ${format}`);
-        // Export logic will be in individual reports
-    };
-
     // Render current report
     const renderReport = () => {
         const commonProps = {
@@ -194,13 +197,11 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                         <button
                             key={report.id}
                             onClick={() => setSelectedReport(report.id)}
-                            className={`
-                flex items-center px-4 py-2 rounded-lg whitespace-nowrap transition-colors
-                ${selectedReport === report.id
-                                    ? `bg-${report.color}-100 text-${report.color}-700 border-2 border-${report.color}-500`
-                                    : 'bg-white text-gray-600 border-2 border-gray-200 hover:bg-gray-50'
-                                }
-              `}
+                            className={`flex items-center px-4 py-2 rounded-lg whitespace-nowrap transition-colors border-2 ${
+                                selectedReport === report.id
+                                    ? activeStyles[report.color] || 'bg-blue-100 text-blue-700 border-blue-500'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            }`}
                         >
                             <Icon className="h-4 w-4 mr-2" />
                             <div className="text-left">
