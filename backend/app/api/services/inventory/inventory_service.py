@@ -81,42 +81,44 @@ class InventoryService:
                 raise ValueError(f"Batch {batch_data.batch_number} already exists for this product")
             
             # Create batch - org_id needed for INSERT (creating new record)
+            # Map schema field names to actual DB column names
             batch_dict = batch_data.dict()
             result = db.execute(text("""
                 INSERT INTO inventory.batches (
                     org_id, product_id, batch_number, manufacturing_date,
-                    expiry_date, quantity_received, quantity_available,
-                    cost_price, mrp,
-                    supplier_id, purchase_invoice_number, location_code, notes,
+                    expiry_date, initial_quantity, quantity_available,
+                    cost_per_unit, mrp_per_unit,
+                    supplier_id, storage_location, source_type,
                     created_at, updated_at
                 ) VALUES (
                     :org_id, :product_id, :batch_number, :manufacturing_date,
                     :expiry_date, :quantity_received, :quantity_available,
                     :cost_price, :mrp,
-                    :supplier_id, :purchase_invoice_number, :location_code, :notes,
+                    :supplier_id, :location_code, 'manual',
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ) RETURNING batch_id
             """), batch_dict)
-            
+
             batch_id = result.scalar()
-            
+
             # Record stock movement - org_id needed for INSERT
             db.execute(text("""
                 INSERT INTO inventory.inventory_movements (
-                    org_id, product_id, batch_id, movement_type,
-                    movement_date, quantity_in, reference_type,
-                    notes, created_at
+                    org_id, product_id, batch_id, movement_type, movement_direction,
+                    movement_date, quantity, reference_type,
+                    notes, created_by, created_at
                 ) VALUES (
-                    :org_id, :product_id, :batch_id, 'purchase',
-                    :movement_date, :quantity_in, 'batch_creation',
-                    'New batch created', CURRENT_TIMESTAMP
+                    :org_id, :product_id, :batch_id, 'purchase', 'in',
+                    :movement_date, :quantity, 'batch_creation',
+                    'New batch created', :created_by, CURRENT_TIMESTAMP
                 )
             """), {
                 "org_id": batch_dict["org_id"],
                 "product_id": batch_dict["product_id"],
                 "batch_id": batch_id,
                 "movement_date": date.today(),
-                "quantity_in": batch_dict["quantity_received"]
+                "quantity": batch_dict["quantity_received"],
+                "created_by": batch_dict.get("created_by", 1)
             })
             
             # Note: We do NOT commit here - caller controls transaction
@@ -137,7 +139,11 @@ class InventoryService:
         """
         result = db.execute(text("""
             SELECT b.*, p.product_name, p.product_code,
-                   b.initial_quantity - b.quantity_available as quantity_sold
+                   b.initial_quantity as quantity_received,
+                   b.cost_per_unit as cost_price,
+                   b.mrp_per_unit as mrp,
+                   b.storage_location as location_code,
+                   b.initial_quantity - b.quantity_available - COALESCE(b.quantity_returned, 0) as quantity_sold
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.batch_id = :batch_id
@@ -152,8 +158,8 @@ class InventoryService:
         # Calculate additional fields
         batch_dict["quantity_sold"] = batch_dict.get("quantity_sold", 0)
         batch_dict["stock_value"] = (
-            Decimal(str(batch_dict["quantity_available"])) * 
-            Decimal(str(batch_dict.get("cost_price", 0)))
+            Decimal(str(batch_dict["quantity_available"])) *
+            Decimal(str(batch_dict.get("cost_per_unit", 0)))
         )
         
         if batch_dict["expiry_date"]:
@@ -919,28 +925,33 @@ class InventoryService:
     def get_near_expiry_stock(db: Session, org_id: str, days: int) -> List[dict]:
         """Get products nearing expiry."""
         result = db.execute(text("""
-            SELECT i.*, p.product_name, p.hsn_code,
-                   EXTRACT(DAY FROM i.expiry_date - CURRENT_DATE) as days_to_expiry
-            FROM inventory i
-            LEFT JOIN inventory.products p ON i.product_id = p.product_id
-            WHERE i.org_id = :org_id AND i.current_stock > 0
-            AND i.expiry_date IS NOT NULL AND i.expiry_date <= CURRENT_DATE + make_interval(days => :days)
-            ORDER BY i.expiry_date ASC
+            SELECT b.batch_id, b.batch_number, b.product_id, b.expiry_date,
+                   b.quantity_available, b.cost_per_unit, b.mrp_per_unit,
+                   p.product_name, p.hsn_code,
+                   EXTRACT(DAY FROM b.expiry_date - CURRENT_DATE) as days_to_expiry
+            FROM inventory.batches b
+            JOIN inventory.products p ON b.product_id = p.product_id AND b.org_id = p.org_id
+            WHERE b.org_id = :org_id AND b.quantity_available > 0
+            AND b.batch_status = 'active'
+            AND b.expiry_date IS NOT NULL
+            AND b.expiry_date <= CURRENT_DATE + make_interval(days => :days)
+            ORDER BY b.expiry_date ASC
         """), {"org_id": org_id, "days": days})
         return [dict(row._mapping) for row in result]
     
     @staticmethod
     def get_low_stock_items(db: Session, org_id: str) -> List[dict]:
-        """Get products with low stock."""
+        """Get products with low stock (below reorder level)."""
         result = db.execute(text("""
             SELECT p.product_id, p.product_name, p.hsn_code, p.reorder_level, p.reorder_quantity,
-                   COALESCE(SUM(i.current_stock), 0) as total_stock
+                   COALESCE(SUM(b.quantity_available), 0) as total_stock
             FROM inventory.products p
-            LEFT JOIN inventory i ON p.product_id = i.product_id
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                AND b.org_id = p.org_id AND b.batch_status = 'active'
             WHERE p.org_id = :org_id AND p.reorder_level IS NOT NULL AND p.reorder_level > 0
             GROUP BY p.product_id, p.product_name, p.hsn_code, p.reorder_level, p.reorder_quantity
-            HAVING COALESCE(SUM(i.current_stock), 0) <= p.reorder_level
-            ORDER BY (COALESCE(SUM(i.current_stock), 0) / NULLIF(p.reorder_level, 0)) ASC
+            HAVING COALESCE(SUM(b.quantity_available), 0) <= p.reorder_level
+            ORDER BY (COALESCE(SUM(b.quantity_available), 0) / NULLIF(p.reorder_level, 0)) ASC
         """), {"org_id": org_id})
         return [dict(row._mapping) for row in result]
     
@@ -981,12 +992,12 @@ class InventoryService:
             query += " AND b.product_id = :product_id"
             params["product_id"] = product_id
         if location:
-            query += " AND b.location_code ILIKE :location"
+            query += " AND b.storage_location ILIKE :location"
             params["location"] = f"%{location}%"
         if not include_expired:
             query += " AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)"
         if expiring_in_days:
-            query += " AND b.expiry_date <= CURRENT_DATE + INTERVAL ':days days'"
+            query += " AND b.expiry_date <= CURRENT_DATE + INTERVAL '1 day' * :days"
             params["days"] = expiring_in_days
         
         count_query = f"SELECT COUNT(*) FROM ({query}) t"
