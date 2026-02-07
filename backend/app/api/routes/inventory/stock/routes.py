@@ -49,7 +49,7 @@ async def create_batch(
 ):
     """Create a new batch"""
     try:
-        return InventoryService.create_batch(db, batch)
+        return InventoryService.create_batch(db, batch, user_id=context.user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

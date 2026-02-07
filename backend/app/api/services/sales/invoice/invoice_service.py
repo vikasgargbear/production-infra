@@ -14,6 +14,7 @@ from .invoice_validator import InvoiceValidator
 from ...document_number_service import DocumentNumberService
 from ...inventory.inventory_service import InventoryService
 from ...compliance.gst_service import GSTService
+from app.core.utils.branch_utils import resolve_location_id
 # Import shared calculator for consistent calculations
 from app.api.shared.calculations import calculate_line_item
 
@@ -300,6 +301,7 @@ class InvoiceService:
                     logger.info(f"✅ Updated {len(batch_deductions)} batch quantities for delta sync")
 
                 # 9.6. Record inventory movements (audit trail)
+                inv_location_id = resolve_location_id(db, org_id, actual_branch_id)
                 movement_records = []
                 for item_data in invoice_items_data:
                     if item_data.get('product_id'):
@@ -311,7 +313,8 @@ class InvoiceService:
                             "pack_type": item_data.get("pack_type"),
                             "base_quantity": item_data.get("base_quantity", item_data["quantity"]),
                             "unit_cost": item_data.get("unit_price", 0),
-                            "total_cost": item_data.get("line_total", 0)
+                            "total_cost": item_data.get("line_total", 0),
+                            "location_id": inv_location_id
                         })
 
                 if movement_records:

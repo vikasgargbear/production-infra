@@ -1009,7 +1009,7 @@ class ProductService:
         }
 
     @staticmethod
-    def create_product(
+    def create_product_with_batch(
         db: Session,
         org_id: str,
         product_data: Dict[str, Any]
@@ -1017,6 +1017,8 @@ class ProductService:
         """
         Create a new product with optional initial batch.
         Handles checking duplicates and trigger management for batch creation.
+        Note: Renamed from create_product to avoid shadowing the primary
+        create_product(db, org_id, product_name, ...) used by get_or_create_product.
         """
         # Check if product code already exists
         exists = db.execute(text("""

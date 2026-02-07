@@ -59,6 +59,55 @@ def get_default_branch_id(db: Session, org_id: str) -> int:
 
 
 
+def resolve_location_id(db: Session, org_id: str, branch_id: int = None, explicit_location_id: int = None) -> int:
+    """
+    Centralized location resolution for inventory operations.
+
+    Priority:
+    1. Explicit location_id (from request body)
+    2. Default location for the given branch
+    3. Any active location for the org
+    4. Falls back to branch_id as location_id (legacy compat)
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        branch_id: Branch ID (from context or request)
+        explicit_location_id: Location ID explicitly provided in request
+
+    Returns:
+        Resolved location_id
+    """
+    if explicit_location_id:
+        return explicit_location_id
+
+    # Try to find location for the given branch
+    if branch_id:
+        result = db.execute(text("""
+            SELECT location_id FROM inventory.storage_locations
+            WHERE org_id = :org_id AND branch_id = :branch_id AND is_active = true
+            ORDER BY location_id LIMIT 1
+        """), {"org_id": org_id, "branch_id": branch_id}).first()
+        if result:
+            return result[0]
+
+    # Fallback: any active location for the org
+    result = db.execute(text("""
+        SELECT location_id FROM inventory.storage_locations
+        WHERE org_id = :org_id AND is_active = true
+        ORDER BY location_id LIMIT 1
+    """), {"org_id": org_id}).first()
+    if result:
+        return result[0]
+
+    # Last resort: use branch_id (legacy behavior, logged)
+    import logging
+    logging.getLogger(__name__).warning(
+        f"No storage_location found for org {org_id}, branch {branch_id}. Using branch_id as location_id."
+    )
+    return branch_id or 1
+
+
 def get_branch_name(db: Session, branch_id: int) -> str:
     """
     Get the name of a branch by its ID.

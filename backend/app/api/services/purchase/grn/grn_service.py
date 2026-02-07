@@ -12,6 +12,7 @@ from .grn_repository import GRNRepository
 from ..calculations import PurchaseCalculator
 from ...document_number_service import DocumentNumberService
 from .....core.utils.constants import GRNStatus
+from .....core.utils.branch_utils import resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,8 @@ class GRNService:
             if not grn_data.get("qc_required", False):
                 batches_created = GRNService._update_inventory(
                     db, org_id, grn_id, grn_number,
-                    grn_data.get("supplier_id"), items, user_id
+                    grn_data.get("supplier_id"), items, user_id,
+                    branch_id=branch_id
                 )
                 
                 # Mark stock as updated
@@ -104,7 +106,8 @@ class GRNService:
         grn_number: str,
         supplier_id: Optional[int],
         items: List[Dict[str, Any]],
-        user_id: int
+        user_id: int,
+        branch_id: int = None
     ) -> int:
         """
         Create/update inventory batches from GRN items and record movements.
@@ -114,6 +117,14 @@ class GRNService:
         1. Bulk UPSERT inventory.batches (handles quantity_available)
         2. Bulk INSERT inventory.inventory_movements (audit trail)
         """
+        # Resolve proper location_id from branch
+        location_id = resolve_location_id(db, org_id, branch_id)
+
+        # Inject location_id into items so repository uses it
+        for item in items:
+            if not item.get("location_id"):
+                item["location_id"] = location_id
+
         # Step 1: Bulk upsert batches
         batches_created = GRNRepository.create_inventory_batches_bulk(
             db, org_id, grn_id, supplier_id, items
@@ -176,7 +187,8 @@ class GRNService:
             items = GRNRepository.get_grn_items(db, grn_id)
             batches_created = GRNService._update_inventory(
                 db, org_id, grn_id, grn.get("grn_number", ""),
-                grn.get("supplier_id"), items, user_id
+                grn.get("supplier_id"), items, user_id,
+                branch_id=grn.get("branch_id")
             )
         
         # Update GRN status via repository

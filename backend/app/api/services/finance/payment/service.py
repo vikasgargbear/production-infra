@@ -651,77 +651,46 @@ class PaymentService:
             raise ValueError("Payment not found or not in a valid status for allocation")
         
         total_allocated = 0
-        
+
         for allocation in allocations:
             invoice_id = allocation.get("invoice_id")
             allocated_amount = allocation.get("amount", 0)
-            
+
             if allocated_amount <= 0:
                 continue
-            
+
             # Get invoice balance
             invoice = db.execute(text("""
-                SELECT invoice_id, final_amount, paid_amount
+                SELECT invoice_id, invoice_number, final_amount, paid_amount
                 FROM sales.invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
             """), {"invoice_id": invoice_id, "org_id": org_id}).first()
-            
+
             if not invoice:
                 raise ValueError(f"Invoice {invoice_id} not found")
-            
+
             balance = invoice.final_amount - (invoice.paid_amount or 0)
             actual_allocation = min(allocated_amount, balance)
-            
+
             if actual_allocation > 0:
-                # Create allocation record
+                # Create allocation record in financial.allocations (base table)
+                # DB trigger trg_update_reference_paid_amount handles invoice + outstanding updates
                 db.execute(text("""
-                    INSERT INTO financial.payment_allocations (
-                        payment_id, invoice_id, allocated_amount,
-                        allocation_date, created_by
+                    INSERT INTO financial.allocations (
+                        payment_id, reference_type, reference_id, reference_number,
+                        allocated_amount, source_type, created_by
                     ) VALUES (
-                        :payment_id, :invoice_id, :allocated_amount,
-                        CURRENT_DATE, :created_by
+                        :payment_id, 'invoice', :reference_id, :reference_number,
+                        :allocated_amount, 'payment', :created_by
                     )
                 """), {
                     "payment_id": payment_id,
-                    "invoice_id": invoice_id,
+                    "reference_id": invoice_id,
+                    "reference_number": invoice.invoice_number or f"INV-{invoice_id}",
                     "allocated_amount": actual_allocation,
                     "created_by": user_id
                 })
-                
-                # Update invoice paid amount in sales.invoices (legacy/compatibility)
-                db.execute(text("""
-                    UPDATE sales.invoices
-                    SET paid_amount = COALESCE(paid_amount, 0) + :amount,
-                        payment_status = CASE
-                            WHEN COALESCE(paid_amount, 0) + :amount >= final_amount THEN 'paid'
-                            ELSE 'partial'
-                        END
-                    WHERE invoice_id = :invoice_id
-                """), {
-                    "amount": actual_allocation,
-                    "invoice_id": invoice_id
-                })
-                
-                # Update invoice outstanding in financial.customer_outstanding (single source of truth)
-                db.execute(text("""
-                    UPDATE financial.customer_outstanding
-                    SET outstanding_amount = outstanding_amount - :amount,
-                        paid_amount = COALESCE(paid_amount, 0) + :amount,
-                        status = CASE 
-                            WHEN outstanding_amount - :amount <= 0 THEN 'paid'
-                            ELSE 'partial'
-                        END,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE document_type = 'invoice' 
-                    AND document_id = :invoice_id
-                    AND org_id = :org_id
-                """), {
-                    "amount": actual_allocation,
-                    "invoice_id": invoice_id,
-                    "org_id": org_id
-                })
-                
+
                 total_allocated += actual_allocation
         
         # Update payment with allocated amount

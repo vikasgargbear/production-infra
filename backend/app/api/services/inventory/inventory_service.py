@@ -56,7 +56,7 @@ class InventoryService:
         return "normal"
     
     @staticmethod
-    def create_batch(db: Session, batch_data: BatchCreate) -> BatchResponse:
+    def create_batch(db: Session, batch_data: BatchCreate, user_id: int = None) -> BatchResponse:
         """Create a new batch with validation"""
         try:
             # Validate product exists (TenantAwareSession auto-adds org_id)
@@ -118,8 +118,7 @@ class InventoryService:
                 "batch_id": batch_id,
                 "movement_date": date.today(),
                 "quantity": batch_dict["quantity_received"],
-                # TODO: Route should pass user_id from OrgContext; schema BatchCreate lacks created_by
-                "created_by": batch_dict.get("created_by", 1)
+                "created_by": user_id or batch_dict.get("created_by", 1)
             })
             
             # Note: We do NOT commit here - caller controls transaction
@@ -730,7 +729,7 @@ class InventoryService:
                 'sale', 'Customer Sale',
                 :location_id_{i}, :created_by_{i}, CURRENT_TIMESTAMP
             )""")
-            mv_params[f"location_id_{i}"] = mv.get("location_id", 1)
+            mv_params[f"location_id_{i}"] = mv["location_id"]
             mv_params[f"org_id_{i}"] = mv["org_id"]
             mv_params[f"product_id_{i}"] = mv["product_id"]
             mv_params[f"batch_id_{i}"] = mv["batch_id"]
