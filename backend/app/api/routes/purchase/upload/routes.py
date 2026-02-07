@@ -11,8 +11,10 @@ import tempfile
 import shutil
 from ....services.document_number_service import DocumentNumberService
 from ....services.purchase.upload.service import UploadService
+from ....services.master.product.service import ProductService
 from decimal import Decimal
 
+from .....core.utils.constants import ProductDefaults, PackDefaults
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
@@ -354,14 +356,14 @@ async def create_purchase_from_parsed(
         for item in purchase_data.get("items", []):
             product_id = item.get("product_id")
             if not product_id and item.get("create_product", False):
-                product_code = f"PROD{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                product_id = UploadService.create_product(db, {
-                    "org_id": str(context.org_id), "code": product_code, "name": item.get("description"),
-                    "hsn": item.get("hsn_code"), "category": "General",
-                    "purchase_price": Decimal(str(item.get("rate", 0))),
-                    "sale_price": Decimal(str(item.get("rate", 0) * 1.2)),
-                    "mrp": Decimal(str(item.get("mrp", 0))), "gst": Decimal(str(item.get("tax_percent", 0)))
-                })
+                product_id = ProductService.get_or_create_product(
+                    db=db,
+                    org_id=str(context.org_id),
+                    product_name=item.get("description", "Unknown Product"),
+                    hsn_code=item.get("hsn_code"),
+                    user_id=getattr(context, 'user_id', None),
+                    gst_percent=float(item.get("tax_percent", ProductDefaults.DEFAULT_GST_PERCENT))
+                )
             
             if product_id:
                 UploadService.create_purchase_order_item(db, {
@@ -370,11 +372,11 @@ async def create_purchase_from_parsed(
                     "unit_price": Decimal(str(item.get("rate", 0))), "mrp": Decimal(str(item.get("mrp", 0))),
                     "discount_percent": Decimal(str(item.get("discount_percent", 0))),
                     "discount_amount": Decimal(str(item.get("discount_amount", 0))),
-                    "tax_percent": Decimal(str(item.get("tax_percent", 12))),
+                    "tax_percent": Decimal(str(item.get("tax_percent", ProductDefaults.DEFAULT_GST_PERCENT))),
                     "tax_amount": Decimal(str(item.get("tax_amount", 0))),
                     "line_total": Decimal(str(item.get("amount", 0))),
                     "batch_number": item.get("batch_number"), "expiry_date": item.get("expiry_date"),
-                    "uom": item.get("unit", "NOS"), "pack_type": item.get("pack_type", "STRIP")
+                    "uom": item.get("unit", ProductDefaults.DEFAULT_BASE_UOM), "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE)
                 })
                 items_created += 1
         

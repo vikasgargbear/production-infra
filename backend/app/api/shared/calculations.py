@@ -14,6 +14,7 @@ from ...core.auth.tenant_service import get_tenant_aware_db, with_tenant_context
 from ...core.auth.org_context import get_org_context, OrgContext
 from ...core.security.permissions import PermissionChecker
 from ..services.compliance.gst_service import GSTService, calculate_gst_breakdown
+from ...core.utils.constants import ProductDefaults
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
@@ -173,7 +174,7 @@ async def calculate_purchase_totals(
             quantity = float(item.get("quantity", 0))
             purchase_price = float(item.get("purchase_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT))
             
             # Line calculations
             subtotal = quantity * purchase_price
@@ -278,7 +279,7 @@ async def calculate_sales_order_totals(
             quantity = float(item.get("quantity", 0))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT))
             
             # Line calculations
             subtotal = quantity * unit_price
@@ -380,7 +381,7 @@ async def calculate_sales_return_totals(
             return_quantity = float(item.get("return_quantity", 0))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT))
             
             # Line calculations
             subtotal = return_quantity * unit_price
@@ -482,7 +483,7 @@ async def calculate_purchase_return_totals(
             return_quantity = float(item.get("return_quantity", 0))
             purchase_price = float(item.get("purchase_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT))
             
             # Line calculations
             subtotal = return_quantity * purchase_price
@@ -667,7 +668,7 @@ async def calculate_invoice_totals(
             
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT))
             
             # Line calculations - use base_quantity (what customer pays for)
             subtotal = base_quantity * unit_price

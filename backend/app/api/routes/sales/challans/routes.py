@@ -13,6 +13,7 @@ from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_d
 from .....core.auth.org_context import get_org_context, OrgContext  
 from .....core.security.permissions import PermissionChecker
 from ....services.sales.challan.service import ChallanService
+from .....core.utils.constants import ProductDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ async def create_delivery_challan(
                 if existing:
                     order_item_id = existing["order_item_id"]
             
-            uom = item.uom if item.uom else "NOS"
+            uom = item.uom if item.uom else ProductDefaults.DEFAULT_BASE_UOM
             pack_type = item.package_type if item.package_type else "UNIT"
             
             ChallanService.create_challan_item(db, {

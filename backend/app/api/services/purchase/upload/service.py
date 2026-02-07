@@ -71,20 +71,6 @@ class UploadService:
         return result.scalar()
     
     @staticmethod
-    def create_product(db: Session, data: Dict[str, Any]) -> int:
-        """Create new product."""
-        result = db.execute(text("""
-            INSERT INTO inventory.products (
-                org_id, product_code, product_name, hsn_code, category,
-                purchase_price, sale_price, mrp, gst_percent
-            ) VALUES (
-                :org_id, :code, :name, :hsn, :category,
-                :purchase_price, :sale_price, :mrp, :gst
-            ) RETURNING product_id
-        """), data)
-        return result.scalar()
-    
-    @staticmethod
     def create_purchase_order_item(db: Session, data: Dict[str, Any]) -> None:
         """Create purchase order item."""
         db.execute(text("""

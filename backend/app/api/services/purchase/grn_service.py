@@ -13,7 +13,7 @@ import logging
 from .calculations import PurchaseCalculator
 from ..document_number_service import DocumentNumberService
 from ..inventory.inventory_service import InventoryService
-from ....core.utils.constants import GRNStatus
+from ....core.utils.constants import GRNStatus, ProductDefaults, PackDefaults, PricingDefaults, DateDefaults, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -184,9 +184,9 @@ class GRNService:
             "accepted_quantity": item.get("accepted_quantity") or item.get("quantity"),
             "rejected_quantity": item.get("rejected_quantity", 0),
             "free_quantity": item.get("free_quantity", 0),
-            "uom": item.get("uom", "Strip"),
-            "pack_type": item.get("pack_type", "STRIP"),
-            "pack_size": item.get("pack_size", 10),
+            "uom": item.get("uom", PackDefaults.PACK_UOM),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
             "unit_price": item.get("unit_price") or item.get("purchase_price"),
             "mrp": item.get("mrp"),
             "ptr": item.get("ptr"),
@@ -258,15 +258,15 @@ class GRNService:
                 "quantity_available": quantity,
                 "cost_per_unit": item.get("unit_price") or item.get("purchase_price"),
                 "supplier_id": supplier_id,
-                "source_type": "GRN",
+                "source_type": SourceType.GRN.value,
                 "source_reference_id": grn_id,
                 "batch_status": "active",
                 "storage_condition": item.get("storage_conditions", "room_temperature"),
-                "pack_size": item.get("pack_size", 1),
-                "pack_type": item.get("pack_type", "PACK"),
-                "pack_uom": item.get("pack_uom", "PACK"),
-                "base_uom": item.get("base_uom", "NOS"),
-                "units_per_pack": item.get("units_per_pack", 1)
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_uom": item.get("pack_uom", PackDefaults.PACK_UOM),
+                "base_uom": item.get("base_uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "units_per_pack": item.get("units_per_pack", PackDefaults.UNITS_PER_PACK)
             })
             
             batches_created += 1

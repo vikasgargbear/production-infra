@@ -17,6 +17,7 @@ from ....schemas.inventory.inventory import (
     StockValuation, InventoryDashboard
 )
 from ....services.inventory.inventory_service import InventoryService
+from .....core.utils.constants import DateDefaults
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["inventory"])
@@ -93,7 +94,7 @@ async def list_batches(
         
         for batch in batches:
             batch["is_expired"] = batch.get("days_to_expiry", 0) <= 0 if batch.get("days_to_expiry") is not None else False
-            batch["is_near_expiry"] = 0 < batch.get("days_to_expiry", 999) <= 90
+            batch["is_near_expiry"] = 0 < batch.get("days_to_expiry", 999) <= DateDefaults.NEAR_EXPIRY_THRESHOLD
         
         return {"total": total, "batches": batches}
     except Exception as e:

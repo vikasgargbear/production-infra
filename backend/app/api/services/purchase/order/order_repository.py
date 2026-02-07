@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
+from ....core.utils.constants import ProductDefaults, PackDefaults, SourceType
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,9 +102,9 @@ class PurchaseOrderRepository:
             "product_name": item.get("product_name", ""),
             "hsn_code": item.get("hsn_code"),
             "quantity": Decimal(str(item.get("quantity", 0))),
-            "uom": item.get("uom", "NOS"),
-            "pack_type": item.get("pack_type", "PACK"),
-            "pack_size": item.get("pack_size", 1),
+            "uom": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
             "unit_price": Decimal(str(item.get("unit_price", 0))),
             "mrp": Decimal(str(item.get("mrp", 0))),
             "discount_percent": Decimal(str(item.get("discount_percent", 0))),
@@ -356,28 +358,6 @@ class PurchaseOrderRepository:
         return result.scalar()
     
     @staticmethod
-    def create_product(
-        db: Session, org_id: str, product_data: Dict[str, Any], category_id: int
-    ) -> int:
-        """Create a new product. Returns product_id."""
-        result = db.execute(text("""
-            INSERT INTO inventory.products (
-                org_id, category_id, product_name, product_code,
-                hsn_code, is_active, maintain_batch, created_at
-            ) VALUES (
-                :org_id, :category_id, :name, :code,
-                :hsn, TRUE, TRUE, CURRENT_TIMESTAMP
-            ) RETURNING product_id
-        """), {
-            "org_id": org_id,
-            "category_id": category_id,
-            "name": product_data.get("product_name", ""),
-            "code": product_data.get("product_code", ""),
-            "hsn": product_data.get("hsn_code", "")
-        })
-        return result.scalar()
-    
-    @staticmethod
     def create_batch(
         db: Session, org_id: str, batch_data: Dict[str, Any]
     ) -> int:
@@ -512,7 +492,7 @@ class PurchaseOrderRepository:
                 :batch_number, :expiry_date,
                 :quantity, :quantity,
                 :cost_price, :mrp, :selling_price,
-                'purchase',
+                :source_type,
                 :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
                 'active', 'normal',
                 CURRENT_TIMESTAMP
@@ -526,11 +506,12 @@ class PurchaseOrderRepository:
             "cost_price": batch_data.get("cost_price", 0),
             "mrp": batch_data.get("mrp", 0),
             "selling_price": batch_data.get("selling_price", 0),
-            "pack_type": batch_data.get("pack_type", "STRIP"),
-            "pack_size": batch_data.get("pack_size", 1),
-            "pack_uom": batch_data.get("pack_uom", "STRIP"),
-            "base_uom": batch_data.get("base_uom", "NOS"),
-            "units_per_pack": batch_data.get("units_per_pack", 1)
+            "source_type": SourceType.PURCHASE.value,
+            "pack_type": batch_data.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": batch_data.get("pack_size", PackDefaults.PACK_SIZE),
+            "pack_uom": batch_data.get("pack_uom", PackDefaults.PACK_UOM),
+            "base_uom": batch_data.get("base_uom", ProductDefaults.DEFAULT_BASE_UOM),
+            "units_per_pack": batch_data.get("units_per_pack", PackDefaults.PACK_SIZE)
         })
         return result.scalar()
     
@@ -573,10 +554,10 @@ class PurchaseOrderRepository:
             "sgst_amount": item.get("sgst_amount", 0),
             "igst_amount": item.get("igst_amount", 0),
             "total_amount": item.get("total_amount", 0),
-            "hsn_code": item.get("hsn_code", "30049099"),
-            "unit": item.get("unit", "NOS"),
-            "pack_type": item.get("pack_type", "STRIP"),
-            "pack_size": item.get("pack_size", 1)
+            "hsn_code": item.get("hsn_code"),
+            "unit": item.get("unit", ProductDefaults.DEFAULT_BASE_UOM),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE)
         })
     
     @staticmethod

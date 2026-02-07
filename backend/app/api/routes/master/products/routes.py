@@ -20,6 +20,9 @@ from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
 from ....services.master.product.service import ProductService  # Service layer
 from ....schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
+from .....core.utils.constants import (
+    ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -442,21 +445,21 @@ async def create_product(
         
         if should_create_batch:
             # Database field names ONLY - no aliases (single source of truth)
-            mrp_per_unit = float(product.get("mrp_per_unit", 100))
-            sale_price_per_unit = float(product.get("sale_price_per_unit") or (mrp_per_unit * 0.8))
-            cost_per_unit = float(product.get("cost_per_unit") or (sale_price_per_unit * 0.6))
-            initial_quantity = float(product.get("initial_quantity", 100))
-            
-            # Calculate expiry date if not provided (default 1 year from now)
+            mrp_per_unit = float(product.get("mrp_per_unit", PricingDefaults.DEFAULT_MRP))
+            sale_price_per_unit = float(product.get("sale_price_per_unit") or (mrp_per_unit * PricingDefaults.SALE_PRICE_FROM_MRP))
+            cost_per_unit = float(product.get("cost_per_unit") or (sale_price_per_unit * PricingDefaults.COST_FROM_SALE_PRICE))
+            initial_quantity = float(product.get("initial_quantity", PricingDefaults.DEFAULT_INITIAL_QUANTITY))
+
+            # Calculate expiry date if not provided
             from datetime import datetime, timedelta
-            expiry_date = product.get("expiry_date") or (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
-            
+            expiry_date = product.get("expiry_date") or (datetime.now() + timedelta(days=DateDefaults.EXPIRY_DAYS_SHORT)).strftime("%Y-%m-%d")
+
             # Parse pack configuration
-            pack_type = product.get("pack_type", "Strip")
-            pack_size = product.get("pack_size", 1)
-            units_per_pack = product.get("units_per_pack", 10)
-            packages_per_box = product.get("packages_per_box", 1)
-            
+            pack_type = product.get("pack_type", PackDefaults.PACK_UOM)
+            pack_size = product.get("pack_size", PackDefaults.PACK_SIZE)
+            units_per_pack = product.get("units_per_pack", PackDefaults.UNITS_PER_PACK)
+            packages_per_box = product.get("packages_per_box", PackDefaults.PACKAGES_PER_BOX)
+
             # Parse pack_input if provided (format: "packages*units" e.g., "1*10")
             pack_input = product.get("pack_input", "")
             if pack_input and "*" in pack_input:
@@ -470,7 +473,7 @@ async def create_product(
                             units_per_pack = int(units_match.group(1))
                 except Exception as parse_err:
                     logger.warning(f"Could not parse pack_input '{pack_input}': {parse_err}")
-            
+
             # Build batch data with database field names
             batch_data = {
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
@@ -485,7 +488,7 @@ async def create_product(
                 "units_per_pack": units_per_pack,
                 "packages_per_box": packages_per_box,
                 "pack_uom": product.get("pack_uom", pack_type),
-                "base_uom": product.get("base_uom", "Unit")
+                "base_uom": product.get("base_uom", PackDefaults.BASE_UOM)
             }
             
             # Use service method with trigger handling
@@ -723,7 +726,7 @@ async def update_product(
             updated_count = ProductService.update_product_batches(
                 db=db,
                 product_id=product_id,
-                batch_updates=batch_fields
+                batch_data=batch_fields
             )
             logger.info(f"Updated {len(batch_fields)} batch fields for product {product_id}")
         

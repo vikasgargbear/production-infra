@@ -14,6 +14,8 @@ from sqlalchemy import text
 from uuid import UUID
 import logging
 
+from ....core.utils.constants import DateDefaults, SourceType
+
 from ...schemas.inventory.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
@@ -49,7 +51,7 @@ class InventoryService:
             return "expired"
         elif days_to_expiry <= 30:
             return "critical"
-        elif days_to_expiry <= 90:
+        elif days_to_expiry <= DateDefaults.NEAR_EXPIRY_THRESHOLD:
             return "warning"
         elif days_to_expiry <= 180:
             return "info"
@@ -94,10 +96,10 @@ class InventoryService:
                     :org_id, :product_id, :batch_number, :manufacturing_date,
                     :expiry_date, :quantity_received, :quantity_available,
                     :cost_price, :mrp,
-                    :supplier_id, :location_code, 'manual',
+                    :supplier_id, :location_code, :source_type,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ) RETURNING batch_id
-            """), batch_dict)
+            """), {**batch_dict, "source_type": SourceType.MANUAL.value})
 
             batch_id = result.scalar()
 
@@ -167,7 +169,7 @@ class InventoryService:
                 batch_dict["expiry_date"]
             )
             batch_dict["is_expired"] = batch_dict["days_to_expiry"] <= 0
-            batch_dict["is_near_expiry"] = 0 < batch_dict["days_to_expiry"] <= 90
+            batch_dict["is_near_expiry"] = 0 < batch_dict["days_to_expiry"] <= DateDefaults.NEAR_EXPIRY_THRESHOLD
         
         return BatchResponse(**batch_dict)
     

@@ -12,7 +12,7 @@ import logging
 
 from .calculations import PurchaseCalculator
 from ..document_number_service import DocumentNumberService
-from ....core.utils.constants import InvoicePaymentStatus, SupplierInvoiceStatus
+from ....core.utils.constants import InvoicePaymentStatus, SupplierInvoiceStatus, ProductDefaults, PackDefaults, PricingDefaults, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -209,10 +209,10 @@ class SupplierInvoiceService:
             "sgst_amount": Decimal(str(calc_item.get('sgst_amount', 0))),
             "igst_amount": Decimal(str(calc_item.get('igst_amount', 0))),
             "total_amount": Decimal(str(calc_item.get('taxable_amount', 0) + calc_item.get('tax_amount', 0))),
-            "hsn_code": item.get("hsn_code", "30049099"),
-            "unit": item.get("uom") or item.get("unit", "NOS"),
-            "pack_type": item.get("pack_type", "STRIP"),
-            "pack_size": item.get("pack_size", 1)
+            "hsn_code": item.get("hsn_code"),
+            "unit": item.get("uom") or item.get("unit", ProductDefaults.DEFAULT_BASE_UOM),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE)
         })
         
         return result.scalar()
@@ -243,7 +243,7 @@ class SupplierInvoiceService:
                     :org_id, :product_id, :batch_number, :expiry_date,
                     :mrp_per_unit, :initial_quantity, :quantity_available,
                     :cost_per_unit, :sale_price_per_unit,
-                    'purchase',
+                    :source_type,
                     :pack_size, :pack_type, :pack_uom, :base_uom, :units_per_pack,
                     'active', 'normal',
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -257,12 +257,13 @@ class SupplierInvoiceService:
                 "initial_quantity": Decimal(str(calc_item.get('quantity', item.get('quantity', 0)))),
                 "quantity_available": Decimal(str(calc_item.get('quantity', item.get('quantity', 0)))),
                 "cost_per_unit": Decimal(str(calc_item.get('unit_price', item.get('unit_price', 0)))),
-                "sale_price_per_unit": Decimal(str(item.get("selling_price", item.get("mrp", 0) * 0.9))),
-                "pack_size": item.get("pack_size", 1),
-                "pack_type": item.get("pack_type", "STRIP"),
-                "pack_uom": item.get("pack_uom", "STRIP"),
-                "base_uom": item.get("base_uom", "NOS"),
-                "units_per_pack": item.get("units_per_pack", 1)
+                "sale_price_per_unit": Decimal(str(item.get("selling_price", item.get("mrp", 0) * PricingDefaults.SELLING_FROM_MRP))),
+                "source_type": SourceType.PURCHASE.value,
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_uom": item.get("pack_uom", PackDefaults.PACK_TYPE),
+                "base_uom": item.get("base_uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "units_per_pack": item.get("units_per_pack", PackDefaults.PACK_SIZE)
             })
             
             return result.scalar()

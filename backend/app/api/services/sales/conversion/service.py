@@ -8,6 +8,7 @@ from sqlalchemy import text
 from datetime import date
 from decimal import Decimal
 import logging
+from .....core.utils.constants import ProductDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ class ConversionService:
             SELECT ci.product_id, ci.product_name, ci.batch_id, ci.batch_number,
                    ci.dispatched_quantity as quantity, ci.unit_price,
                    COALESCE(p.hsn_code, '') as hsn_code,
-                   COALESCE(p.gst_percent, 18) as gst_percent,
+                   COALESCE(p.gst_percent, 18) as gst_percent,  -- TODO: hardcoded GST fallback 18%; should come from product record
                    COALESCE(b.mrp_per_unit, 0) as mrp
             FROM challan_items ci
             LEFT JOIN inventory.products p ON ci.product_id = p.product_id

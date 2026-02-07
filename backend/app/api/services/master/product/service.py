@@ -19,16 +19,20 @@ import re
 
 from ...compliance.gst_service import GSTService
 from ...document_number_service import DocumentNumberService
+from ....core.utils.constants import (
+    ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
+    TaxRates, SourceType,
+)
 
 logger = logging.getLogger(__name__)
 
-# Constants - single source of truth for product defaults
-DEFAULT_HSN_PHARMA = "30049099"  # Default pharmaceutical HSN code
-DEFAULT_HSN_GENERAL = "3004"     # General medicines HSN
-DEFAULT_BASE_UOM = "NOS"         # Default unit of measure
+# Aliases for backward compatibility within this file
+DEFAULT_HSN_PHARMA = ProductDefaults.HSN_PHARMA
+DEFAULT_HSN_GENERAL = ProductDefaults.HSN_GENERAL
+DEFAULT_BASE_UOM = ProductDefaults.DEFAULT_BASE_UOM
 DEFAULT_CONVERSION_FACTOR = 1
-DEFAULT_CESS_RATE = Decimal("0.00")
-GST_RATES = [0, 5, 12, 18, 28]   # Valid GST slabs in India
+DEFAULT_CESS_RATE = Decimal(str(ProductDefaults.DEFAULT_CESS_RATE))
+GST_RATES = TaxRates.VALID_SLABS
 PRODUCT_CODE_PREFIX = "PROD"
 
 
@@ -349,51 +353,6 @@ class ProductService:
             raise ValueError(f"Product {product_id} not found")
         
         return dict(result._mapping)
-    
-    @staticmethod
-    def search_products(
-        db: Session,
-        org_id: str,
-        query: str,
-        limit: int = 20,
-        offset: int = 0
-    ) -> List[Dict[str, Any]]:
-        """
-        Search products by name, brand, or code.
-        TenantAwareSession auto-filters by org_id.
-        
-        Args:
-            db: Database session
-            org_id: Organization ID
-            query: Search query string
-            limit: Max results to return
-            offset: Results offset for pagination
-        
-        Returns:
-            List of product dictionaries
-        """
-        results = db.execute(text("""
-            SELECT 
-                product_id, product_code, product_name,
-                brand, manufacturer, hsn_code,
-                base_uom, is_active
-            FROM inventory.products
-            WHERE is_active = true
-                AND (
-                    LOWER(product_name) LIKE LOWER(:pattern)
-                    OR LOWER(brand) LIKE LOWER(:pattern)
-                    OR LOWER(product_code) LIKE LOWER(:pattern)
-                    OR LOWER(manufacturer) LIKE LOWER(:pattern)
-                )
-            ORDER BY product_name
-            LIMIT :limit OFFSET :offset
-        """), {
-            "pattern": f"%{query}%",
-            "limit": limit,
-            "offset": offset
-        })
-        
-        return [dict(row._mapping) for row in results]
     
     @staticmethod
     def update_product(
@@ -1008,199 +967,6 @@ class ProductService:
             "default_base_uom": created.default_base_uom
         }
 
-    @staticmethod
-    def create_product_with_batch(
-        db: Session,
-        org_id: str,
-        product_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Create a new product with optional initial batch.
-        Handles checking duplicates and trigger management for batch creation.
-        Note: Renamed from create_product to avoid shadowing the primary
-        create_product(db, org_id, product_name, ...) used by get_or_create_product.
-        """
-        # Check if product code already exists
-        exists = db.execute(text("""
-            SELECT 1 FROM inventory.products 
-            WHERE product_code = :product_code
-            AND org_id = :org_id
-        """), {
-            "product_code": product_data["product_code"],
-            "org_id": org_id
-        }).scalar()
-        
-        if exists:
-            # Return existing product instead of error
-            result = db.execute(text("""
-                SELECT * FROM inventory.products
-                WHERE product_code = :product_code
-                AND org_id = :org_id
-            """), {
-                "product_code": product_data["product_code"],
-                "org_id": org_id
-            })
-            
-            existing = result.fetchone()
-            return {
-                "product_id": existing.product_id,
-                "product_code": existing.product_code,
-                "product_name": existing.product_name,
-                "message": "Product already exists",
-                "exists": True
-            }
-            
-        # Create product
-        # Build INSERT with only non-NULL foreign keys
-        columns = ["org_id", "product_code", "product_name", "generic_name",
-                  "brand", "manufacturer", "composition", "hsn_code", 
-                  "gst_percent", "maintain_batch", 
-                  "maintain_expiry", "is_active", "created_at", "updated_at"]
-        values = [":org_id", ":product_code", ":product_name", ":generic_name",
-                 ":brand", ":manufacturer", "CAST(:composition AS jsonb)", ":hsn_code",
-                 ":gst_percent", ":maintain_batch",
-                 ":maintain_expiry", ":is_active", "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP"]
-        
-        # Only add foreign keys if they're not None
-        if product_data.get("category_id") is not None:
-            columns.insert(7, "category_id")
-            values.insert(7, ":category_id")
-        
-        if product_data.get("type_id") is not None:
-            columns.insert(-2, "type_id")
-            values.insert(-2, ":type_id")
-        
-        if product_data.get("base_uom_id") is not None:
-            columns.insert(-2, "base_uom_id")
-            values.insert(-2, ":base_uom_id")
-            
-        # Prepare params
-        insert_params = product_data.copy()
-        insert_params["org_id"] = org_id
-        insert_params["maintain_batch"] = product_data.get("maintain_batch", True)
-        insert_params["maintain_expiry"] = product_data.get("maintain_expiry", True)
-        insert_params["is_active"] = product_data.get("is_active", True)
-        
-        # Ensure jsonb fields are strings if they need to be
-        if "composition" not in insert_params or insert_params["composition"] is None:
-             insert_params["composition"] = "[]"
-        
-        result = db.execute(text(f"""
-            INSERT INTO inventory.products ({', '.join(columns)})
-            VALUES ({', '.join(values)})
-            RETURNING product_id, product_code, product_name
-        """), insert_params)
-        
-        created = result.fetchone()
-        product_id = created.product_id
-        
-        # Create initial batch logic
-        should_create_batch = (
-            insert_params.get("maintain_batch") or
-            (product_data.get("quantity_available") and float(product_data.get("quantity_available", 0)) > 0) or 
-            (product_data.get("mrp") and float(product_data.get("mrp", 0)) > 0)
-        )
-        
-        if should_create_batch:
-            mrp_per_unit = float(product_data.get("mrp_per_unit", 100))
-            sale_price_per_unit = float(product_data.get("sale_price_per_unit") or (mrp_per_unit * 0.8))
-            cost_per_unit = float(product_data.get("cost_per_unit") or (sale_price_per_unit * 0.6))
-            initial_quantity = float(product_data.get("initial_quantity", 100))
-            
-            # Calculate expiry date
-            from datetime import timedelta
-            expiry_date = None
-            if product_data.get("expiry_date"):
-                if isinstance(product_data["expiry_date"], str):
-                    expiry_date = datetime.strptime(product_data["expiry_date"], "%Y-%m-%d").date()
-                else:
-                    expiry_date = product_data["expiry_date"]
-            else:
-                expiry_date = (datetime.now() + timedelta(days=365)).date()
-                
-            batch_number = f"BAT-{datetime.now().strftime('%Y%m%d')}"
-            
-            # Parse pack configuration
-            pack_type = product_data.get("pack_type", "Strip")
-            pack_size = float(product_data.get("pack_size", 1))
-            units_per_pack = float(product_data.get("units_per_pack", 10))
-            packages_per_box = float(product_data.get("packages_per_box", 1))
-            
-            # Parse pack_input if provided (format: "packages*units" e.g., "1*10")
-            pack_input = product_data.get("pack_input", "")
-            if pack_input and "*" in pack_input:
-                try:
-                    parts = pack_input.split("*")
-                    if len(parts) == 2:
-                        packages_per_box = float(parts[0].strip())
-                        units_match = re.match(r'^(\d+)', parts[1].strip())
-                        if units_match:
-                            units_per_pack = float(units_match.group(1))
-                except Exception as parse_err:
-                    logger.warning(f"Could not parse pack_input '{pack_input}': {parse_err}")
-
-            # Import random for batch number generation if needed
-            import random
-            
-            # Ensure batch number
-            batch_num = product_data.get("batch_number")
-            if not batch_num:
-                 batch_num = f"BAT-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
-            
-            # Important: Temporarily disable trigger for initial batch
-            try:
-                db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
-                
-                db.execute(text("""
-                    INSERT INTO inventory.batches (
-                        org_id, product_id, batch_number,
-                        expiry_date, manufacturing_date,
-                        quantity_available, quantity_reserved,
-                        mrp_per_unit, sale_price_per_unit, cost_per_unit,
-                        batch_status, quality_status,
-                        source_type,
-                        pack_type, pack_size, units_per_pack,
-                        packages_per_box, pack_uom, base_uom,
-                        created_at, updated_at
-                    ) VALUES (
-                        :org_id, :product_id, :batch_number,
-                        :expiry_date, CURRENT_DATE,
-                        :quantity, 0,
-                        :mrp, :sale_price, :cost,
-                        'active', 'approved',
-                        'MANUAL',
-                        :pack_type, :pack_size, :units_per_pack,
-                        :packages_per_box, :pack_uom, :base_uom,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                    )
-                """), {
-                    "org_id": org_id,
-                    "product_id": product_id,
-                    "batch_number": batch_num,
-                    "expiry_date": expiry_date,
-                    "quantity": initial_quantity,
-                    "mrp": mrp_per_unit,
-                    "sale_price": sale_price_per_unit,
-                    "cost": cost_per_unit,
-                    "pack_type": pack_type,
-                    "pack_size": pack_size,
-                    "units_per_pack": units_per_pack,
-                    "packages_per_box": packages_per_box,
-                    "pack_uom": product_data.get("pack_uom", pack_type),
-                    "base_uom": product_data.get("base_uom", "Unit")
-                })
-            finally:
-                # Always re-enable trigger
-                db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
-        
-        return {
-            "product_id": created.product_id,
-            "product_code": created.product_code,
-            "product_name": created.product_name,
-            "message": "Product created successfully",
-            "exists": False
-        }
-    
     # ==================== SEARCH WITH BATCHES ====================
     
     @staticmethod
@@ -1389,9 +1155,9 @@ class ProductService:
             "brand": product_data.get("brand"),
             "manufacturer": product_data.get("manufacturer"),
             "category_id": product_data.get("category_id"),
-            "product_type": product_data.get("product_type", "medication"),
-            "hsn_code": product_data.get("hsn_code", "30049099"),
-            "gst_percent": product_data.get("gst_percent", 12),
+            "product_type": product_data.get("product_type", ProductDefaults.DEFAULT_PRODUCT_TYPE),
+            "hsn_code": product_data.get("hsn_code", DEFAULT_HSN_PHARMA),
+            "gst_percent": product_data.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT),
             "composition": product_data.get("composition", "{}"),
             "strength": product_data.get("strength"),
             "is_active": product_data.get("is_active", True),
@@ -1449,45 +1215,6 @@ class ProductService:
         return result.category_id if result else None
     
     @staticmethod
-    def update_product_batches(
-        db: Session,
-        product_id: int,
-        batch_updates: Dict[str, Any]
-    ) -> int:
-        """
-        Update all active batches for a product.
-        TenantAwareSession auto-filters by org_id.
-        
-        Returns:
-            Number of batches updated
-        """
-        if not batch_updates:
-            return 0
-        
-        # Build dynamic UPDATE query for batches
-        set_clauses = []
-        params = {"product_id": product_id}
-        
-        for field, value in batch_updates.items():
-            if value is not None:
-                set_clauses.append(f"{field} = :{field}")
-                params[field] = value
-        
-        if not set_clauses:
-            return 0
-        
-        set_clauses.append("updated_at = CURRENT_TIMESTAMP")
-        query = f"""
-            UPDATE inventory.batches 
-            SET {', '.join(set_clauses)}
-            WHERE product_id = :product_id
-              AND batch_status = 'active'
-        """
-        
-        result = db.execute(text(query), params)
-        return result.rowcount
-    
-    @staticmethod
     def create_initial_batch(
         db: Session,
         org_id: str,
@@ -1541,12 +1268,12 @@ class ProductService:
                 "mrp": batch_data.get("mrp_per_unit", 0),
                 "sale_price": batch_data.get("sale_price_per_unit", 0),
                 "cost": batch_data.get("cost_per_unit", 0),
-                "pack_type": batch_data.get("pack_type", "UNIT"),
-                "pack_size": batch_data.get("pack_size", 1),
-                "units_per_pack": batch_data.get("units_per_pack", 1),
-                "packages_per_box": batch_data.get("packages_per_box", 1),
-                "pack_uom": batch_data.get("pack_uom", "UNIT"),
-                "base_uom": batch_data.get("base_uom", "Unit")
+                "pack_type": batch_data.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": batch_data.get("pack_size", PackDefaults.PACK_SIZE),
+                "units_per_pack": batch_data.get("units_per_pack", PackDefaults.UNITS_PER_PACK),
+                "packages_per_box": batch_data.get("packages_per_box", PackDefaults.PACKAGES_PER_BOX),
+                "pack_uom": batch_data.get("pack_uom", PackDefaults.PACK_UOM),
+                "base_uom": batch_data.get("base_uom", PackDefaults.BASE_UOM)
             })
             
             return result.scalar()

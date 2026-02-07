@@ -280,3 +280,92 @@ class APISettings:
     MAX_PAGE_SIZE = 200
     REQUEST_TIMEOUT = 30  # seconds
     MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+# =============================================================================
+# PRODUCT DEFAULTS
+# =============================================================================
+
+class ProductDefaults:
+    """Default values for product creation and management"""
+    HSN_PHARMA = "30049099"       # Default pharmaceutical HSN code
+    HSN_GENERAL = "3004"          # General medicines HSN
+    DEFAULT_GST_PERCENT = 12      # Default GST rate for pharma products
+    DEFAULT_PRODUCT_TYPE = "medication"
+    DEFAULT_BASE_UOM = "NOS"      # Default unit of measure (Numbers)
+    DEFAULT_CESS_RATE = 0.00
+
+
+# =============================================================================
+# PACK CONFIGURATION DEFAULTS
+# =============================================================================
+
+class PackDefaults:
+    """Default pack configuration for pharma products"""
+    PACK_TYPE = "STRIP"
+    PACK_SIZE = 1
+    UNITS_PER_PACK = 10
+    PACKAGES_PER_BOX = 1
+    PACK_UOM = "Strip"
+    BASE_UOM = "Unit"
+
+
+# =============================================================================
+# PRICING DEFAULTS
+# =============================================================================
+
+class PricingDefaults:
+    """Default pricing multipliers and values.
+    Change these to adjust default pricing strategy across all modules."""
+    SALE_PRICE_FROM_MRP = 0.8       # sale_price = mrp * 0.8  (20% margin)
+    COST_FROM_SALE_PRICE = 0.6      # cost = sale_price * 0.6  (40% margin)
+    MRP_FROM_COST = 1.5             # mrp = cost * 1.5  (50% markup)
+    SELLING_FROM_MRP = 0.9          # selling_price = mrp * 0.9 (10% discount)
+    DEFAULT_MRP = 100               # Default MRP for new products
+    DEFAULT_INITIAL_QUANTITY = 100  # Default stock quantity for new batches
+
+
+# =============================================================================
+# DATE & EXPIRY DEFAULTS
+# =============================================================================
+
+class DateDefaults:
+    """Default date calculations.
+    Change these to adjust expiry and date logic across all modules."""
+    EXPIRY_DAYS_SHORT = 365         # 1 year default expiry (product creation)
+    EXPIRY_DAYS_LONG = 730          # 2 year default expiry (purchase batches)
+    NEAR_EXPIRY_THRESHOLD = 90      # Days threshold for near-expiry alerts
+
+
+# =============================================================================
+# SOURCE TYPES
+# =============================================================================
+
+class SourceType(str, Enum):
+    """Batch source type - how the batch was created"""
+    MANUAL = "MANUAL"
+    GRN = "GRN"
+    PURCHASE = "PURCHASE"
+
+
+# =============================================================================
+# QUALITY STATUS
+# =============================================================================
+
+class QualityStatus(str, Enum):
+    """Quality control status for batches and GRN items"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    NOT_REQUIRED = "not_required"
+
+
+# =============================================================================
+# PARSER CONFIDENCE THRESHOLDS
+# =============================================================================
+
+class ParserConfidence:
+    """Confidence thresholds for invoice parsing"""
+    HIGH = 0.8      # Auto-accept threshold
+    MEDIUM = 0.5    # Needs review
+    LOW = 0.3       # Likely incorrect

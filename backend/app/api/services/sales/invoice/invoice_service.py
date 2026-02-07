@@ -17,6 +17,7 @@ from ...compliance.gst_service import GSTService
 from app.core.utils.branch_utils import resolve_location_id
 # Import shared calculator for consistent calculations
 from app.api.shared.calculations import calculate_line_item
+from .....core.utils.constants import PackDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -444,7 +445,7 @@ class InvoiceService:
                 "quantity": round(float(item.get("quantity", 0)) + float(item.get("free_quantity", 0)), 2),
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
-                "pack_size": int(item.get("pack_size", 1)),
+                "pack_size": int(item.get("pack_size", PackDefaults.PACK_SIZE)),
                 "base_quantity": round(float(item.get("quantity", 0)), 2),
                 "mrp": round(float(mrp), 2),
                 "unit_price": round(float(item.get("unit_price", 0)), 2),

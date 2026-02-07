@@ -11,6 +11,7 @@ from .order_repository import OrderRepository
 from .order_validator import OrderValidator
 from ..invoice.invoice_service import InvoiceService as InvoiceCalc
 from ...document_number_service import DocumentNumberService
+from .....core.utils.constants import PackDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ class OrderService:
                 "quantity": float(item.get("quantity", 0)) + float(item.get("free_quantity", 0)),
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
-                "pack_size": int(item.get("pack_size", 1)),
+                "pack_size": int(item.get("pack_size", PackDefaults.PACK_SIZE)),
                 "base_quantity": float(item.get("quantity", 0)),
                 "mrp": float(mrp),
                 "unit_price": float(item.get("unit_price", 0)),

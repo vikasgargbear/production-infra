@@ -13,6 +13,7 @@ from ....services.document_number_service import DocumentNumberService
 from ....services.compliance.gst_service import GSTService
 from ....services.purchase.order.order_service import PurchaseOrderService
 from ....services.purchase.order.order_repository import PurchaseOrderRepository
+from ....services.master.product.service import ProductService
 from datetime import datetime
 from decimal import Decimal
 
@@ -20,6 +21,9 @@ from decimal import Decimal
 from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from .....core.auth.org_context import OrgContext, get_org_context
 from .....core.security.permissions import PermissionChecker
+from .....core.utils.constants import (
+    ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -244,44 +248,38 @@ async def create_purchase_entry(
                     product_id = product_lookup[name_key]
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
-                    # OPTIMIZED: Use pre-fetched category instead of per-item query
-                    category_id = default_category_id
-                    if not category_id:
-                        # Create a default category only if needed using repository
-                        category_id = PurchaseOrderRepository.create_category(
-                            db, str(context.org_id), "General"
-                        )
-                        default_category_id = category_id  # Cache for next items
-                    
-                    # Create new product with minimal required fields using repository
-                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
-                    
-                    product_data = {
-                        "product_name": product_name,
-                        "product_code": product_code,
-                        "hsn_code": hsn_code
-                    }
-                    product_id = PurchaseOrderRepository.create_product(
-                        db, str(context.org_id), product_data, category_id
+                    # Use centralized ProductService for consistent product creation
+                    product_id = ProductService.get_or_create_product(
+                        db=db,
+                        org_id=str(context.org_id),
+                        product_name=product_name,
+                        hsn_code=item.get("hsn_code"),
+                        user_id=getattr(context, 'user_id', None)
                     )
-                    # Add to lookup so we don't create again if same name appears
                     product_lookup[name_key] = product_id
-                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
+                    logger.info(f"Created/found product: {product_name} (ID: {product_id})")
             
+            # Resolve HSN from product record if not provided by frontend
+            item_hsn = item.get("hsn_code")
+            if not item_hsn and product_id:
+                prod_row = db.execute(text(
+                    "SELECT hsn_code FROM inventory.products WHERE product_id = :pid"
+                ), {"pid": product_id}).fetchone()
+                item_hsn = prod_row.hsn_code if prod_row and prod_row.hsn_code else None
+
             # Calculate item totals
             quantity = Decimal(str(item.get("ordered_quantity", item.get("quantity", 0))))
             cost_price = Decimal(str(item.get("cost_price", item.get("unit_price", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            
+
             # Calculate amounts
             subtotal = quantity * cost_price
             discount_amount = subtotal * discount_percent / 100
             taxable_amount = subtotal - discount_amount
             tax_amount = taxable_amount * tax_percent / 100
             total_price = taxable_amount + tax_amount
-            
+
             # Use GSTService for consistent GST split
             gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
             cgst_percent = gst["cgst_percent"]
@@ -290,32 +288,32 @@ async def create_purchase_entry(
             cgst_amount = gst["cgst_amount"]
             sgst_amount = gst["sgst_amount"]
             igst_amount = gst["igst_amount"]
-            
+
             # Generate batch number if not provided
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
                 import uuid
                 batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(uuid.uuid4().int % 10000).zfill(4)}"
-            
+
             # Calculate pricing values
             mrp_value = Decimal(str(item.get("mrp", 0)))
             if mrp_value == 0:
-                mrp_value = cost_price * Decimal('1.5')  # Default MRP is 1.5x cost
-            
+                mrp_value = cost_price * Decimal(str(PricingDefaults.MRP_FROM_COST))  # Default MRP markup
+
             # Selling price (PTR/PTS in pharma)
             selling_price = Decimal(str(item.get("selling_price", 0)))
             if selling_price == 0:
                 # Default selling price is 90% of MRP
-                selling_price = mrp_value * Decimal('0.9')
-            
+                selling_price = mrp_value * Decimal(str(PricingDefaults.SELLING_FROM_MRP))
+
             # Always create batch for inventory tracking
             batch_id = None
             # Use expiry_date if provided, otherwise set to 2 years from now (default for pharma)
             expiry_date = item.get("expiry_date")
             if not expiry_date:
                 from datetime import timedelta
-                expiry_date = (datetime.now() + timedelta(days=730)).date()  # 2 years default
-            
+                expiry_date = (datetime.now() + timedelta(days=DateDefaults.EXPIRY_DAYS_LONG)).date()
+
             # Create batch using repository
             batch_data = {
                 "product_id": product_id,
@@ -325,20 +323,20 @@ async def create_purchase_entry(
                 "cost_price": cost_price,
                 "mrp": mrp_value,
                 "selling_price": selling_price,
-                "pack_type": item.get("pack_type", "STRIP"),
-                "pack_size": item.get("pack_size", 1),
-                "pack_uom": item.get("pack_type", "STRIP"),
-                "base_uom": item.get("uom", "NOS"),
-                "units_per_pack": item.get("pack_size", 1)
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+                "pack_uom": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "base_uom": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "units_per_pack": item.get("pack_size", PackDefaults.PACK_SIZE)
             }
             batch_id = PurchaseOrderRepository.create_purchase_batch(
                 db, str(context.org_id), batch_data
             )
             logger.info(f"Batch {batch_id} created for product {product_id}")
-            
+
             # Note: Pricing is stored at batch level, not product level
             # Each batch can have different MRP and cost prices
-            
+
             # Create supplier invoice item using repository
             invoice_item = {
                 "product_id": product_id,
@@ -357,10 +355,10 @@ async def create_purchase_entry(
                 "sgst_amount": sgst_amount,
                 "igst_amount": igst_amount,
                 "total_amount": total_price,
-                "hsn_code": item.get("hsn_code", "30049099"),
-                "unit": item.get("uom", "NOS"),
-                "pack_type": item.get("pack_type", "STRIP"),
-                "pack_size": item.get("pack_size", 1)
+                "hsn_code": item_hsn,
+                "unit": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE)
             }
             PurchaseOrderRepository.create_supplier_invoice_item(
                 db, supplier_invoice_id, invoice_item
@@ -492,45 +490,42 @@ async def create_purchase_with_items(
                     product_id = product_lookup[name_key]
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
-                    # Get or create category using repository
-                    category_id = PurchaseOrderRepository.get_default_category(db, str(context.org_id))
-                    if not category_id:
-                        category_id = PurchaseOrderRepository.create_category(
-                            db, str(context.org_id), "General"
-                        )
-                    
-                    # Create new product using repository
-                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    hsn_code = item.get("hsn_code", "30049099")
-                    
-                    product_data = {
-                        "product_name": product_name,
-                        "product_code": product_code,
-                        "hsn_code": hsn_code
-                    }
-                    product_id = PurchaseOrderRepository.create_product(
-                        db, str(context.org_id), product_data, category_id
+                    # Use centralized ProductService for consistent product creation
+                    product_id = ProductService.get_or_create_product(
+                        db=db,
+                        org_id=str(context.org_id),
+                        product_name=product_name,
+                        hsn_code=item.get("hsn_code"),
+                        user_id=getattr(context, 'user_id', None)
                     )
-                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
+                    logger.info(f"Created/found product: {product_name} (ID: {product_id})")
             
+            # Resolve HSN from product record if not provided by frontend
+            item_hsn = item.get("hsn_code")
+            if not item_hsn and product_id:
+                prod_row = db.execute(text(
+                    "SELECT hsn_code FROM inventory.products WHERE product_id = :pid"
+                ), {"pid": product_id}).fetchone()
+                item_hsn = prod_row.hsn_code if prod_row and prod_row.hsn_code else None
+
             # Calculate item totals if not provided
             quantity = Decimal(str(item.get("ordered_quantity", 0)))
             cost_price = Decimal(str(item.get("cost_price", 0)))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
-            
+
             # Calculate amounts
             subtotal = quantity * cost_price
             discount_amount = subtotal * discount_percent / 100
             taxable_amount = subtotal - discount_amount
             tax_amount = taxable_amount * tax_percent / 100
             total_price = taxable_amount + tax_amount
-            
+
             # Generate batch number if not provided using repository
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
                 batch_number = PurchaseOrderRepository.generate_batch_number(db)
-            
+
             # Create PO item using repository
             po_item_data = {
                 "purchase_order_id": purchase_id,
@@ -539,8 +534,8 @@ async def create_purchase_with_items(
                 "ordered_quantity": quantity,
                 "unit_price": cost_price,
                 "free_quantity": item.get("free_quantity", 0),
-                "uom": item.get("uom", "NOS"),
-                "pack_type": item.get("pack_type", "STRIP"),
+                "uom": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
                 "discount_percent": discount_percent,
                 "discount_amount": discount_amount,
                 "cgst_percent": 0,
@@ -555,10 +550,10 @@ async def create_purchase_with_items(
                 "batch_number": batch_number,
                 "expiry_date": item.get("expiry_date"),
                 "manufacturing_date": item.get("manufacturing_date"),
-                "hsn_code": item.get("hsn_code", "30049099")
+                "hsn_code": item_hsn
             }
             PurchaseOrderRepository.create_po_item(db, po_item_data)
-            
+
             # Also create supplier invoice item
             # Use GSTService for consistent GST split
             gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
@@ -568,7 +563,7 @@ async def create_purchase_with_items(
             cgst_amount = gst["cgst_amount"]
             sgst_amount = gst["sgst_amount"]
             igst_amount = gst["igst_amount"]
-            
+
             # Create supplier invoice item using repository
             invoice_item = {
                 "product_id": product_id,
@@ -586,10 +581,10 @@ async def create_purchase_with_items(
                 "sgst_amount": sgst_amount,
                 "igst_amount": igst_amount,
                 "total_amount": total_price,
-                "hsn_code": item.get("hsn_code", "30049099"),
-                "unit": item.get("uom", "NOS"),
-                "pack_type": item.get("pack_type", "STRIP"),
-                "pack_size": item.get("pack_size", 1)
+                "hsn_code": item_hsn,
+                "unit": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE)
             }
             PurchaseOrderRepository.create_supplier_invoice_item(db, supplier_invoice_id, invoice_item)
             

@@ -8,6 +8,8 @@ from decimal import Decimal
 from datetime import date, datetime
 import logging
 
+from .....core.utils.constants import ProductDefaults, PackDefaults, SourceType, QualityStatus
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,9 +120,9 @@ class GRNRepository:
             "accepted_quantity": item.get("accepted_quantity") or item.get("quantity"),
             "rejected_quantity": item.get("rejected_quantity", 0),
             "free_quantity": item.get("free_quantity", 0),
-            "uom": item.get("uom", "Strip"),
-            "pack_type": item.get("pack_type", "STRIP"),
-            "pack_size": item.get("pack_size", 10),
+            "uom": item.get("uom", PackDefaults.PACK_UOM),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
             "unit_price": item.get("unit_price") or item.get("purchase_price"),
             "mrp": item.get("mrp"),
             "ptr": item.get("ptr"),
@@ -129,9 +131,9 @@ class GRNRepository:
             "item_status": item.get("item_status", "received"),
             "display_order": display_order
         })
-        
+
         return result.scalar()
-    
+
     @staticmethod
     def create_grn_items_bulk(
         db: Session,
@@ -197,9 +199,9 @@ class GRNRepository:
             params[f"{prefix}accepted_qty"] = item.get("accepted_quantity") or item.get("quantity")
             params[f"{prefix}rejected_qty"] = item.get("rejected_quantity", 0)
             params[f"{prefix}free_qty"] = item.get("free_quantity", 0)
-            params[f"{prefix}uom"] = item.get("uom", "Strip")
-            params[f"{prefix}pack_type"] = item.get("pack_type", "STRIP")
-            params[f"{prefix}pack_size"] = item.get("pack_size", 10)
+            params[f"{prefix}uom"] = item.get("uom", PackDefaults.PACK_UOM)
+            params[f"{prefix}pack_type"] = item.get("pack_type", PackDefaults.PACK_TYPE)
+            params[f"{prefix}pack_size"] = item.get("pack_size", PackDefaults.PACK_SIZE)
             params[f"{prefix}unit_price"] = item.get("unit_price") or item.get("purchase_price")
             params[f"{prefix}mrp"] = item.get("mrp")
             params[f"{prefix}ptr"] = item.get("ptr")
@@ -273,17 +275,17 @@ class GRNRepository:
             "quantity_available": quantity,
             "cost_per_unit": item.get("unit_price") or item.get("purchase_price"),
             "supplier_id": supplier_id,
-            "source_type": "GRN",
+            "source_type": SourceType.GRN.value,
             "source_reference_id": grn_id,
             "batch_status": "active",
             "storage_condition": item.get("storage_conditions", "room_temperature"),
-            "pack_size": item.get("pack_size", 1),
-            "pack_type": item.get("pack_type", "PACK"),
-            "pack_uom": item.get("pack_uom", "PACK"),
-            "base_uom": item.get("base_uom", "NOS"),
-            "units_per_pack": item.get("units_per_pack", 1)
+            "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+            "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_uom": item.get("pack_uom", PackDefaults.PACK_UOM),
+            "base_uom": item.get("base_uom", ProductDefaults.DEFAULT_BASE_UOM),
+            "units_per_pack": item.get("units_per_pack", PackDefaults.UNITS_PER_PACK)
         })
-    
+
     @staticmethod
     def create_inventory_batches_bulk(
         db: Session,
@@ -336,11 +338,11 @@ class GRNRepository:
             params[f"{prefix}avail_qty"] = quantity
             params[f"{prefix}cost"] = item.get("unit_price") or item.get("purchase_price")
             params[f"{prefix}storage"] = item.get("storage_conditions", "room_temperature")
-            params[f"{prefix}pack_size"] = item.get("pack_size", 1)
-            params[f"{prefix}pack_type"] = item.get("pack_type", "PACK")
-            params[f"{prefix}pack_uom"] = item.get("pack_uom", "PACK")
-            params[f"{prefix}base_uom"] = item.get("base_uom", "NOS")
-            params[f"{prefix}units_per_pack"] = item.get("units_per_pack", 1)
+            params[f"{prefix}pack_size"] = item.get("pack_size", PackDefaults.PACK_SIZE)
+            params[f"{prefix}pack_type"] = item.get("pack_type", PackDefaults.PACK_TYPE)
+            params[f"{prefix}pack_uom"] = item.get("pack_uom", PackDefaults.PACK_UOM)
+            params[f"{prefix}base_uom"] = item.get("base_uom", ProductDefaults.DEFAULT_BASE_UOM)
+            params[f"{prefix}units_per_pack"] = item.get("units_per_pack", PackDefaults.UNITS_PER_PACK)
         
         # Bulk UPSERT
         query = f"""

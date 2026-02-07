@@ -10,6 +10,7 @@ import logging
 from .order_repository import PurchaseOrderRepository
 from ..calculations import PurchaseCalculator
 from ...document_number_service import DocumentNumberService
+from ...master.product.service import ProductService
 
 logger = logging.getLogger(__name__)
 
@@ -261,8 +262,11 @@ class PurchaseOrderService:
                     product_id = product_lookup.get(name_key)
                     
                     if not product_id:
-                        product_id = PurchaseOrderRepository.create_product(
-                            db, org_id, item, default_category_id
+                        product_id = ProductService.get_or_create_product(
+                            db=db,
+                            org_id=org_id,
+                            product_name=item["product_name"],
+                            hsn_code=item.get("hsn_code"),
                         )
                         product_lookup[name_key] = product_id
                 
@@ -380,45 +384,14 @@ class PurchaseOrderService:
     ) -> int:
         """
         Get existing product by name or create new one.
+        Delegates to centralized ProductService.
         Returns product_id.
         """
-        # Check if product exists
-        existing = PurchaseOrderRepository.lookup_products_by_name(
-            db, org_id, [product_name]
-        )
-        
-        if existing:
-            return list(existing.values())[0]
-        
-        # Get or create category
-        category_id = None
-        if category_name:
-            from sqlalchemy import text
-            cat_result = db.execute(text("""
-                SELECT category_id FROM inventory.product_categories
-                WHERE LOWER(TRIM(category_name)) = LOWER(TRIM(:name))
-                AND org_id = :org_id AND is_active = true
-                LIMIT 1
-            """), {"name": category_name, "org_id": org_id}).fetchone()
-            
-            if cat_result:
-                category_id = cat_result.category_id
-            else:
-                category_id = PurchaseOrderRepository.create_category(
-                    db, org_id, category_name
-                )
-        
-        if not category_id:
-            category_id = PurchaseOrderRepository.get_default_category(db, org_id)
-        
-        # Create product
-        product_data = {
-            "product_name": product_name,
-            "product_code": product_name[:20].upper().replace(" ", "_")
-        }
-        
-        return PurchaseOrderRepository.create_product(
-            db, org_id, product_data, category_id
+        return ProductService.get_or_create_product(
+            db=db,
+            org_id=org_id,
+            product_name=product_name,
+            hsn_code=None,
         )
     
     @staticmethod
