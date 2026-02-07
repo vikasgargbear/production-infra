@@ -1156,7 +1156,8 @@ class ProductService:
                         quantity_available, quantity_reserved,
                         mrp_per_unit, sale_price_per_unit, cost_per_unit,
                         batch_status, quality_status,
-                        pack_type, pack_size, units_per_pack, 
+                        source_type,
+                        pack_type, pack_size, units_per_pack,
                         packages_per_box, pack_uom, base_uom,
                         created_at, updated_at
                     ) VALUES (
@@ -1165,6 +1166,7 @@ class ProductService:
                         :quantity, 0,
                         :mrp, :sale_price, :cost,
                         'active', 'approved',
+                        'MANUAL',
                         :pack_type, :pack_size, :units_per_pack,
                         :packages_per_box, :pack_uom, :base_uom,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -1512,6 +1514,7 @@ class ProductService:
                     quantity_available, quantity_reserved,
                     mrp_per_unit, sale_price_per_unit, cost_per_unit,
                     batch_status, quality_status,
+                    source_type,
                     pack_type, pack_size, units_per_pack,
                     packages_per_box, pack_uom, base_uom,
                     created_at, updated_at
@@ -1521,6 +1524,7 @@ class ProductService:
                     :quantity, 0,
                     :mrp, :sale_price, :cost,
                     'active', 'approved',
+                    'MANUAL',
                     :pack_type, :pack_size, :units_per_pack,
                     :packages_per_box, :pack_uom, :base_uom,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP

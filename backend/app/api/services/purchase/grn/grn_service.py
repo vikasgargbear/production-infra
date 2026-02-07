@@ -75,7 +75,8 @@ class GRNService:
             batches_created = 0
             if not grn_data.get("qc_required", False):
                 batches_created = GRNService._update_inventory(
-                    db, org_id, grn_id, grn_data.get("supplier_id"), items
+                    db, org_id, grn_id, grn_number,
+                    grn_data.get("supplier_id"), items, user_id
                 )
                 
                 # Mark stock as updated
@@ -100,20 +101,34 @@ class GRNService:
         db: Session,
         org_id: str,
         grn_id: int,
+        grn_number: str,
         supplier_id: Optional[int],
-        items: List[Dict[str, Any]]
+        items: List[Dict[str, Any]],
+        user_id: int
     ) -> int:
         """
-        Create/update inventory batches from GRN items.
+        Create/update inventory batches from GRN items and record movements.
         P2-1: Using bulk UPSERT instead of loop.
+
+        Steps:
+        1. Bulk UPSERT inventory.batches (handles quantity_available)
+        2. Bulk INSERT inventory.inventory_movements (audit trail)
         """
-        # Use bulk upsert (50 items: 50 UPSERT queries → 1 query)
+        # Step 1: Bulk upsert batches
         batches_created = GRNRepository.create_inventory_batches_bulk(
             db, org_id, grn_id, supplier_id, items
         )
-        
-        logger.info(f"Created/updated {batches_created} inventory batches in bulk UPSERT")
-        
+
+        # Step 2: Create inventory movements (audit trail)
+        movements_created = GRNRepository.create_inventory_movements_bulk(
+            db, org_id, grn_id, grn_number, items, user_id
+        )
+
+        logger.info(
+            f"GRN {grn_id}: {batches_created} batches upserted, "
+            f"{movements_created} movements recorded"
+        )
+
         return batches_created
     
     @staticmethod
@@ -160,7 +175,8 @@ class GRNService:
         if not grn.get("stock_updated"):
             items = GRNRepository.get_grn_items(db, grn_id)
             batches_created = GRNService._update_inventory(
-                db, org_id, grn_id, grn.get("supplier_id"), items
+                db, org_id, grn_id, grn.get("grn_number", ""),
+                grn.get("supplier_id"), items, user_id
             )
         
         # Update GRN status via repository

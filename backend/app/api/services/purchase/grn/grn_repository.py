@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from decimal import Decimal
+from datetime import date, datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -425,3 +426,88 @@ class GRNRepository:
             "user_id": user_id,
             "notes": notes
         })
+
+    @staticmethod
+    def create_inventory_movements_bulk(
+        db: Session,
+        org_id: str,
+        grn_id: int,
+        grn_number: str,
+        items: List[Dict[str, Any]],
+        user_id: int
+    ) -> int:
+        """
+        Create inventory_movements for GRN items (audit trail).
+        Called AFTER create_inventory_batches_bulk which handles quantity_available.
+
+        This method:
+        1. Looks up batch_id for each item (needed for movement record)
+        2. Bulk inserts movement records into inventory.inventory_movements
+        3. Updates inventory.location_wise_stock for each item
+
+        Note: Does NOT update inventory.batches.quantity_available since
+        create_inventory_batches_bulk already handles that via UPSERT.
+        """
+        valid_items = [
+            item for item in items
+            if (item.get("quantity") or item.get("received_quantity") or 0) > 0
+        ]
+
+        if not valid_items:
+            return 0
+
+        # Build bulk movement INSERT
+        values_list = []
+        params = {"org_id": org_id, "grn_id": grn_id, "user_id": user_id}
+
+        for idx, item in enumerate(valid_items):
+            prefix = f"m{idx}_"
+            quantity = item.get("quantity") or item.get("received_quantity")
+
+            # Look up batch_id for this item
+            batch_id = db.execute(text("""
+                SELECT batch_id FROM inventory.batches
+                WHERE org_id = :org_id AND product_id = :product_id AND batch_number = :batch_number
+            """), {
+                "org_id": org_id,
+                "product_id": item.get("product_id"),
+                "batch_number": item.get("batch_number")
+            }).scalar()
+
+            values_list.append(f"""(
+                :org_id, :{prefix}product_id, :{prefix}batch_id,
+                'GRN', 'in', CURRENT_DATE,
+                :{prefix}quantity, :{prefix}quantity,
+                :{prefix}unit_cost, :{prefix}total_cost,
+                'GRN', :grn_id, :{prefix}grn_number,
+                :{prefix}location_id, :{prefix}notes,
+                :user_id, CURRENT_TIMESTAMP
+            )""")
+
+            params[f"{prefix}product_id"] = item.get("product_id")
+            params[f"{prefix}batch_id"] = batch_id
+            params[f"{prefix}quantity"] = round(float(quantity), 2)
+            unit_cost = item.get("unit_price") or item.get("purchase_price") or 0
+            params[f"{prefix}unit_cost"] = float(unit_cost)
+            params[f"{prefix}total_cost"] = round(float(unit_cost) * float(quantity), 2)
+            params[f"{prefix}grn_number"] = grn_number
+            params[f"{prefix}location_id"] = item.get("location_id") or item.get("branch_id")
+            params[f"{prefix}notes"] = f"GRN #{grn_number} - {item.get('batch_number', '')}"
+
+        # Bulk insert movements
+        query = f"""
+            INSERT INTO inventory.inventory_movements (
+                org_id, product_id, batch_id,
+                movement_type, movement_direction, movement_date,
+                quantity, base_quantity,
+                unit_cost, total_cost,
+                reference_type, reference_id, reference_number,
+                location_id, notes,
+                created_by, created_at
+            ) VALUES {', '.join(values_list)}
+        """
+
+        db.execute(text(query), params)
+
+        logger.info(f"Created {len(valid_items)} inventory movements for GRN {grn_id}")
+        return len(valid_items)
