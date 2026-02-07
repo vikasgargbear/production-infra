@@ -58,78 +58,101 @@ class InventoryService:
         return "normal"
     
     @staticmethod
-    def create_batch(db: Session, batch_data: BatchCreate, user_id: int = None) -> BatchResponse:
-        """Create a new batch with validation"""
+    def create_batch(db: Session, batch_data: BatchCreate, user_id: int = None, org_id: str = None, branch_id: int = None) -> BatchResponse:
+        """Create a new batch with validation.
+
+        Args:
+            db: Database session
+            batch_data: Batch creation data
+            user_id: User creating the batch
+            org_id: Organization ID (required for INSERT operations)
+            branch_id: Branch ID for location resolution
+        """
         try:
+            if not org_id:
+                raise ValueError("org_id is required to create a batch")
+            if not user_id:
+                raise ValueError("user_id is required to create a batch")
+
             # Validate product exists (TenantAwareSession auto-adds org_id)
             product = db.execute(text("""
-                SELECT product_id, product_name, product_code 
+                SELECT product_id, product_name, product_code
                 FROM inventory.products WHERE product_id = :product_id
             """), {"product_id": batch_data.product_id}).fetchone()
-            
+
             if not product:
                 raise ValueError(f"Product {batch_data.product_id} not found")
-            
+
             # Check for duplicate batch number
             existing = db.execute(text("""
-                SELECT 1 FROM inventory.batches 
+                SELECT 1 FROM inventory.batches
                 WHERE product_id = :product_id AND batch_number = :batch_number
             """), {
                 "product_id": batch_data.product_id,
                 "batch_number": batch_data.batch_number
             }).scalar()
-            
+
             if existing:
                 raise ValueError(f"Batch {batch_data.batch_number} already exists for this product")
-            
-            # Create batch - org_id needed for INSERT (creating new record)
-            # Map schema field names to actual DB column names
-            batch_dict = batch_data.dict()
+
+            # Create batch with quantity_available=0; the movement below will add the stock
             result = db.execute(text("""
                 INSERT INTO inventory.batches (
                     org_id, product_id, batch_number, manufacturing_date,
                     expiry_date, initial_quantity, quantity_available,
                     cost_per_unit, mrp_per_unit,
                     supplier_id, storage_location, source_type,
-                    created_at, updated_at
+                    created_by, created_at, updated_at
                 ) VALUES (
                     :org_id, :product_id, :batch_number, :manufacturing_date,
-                    :expiry_date, :quantity_received, :quantity_available,
+                    :expiry_date, :quantity_received, 0,
                     :cost_price, :mrp,
                     :supplier_id, :location_code, :source_type,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ) RETURNING batch_id
-            """), {**batch_dict, "source_type": SourceType.MANUAL.value})
+            """), {
+                "org_id": org_id,
+                "product_id": batch_data.product_id,
+                "batch_number": batch_data.batch_number,
+                "manufacturing_date": batch_data.manufacturing_date,
+                "expiry_date": batch_data.expiry_date,
+                "quantity_received": batch_data.quantity_received,
+                "cost_price": batch_data.cost_price,
+                "mrp": batch_data.mrp,
+                "supplier_id": batch_data.supplier_id,
+                "location_code": batch_data.location_code,
+                "source_type": SourceType.MANUAL.value,
+                "created_by": user_id
+            })
 
             batch_id = result.scalar()
 
-            # Record stock movement - org_id needed for INSERT
-            db.execute(text("""
-                INSERT INTO inventory.inventory_movements (
-                    org_id, product_id, batch_id, movement_type, movement_direction,
-                    movement_date, quantity, reference_type,
-                    notes, created_by, created_at
-                ) VALUES (
-                    :org_id, :product_id, :batch_id, 'purchase', 'in',
-                    :movement_date, :quantity, 'batch_creation',
-                    'New batch created', :created_by, CURRENT_TIMESTAMP
-                )
-            """), {
-                "org_id": batch_dict["org_id"],
-                "product_id": batch_dict["product_id"],
-                "batch_id": batch_id,
-                "movement_date": date.today(),
-                "quantity": batch_dict["quantity_received"],
-                "created_by": user_id or batch_dict.get("created_by", 1)
-            })
-            
+            # Resolve location for inventory tracking
+            from ....core.utils.branch_utils import resolve_location_id
+            location_id = resolve_location_id(db, org_id, branch_id)
+
+            # Record stock movement via the standard method for full audit trail
+            movement_data = StockMovementCreate(
+                org_id=org_id,
+                product_id=batch_data.product_id,
+                batch_id=batch_id,
+                movement_type="purchase",
+                movement_direction="in",
+                movement_date=date.today(),
+                quantity=batch_data.quantity_received,
+                reference_type="batch_creation",
+                location_id=location_id,
+                notes="New batch created",
+                created_by=user_id
+            )
+            InventoryService.record_stock_movement(db, movement_data)
+
             # Note: We do NOT commit here - caller controls transaction
-            
+
             # Return created batch
             return InventoryService.get_batch(db, batch_id)
-            
+
         except Exception as e:
-            # Caller handles rollback
             logger.error(f"Error creating batch: {str(e)}")
             raise
     
@@ -188,29 +211,39 @@ class InventoryService:
         if not product:
             raise ValueError(f"Product {product_id} not found")
         
-        # Get batch summary
+        # Get batch summary (only active batches)
         batch_summary = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_batches,
                 COALESCE(SUM(quantity_available), 0) as total_quantity,
                 COALESCE(SUM(quantity_available), 0) as available_quantity,
-                COALESCE(SUM(quantity_sold), 0) as allocated_quantity,
-                COALESCE(SUM(quantity_available * cost_price), 0) as total_value,
-                COALESCE(AVG(cost_price), 0) as average_cost,
+                COALESCE(SUM(COALESCE(quantity_reserved, 0)), 0) as allocated_quantity,
+                COALESCE(SUM(quantity_available * COALESCE(cost_per_unit, 0)), 0) as total_value,
+                COALESCE(AVG(COALESCE(cost_per_unit, 0)), 0) as average_cost,
                 COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
                 COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
             FROM inventory.batches
-            WHERE product_id = :product_id
+            WHERE product_id = :product_id AND batch_status = 'active'
         """), {"product_id": product_id}).fetchone()
         
         stock_dict = dict(product._mapping)
         stock_dict.update(dict(batch_summary._mapping))
-        
-        # Check reorder levels
+
+        # Get product reorder settings
+        reorder_info = db.execute(text("""
+            SELECT reorder_level, min_stock_quantity
+            FROM inventory.products WHERE product_id = :product_id
+        """), {"product_id": product_id}).fetchone()
+
+        reorder_level = int(reorder_info.reorder_level or 0) if reorder_info and reorder_info.reorder_level else 0
+        min_stock = int(reorder_info.min_stock_quantity or 0) if reorder_info and reorder_info.min_stock_quantity else 0
+
         total_qty = stock_dict["total_quantity"]
-        stock_dict["is_below_minimum"] = total_qty < 10  # Default threshold
-        stock_dict["is_below_reorder"] = total_qty <= 20  # Default threshold
-        
+        stock_dict["reorder_level"] = reorder_level or None
+        stock_dict["minimum_stock"] = min_stock or None
+        stock_dict["is_below_minimum"] = total_qty < min_stock if min_stock > 0 else False
+        stock_dict["is_below_reorder"] = total_qty <= reorder_level if reorder_level > 0 else False
+
         return CurrentStock(**stock_dict)
     
     @staticmethod
@@ -283,14 +316,14 @@ class InventoryService:
                     movement_date, quantity, pack_type, base_quantity,
                     unit_cost, total_cost,
                     reference_type, reference_id, reference_number,
-                    location_id, transfer_type, reason,
+                    location_id, transfer_type, reason, notes,
                     created_by, created_at
                 ) VALUES (
                     :org_id, :product_id, :batch_id, :movement_type, :movement_direction,
                     :movement_date, :quantity, :pack_type, :base_quantity,
                     :unit_cost, :total_cost,
                     :reference_type, :reference_id, :reference_number,
-                    :location_id, :transfer_type, :reason,
+                    :location_id, :transfer_type, :reason, :notes,
                     :created_by, CURRENT_TIMESTAMP
                 ) RETURNING movement_id
             """), movement_params)
@@ -370,7 +403,7 @@ class InventoryService:
             return StockMovementResponse(**movement_response)
             
         except Exception as e:
-            db.rollback()
+            # Do NOT rollback here - caller controls transaction
             logger.error(f"Error recording stock movement: {str(e)}")
             raise
     
@@ -590,8 +623,8 @@ class InventoryService:
                 COUNT(DISTINCT CASE 
                     WHEN b.expiry_date > CURRENT_DATE AND b.expiry_date <= CURRENT_DATE + INTERVAL '90 days' 
                     THEN b.product_id END) as near_expiry_products,
-                COUNT(DISTINCT CASE 
-                    WHEN sq.total_quantity < 10 
+                COUNT(DISTINCT CASE
+                    WHEN p.reorder_level IS NOT NULL AND p.reorder_level > 0 AND sq.total_quantity <= p.reorder_level
                     THEN p.product_id END) as low_stock_products,
                 COUNT(DISTINCT CASE 
                     WHEN sq.total_quantity = 0 
@@ -605,11 +638,11 @@ class InventoryService:
             ) sq ON p.product_id = sq.product_id
         """)).fetchone()
         
-        # Today's activity
+        # Today's activity (all movement types, not just sales)
         activity = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as todays_movements
-            FROM inventory.movement_summary
+            FROM inventory.inventory_movements
             WHERE DATE(movement_date) = CURRENT_DATE
         """)).fetchone()
         
@@ -620,14 +653,15 @@ class InventoryService:
             WHERE order_status IN ('pending', 'confirmed')
         """)).fetchone()
         
-        # Fast moving products (last 30 days)
+        # Fast moving products (last 30 days) - based on actual inventory movements
         fast_moving = db.execute(text("""
-            SELECT 
+            SELECT
                 p.product_id, p.product_code, p.product_name,
                 COALESCE(SUM(im.quantity), 0) as movement_quantity
             FROM inventory.products p
-            LEFT JOIN inventory.movement_summary im ON p.product_id = im.product_id
+            LEFT JOIN inventory.inventory_movements im ON p.product_id = im.product_id
                 AND im.movement_type = 'sale'
+                AND im.movement_direction = 'out'
                 AND im.movement_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY p.product_id, p.product_code, p.product_name
             ORDER BY movement_quantity DESC
@@ -805,7 +839,7 @@ class InventoryService:
             query += " AND im.batch_id = :batch_id"
             params["batch_id"] = batch_id
         if location_id:
-            query += " AND (im.from_location_id = :location_id OR im.to_location_id = :location_id)"
+            query += " AND (im.location_id = :location_id OR im.from_location_id = :location_id OR im.to_location_id = :location_id)"
             params["location_id"] = location_id
         if from_date:
             query += " AND im.movement_date >= :from_date::date"
@@ -876,12 +910,11 @@ class InventoryService:
     
     @staticmethod
     def update_location_stock_increase(db: Session, stock_id: int, quantity: float, movement_date: str) -> None:
-        """Increase location stock quantity (both on_hand and available)."""
+        """Increase location stock quantity."""
         db.execute(text("""
             UPDATE inventory.location_wise_stock
-            SET quantity_on_hand = quantity_on_hand + :quantity,
-                quantity_available = quantity_available + :quantity,
-                last_movement_date = :movement_date, updated_at = CURRENT_TIMESTAMP
+            SET quantity_available = quantity_available + :quantity,
+                last_movement_date = :movement_date, last_updated = CURRENT_TIMESTAMP
             WHERE stock_id = :stock_id
         """), {"quantity": quantity, "movement_date": movement_date, "stock_id": stock_id})
     
@@ -889,10 +922,9 @@ class InventoryService:
     def update_location_stock_decrease(db: Session, stock_id: int, quantity: float, movement_date: str) -> None:
         """Decrease location stock quantity."""
         db.execute(text("""
-            UPDATE inventory.location_wise_stock 
-            SET quantity_on_hand = quantity_on_hand - :quantity,
-                quantity_available = quantity_available - :quantity,
-                last_movement_date = :movement_date, updated_at = CURRENT_TIMESTAMP
+            UPDATE inventory.location_wise_stock
+            SET quantity_available = quantity_available - :quantity,
+                last_movement_date = :movement_date, last_updated = CURRENT_TIMESTAMP
             WHERE stock_id = :stock_id
         """), {"quantity": quantity, "movement_date": movement_date, "stock_id": stock_id})
     
@@ -905,8 +937,8 @@ class InventoryService:
         db.execute(text("""
             INSERT INTO inventory.location_wise_stock (
                 org_id, location_id, product_id, batch_id,
-                quantity_on_hand, quantity_available, quantity_reserved, last_movement_date
-            ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, :quantity, 0, :movement_date)
+                quantity_available, quantity_reserved, last_movement_date
+            ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, 0, :movement_date)
         """), {
             "org_id": org_id, "location_id": location_id, "product_id": product_id,
             "batch_id": batch_id, "quantity": quantity, "movement_date": movement_date
@@ -1053,7 +1085,7 @@ class InventoryService:
             query += " AND p.category_id = :category"
             params["category"] = category
         if low_stock_only:
-            query += " AND COALESCE(b.total_quantity, 0) <= 10"
+            query += " AND COALESCE(b.total_quantity, 0) <= COALESCE(p.reorder_level, 0) AND p.reorder_level IS NOT NULL AND p.reorder_level > 0"
         
         count_query = f"SELECT COUNT(*) FROM ({query}) t"
         total = db.execute(text(count_query), params).scalar() or 0

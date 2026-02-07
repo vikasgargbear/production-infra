@@ -14,7 +14,7 @@ from decimal import Decimal
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.branch_utils import get_default_branch_id
+from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ async def create_stock_adjustment(
             quantity=abs(quantity_adjusted),
             unit_cost=Decimal(str(batch.get("unit_cost", 0))),
             total_cost=Decimal(str(abs(quantity_adjusted) * float(batch.get("unit_cost", 0)))),
-            location_id=adjustment_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, org_id),
+            location_id=resolve_location_id(db, org_id, context.primary_branch_id, adjustment_data.get("location_id")),
             reference_type="adjustment",
             reference_number=adjustment_data.get("reference_number") or DocumentNumberService.generate_number(db, "adjustment", org_id),
             reason=adjustment_data.get("reason"),
@@ -146,7 +146,7 @@ async def process_physical_count(
                     movement_direction="in" if difference > 0 else "out",
                     movement_date=count_data.get("count_date", date.today()),
                     quantity=abs(difference),
-                    location_id=context.primary_branch_id or get_default_branch_id(db, org_id),
+                    location_id=resolve_location_id(db, org_id, context.primary_branch_id),
                     reference_type="physical_count",
                     reference_number=count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
                     reason=f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
@@ -191,7 +191,7 @@ async def expire_batches(
                 movement_direction="out",
                 movement_date=date.today(),
                 quantity=batch.get("quantity_available", 0),
-                location_id=context.primary_branch_id or get_default_branch_id(db, org_id),
+                location_id=resolve_location_id(db, org_id, context.primary_branch_id),
                 reference_type="expiry",
                 reference_number=f"EXP-{batch.get('batch_number')}",
                 reason=f"Batch expired on {batch.get('expiry_date')}",

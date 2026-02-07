@@ -175,18 +175,17 @@ async def create_stock_writeoff(
             if item.batch_id:
                 WriteoffService.reduce_batch_quantity(db, org_id, item.batch_id, item.quantity)
             
-            # Create stock movement record
+            # Create stock movement record (quantity is positive; direction='out' in the INSERT)
             WriteoffService.insert_stock_movement(db, {
                 "org_id": org_id,
                 "date": request.write_off_date,
                 "product_id": item.product_id,
                 "batch_id": item.batch_id,
-                "quantity": -abs(float(item.quantity)),
+                "quantity": abs(float(item.quantity)),
                 "writeoff_id": writeoff_id,
                 "reason": request.reason,
                 "notes": f"Stock writeoff - {request.reason}",
-                "created_by": user_id,
-                "branch_id": branch_id
+                "created_by": user_id
             })
         
         # If ITC reversal is required, create GST adjustment entry

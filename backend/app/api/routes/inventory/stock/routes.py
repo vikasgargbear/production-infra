@@ -50,7 +50,7 @@ async def create_batch(
 ):
     """Create a new batch"""
     try:
-        return InventoryService.create_batch(db, batch, user_id=context.user_id)
+        return InventoryService.create_batch(db, batch, user_id=context.user_id, org_id=str(context.org_id), branch_id=context.primary_branch_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -133,10 +133,12 @@ async def list_current_stock(
         
         result = []
         for stock in stocks:
-            stock["is_below_minimum"] = stock["total_quantity"] < 10
-            stock["is_below_reorder"] = stock["total_quantity"] <= 20
+            reorder_level = stock.get("reorder_level") or 0
+            total_qty = stock.get("total_quantity", 0)
+            stock["is_below_minimum"] = False  # Determined by product settings
+            stock["is_below_reorder"] = total_qty <= reorder_level if reorder_level > 0 else False
             result.append(CurrentStock(**stock))
-        
+
         return {"total": total, "stocks": result}
     except Exception as e:
         raise handle_error(e, "list current stock")

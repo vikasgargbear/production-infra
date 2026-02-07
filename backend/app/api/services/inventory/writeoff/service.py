@@ -80,15 +80,17 @@ class WriteoffService:
     
     @staticmethod
     def reduce_batch_quantity(db: Session, org_id: str, batch_id: int, quantity: Decimal) -> None:
-        """Reduce batch quantity for writeoff."""
-        db.execute(text("""
-            UPDATE inventory.batches 
+        """Reduce batch quantity for writeoff. Raises if insufficient stock."""
+        result = db.execute(text("""
+            UPDATE inventory.batches
             SET quantity_available = quantity_available - :quantity,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE batch_id = :batch_id 
+            WHERE batch_id = :batch_id
             AND org_id = :org_id
             AND quantity_available >= :quantity
         """), {"batch_id": batch_id, "org_id": org_id, "quantity": quantity})
+        if result.rowcount == 0:
+            raise ValueError(f"Insufficient stock in batch {batch_id} for writeoff of {quantity}")
     
     @staticmethod
     def insert_stock_movement(db: Session, data: Dict[str, Any]) -> None:
@@ -97,7 +99,7 @@ class WriteoffService:
             INSERT INTO inventory.inventory_movements (
                 org_id, movement_date, movement_type, movement_direction,
                 product_id, batch_id, quantity, reference_type,
-                reference_id, reason, notes, created_by, created_at
+                reference_number, reason, notes, created_by, created_at
             ) VALUES (
                 :org_id, :date, 'writeoff', 'out',
                 :product_id, :batch_id, :quantity, 'stock_writeoff',

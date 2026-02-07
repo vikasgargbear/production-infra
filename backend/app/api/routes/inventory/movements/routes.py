@@ -12,7 +12,7 @@ from ....services.inventory.inventory_service import InventoryService
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.branch_utils import get_default_branch_id
+from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
 from .....core.utils.feature_flags import check_negative_stock_allowed
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ async def create_stock_receive(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        location_id = receive_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, org_id)
+        location_id = resolve_location_id(db, org_id, context.primary_branch_id, receive_data.get("location_id"))
 
         logger.info(f"Stock receive: {movement_number} for product {receive_data['product_id']} qty {receive_data['quantity']}")
 
@@ -191,7 +191,7 @@ async def create_stock_issue(
         org_id = str(context.org_id)
         movement_number = DocumentNumberService.generate_number(db, "stock_issue", org_id)
 
-        location_id = issue_data.get("location_id") or context.primary_branch_id or get_default_branch_id(db, org_id)
+        location_id = resolve_location_id(db, org_id, context.primary_branch_id, issue_data.get("location_id"))
 
         # Pre-check stock availability at location level
         stock = InventoryService.get_location_wise_stock(db, org_id, issue_data["product_id"], location_id, issue_data.get("batch_id"))
