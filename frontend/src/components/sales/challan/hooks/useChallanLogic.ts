@@ -11,6 +11,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { challansApi } from '../../../../services/api';
 import { useSalesTransaction } from '../../hooks/useSalesTransaction';
+import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { useCompany } from '../../../../contexts/CompanyContext';
 import {
     Challan,
     ChallanItem,
@@ -31,6 +33,8 @@ export interface UseChallanLogicProps {
 // ==================== THE HOOK ====================
 
 export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseChallanLogicProps = {}) {
+
+    const { companyInfo } = useCompany();
 
     // ==================== COMPOSE SHARED TRANSACTION LOGIC ====================
     const {
@@ -196,6 +200,11 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 return;
             }
 
+            // Determine GST type based on delivery state vs company state
+            const deliveryState = challan.delivery_state || (selectedCustomer as CustomerDetails)?.state || '';
+            const gstType = determineGstType(companyInfo?.state, deliveryState);
+            const isIGST = gstType === 'IGST';
+
             const apiItems = challan.items.map(item => ({
                 product_id: item.product_id,
                 product_name: item.product_name,
@@ -204,11 +213,11 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
                 expiry_date: item.expiry_date || null,
                 ordered_quantity: null,
                 dispatched_quantity: item.quantity,
-                unit_price: item.unit_price || item.unit_price || item.sale_price || 0,
+                unit_price: item.unit_price || item.sale_price || 0,
                 gst_percent: item.gst_percent || 0,
-                cgst_percent: (item.gst_percent || 0) / 2,
-                sgst_percent: (item.gst_percent || 0) / 2,
-                igst_percent: 0,
+                cgst_percent: isIGST ? 0 : (item.gst_percent || 0) / 2,
+                sgst_percent: isIGST ? 0 : (item.gst_percent || 0) / 2,
+                igst_percent: isIGST ? (item.gst_percent || 0) : 0,
                 uom: item.unit || item.base_uom || 'NOS',
                 package_type: 'UNIT'
             }));

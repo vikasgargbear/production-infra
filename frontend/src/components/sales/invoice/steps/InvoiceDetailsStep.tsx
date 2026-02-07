@@ -2,7 +2,11 @@ import React, { RefObject, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 
 // Global Components
-import { ModuleHeader, AddressForm } from '../../../global';
+import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
+
+// GST Type Determination
+import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { useCompany } from '../../../../contexts/CompanyContext';
 
 // Shared Types
 import { Customer, Invoice, InvoiceTotals, Payment } from '../types/invoiceTypes';
@@ -34,6 +38,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     vehicleRef,
     deliveryChargesRef,
 }) => {
+    const { companyInfo } = useCompany();
     // State for controlling AddressForm add mode externally
     const [addAddressMode, setAddAddressMode] = useState(false);
 
@@ -53,9 +58,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                         {
                             label: "← Back to Items",
                             onClick: onBack,
-                            icon: undefined,
-                            variant: "default",
-                            className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
+                            variant: "secondary"
                         }
                     ]}
                 />
@@ -66,24 +69,22 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                         {/* 1. Delivery - Address first, then options */}
                         <div className="mb-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center">
-                                    <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full mr-3">
-                                        <span className="text-sm font-bold text-blue-600">1</span>
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Delivery</h3>
-                                </div>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                                    <FileText className="w-4 h-4 mr-2" />
+                                    DELIVERY
+                                </h3>
                                 {selectedCustomer && (
                                     <button
                                         onClick={() => setAddAddressMode(true)}
-                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1"
+                                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
                                         New Address
                                     </button>
                                 )}
                             </div>
-                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
+                            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-5">
 
                                 {/* Delivery Address - First Priority */}
                                 {selectedCustomer ? (
@@ -96,7 +97,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         isAddMode={addAddressMode}
                                         onExitAddMode={() => setAddAddressMode(false)}
                                         onChange={(address: string) => {
-                                            console.log('[Invoice] Address changed:', address);
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address: address,
@@ -104,12 +104,15 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             }));
                                         }}
                                         onSave={(addressData: unknown) => {
-                                            console.log('[Invoice] Address saved:', addressData);
                                             setAddAddressMode(false);
+                                            // Re-determine GST type based on delivery address state (place of supply)
+                                            const addrState = (addressData as any)?.state;
+                                            const gstType = determineGstType(companyInfo?.state, addrState);
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,
-                                                billing_address_data: addressData
+                                                billing_address_data: addressData,
+                                                gst_type: gstType
                                             } as Invoice));
                                         }}
                                     />
@@ -123,12 +126,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                 <div className="border-t border-gray-100 pt-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Delivery Type</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Type</label>
                                             <select
                                                 ref={deliveryTypeRef}
                                                 value={invoice.delivery_type || 'PICKUP'}
                                                 onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
-                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                             >
                                                 <option value="PICKUP">Pickup</option>
                                                 <option value="SAME_DAY">Same Day</option>
@@ -137,36 +140,36 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Transport</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Transport</label>
                                             <input
                                                 ref={transportRef}
                                                 type="text"
                                                 value={invoice.transport_company || ''}
                                                 onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
-                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                 placeholder="Company name"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle</label>
                                             <input
                                                 ref={vehicleRef}
                                                 type="text"
                                                 value={invoice.vehicle_number || ''}
                                                 onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
-                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                 placeholder="MH-01-AB-1234"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1">Charges ₹</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Charges</label>
                                             <input
                                                 ref={deliveryChargesRef}
                                                 type="number"
                                                 value={invoice.freight_charges || ''}
                                                 onChange={(e) => setInvoice(prev => ({ ...prev, freight_charges: parseFloat(e.target.value) || 0 }))}
                                                 onFocus={(e) => e.target.select()}
-                                                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                 placeholder="0"
                                                 min="0"
                                             />
@@ -178,22 +181,22 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                         {/* 2. Payment */}
                         <div className="mb-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center">
-                                    <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
-                                        <span className="text-sm font-bold text-green-600">2</span>
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-gray-800">Payment</h3>
-                                </div>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                                    <FileText className="w-4 h-4 mr-2" />
+                                    PAYMENT
+                                </h3>
 
-                                {/* Split Payment Toggle - Outside tile for better UX */}
+                                {/* Split Payment Toggle */}
                                 <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-600">Split Payment</span>
+                                    <span className="text-sm font-medium text-gray-700">Split Payment</span>
                                     <button
+                                        role="switch"
+                                        aria-checked={!!(invoice.payments && invoice.payments.length > 1)}
+                                        aria-label="Enable split payment"
                                         onClick={() => {
                                             const totalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0;
                                             if (invoice.payments && invoice.payments.length > 1) {
-                                                // Disable split - Default to credit (pay later)
                                                 setInvoice(prev => ({
                                                     ...prev,
                                                     payments: [{
@@ -206,7 +209,6 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     payment_status: 'pending'
                                                 }));
                                             } else {
-                                                // Enable split - UPI gets full amount, Credit starts at 0 (user can edit)
                                                 setInvoice(prev => ({
                                                     ...prev,
                                                     payments: [
@@ -219,7 +221,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             }
                                         }}
                                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${invoice.payments && invoice.payments.length > 1
-                                            ? 'bg-indigo-600'
+                                            ? 'bg-blue-600'
                                             : 'bg-gray-200'
                                             }`}
                                     >
@@ -233,7 +235,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                            <div className="bg-white rounded-lg border border-gray-200 p-6">
 
                                 {/* Payment Method Selection - Always show dropdown */}
                                 <div className="space-y-4">
@@ -252,7 +254,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                                     newPayments[index] = { ...newPayments[index], method: e.target.value };
                                                                     setInvoice(prev => ({ ...prev, payments: newPayments }));
                                                                 }}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                             >
                                                                 <option value="cash">Cash</option>
                                                                 <option value="card">Card</option>
@@ -281,7 +283,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                                     }
                                                                 }}
                                                                 onFocus={(e) => e.target.select()}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                                 placeholder="Amount"
                                                             />
                                                         </div>
@@ -295,7 +297,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                                     newPayments[index] = { ...newPayments[index], reference: e.target.value };
                                                                     setInvoice(prev => ({ ...prev, payments: newPayments }));
                                                                 }}
-                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                                                                 placeholder={payment.method === 'upi' ? 'UPI ID' :
                                                                     payment.method === 'card' ? 'Last 4 digits' :
                                                                         payment.method === 'bank' ? 'Transaction ID' :
@@ -361,7 +363,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                             payment_mode: e.target.value
                                                         }));
                                                     }}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                                                 >
                                                     <option value="credit">Credit (Pay Later)</option>
                                                     <option value="cash">Cash</option>
@@ -405,7 +407,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                             invoice.payments[0].method === 'card' ? '1234' :
                                                                 invoice.payments[0].method === 'bank' ? 'NEFT123' :
                                                                     invoice.payments[0].method === 'check' ? '123456' : 'Optional'}
-                                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                     />
                                                 </div>
                                             )}
@@ -486,7 +488,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         }
                                                     }}
                                                     onFocus={(e) => e.target.select()}
-                                                    className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                                                    className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                                                     placeholder="Enter value"
                                                 />
                                                 {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
@@ -581,46 +583,39 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="bg-white border-t border-gray-200 px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        {/* Left side - Remaining amount (inline, bold) */}
-                        <div className="text-sm">
-                            {(() => {
-                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-                                const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                                const remaining = finalAmount - totalPaid;
+                <DocumentFooter
+                    totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0))}
+                    onCancel={onBack}
+                    onContinue={onContinue}
+                    cancelLabel="← Back to Items"
+                    continueLabel="Continue to Preview"
+                    continueDisabled={(() => {
+                        const totalPaid = (invoice.payments || []).reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
+                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                        return totalPaid > finalAmount;
+                    })()}
+                    continueButtonColor="blue"
+                    additionalInfo={(() => {
+                        const totalPaid = (invoice.payments || []).reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
+                        const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
+                        const remaining = finalAmount - totalPaid;
 
-                                if (remaining > 0) {
-                                    return (
-                                        <span className="text-amber-600 font-semibold">
-                                            Remaining: ₹{remaining.toFixed(2)} (Credit)
-                                        </span>
-                                    );
-                                } else if (remaining < 0) {
-                                    return (
-                                        <span className="text-red-600 font-semibold">
-                                            ⚠️ Payment exceeds by ₹{Math.abs(remaining).toFixed(2)}
-                                        </span>
-                                    );
-                                }
-                                return null;
-                            })()}
-                        </div>
-
-                        {/* Right side - Continue button */}
-                        <button
-                            onClick={onContinue}
-                            disabled={(() => {
-                                const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-                                const finalAmount = parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0));
-                                return totalPaid > finalAmount;
-                            })()}
-                            className="inline-flex items-center px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            Continue to Preview →
-                        </button>
-                    </div>
-                </div>
+                        if (remaining > 0) {
+                            return (
+                                <span className="text-amber-600 font-semibold">
+                                    ₹{remaining.toFixed(2)} goes to credit
+                                </span>
+                            );
+                        } else if (remaining < 0) {
+                            return (
+                                <span className="text-red-600 font-semibold">
+                                    Payment exceeds by ₹{Math.abs(remaining).toFixed(2)}
+                                </span>
+                            );
+                        }
+                        return null;
+                    })()}
+                />
 
             </div>
         </div>

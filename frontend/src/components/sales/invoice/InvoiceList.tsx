@@ -16,6 +16,10 @@ import { invoicesApi, challansApi, salesOrdersApi } from '../../../services/api'
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { toast } from 'react-toastify';
+import { InvoiceTable } from './invoicelist/components/InvoiceTable';
+import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
+import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
+import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.types';
 
 // Document type configuration
 type DocumentType = 'invoice' | 'challan' | 'sales_order';
@@ -40,14 +44,6 @@ const documentTypeConfig = {
     iconColor: 'text-purple-600'
   }
 };
-
-// Import extracted components
-import { InvoiceTable } from './invoicelist/components/InvoiceTable';
-import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
-
-// Import hooks and types
-import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
-import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.types';
 
 // Filter configuration for InlineFilterPanel
 const filterOptions = [
@@ -563,25 +559,20 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
 
-        {/* Header - Using Global ModuleHeader */}
+        {/* Header */}
         <ModuleHeader
           title="Sales History"
-          documentNumber=""
-          status="active"
           icon={documentTypeConfig[documentType].icon}
           iconColor={documentTypeConfig[documentType].iconColor}
           onClose={onClose}
-          showSaveDraft={false}
-          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: "",
               onClick: handleRefresh,
-              variant: "ghost",
-              icon: loading ? RefreshCw : RefreshCw,
+              icon: RefreshCw,
               disabled: loading,
               title: "Refresh",
               className: loading ? "animate-spin" : ""
@@ -589,7 +580,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             {
               label: "Export All",
               onClick: handleExportAll,
-              variant: "default",
               className: "bg-gray-900 hover:bg-gray-800 text-white"
             }
           ] as any}

@@ -199,7 +199,8 @@ const subject = `[Entity] ${item.entity_number} - ₹${item.total_amount.toLocal
 
 ## 4. Styling
 
-- **Background**: `bg-blue-50` for consistency
+- **Background**: `bg-gray-50` for list/history pages (per ui-design-standards.md §6)
+  - Note: Transaction CREATE flows use `bg-blue-50`, but LIST views use `bg-gray-50`
 - **Cards**: White background with shadow
 - **Buttons**: Follow variant system (ghost, default, etc.)
 - **Icons**: Use lucide-react for consistency

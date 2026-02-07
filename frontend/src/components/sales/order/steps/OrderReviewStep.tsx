@@ -12,6 +12,7 @@ import {
 } from '../../../global';
 import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { numberToWords } from '../../../../utils/formatters';
+import { determineGstType } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, BankAccount, Customer } from '../../../../types/models';
 
 // Using canonical Customer type from /types/models - no local duplicate
@@ -24,6 +25,7 @@ interface CompanyInfo {
     gst_number?: string;
     pan?: string;
     city?: string;
+    state?: string;
 }
 
 interface OrderReviewStepProps {
@@ -181,7 +183,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     <select
                                         value={order.payment_terms}
                                         onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                                        className="w-full px-2 py-1 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
+                                        className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors print:hidden"
                                     >
                                         <option value="credit">Credit</option>
                                         <option value="cash">Cash</option>
@@ -197,7 +199,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         type="date"
                                         value={order.expected_delivery_date}
                                         onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
-                                        className="w-full px-2 py-1 text-sm border-0 bg-transparent focus:outline-none print:hidden"
+                                        className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors print:hidden"
                                         min={new Date().toISOString().split('T')[0]}
                                     />
                                 </div>
@@ -220,16 +222,29 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     addressData={order.shipping_address_data as any}
                                     addressType="shipping"
                                     onChange={(address: string) => setOrder(prev => ({ ...prev, shipping_address: address }))}
-                                    onSave={(addressData: any) => setOrder(prev => ({ ...prev, shipping_address_data: addressData }))}
+                                    onSave={(addressData: any) => {
+                                        const addrState = addressData?.state;
+                                        const gstType = determineGstType(companyInfo?.state, addrState);
+                                        setOrder(prev => ({
+                                            ...prev,
+                                            shipping_address_data: addressData,
+                                            gst_type: gstType,
+                                            place_of_supply: addrState || companyInfo?.state || ''
+                                        }));
+                                    }}
                                     sameAsBilling={sameAsBilling}
                                     billingAddressData={order.billing_address_data as any}
                                     onSameAsBillingChange={(same: boolean) => {
                                         setSameAsBilling(same);
                                         if (same) {
+                                            const billingState = (order.billing_address_data as any)?.state;
+                                            const gstType = determineGstType(companyInfo?.state, billingState);
                                             setOrder(prev => ({
                                                 ...prev,
                                                 shipping_address: prev.billing_address,
-                                                shipping_address_data: prev.billing_address_data
+                                                shipping_address_data: prev.billing_address_data,
+                                                gst_type: gstType,
+                                                place_of_supply: billingState || companyInfo?.state || ''
                                             }));
                                         }
                                     }}

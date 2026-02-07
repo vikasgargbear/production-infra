@@ -76,10 +76,10 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     size="sm"
                 />
                 <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Import Data</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Import Data</label>
                     <button
                         onClick={onShowImportModal}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
+                        className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
                     >
                         <FileInput className="w-4 h-4 text-gray-400" />
                         <span>Import from Invoice/Challan</span>
@@ -123,7 +123,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     </h3>
                     <button
                         onClick={onShowProductModal}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
                     >
                         Create Product
                     </button>

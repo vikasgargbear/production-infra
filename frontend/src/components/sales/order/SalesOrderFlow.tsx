@@ -129,9 +129,6 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             icon={ShoppingCart}
                             iconColor="text-purple-600"
                             onClose={onClose}
-                            historyType="order"
-                            showSaveDraft={true}
-                            onSaveDraft={() => { }}
                         />
 
                         <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
@@ -223,7 +220,6 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             icon={ShoppingCart}
                             iconColor="text-purple-600"
                             onClose={onClose}
-                            historyType="order"
                             additionalActions={[
                                 {
                                     label: "Edit",
@@ -237,7 +233,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
                         </div>
 
-                        <div className="flex-1 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto bg-blue-50">
                             <OrderReviewStep
                                 order={order}
                                 setOrder={setOrder}

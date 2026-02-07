@@ -50,17 +50,15 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                     additionalActions={[
                         {
                             label: "← Back to Details",
-                            onClick: () => onBack(2), // FIXED: Pass step number, not event
-                            icon: undefined,
-                            variant: "default",
-                            className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
+                            onClick: () => onBack(2),
+                            variant: "secondary"
                         }
                     ]}
                 />
 
-                {/* Content - White background for seamless preview, matching step 1/2 width */}
-                <div className="flex-1 overflow-y-auto bg-white">
-                    <div className="max-w-6xl mx-auto px-8 py-6">
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto bg-blue-50">
+                    <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* Invoice Preview */}
                         <PrintUtility
@@ -126,23 +124,22 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                         </PrintUtility>
 
                         {/* Notes Section */}
-                        <div className="w-full mt-4 mb-4">
-                            <div className="border border-gray-300 rounded-lg overflow-hidden">
-                                <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
-                                    <h3 className="text-xs font-bold text-gray-800 uppercase">Invoice Notes</h3>
-                                </div>
-                                <div className="p-3">
-                                    <textarea
-                                        value={invoice.notes || ''}
-                                        onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                                        rows={2}
-                                        placeholder="Add any additional notes or comments for this invoice..."
-                                    />
-                                    <div className="flex justify-between items-center mt-2">
-                                        <span className="text-xs text-gray-500">These notes will appear on the printed invoice</span>
-                                        <span className="text-xs text-gray-400">{(invoice.notes || '').length}/500</span>
-                                    </div>
+                        <div className="w-full mt-6 mb-4">
+                            <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                                <FileText className="w-4 h-4 mr-2" />
+                                INVOICE NOTES
+                            </h3>
+                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <textarea
+                                    value={invoice.notes || ''}
+                                    onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
+                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                    rows={2}
+                                    placeholder="Add any additional notes or comments for this invoice..."
+                                />
+                                <div className="flex justify-between items-center mt-2">
+                                    <span className="text-xs text-gray-500">These notes will appear on the printed invoice</span>
+                                    <span className="text-xs text-gray-400">{(invoice.notes || '').length}/500</span>
                                 </div>
                             </div>
                         </div>
@@ -170,68 +167,68 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                     {invoice.e_invoice_applicable && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     E-Invoice Number
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={invoice.e_invoice_number || ''}
                                                     onChange={(e) => setInvoice(prev => ({ ...prev, e_invoice_number: e.target.value }))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                     placeholder="Auto-generated after submission"
                                                     readOnly
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     IRN (Invoice Reference Number)
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={invoice.irn || ''}
                                                     onChange={(e) => setInvoice(prev => ({ ...prev, irn: e.target.value }))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                     placeholder="Generated by GST Portal"
                                                     readOnly
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     Acknowledgment Number
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={invoice.ack_no || ''}
                                                     onChange={(e) => setInvoice(prev => ({ ...prev, ack_no: e.target.value }))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                     placeholder="From GST Portal"
                                                     readOnly
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     Acknowledgment Date
                                                 </label>
                                                 <input
                                                     type="datetime-local"
                                                     value={invoice.ack_date || ''}
                                                     onChange={(e) => setInvoice(prev => ({ ...prev, ack_date: e.target.value }))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                     readOnly
                                                 />
                                             </div>
 
                                             <div className="md:col-span-2">
-                                                <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     QR Code Data
                                                 </label>
                                                 <textarea
                                                     value={invoice.qr_code || ''}
                                                     onChange={(e) => setInvoice(prev => ({ ...prev, qr_code: e.target.value }))}
-                                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
+                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                                                     rows={2}
                                                     placeholder="QR code data from GST Portal"
                                                     readOnly
@@ -243,39 +240,39 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                                 <div className="text-xs font-medium text-orange-700 mb-2">E-way Bill Details (Auto-generated for distance &gt; 50km)</div>
                                                 <div className="grid grid-cols-3 gap-3">
                                                     <div>
-                                                        <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                                             E-way Bill Number
                                                         </label>
                                                         <input
                                                             type="text"
                                                             value={invoice.eway_bill_number || ''}
                                                             onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_number: e.target.value }))}
-                                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                             placeholder="Auto-generated"
                                                             readOnly
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                                             E-way Bill Date
                                                         </label>
                                                         <input
                                                             type="date"
                                                             value={invoice.eway_bill_date || ''}
                                                             onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_date: e.target.value }))}
-                                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                             readOnly
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-medium text-blue-700 mb-1">
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                                             Valid Upto
                                                         </label>
                                                         <input
                                                             type="date"
                                                             value={invoice.eway_bill_valid_upto || ''}
                                                             onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_valid_upto: e.target.value }))}
-                                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                             readOnly
                                                         />
                                                     </div>

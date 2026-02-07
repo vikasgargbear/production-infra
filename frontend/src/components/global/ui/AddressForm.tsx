@@ -536,10 +536,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 <div className="flex items-center gap-1 absolute top-0 right-0 z-10">
                     <button
                         onClick={handleEdit}
-                        className="text-blue-600 hover:text-blue-700 p-1.5 hover:bg-blue-50 rounded-md transition-colors"
+                        className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5"
                         title="Edit address or select from saved"
                     >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Change
                     </button>
                 </div>
             )}

@@ -4,8 +4,7 @@
  */
 
 import React from 'react';
-import { X, LucideIcon } from 'lucide-react';
-import ViewHistoryButton from './ViewHistoryButton';
+import { ArrowLeft, LucideIcon } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -26,7 +25,8 @@ export interface ModuleHeaderProps {
     icon?: LucideIcon;
     iconColor?: string;
     onClose?: () => void;
-    historyType?: 'invoice' | 'challan' | 'payment' | 'purchase' | 'order' | 'return' | 'ledger' | 'report' | 'expense' | 'journal' | 'reconciliation' | 'credit_note' | 'reports' | string;
+    /** @deprecated History buttons removed from create flows. Use dedicated history pages instead. */
+    historyType?: string;
     additionalActions?: ModuleHeaderAction[];
     showSaveDraft?: boolean;
     onSaveDraft?: () => void;
@@ -42,7 +42,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
     icon: Icon,
     iconColor = "text-blue-600",
     onClose,
-    historyType,
+    historyType: _historyType, // deprecated, no longer rendered
     additionalActions = [],
     showSaveDraft = false,
     onSaveDraft,
@@ -72,18 +72,32 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
 
     return (
         <div className={`bg-white border-b border-gray-200 ${className}`}>
-            <div className="flex items-center justify-between px-6 py-3">
-                {/* Left side - Title and info */}
-                <div className="flex items-center gap-4">
-                    {Icon && <Icon className={`w-5 h-5 ${iconColor}`} />}
-                    <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+            <div className="flex items-center justify-between px-6 py-4">
+                {/* Left side - Back button, Title and info */}
+                <div className="flex items-center gap-3 min-h-[36px]">
+                    {onClose && (
+                        <button
+                            onClick={onClose}
+                            className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-all duration-200 group"
+                            title="Back (Esc)"
+                            aria-label="Go back"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-gray-500 group-hover:text-gray-700 transition-colors" />
+                        </button>
+                    )}
+                    {Icon && (
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50">
+                            <Icon className={`w-4 h-4 ${iconColor}`} />
+                        </div>
+                    )}
+                    <h1 className="text-lg font-semibold text-gray-900 leading-none">{title}</h1>
                     {documentNumber && (
-                        <div className="px-3 py-1 bg-blue-50 border border-blue-200 rounded-lg">
-                            <span className="text-sm font-medium text-blue-700">{documentNumber}</span>
+                        <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+                            <span className="text-sm font-medium text-blue-700 leading-none">{documentNumber}</span>
                         </div>
                     )}
                     {status && (
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+                        <div className={`px-2.5 py-1 rounded-full text-xs font-medium leading-none ${getStatusColor(status)}`}>
                             {status.toUpperCase()}
                         </div>
                     )}
@@ -94,7 +108,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                     {showSaveDraft && onSaveDraft && (
                         <button
                             onClick={onSaveDraft}
-                            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             Save Draft
                         </button>
@@ -108,22 +122,23 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                                 key={index}
                                 onClick={action.onClick}
                                 disabled={action.disabled}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${action.variant === 'primary'
+                                className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center ${action.variant === 'primary'
                                     ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400'
                                     : action.variant === 'success'
                                         ? 'bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-400'
-                                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                                        : action.variant === 'secondary'
+                                            ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                                     } ${action.className || ''}`}
                                 title={action.title}
                             >
                                 {ActionIcon ? (
                                     isElement ? (
                                         React.cloneElement(ActionIcon as React.ReactElement, {
-                                            className: `w-4 h-4 inline-block mr-1 ${(ActionIcon as React.ReactElement).props?.className || ''}`
+                                            className: `w-4 h-4 ${action.label ? 'mr-1.5' : ''} ${(ActionIcon as React.ReactElement).props?.className || ''}`
                                         })
                                     ) : (
-                                        // Assume it's a component
-                                        React.createElement(ActionIcon as LucideIcon, { className: "w-4 h-4 inline-block mr-1" })
+                                        React.createElement(ActionIcon as LucideIcon, { className: `w-4 h-4 ${action.label ? 'mr-1.5' : ''}` })
                                     )
                                 ) : null}
                                 {action.label}
@@ -131,23 +146,6 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                         );
                     })}
 
-                    {historyType && (
-                        <ViewHistoryButton
-                            historyType={historyType as any}
-                            className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors flex items-center gap-2 ml-2 font-medium border border-blue-200 shadow-sm"
-                            buttonText="History"
-                        />
-                    )}
-
-                    {onClose && (
-                        <button
-                            onClick={onClose}
-                            className="p-2.5 hover:bg-red-50 rounded-full ml-3 transition-all hover:rotate-90 duration-200 group"
-                            title="Close (Esc)"
-                        >
-                            <X className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
-                        </button>
-                    )}
                 </div>
             </div>
         </div>

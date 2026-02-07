@@ -147,7 +147,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <div className="relative">
                                 <button
                                     onClick={() => setShowThermalOptions(!showThermalOptions)}
-                                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    className="px-4 py-2.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <Receipt className="w-4 h-4" />
                                     Thermal Print
@@ -181,7 +181,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onPrint && (
                             <button
                                 onClick={onPrint}
-                                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="px-6 py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <Printer className="w-4 h-4" />
                                 Print
@@ -222,7 +222,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onCancel && (
                             <button
                                 onClick={onCancel}
-                                className="px-6 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="px-6 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                             >
                                 {cancelLabel}
                             </button>
@@ -231,7 +231,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 onClick={onContinue}
                                 disabled={continueDisabled}
-                                className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
+                                className={`px-6 py-2.5 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
                             >
                                 {continueLabel}
                                 <ArrowRight className="w-4 h-4" />

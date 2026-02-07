@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, User, Phone, Mail, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { formatCurrency } from '../../../utils/formatters';
+import { determineGstType } from '../../gst/utils/gstCalculations';
 
 // Return reasons for display
 const RETURN_REASONS = [
@@ -45,6 +46,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
     taxableAmount: number;
     cgst: number;
     sgst: number;
+    igst: number;
     totalTax: number;
   }
 
@@ -54,6 +56,12 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
     // Calculate GST for all customers (they all paid it)
     // Only skip if GST customer explicitly excludes it
     if (customer.gst_number && !includeGst) return gstBreakup;
+
+    // Document-level GST type: use customer address state vs company state
+    // For invoice-linked returns, item-level rates override this
+    // For manual returns, this determines IGST vs CGST/SGST
+    const customerState = customer?.state || customer?.billing_address?.state || customer?.address_info?.billing_state || '';
+    const documentGstType = determineGstType(companyDetails?.company_state, customerState);
 
     returnItems.forEach(item => {
       // Only calculate for paid quantities
@@ -78,13 +86,26 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
+          igst: 0,
           totalTax: 0
         };
       }
 
       gstBreakup[item.tax_percent].taxableAmount += returnAmount;
-      gstBreakup[item.tax_percent].cgst += taxAmount / 2;
-      gstBreakup[item.tax_percent].sgst += taxAmount / 2;
+
+      // Determine IGST vs CGST/SGST:
+      // 1. Item-level igst_rate from original invoice (return from invoice)
+      // 2. Fallback: document-level GST type from customer address (manual entry)
+      const igstRate = parseFloat(item.igst_rate || 0);
+      const hasItemLevelRates = igstRate > 0 || parseFloat(item.cgst_rate || 0) > 0;
+      const isIGST = hasItemLevelRates ? igstRate > 0 : documentGstType === 'IGST';
+
+      if (isIGST) {
+        gstBreakup[item.tax_percent].igst += taxAmount;
+      } else {
+        gstBreakup[item.tax_percent].cgst += taxAmount / 2;
+        gstBreakup[item.tax_percent].sgst += taxAmount / 2;
+      }
       gstBreakup[item.tax_percent].totalTax += taxAmount;
     });
 
@@ -92,6 +113,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
   };
 
   const gstBreakup = calculateGSTBreakup();
+  const hasIGST = Object.values(gstBreakup).some(v => v.igst > 0);
 
   return (
     <>
@@ -370,8 +392,14 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
                       <tr className="border-b border-gray-200">
                         <th className="text-left py-2">GST%</th>
                         <th className="text-right py-2">Taxable</th>
-                        <th className="text-right py-2">CGST</th>
-                        <th className="text-right py-2">SGST</th>
+                        {hasIGST ? (
+                          <th className="text-right py-2">IGST</th>
+                        ) : (
+                          <>
+                            <th className="text-right py-2">CGST</th>
+                            <th className="text-right py-2">SGST</th>
+                          </>
+                        )}
                         <th className="text-right py-2">Total Tax</th>
                       </tr>
                     </thead>
@@ -380,8 +408,14 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
                         <tr key={taxRate} className="border-b border-gray-100">
                           <td className="py-2">{taxRate}%</td>
                           <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
-                          <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
-                          <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
+                          {hasIGST ? (
+                            <td className="text-right py-2">{formatCurrency(values.igst)}</td>
+                          ) : (
+                            <>
+                              <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
+                              <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
+                            </>
+                          )}
                           <td className="text-right py-2 font-medium">{formatCurrency(values.totalTax)}</td>
                         </tr>
                       ))}

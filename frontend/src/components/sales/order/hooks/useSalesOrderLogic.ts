@@ -9,6 +9,7 @@ import { apiClient, usersApi, authApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { useCompany } from '../../../../contexts/CompanyContext';
+import { determineGstType } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -377,18 +378,16 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
                     if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
                     if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
-                    if (preferredAddr.state || preferredAddr.state) fetchedParts.push(preferredAddr.state || preferredAddr.state);
-                    if (preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode) {
-                        fetchedParts.push(preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode);
-                    }
+                    if (preferredAddr.state) fetchedParts.push(preferredAddr.state);
+                    if (preferredAddr.pincode) fetchedParts.push(preferredAddr.pincode);
                     fullAddress = fetchedParts.filter(Boolean).join(', ');
 
                     addressData = {
                         address_line1: preferredAddr.address_line1 || '',
                         address_line2: preferredAddr.address_line2 || '',
                         city: preferredAddr.city || '',
-                        state: preferredAddr.state || preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode || '',
+                        state: preferredAddr.state || '',
+                        pincode: preferredAddr.pincode || '',
                         country: preferredAddr.country || 'India'
                     };
 
@@ -397,8 +396,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                         address: preferredAddr.address_line1 || '',
                         address2: preferredAddr.address_line2 || '',
                         city: preferredAddr.city || '',
-                        state: preferredAddr.state || preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || preferredAddr.pincode || preferredAddr.pincode || ''
+                        state: preferredAddr.state || '',
+                        pincode: preferredAddr.pincode || ''
                     };
                     setSelectedCustomer(customer);
                 }
@@ -407,11 +406,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             }
         }
 
-        const customerState = addressData.state || customer.state || customer.state || '';
-        const companyState = companyInfo.state || 'Gujarat';
-        const cleanCustomerState = customerState.trim().toLowerCase();
-        const cleanCompanyState = companyState.trim().toLowerCase();
-        const gstType = (cleanCustomerState === cleanCompanyState || cleanCustomerState === '') ? 'CGST/SGST' : 'IGST';
+        const customerState = addressData.state || customer.state || '';
+        const gstType = determineGstType(companyInfo?.state, customerState);
 
         setOrder(prev => ({
             ...prev,
@@ -423,7 +419,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             billing_address_data: addressData,
             shipping_address_data: addressData,
             gst_type: gstType,
-            place_of_supply: customerState || companyState
+            place_of_supply: customerState || companyInfo?.state || ''
         }));
     }, [companyInfo]);
 

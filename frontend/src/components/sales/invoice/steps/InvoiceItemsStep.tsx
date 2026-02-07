@@ -1,5 +1,5 @@
 import React, { RefObject } from 'react';
-import { FileText, User, Package, FileInput, Loader2, AlertCircle, X, CheckCircle } from 'lucide-react';
+import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
 import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard, DocumentFooter } from '../../../global';
@@ -124,32 +124,18 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
-                    historyType="invoice"
-                    showSaveDraft={true}
-                    onSaveDraft={() => {
-                        // TODO: Implement save draft
-                    }}
                     additionalActions={[
                         {
                             label: 'Import from Order/Challan',
                             icon: FileInput,
                             onClick: () => setShowImportModal(true),
-                            variant: 'secondary',
-                            className: 'text-sm'
+                            variant: 'secondary'
                         }
                     ]}
                 />
 
                 {/* Keyboard Shortcuts Help */}
                 <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE as any} />
-
-                {/* Loading State */}
-                {isLoading && (
-                    <div className="bg-blue-50 px-4 py-3 text-blue-700 border-b border-blue-200 flex items-center">
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        <span>Loading invoice data...</span>
-                    </div>
-                )}
 
                 {/* Error State */}
                 {error && (
@@ -189,7 +175,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 tabIndex={2}
                             />
                             <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                     M.R. (Medical Representative)
                                 </label>
                                 <select
@@ -198,13 +184,11 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                         const employeeId = parseInt(e.target.value);
                                         const employee = employees.find(emp => emp.employee_id === employeeId);
                                         setSelectedMR(employee || null);
-                                        // Use employee.user_id as salesperson_id (FK to org_users)
-                                        // Fall back to employee_id if user_id not linked yet
                                         const userId = employee?.user_id ?? null;
                                         const empId = typeof employee?.employee_id === 'number' ? employee.employee_id : null;
                                         setInvoice(prev => ({ ...prev, salesperson_id: userId || empId }));
                                     }}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                                     tabIndex={3}
                                 >
                                     <option value="">
@@ -255,7 +239,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 </h3>
                                 <button
                                     onClick={() => setShowProductModal(true)}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                                    className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
                                 >
                                     Create Product
                                 </button>

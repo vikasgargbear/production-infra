@@ -388,10 +388,159 @@ Before creating or refactoring any component:
 
 ---
 
+## 13. Multi-Step Flow Standards
+
+Used for: InvoiceFlow, SalesReturnFlow, PurchaseFlow, PaymentFlow
+
+### Step Consistency Rules
+
+1. **Background**: ALL steps in a flow MUST use the same background (`bg-blue-50` for transactions)
+2. **Content padding**: ALL steps MUST use `px-6 py-6` (never `px-8`)
+3. **Content width**: ALL steps MUST use the same `max-w-*` (e.g., `max-w-6xl`)
+4. **Footer**: ALL steps MUST use `DocumentFooter` component — never hand-code a footer
+5. **Section headers**: ALL steps MUST use the same section header pattern within a flow
+
+### Section Headers in Transaction Flows
+
+Use the standard uppercase pattern consistently:
+
+```tsx
+<h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+    <Icon className="w-4 h-4 mr-2" />
+    SECTION TITLE
+</h3>
+```
+
+Do NOT mix numbered circles, different font sizes, or different colors for section headers within the same flow.
+
+### Label Standard (ALL forms)
+
+```tsx
+<label className="block text-sm font-medium text-gray-700 mb-2">
+    Field Name
+</label>
+```
+
+- Size: `text-sm` (NOT `text-xs`)
+- Weight: `font-medium`
+- Color: `text-gray-700` (NOT `text-gray-500` or `text-blue-700`)
+- Margin: `mb-2` (NOT `mb-1`)
+
+---
+
+## 14. Component Usage Rules
+
+### Always Use Global Components
+
+| Need | Use Global | Never Use |
+|------|------------|-----------|
+| Dropdown | `Select` from global | Native `<select>` |
+| Number field | `NumberInput` from global | `<input type="number">` |
+| Currency field | `CurrencyInput` from global | `<input type="number">` with ₹ |
+| Date field | `StandardDatePicker` from global | `<input type="date">` |
+| Toggle/Switch | `Toggle` from global (when available) | Hand-coded toggle |
+| Status indicator | `StatusBadge` from global | Custom colored spans |
+
+**Exception**: Native `<select>` is acceptable ONLY inside the global component implementations themselves.
+
+### Focus Ring Standard
+
+ALL inputs MUST use `focus:border-transparent` with the focus ring:
+
+```css
+focus:ring-2 focus:ring-{module-color}-500 focus:border-transparent
+```
+
+Never use `focus:border-{color}-500` — the ring replaces the border highlight.
+
+### Card Border Radius Standard
+
+| Card Type | Radius |
+|-----------|--------|
+| Form section cards | `rounded-xl` |
+| Table wrappers | `rounded-lg` |
+| Search wrappers | `rounded-lg` |
+| Modal containers | `rounded-xl` |
+| Small badges/pills | `rounded-full` |
+
+---
+
+## 15. Toast Notification Standard
+
+Use **`react-toastify`** as the single toast system across the entire app.
+
+```tsx
+import { toast } from 'react-toastify';
+
+toast.success('Invoice created!');
+toast.error('Failed to save');
+toast.info('Feature coming soon');
+```
+
+Do NOT use the custom `useToast()` hook for new code. The global `ToastProvider` component (`useToast`) should be deprecated in favor of `react-toastify`.
+
+---
+
+## 16. Code Quality Standards
+
+### No Debug Logging in Production
+
+Remove all `console.log` statements before merging. Use a logger utility with levels if debug output is needed:
+
+```tsx
+// ❌ Wrong
+console.log('[Invoice] Data:', data);
+console.log('🔄 [STEP 1→2] Calculating...');
+
+// ✅ Correct - remove or use debug utility
+import { logger } from '@/utils/logger';
+logger.debug('[Invoice] Data:', data);  // Only outputs in dev mode
+```
+
+### TypeScript Strictness
+
+Avoid `as any` type casting. If types don't match between components:
+
+```tsx
+// ❌ Wrong
+<Component invoice={invoice as any} />
+
+// ✅ Correct - fix the type definition
+<Component invoice={invoice} />  // Ensure types align
+```
+
+### ARIA Accessibility
+
+ALL interactive elements MUST have accessible labels:
+
+```tsx
+// Toggle switches
+<button role="switch" aria-checked={isEnabled} aria-label="Enable split payment">
+
+// Icon-only buttons
+<button aria-label="View invoice" title="View Invoice">
+
+// Checkboxes in tables
+<input type="checkbox" aria-label={`Select invoice ${invoice.invoice_number}`} />
+```
+
+---
+
+## 17. File Hygiene
+
+- Delete orphaned/duplicate component files immediately
+- Never keep `-NEW`, `-OLD`, `-backup` files in the codebase
+- If refactoring creates new files, delete the old ones in the same commit
+
+---
+
 ## Related Documents
 
 This document consolidates and supersedes:
 - `docs/frontend/ui-design-patterns.md` (merged)
 - `docs/frontend/ui_ux_design_principles.md` (merged)
+
+Audit reports:
+- `frontend/docs/UI_AUDIT_INVOICE_MODULE.md` (2026-02-06)
 
 All UI design decisions should reference THIS document.
