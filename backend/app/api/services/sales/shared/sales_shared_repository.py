@@ -5,6 +5,7 @@ Reusable queries across invoice, order, and challan modules
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Tuple
+from datetime import date
 import logging
 
 logger = logging.getLogger(__name__)

@@ -673,7 +673,7 @@ class AdminBypass:
         if not self.allowed:
             raise SecurityError("Admin bypass attempted without permission")
             
-        self.original_bypass_state = TenantContext._bypass_tenant_filter
+        self.original_bypass_state = TenantContext.is_bypass_enabled()
         TenantContext.bypass_tenant_filter(True)
         logger.warning("SECURITY: Admin bypass enabled")
         
