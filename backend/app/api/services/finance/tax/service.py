@@ -90,12 +90,13 @@ class TaxService:
         """Get HSN summary for GSTR-1."""
         result = db.execute(text("""
             SELECT p.hsn_code, p.product_name as product_description, COUNT(*) as transaction_count,
-                   SUM(ii.total_amount) as taxable_value, 18.0 as avg_tax_rate,
-                   SUM(ii.total_amount * 0.18) as total_tax
+                   SUM(ii.total_amount) as taxable_value,
+                   COALESCE(p.gst_percent, 0) as tax_rate,
+                   SUM(ii.total_amount * COALESCE(p.gst_percent, 0) / 100.0) as total_tax
             FROM sales.invoice_items ii JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
             JOIN inventory.products p ON ii.product_id = p.product_id
             WHERE i.invoice_date >= :start_date AND i.invoice_date <= :end_date AND i.org_id = :org_id
-            GROUP BY p.hsn_code, p.product_name ORDER BY taxable_value DESC
+            GROUP BY p.hsn_code, p.product_name, p.gst_percent ORDER BY taxable_value DESC
         """), {"start_date": start_date, "end_date": end_date, "org_id": org_id})
         return [dict(row._mapping) for row in result]
     

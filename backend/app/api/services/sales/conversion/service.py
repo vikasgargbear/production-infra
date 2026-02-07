@@ -157,13 +157,13 @@ class ConversionService:
             SELECT ci.product_id, ci.product_name, ci.batch_id, ci.batch_number,
                    ci.dispatched_quantity as quantity, ci.unit_price,
                    COALESCE(p.hsn_code, '') as hsn_code,
-                   COALESCE(p.gst_percent, 18) as gst_percent,  -- TODO: hardcoded GST fallback 18%; should come from product record
+                   COALESCE(p.gst_percent, :default_gst) as gst_percent,
                    COALESCE(b.mrp_per_unit, 0) as mrp
             FROM challan_items ci
             LEFT JOIN inventory.products p ON ci.product_id = p.product_id
             LEFT JOIN inventory.batches b ON ci.batch_id = b.batch_id
             WHERE ci.challan_id = ANY(:ids)
-        """), {"ids": challan_ids})
+        """), {"ids": challan_ids, "default_gst": ProductDefaults.DEFAULT_GST_PERCENT})
         return [dict(row._mapping) for row in result]
     
     @staticmethod
