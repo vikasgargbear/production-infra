@@ -28,7 +28,7 @@ class AllocationService:
     def get_invoice(db: Session, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get invoice with allocation info."""
         result = db.execute(text("""
-            SELECT invoice_id, customer_id, final_amount, allocated_amount
+            SELECT invoice_id, invoice_number, customer_id, final_amount, allocated_amount
             FROM sales.invoices WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id})
         row = result.first()
@@ -36,29 +36,43 @@ class AllocationService:
     
     @staticmethod
     def create_allocation(
-        db: Session, org_id: str, payment_id: int, invoice_id: int, amount: float
+        db: Session, org_id: str, payment_id: int, invoice_id: int,
+        amount: float, invoice_number: str, user_id: int
     ) -> int:
-        """Create payment allocation. Returns allocation_id."""
+        """Create payment allocation. Returns allocation_id.
+
+        Inserts into financial.allocations (actual table).
+        DB trigger trg_update_reference_paid_amount updates sales.invoices.
+        customer_outstanding is a separate table and needs manual update.
+        """
         result = db.execute(text("""
-            INSERT INTO financial.payment_allocations 
-            (org_id, payment_id, invoice_id, allocated_amount, allocation_type)
-            VALUES (:org_id, :payment_id, :invoice_id, :amount, 'manual')
+            INSERT INTO financial.allocations
+            (payment_id, reference_type, reference_id, reference_number,
+             allocated_amount, created_by, source_type)
+            VALUES (:payment_id, 'INVOICE', :reference_id, :reference_number,
+                    :amount, :created_by, 'payment')
             RETURNING allocation_id
-        """), {"org_id": org_id, "payment_id": payment_id, "invoice_id": invoice_id, "amount": amount})
-        
+        """), {
+            "payment_id": payment_id,
+            "reference_id": invoice_id,
+            "reference_number": invoice_number,
+            "amount": amount,
+            "created_by": user_id
+        })
+
         allocation_id = result.scalar()
-        
-        # Update invoice outstanding in financial.customer_outstanding
+
+        # Update customer_outstanding (separate denormalized table, no trigger cascade)
         db.execute(text("""
             UPDATE financial.customer_outstanding
             SET outstanding_amount = outstanding_amount - :amount,
                 paid_amount = COALESCE(paid_amount, 0) + :amount,
-                status = CASE 
+                status = CASE
                     WHEN outstanding_amount - :amount <= 0 THEN 'paid'
                     ELSE 'partial'
                 END,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE document_type = 'invoice' 
+            WHERE document_type = 'INVOICE'
             AND document_id = :invoice_id
             AND org_id = :org_id
         """), {
@@ -66,7 +80,7 @@ class AllocationService:
             "invoice_id": invoice_id,
             "org_id": org_id
         })
-        
+
         return allocation_id
     
     @staticmethod
@@ -104,7 +118,7 @@ class AllocationService:
             SELECT allocation_id, reference_id as invoice_id, reference_number as invoice_number,
                    allocated_amount, created_at as allocation_date
             FROM financial.payment_allocations
-            WHERE payment_id = :payment_id AND reference_type = 'invoice' AND allocation_status = 'active'
+            WHERE payment_id = :payment_id AND reference_type = 'INVOICE' AND allocation_status = 'active'
             ORDER BY created_at DESC
         """), {"payment_id": payment_id})
         return [dict(row._mapping) for row in result]
@@ -117,7 +131,7 @@ class AllocationService:
                    p.payment_amount, pa.allocated_amount, pa.created_at as allocation_date
             FROM financial.payment_allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
-            WHERE pa.reference_type = 'invoice' AND pa.reference_id = :invoice_id
+            WHERE pa.reference_type = 'INVOICE' AND pa.reference_id = :invoice_id
             AND pa.allocation_status = 'active' ORDER BY pa.created_at DESC
         """), {"invoice_id": invoice_id})
         return [dict(row._mapping) for row in result]
@@ -147,7 +161,7 @@ class AllocationService:
     def delete_allocation(db: Session, allocation_id: int) -> None:
         """Delete an allocation."""
         db.execute(text(
-            "DELETE FROM financial.payment_allocations WHERE allocation_id = :allocation_id"
+            "DELETE FROM financial.allocations WHERE allocation_id = :allocation_id"
         ), {"allocation_id": allocation_id})
     
     @staticmethod

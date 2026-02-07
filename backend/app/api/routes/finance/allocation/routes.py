@@ -59,7 +59,12 @@ async def allocate_payment(
         if allocation.amount > invoice_due:
             raise HTTPException(status_code=400, detail=f"Allocation exceeds invoice due. Due: {invoice_due}")
         
-        allocation_id = AllocationService.create_allocation(db, org_id, allocation.payment_id, allocation.invoice_id, allocation.amount)
+        invoice_number = invoice.get("invoice_number", "")
+        user_id = getattr(context, 'user_id', None)
+        allocation_id = AllocationService.create_allocation(
+            db, org_id, allocation.payment_id, allocation.invoice_id,
+            allocation.amount, invoice_number, user_id
+        )
         
         updated_payment = AllocationService.get_payment_status(db, allocation.payment_id)
         updated_invoice = AllocationService.get_invoice_status(db, allocation.invoice_id)

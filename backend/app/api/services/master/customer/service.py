@@ -843,7 +843,7 @@ class CustomerService:
                     
                     # Create allocation record (use pre-fetched user_id)
                     db.execute(text("""
-                        INSERT INTO financial.payment_allocations (
+                        INSERT INTO financial.allocations (
                             payment_id, reference_type, reference_id, 
                             reference_number, allocated_amount, created_by
                         ) VALUES (
@@ -901,7 +901,7 @@ class CustomerService:
                 
                 # Create allocation record (use pre-fetched user_id)
                 db.execute(text("""
-                    INSERT INTO financial.payment_allocations (
+                    INSERT INTO financial.allocations (
                         payment_id, reference_type, reference_id, 
                         reference_number, allocated_amount, created_by
                     ) VALUES (
