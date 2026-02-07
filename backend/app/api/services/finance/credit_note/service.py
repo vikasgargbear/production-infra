@@ -514,7 +514,7 @@ class CreditNoteService:
         org_id: str,
         branch_id: int,
         data: Dict[str, Any],
-        created_by: int = 1
+        created_by: int
     ) -> Dict[str, Any]:
         """
         Create a credit note in financial.credit_notes table.
@@ -579,7 +579,7 @@ class CreditNoteService:
         org_id: str,
         branch_id: int,
         data: Dict[str, Any],
-        created_by: int = 1
+        created_by: int
     ) -> Dict[str, Any]:
         """
         Create a debit note in financial.debit_notes table.
@@ -653,11 +653,11 @@ class CreditNoteService:
         igst_amount: float,
         reason_code: str,
         reason: str,
+        created_by: int,
         invoice_id: int = None,
         invoice_number: str = None,
         return_date: str = None,
-        is_gst_applicable: bool = True,
-        created_by: int = 1
+        is_gst_applicable: bool = True
     ) -> Dict[str, Any]:
         """
         Create a credit note for a sales return and update customer outstanding.
@@ -805,11 +805,11 @@ class CreditNoteService:
         igst_amount: float,
         reason_code: str,
         reason: str,
+        created_by: int,
         grn_id: int = None,
         grn_number: str = None,
         return_date: str = None,
-        is_gst_applicable: bool = True,
-        created_by: int = 1
+        is_gst_applicable: bool = True
     ) -> Dict[str, Any]:
         """
         Create a debit note for a purchase return and update supplier balance.

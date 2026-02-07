@@ -184,6 +184,7 @@ async def create_stock_writeoff(
                 "quantity": -abs(float(item.quantity)),
                 "writeoff_id": writeoff_id,
                 "reason": request.reason,
+                "notes": f"Stock writeoff - {request.reason}",
                 "created_by": user_id,
                 "branch_id": branch_id
             })

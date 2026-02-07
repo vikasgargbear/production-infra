@@ -97,11 +97,11 @@ class WriteoffService:
             INSERT INTO inventory.inventory_movements (
                 org_id, movement_date, movement_type, movement_direction,
                 product_id, batch_id, quantity, reference_type,
-                reference_id, reason, created_by
+                reference_id, reason, notes, created_by, created_at
             ) VALUES (
                 :org_id, :date, 'writeoff', 'out',
                 :product_id, :batch_id, :quantity, 'stock_writeoff',
-                :writeoff_id, :reason, :created_by
+                :writeoff_id, :reason, :notes, :created_by, CURRENT_TIMESTAMP
             )
         """), data)
     

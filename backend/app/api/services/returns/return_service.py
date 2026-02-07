@@ -1045,18 +1045,15 @@ class ReturnService:
         Returns: dict with updated balance and action taken
         """
         action_taken = "none"
-        
+
         if return_method == "credit_note":
-            # Reduce customer's outstanding balance (credit note reduces what they owe)
-            db.execute(text("""
-                UPDATE parties.customers 
-                SET current_outstanding = COALESCE(current_outstanding, 0) - :amount,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE customer_id = :customer_id
-            """), {"amount": amount, "customer_id": customer_id})
-            action_taken = "outstanding_reduced"
-            logger.info(f"Customer {customer_id} outstanding reduced by {amount} for return {return_number}")
-            
+            # Credit note returns are handled by CreditNoteService.create_credit_note_for_return()
+            # which creates the credit note record + updates financial.customer_outstanding.
+            # This branch should not be reached from routes — log a warning if it is.
+            logger.warning(f"update_customer_credit_balance called with credit_note method for return {return_number}. "
+                          f"This should be handled by CreditNoteService instead.")
+            action_taken = "deferred_to_credit_note_service"
+
         elif return_method == "refund":
             # Create pending refund entry (not immediately paid)
             # The actual refund will be processed through payment module

@@ -118,6 +118,7 @@ class InventoryService:
                 "batch_id": batch_id,
                 "movement_date": date.today(),
                 "quantity": batch_dict["quantity_received"],
+                # TODO: Route should pass user_id from OrgContext; schema BatchCreate lacks created_by
                 "created_by": batch_dict.get("created_by", 1)
             })
             
@@ -727,8 +728,9 @@ class InventoryService:
                 :unit_cost_{i}, :total_cost_{i},
                 'invoice', :invoice_id_{i}, :reference_number_{i},
                 'sale', 'Customer Sale',
-                1, :created_by_{i}, CURRENT_TIMESTAMP
+                :location_id_{i}, :created_by_{i}, CURRENT_TIMESTAMP
             )""")
+            mv_params[f"location_id_{i}"] = mv.get("location_id", 1)
             mv_params[f"org_id_{i}"] = mv["org_id"]
             mv_params[f"product_id_{i}"] = mv["product_id"]
             mv_params[f"batch_id_{i}"] = mv["batch_id"]
@@ -917,7 +919,9 @@ class InventoryService:
                    cost_per_unit as purchase_price, sale_price_per_unit as selling_price, mrp_per_unit as mrp
             FROM inventory.batches
             WHERE org_id = :org_id AND product_id = :product_id AND quantity_available > 0
-            ORDER BY expiry_date ASC, batch_number
+            AND batch_status = 'active'
+            AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
+            ORDER BY expiry_date ASC NULLS LAST, batch_number
         """), {"org_id": org_id, "product_id": product_id})
         return [dict(row._mapping) for row in result]
     
@@ -1143,8 +1147,8 @@ class InventoryService:
         """Get stock adjustment analytics."""
         query = """
             SELECT COUNT(*) as total_adjustments,
-                   SUM(quantity_in) as total_quantity_added,
-                   SUM(quantity_out) as total_quantity_removed,
+                   COALESCE(SUM(CASE WHEN movement_direction = 'in' THEN quantity ELSE 0 END), 0) as total_quantity_added,
+                   COALESCE(SUM(CASE WHEN movement_direction = 'out' THEN quantity ELSE 0 END), 0) as total_quantity_removed,
                    COUNT(DISTINCT product_id) as products_affected,
                    COUNT(DISTINCT batch_id) as batches_affected,
                    COUNT(CASE WHEN movement_type = 'stock_damage' THEN 1 END) as damage_adjustments,
