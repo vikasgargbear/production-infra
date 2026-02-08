@@ -100,11 +100,11 @@ export const usePermissions = () => {
    */
   const hasPermission = useCallback(
     (module: string, permission: string): boolean => {
-      if (state.isLoading) return true; // Don't block while loading
+      if (state.isLoading || state.error) return true; // Permissive on loading or error
       if (state.isAdmin) return true;
       return state.permissions?.[module]?.[permission] === true;
     },
-    [state.isAdmin, state.isLoading, state.permissions]
+    [state.isAdmin, state.isLoading, state.error, state.permissions]
   );
 
   /**
@@ -112,11 +112,11 @@ export const usePermissions = () => {
    */
   const hasModuleAccess = useCallback(
     (module: string): boolean => {
-      if (state.isLoading) return true;
+      if (state.isLoading || state.error) return true; // Permissive on loading or error
       if (state.isAdmin) return true;
       return state.modules.includes(module);
     },
-    [state.isAdmin, state.isLoading, state.modules]
+    [state.isAdmin, state.isLoading, state.error, state.modules]
   );
 
   return {
