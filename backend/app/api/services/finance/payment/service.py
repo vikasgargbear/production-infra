@@ -159,6 +159,22 @@ class PaymentService:
             "created_by": created_by,
         })
 
+        # Explicitly update invoice totals (overrides trigger which only counts
+        # allocations — old payments may lack allocation rows)
+        db.execute(text("""
+            UPDATE sales.invoices
+            SET paid_amount = :paid_amount,
+                credit_amount = :credit_amount,
+                payment_status = :payment_status,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE invoice_id = :invoice_id
+        """), {
+            "invoice_id": invoice_id,
+            "paid_amount": new_paid_amount,
+            "credit_amount": new_credit_amount,
+            "payment_status": new_payment_status,
+        })
+
         # Update customer_outstanding (no trigger handles this)
         outstanding_status = "paid" if new_payment_status == PaymentStatus.PAID.value else "partial"
         db.execute(text("""
@@ -176,14 +192,15 @@ class PaymentService:
 
         # Update order payment status if fully paid
         if new_payment_status == PaymentStatus.PAID.value:
-            db.execute(text("""
-                UPDATE sales.orders o
-                SET payment_status = 'paid',
-                    updated_at = CURRENT_TIMESTAMP
-                FROM sales.invoices i
-                WHERE i.order_id = o.order_id
-                AND i.invoice_id = :invoice_id
-            """), {"invoice_id": invoice_id})
+            order_id = db.execute(text("""
+                SELECT order_id FROM sales.invoices WHERE invoice_id = :invoice_id
+            """), {"invoice_id": invoice_id}).scalar()
+            if order_id:
+                db.execute(text("""
+                    UPDATE sales.orders
+                    SET payment_status = 'paid', updated_at = CURRENT_TIMESTAMP
+                    WHERE order_id = :order_id
+                """), {"order_id": order_id})
         
         return {
             "payment_id": payment_id,
