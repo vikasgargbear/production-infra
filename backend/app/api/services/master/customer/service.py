@@ -4,7 +4,7 @@ Handles GST validation, credit management, and ledger calculations
 """
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -466,30 +466,30 @@ class CustomerService:
     @staticmethod
     def get_customer_statistics(db: Session, customer_id: int) -> Dict[str, Any]:
         """Get customer business statistics"""
-        # Total business
+        # Total business (from invoices, not orders)
         business_result = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_orders,
                 COALESCE(SUM(final_amount), 0) as total_business,
-                MAX(order_date) as last_order_date
-            FROM sales.orders
+                MAX(invoice_date) as last_order_date
+            FROM sales.invoices
             WHERE customer_id = :customer_id
-                AND order_status NOT IN ('cancelled', 'draft')
+                AND invoice_status NOT IN ('cancelled', 'draft')
         """), {"customer_id": customer_id})
-        
+
         business = business_result.fetchone()
-        
-        # Outstanding amount
+
+        # Outstanding amount (unpaid invoices)
         outstanding_result = db.execute(text("""
-            SELECT COALESCE(SUM(final_amount), 0) as outstanding
-            FROM sales.orders
+            SELECT COALESCE(SUM(credit_amount), 0) as outstanding
+            FROM sales.invoices
             WHERE customer_id = :customer_id
-                AND order_status NOT IN ('cancelled', 'draft')
-                AND final_amount > 0
+                AND invoice_status NOT IN ('cancelled', 'draft')
+                AND credit_amount > 0
         """), {"customer_id": customer_id})
-        
+
         outstanding = outstanding_result.scalar() or Decimal("0.00")
-        
+
         return {
             "total_orders": business.total_orders or 0,
             "total_business": business.total_business or Decimal("0.00"),
@@ -503,22 +503,20 @@ class CustomerService:
         if not customer_ids:
             return {}
         
-        # Get all statistics in one query
+        # Get all statistics in one query (from invoices, not orders)
         result = db.execute(text("""
-            SELECT 
+            SELECT
                 c.customer_id,
-                COUNT(DISTINCT o.order_id) as total_orders,
-                COALESCE(SUM(o.final_amount), 0) as total_business,
-                MAX(o.order_date) as last_order_date,
-                COALESCE(SUM(CASE 
-                    WHEN o.order_status NOT IN ('cancelled', 'draft') 
-                    AND final_amount > 0 
-                    THEN o.final_amount 
-                    ELSE 0 
+                COUNT(DISTINCT i.invoice_id) as total_orders,
+                COALESCE(SUM(i.final_amount), 0) as total_business,
+                MAX(i.invoice_date) as last_order_date,
+                COALESCE(SUM(CASE
+                    WHEN i.credit_amount > 0 THEN i.credit_amount
+                    ELSE 0
                 END), 0) as outstanding_amount
             FROM parties.customers c
-            LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
-                AND o.order_status NOT IN ('cancelled', 'draft')
+            LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id
+                AND i.invoice_status NOT IN ('cancelled', 'draft')
             WHERE c.customer_id = ANY(:customer_ids)
             GROUP BY c.customer_id
         """), {"customer_ids": customer_ids})
@@ -582,13 +580,13 @@ class CustomerService:
                 -- Invoices
                 SELECT
                     'invoice' as type,
-                    order_date as date,
+                    invoice_date as date,
                     final_amount as amount
-                FROM sales.orders
+                FROM sales.invoices
                 WHERE customer_id = :customer_id
                     AND org_id = :org_id
-                    AND order_date < :from_date
-                    AND order_status NOT IN ('cancelled', 'draft')
+                    AND invoice_date < :from_date
+                    AND invoice_status NOT IN ('cancelled', 'draft')
 
                 UNION ALL
 
@@ -616,16 +614,16 @@ class CustomerService:
                 -- Invoices
                 SELECT
                     'invoice' as transaction_type,
-                    order_date as transaction_date,
-                    order_number as reference_number,
+                    invoice_date as transaction_date,
+                    invoice_number as reference_number,
                     'Sales Invoice' as description,
                     final_amount as debit_amount,
                     0 as credit_amount
-                FROM sales.orders
+                FROM sales.invoices
                 WHERE customer_id = :customer_id
                     AND org_id = :org_id
-                    AND order_date BETWEEN :from_date AND :to_date
-                    AND order_status NOT IN ('cancelled', 'draft')
+                    AND invoice_date BETWEEN :from_date AND :to_date
+                    AND invoice_status NOT IN ('cancelled', 'draft')
 
                 UNION ALL
 
@@ -633,7 +631,7 @@ class CustomerService:
                 SELECT
                     'payment' as transaction_type,
                     payment_date as transaction_date,
-                    payment_reference as reference_number,
+                    payment_number as reference_number,
                     'Payment Received' as description,
                     0 as debit_amount,
                     payment_amount as credit_amount
@@ -704,38 +702,38 @@ class CustomerService:
 
         org_id = customer.org_id
 
-        # Get outstanding invoices
+        # Get outstanding invoices (unpaid/partially paid)
         invoices_result = db.execute(text("""
             SELECT
-                order_id,
-                order_number,
-                order_date,
+                invoice_id as order_id,
+                invoice_number as order_number,
+                invoice_date as order_date,
                 final_amount as invoice_amount,
-                paid_amount,
-                final_amount as outstanding_amount,
-                CURRENT_DATE - order_date as days_since_invoice
-            FROM sales.orders
+                COALESCE(paid_amount, 0) as paid_amount,
+                credit_amount as outstanding_amount,
+                CURRENT_DATE - invoice_date as days_since_invoice
+            FROM sales.invoices
             WHERE customer_id = :customer_id
                 AND org_id = :org_id
-                AND order_status NOT IN ('cancelled', 'draft')
-                AND final_amount > 0
-            ORDER BY order_date
+                AND invoice_status NOT IN ('cancelled', 'draft')
+                AND credit_amount > 0
+            ORDER BY invoice_date
         """), {"customer_id": customer_id, "org_id": str(org_id)})
-        
+
         invoices = []
         total_outstanding = Decimal("0.00")
         overdue_amount = Decimal("0.00")
-        
+
         for row in invoices_result:
             days_overdue = max(0, row.days_since_invoice - customer.credit_days)
             outstanding = Decimal(str(row.outstanding_amount))
-            
+
             invoices.append(OutstandingInvoice(
                 order_id=row.order_id,
                 order_number=row.order_number,
                 order_date=row.order_date,
                 invoice_amount=Decimal(str(row.invoice_amount)),
-                paid_amount=Decimal("0"),
+                paid_amount=Decimal(str(row.paid_amount)),
                 outstanding_amount=outstanding,
                 days_overdue=days_overdue
             ))

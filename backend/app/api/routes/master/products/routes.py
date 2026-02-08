@@ -406,6 +406,9 @@ async def create_product(
             "type_id": product.get("type_id") if product.get("type_id") else None,
             "hsn_code": validated.get("hsn_code"),  # Uses validated HSN (with default applied)
             "gst_percent": validated.get("gst_percent") or product.get("gst_rate") or 0,
+            "reorder_level": product.get("reorder_level"),
+            "min_stock_quantity": product.get("min_stock_quantity"),
+            "max_stock_quantity": product.get("max_stock_quantity"),
             "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,
@@ -738,9 +741,9 @@ async def update_product(
         db.commit()
         
         return {
-            "product_id": updated.product_id,
-            "product_code": updated.product_code,
-            "product_name": updated.product_name,
+            "product_id": updated["product_id"],
+            "product_code": updated["product_code"],
+            "product_name": updated["product_name"],
             "message": "Product updated successfully"
         }
         

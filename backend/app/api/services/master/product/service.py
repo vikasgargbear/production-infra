@@ -1138,12 +1138,14 @@ class ProductService:
                 org_id, product_code, product_name, generic_name,
                 brand, manufacturer, category_id, product_type,
                 hsn_code, gst_percent, composition, strength,
+                reorder_level, min_stock_quantity, max_stock_quantity,
                 is_active, is_saleable, maintain_batch,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :product_code, :product_name, :generic_name,
                 :brand, :manufacturer, :category_id, :product_type,
                 :hsn_code, :gst_percent, CAST(:composition AS jsonb), :strength,
+                :reorder_level, :min_stock_quantity, :max_stock_quantity,
                 :is_active, :is_saleable, :maintain_batch,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id
@@ -1160,6 +1162,9 @@ class ProductService:
             "gst_percent": product_data.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT),
             "composition": product_data.get("composition", "{}"),
             "strength": product_data.get("strength"),
+            "reorder_level": product_data.get("reorder_level"),
+            "min_stock_quantity": product_data.get("min_stock_quantity"),
+            "max_stock_quantity": product_data.get("max_stock_quantity"),
             "is_active": product_data.get("is_active", True),
             "is_saleable": product_data.get("is_saleable", True),
             "maintain_batch": product_data.get("maintain_batch", True)

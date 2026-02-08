@@ -437,7 +437,7 @@ async def get_customer(
     except Exception as e:
         raise handle_error(e, "get customer", customer_id)
 
-@router.put("/{customer_id}", response_model=CustomerResponse)
+@router.put("/{customer_id}")
 @with_tenant_context
 async def update_customer(
     customer_id: int,
@@ -500,9 +500,24 @@ async def update_customer(
                 )
                 db.commit()
         
-        # Return updated customer
-        return await get_customer(customer_id, context, db)
-        
+        # Return updated customer using service directly (not route handler)
+        customer_dict = CustomerService.get_customer_with_addresses(db=db, customer_id=customer_id)
+        if not customer_dict:
+            raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+
+        # Parse addresses JSON if needed
+        addresses = customer_dict.get("addresses", [])
+        if isinstance(addresses, str):
+            customer_dict["addresses"] = json.loads(addresses)
+        elif addresses is None:
+            customer_dict["addresses"] = []
+
+        # Convert org_id to string for JSON serialization
+        if "org_id" in customer_dict and customer_dict["org_id"]:
+            customer_dict["org_id"] = str(customer_dict["org_id"])
+
+        return customer_dict
+
     except HTTPException:
         raise
     except Exception as e:
