@@ -516,7 +516,7 @@ async def cancel_sale_return(
         if not sale_return:
             raise HTTPException(status_code=404, detail="Sale return not found")
             
-        if sale_return.get("return_status") == ReturnStatus.CANCELLED.value:
+        if sale_return.get("approval_status") == "cancelled":
             raise HTTPException(status_code=400, detail="Return already cancelled")
         
         # Use service method to cancel and reverse all side effects

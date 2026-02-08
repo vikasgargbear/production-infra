@@ -566,7 +566,7 @@ class ReturnService:
             LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id
                 AND sri.return_id IN (
                     SELECT return_id FROM sales.sales_returns
-                    WHERE return_status != 'CANCELLED' AND approval_status != 'cancelled'
+                    WHERE approval_status != 'cancelled'
                 )
             WHERE ii.invoice_id = :invoice_id
             GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
@@ -626,7 +626,6 @@ class ReturnService:
                 FROM sales.sales_return_items sri
                 JOIN sales.sales_returns sr ON sri.return_id = sr.return_id
                 WHERE sr.invoice_id = :invoice_id
-                  AND sr.return_status != 'CANCELLED'
                   AND sr.approval_status != 'cancelled'
                 GROUP BY sri.product_id, sri.batch_id
             ) ret ON (ret.product_id = ii.product_id 
@@ -762,10 +761,10 @@ class ReturnService:
         # 4. Mark return as cancelled
         db.execute(text("""
             UPDATE sales.sales_returns
-            SET return_status = :cancelled_status,
+            SET approval_status = 'cancelled',
                 updated_at = CURRENT_TIMESTAMP
             WHERE return_id = :return_id
-        """), {"return_id": return_id, "cancelled_status": ReturnStatus.CANCELLED.value})
+        """), {"return_id": return_id})
 
         return {"success": True, "return_number": return_number}
     
@@ -907,7 +906,7 @@ class ReturnService:
                 ON ii.invoice_item_id = sri.invoice_item_id
                 AND sri.return_id IN (
                     SELECT return_id FROM sales.sales_returns
-                    WHERE return_status != 'CANCELLED' AND approval_status != 'cancelled'
+                    WHERE approval_status != 'cancelled'
                 )
             WHERE ii.invoice_item_id = :invoice_item_id
             GROUP BY ii.invoice_item_id, ii.quantity
@@ -1021,10 +1020,10 @@ class ReturnService:
     def get_return_status(db: Session, return_id: int) -> Optional[dict]:
         """
         Get return status for cancel validation.
-        Returns dict with return_id, return_number, return_status or None.
+        Returns dict with return_id, return_number, approval_status or None.
         """
         result = db.execute(text("""
-            SELECT return_id, return_number, return_status
+            SELECT return_id, return_number, approval_status
             FROM sales.sales_returns
             WHERE return_id = :return_id
         """), {"return_id": return_id}).first()
