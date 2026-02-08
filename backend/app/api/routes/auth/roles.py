@@ -18,7 +18,7 @@ from ....core.security.role_management import RoleManager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/roles", tags=["Role Management"])
+router = APIRouter(prefix="/roles", tags=["Role Management"])
 
 # ─────────────────────────────────────────────────────────────────
 # STATIC ROUTES (must come before /{role_id})
