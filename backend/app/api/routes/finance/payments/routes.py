@@ -258,7 +258,9 @@ async def record_payment(
     - Creates payment history record
     """
     try:
-        result = PaymentService.record_payment(db, payment.invoice_id, payment.dict())
+        payment_data = payment.dict()
+        payment_data["created_by"] = context.user_id
+        result = PaymentService.record_payment(db, payment.invoice_id, payment_data)
         db.commit()
         return result
     except ValueError as e:

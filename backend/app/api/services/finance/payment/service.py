@@ -103,7 +103,7 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type,
                 payment_method_id, party_type, party_id, party_name,
-                payment_amount, payment_status, reference_number
+                payment_amount, payment_status, reference_number, created_by
             )
             SELECT
                 i.org_id,
@@ -111,11 +111,12 @@ class PaymentService:
                 :payment_reference, :payment_date, 'receipt',
                 :payment_method_id, 'customer', i.customer_id,
                 COALESCE((SELECT customer_name FROM parties.customers WHERE customer_id = i.customer_id), 'Unknown'),
-                :payment_amount, 'cleared', :transaction_reference
+                :payment_amount, 'cleared', :transaction_reference,
+                COALESCE(:created_by, (SELECT user_id FROM master.org_users WHERE org_id = i.org_id LIMIT 1))
             FROM sales.invoices i
             WHERE i.invoice_id = :invoice_id
             RETURNING payment_id
-        """), payment_record)
+        """), {**payment_record, "created_by": payment_data.get("created_by")})
         
         payment_id = result.scalar()
         
