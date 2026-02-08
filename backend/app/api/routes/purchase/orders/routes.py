@@ -270,7 +270,7 @@ async def create_purchase_entry(
                 item_hsn = prod_row.hsn_code if prod_row and prod_row.hsn_code else None
 
             # Calculate item totals
-            quantity = Decimal(str(item.get("ordered_quantity", item.get("quantity", 0))))
+            quantity = Decimal(str(item.get("quantity", item.get("ordered_quantity", 0))))
             cost_price = Decimal(str(item.get("cost_price", item.get("unit_price", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
