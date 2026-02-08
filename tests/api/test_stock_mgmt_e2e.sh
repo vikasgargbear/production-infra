@@ -392,6 +392,7 @@ S3_QTY=3
 S3_BEFORE_BATCH=$(run_sql "SELECT quantity_available FROM inventory.batches WHERE batch_id = ${BATCH_ID}" | tr -d '[:space:]')
 S3_BEFORE_LWS_SRC=$(run_sql "SELECT COALESCE(quantity_available, 0) FROM inventory.location_wise_stock WHERE batch_id = ${BATCH_ID} AND location_id = ${PRIMARY_LOC_ID}" | tr -d '[:space:]')
 S3_BEFORE_LWS_DST=$(run_sql "SELECT COALESCE(quantity_available, 0) FROM inventory.location_wise_stock WHERE batch_id = ${BATCH_ID} AND location_id = ${TEST_LOC_ID}" | tr -d '[:space:]')
+[ -z "$S3_BEFORE_LWS_DST" ] && S3_BEFORE_LWS_DST="0"
 
 echo "  Before: batch_qty=${S3_BEFORE_BATCH}, lws_src=${S3_BEFORE_LWS_SRC}, lws_dst=${S3_BEFORE_LWS_DST}"
 
@@ -485,6 +486,8 @@ else
     cross_validate "$S3_AFTER_LWS_SRC" "$S3_EXPECTED_LWS_SRC" "S3: Source LWS decreased by ${S3_QTY}"
 
     S3_AFTER_LWS_DST=$(run_sql "SELECT COALESCE(quantity_available, 0) FROM inventory.location_wise_stock WHERE batch_id = ${BATCH_ID} AND location_id = ${TEST_LOC_ID}" | tr -d '[:space:]')
+    [ -z "$S3_AFTER_LWS_DST" ] && S3_AFTER_LWS_DST="0"
+    [ -z "$S3_BEFORE_LWS_DST" ] && S3_BEFORE_LWS_DST="0"
     S3_EXPECTED_LWS_DST=$(python3 -c "print(round(float('${S3_BEFORE_LWS_DST}') + ${S3_QTY}, 2))")
     cross_validate "$S3_AFTER_LWS_DST" "$S3_EXPECTED_LWS_DST" "S3: Dest LWS increased by ${S3_QTY}"
 
