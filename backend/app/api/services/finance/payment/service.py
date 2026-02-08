@@ -305,12 +305,14 @@ class PaymentService:
         Cancel a payment and adjust invoice.
         TenantAwareSession auto-filters by org_id.
         """
-        # Get payment details (TenantAwareSession auto-adds org_id filter)
+        # Get payment details with linked invoice via allocations
         payment = db.execute(text("""
-            SELECT p.*, i.invoice_id, i.paid_amount as invoice_paid_amount
+            SELECT p.payment_id, p.payment_amount, p.payment_status, p.party_type, p.party_id,
+                   a.reference_id as invoice_id
             FROM financial.payments p
-            LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
-            WHERE p.payment_id = :payment_id 
+            LEFT JOIN financial.allocations a ON a.payment_id = p.payment_id
+                AND a.reference_type = 'INVOICE' AND a.allocation_status = 'active'
+            WHERE p.payment_id = :payment_id
                 AND p.payment_status NOT IN ('cancelled', 'failed')
         """), {"payment_id": payment_id}).fetchone()
         
@@ -363,14 +365,17 @@ class PaymentService:
         TenantAwareSession auto-filters by org_id.
         """
         result = db.execute(text("""
-            SELECT p.*, 
-                c.customer_name,
-                s.supplier_name,
-                i.invoice_number
+            SELECT p.payment_id, p.payment_number, p.payment_date,
+                   p.payment_type, p.party_type, p.party_id, p.party_name,
+                   p.payment_amount, p.payment_status, p.reference_number,
+                   p.allocation_status, p.allocated_amount, p.narration,
+                   pm.method_name as payment_method,
+                   a.reference_number as invoice_number,
+                   a.reference_id as invoice_id
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
-            LEFT JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
+            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
+            LEFT JOIN financial.allocations a ON a.payment_id = p.payment_id
+                AND a.reference_type = 'INVOICE' AND a.allocation_status = 'active'
             WHERE p.payment_id = :payment_id
         """), {"payment_id": payment_id}).first()
         return dict(result._mapping) if result else None
@@ -583,28 +588,29 @@ class PaymentService:
         TenantAwareSession auto-filters by org_id.
         """
         query = """
-            SELECT p.*, 
-                COALESCE(c.customer_name, s.supplier_name) as party_name
+            SELECT p.payment_id, p.payment_number, p.payment_date,
+                   p.payment_type, p.party_type, p.party_id, p.party_name,
+                   p.payment_amount, p.payment_status, p.reference_number,
+                   pm.method_name as payment_method
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
+            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.payment_status = :pending_status
                 OR (p.payment_method_id IS NOT NULL AND p.clearance_date IS NULL)
         """
         params = {"pending_status": "pending"}
-        
+
         if party_type == "customer" and party_id:
             query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
             params["party_id"] = party_id
         elif party_type == "supplier" and party_id:
             query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
             params["party_id"] = party_id
-            
+
         query += " ORDER BY p.payment_date DESC"
-        
+
         result = db.execute(text(query), params)
         payments = [dict(row._mapping) for row in result]
-        
+
         return {"payments": payments, "total": len(payments)}
     
     @staticmethod
