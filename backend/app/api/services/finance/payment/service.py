@@ -72,34 +72,46 @@ class PaymentService:
         # Generate payment reference
         payment_reference = PaymentService.generate_payment_number(db, org_id)
         
+        # Resolve payment_method_id from payment_mode string
+        payment_mode = payment_data.get("payment_mode", PaymentMethod.CASH.value)
+        method_id_result = db.execute(text("""
+            SELECT payment_method_id FROM financial.payment_methods
+            WHERE UPPER(method_code) = UPPER(:mode)
+            LIMIT 1
+        """), {"mode": payment_mode}).scalar()
+
+        if not method_id_result:
+            # Fallback to CASH (id=32)
+            method_id_result = db.execute(text("""
+                SELECT payment_method_id FROM financial.payment_methods
+                WHERE UPPER(method_code) = 'CASH' LIMIT 1
+            """)).scalar()
+
         # Create payment record
         payment_record = {
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
             "payment_date": payment_data.get("payment_date", date.today()),
-            "payment_mode": payment_data.get("payment_mode", PaymentMethod.CASH.value),
+            "payment_method_id": method_id_result,
             "payment_amount": payment_amount,
             "transaction_reference": payment_data.get("transaction_reference"),
-            "bank_name": payment_data.get("bank_name"),
-            "cheque_number": payment_data.get("cheque_number"),
-            "cheque_date": payment_data.get("cheque_date"),
             "notes": payment_data.get("notes"),
-            "status": PaymentRecordStatus.COMPLETED.value,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now()
         }
-        
+
         # Insert payment into financial.payments
         result = db.execute(text("""
             INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, payment_type, payment_mode,
-                party_type, party_id, payment_amount, payment_status,
-                reference_number, narration, created_at, updated_at
-            ) 
-            SELECT 
-                i.org_id, :payment_reference, :payment_date, 'receipt', :payment_mode,
-                'customer', i.customer_id, :payment_amount, 'cleared',
-                :transaction_reference, :notes, :created_at, :updated_at
+                org_id, branch_id, payment_number, payment_date, payment_type,
+                payment_method_id, party_type, party_id, party_name,
+                payment_amount, payment_status, reference_number
+            )
+            SELECT
+                i.org_id,
+                COALESCE((SELECT branch_id FROM master.org_branches WHERE org_id = i.org_id LIMIT 1), 5),
+                :payment_reference, :payment_date, 'receipt',
+                :payment_method_id, 'customer', i.customer_id,
+                COALESCE((SELECT customer_name FROM parties.customers WHERE customer_id = i.customer_id), 'Unknown'),
+                :payment_amount, 'cleared', :transaction_reference
             FROM sales.invoices i
             WHERE i.invoice_id = :invoice_id
             RETURNING payment_id
@@ -119,24 +131,43 @@ class PaymentService:
         else:
             new_payment_status = PaymentStatus.PENDING.value
         
-        # Update invoice paid amount and status
+        new_credit_amount = max(Decimal("0"), total_amount - new_paid_amount)
+
+        # Update invoice paid amount, credit amount, and status
         db.execute(text("""
             UPDATE sales.invoices
             SET paid_amount = :paid_amount,
+                credit_amount = :credit_amount,
                 payment_status = :payment_status,
-                payment_date = CASE 
-                    WHEN :payment_status = 'paid' THEN :payment_date 
-                    ELSE payment_date 
+                payment_date = CASE
+                    WHEN :payment_status = 'paid' THEN :payment_date
+                    ELSE payment_date
                 END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE invoice_id = :invoice_id
         """), {
             "invoice_id": invoice_id,
             "paid_amount": new_paid_amount,
+            "credit_amount": new_credit_amount,
             "payment_status": new_payment_status,
             "payment_date": payment_data.get("payment_date", date.today())
         })
-        
+
+        # Update customer_outstanding
+        outstanding_status = "paid" if new_payment_status == PaymentStatus.PAID.value else "partial"
+        db.execute(text("""
+            UPDATE financial.customer_outstanding
+            SET paid_amount = :paid_amount,
+                outstanding_amount = :outstanding_amount,
+                status = :status
+            WHERE document_id = :invoice_id AND document_type = 'invoice'
+        """), {
+            "invoice_id": invoice_id,
+            "paid_amount": new_paid_amount,
+            "outstanding_amount": new_credit_amount,
+            "status": outstanding_status
+        })
+
         # Update order payment status if fully paid
         if new_payment_status == PaymentStatus.PAID.value:
             db.execute(text("""
@@ -358,16 +389,30 @@ class PaymentService:
         ).first()
         customer_name = customer_result.customer_name if customer_result else f"Customer {customer_id}"
         
+        # Resolve payment_method_id from payment_mode string
+        method_id = db.execute(text("""
+            SELECT payment_method_id FROM financial.payment_methods
+            WHERE UPPER(method_code) = UPPER(:mode)
+            LIMIT 1
+        """), {"mode": payment_mode}).scalar()
+        if not method_id:
+            method_id = db.execute(text("""
+                SELECT payment_method_id FROM financial.payment_methods
+                WHERE UPPER(method_code) = 'CASH' LIMIT 1
+            """)).scalar()
+
         # Insert payment - using org_id from parameter for INSERT (new record creation)
         result = db.execute(text("""
             INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, payment_type, payment_mode,
-                party_type, party_id, party_name, payment_amount,
-                reference_number, payment_status, narration, created_by
+                org_id, branch_id, payment_number, payment_date, payment_type,
+                payment_method_id, party_type, party_id, party_name,
+                payment_amount, reference_number, payment_status, created_by
             ) VALUES (
-                :org_id, :receipt_number, :payment_date, 'receipt', :payment_mode,
-                'customer', :customer_id, :customer_name, :amount,
-                :reference_number, 'cleared', :notes, :created_by
+                :org_id,
+                COALESCE((SELECT branch_id FROM master.org_branches WHERE org_id = :org_id::uuid LIMIT 1), 5),
+                :receipt_number, :payment_date, 'receipt',
+                :payment_method_id, 'customer', :customer_id, :customer_name,
+                :amount, :reference_number, 'cleared', :created_by
             ) RETURNING payment_id, payment_number, payment_amount
         """), {
             "org_id": org_id,
@@ -376,9 +421,8 @@ class PaymentService:
             "customer_id": customer_id,
             "customer_name": customer_name,
             "amount": amount,
-            "payment_mode": payment_mode,
+            "payment_method_id": method_id,
             "reference_number": reference_number,
-            "notes": notes,
             "created_by": created_by
         })
         

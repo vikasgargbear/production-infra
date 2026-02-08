@@ -242,7 +242,7 @@ async def create_payment(
         logger.error(f"Error creating payment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
 
-@router.post("/record", response_model=PaymentResponse)
+@router.post("/record")
 @with_tenant_context
 async def record_payment(
     payment: InvoicePaymentCreate,
@@ -260,7 +260,7 @@ async def record_payment(
     try:
         result = PaymentService.record_payment(db, payment.invoice_id, payment.dict())
         db.commit()
-        return PaymentResponse(**result)
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
