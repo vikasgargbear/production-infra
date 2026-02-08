@@ -121,10 +121,12 @@ class DocumentNumberGenerator {
      * Generate next document number
      * 
      * @param docType - Document type from DOC_TYPES
-     * @param tryBackend - Try to get number from backend first (default: true)
+     * @param tryBackend - Try to get number from backend first (default: false).
+     *   Backend assigns the real number on save, so local generation is preferred
+     *   for instant form loading. Set true only when you need the exact backend sequence.
      * @returns Document number (e.g., "INV-202602080001")
      */
-    async generateNumber(docType: DocumentType, tryBackend: boolean = true): Promise<string> {
+    async generateNumber(docType: DocumentType, tryBackend: boolean = false): Promise<string> {
         await this.initialize();
 
         const today = this.getTodayString();

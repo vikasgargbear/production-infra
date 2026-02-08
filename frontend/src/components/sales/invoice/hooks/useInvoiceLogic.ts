@@ -8,6 +8,7 @@ import { useCompany } from '../../../../contexts/CompanyContext';
 import { getTodayBusinessDate, getDaysFromToday } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
+import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 
 // Shared Types - Single Source of Truth
 import {
@@ -190,7 +191,7 @@ export const useInvoiceLogic = (
 
     // Core State - using canonical backend names
     const [invoice, setInvoice] = useState<Invoice>({
-        invoice_number: `DRAFT-${getTodayBusinessDate().replace(/-/g, '')}`,
+        invoice_number: '',
         invoice_date: getTodayBusinessDate(),
         due_date: getDaysFromToday(30),
         items: [],
@@ -283,6 +284,13 @@ export const useInvoiceLogic = (
         const initializeInvoice = async () => {
             try {
                 setIsLoading(true);
+
+                // Generate invoice number locally (instant, no API call)
+                // Backend assigns the real number on save
+                if (!invoice.invoice_number) {
+                    const invoiceNumber = await documentNumberGenerator.generateInvoiceNumber();
+                    setInvoice(prev => ({ ...prev, invoice_number: invoiceNumber }));
+                }
 
                 // Load employees for MR selection with caching
                 try {

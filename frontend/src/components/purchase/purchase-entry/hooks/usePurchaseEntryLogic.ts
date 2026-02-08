@@ -194,10 +194,8 @@ export function usePurchaseEntryLogic({
                 const purchaseNumber = await documentNumberGenerator.generatePurchaseNumber();
                 setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
             } catch (error) {
-                const date = new Date();
-                const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
-                const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-                const fallbackNumber = `PUR-${dateStr}${randomNum}`;
+                // Fallback: generate locally without backend (instant)
+                const fallbackNumber = await documentNumberGenerator.generateNumber('PUR', false);
                 setPurchase(prev => ({ ...prev, purchase_number: fallbackNumber }));
             }
         };

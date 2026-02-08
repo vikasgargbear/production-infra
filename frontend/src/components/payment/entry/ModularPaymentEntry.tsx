@@ -15,6 +15,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 
 // Import global components
 import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 
 
 interface PaymentEntryContentProps {
@@ -26,13 +27,6 @@ interface KeyboardShortcut {
   label: string;
 }
 
-// Generate sequential receipt number
-const generateReceiptNumber = () => {
-  // Generate receipt number locally
-  const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1000);
-  return `RCT-${timestamp.toString().slice(-8)}-${random}`;
-};
 
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
@@ -66,11 +60,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
   const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
 
-  // Generate receipt number on component mount
+  // Generate receipt number on component mount (local-only, instant)
   React.useEffect(() => {
     if (!payment.receipt_no || payment.receipt_no === 'RCT-TEMP') {
-      const receiptNo = generateReceiptNumber();
-      setPaymentField('receipt_no', receiptNo);
+      documentNumberGenerator.generateReceiptNumber().then(receiptNo => {
+        setPaymentField('receipt_no', receiptNo);
+      });
     }
   }, []);
 

@@ -18,6 +18,7 @@ import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
 import { getApiBaseUrl } from '../../config/apiBase';
+import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import offlineStorage from '../../services/offlineStorage';
 import { useCompany } from '../../contexts/CompanyContext';
 import html2pdf from 'html2pdf.js';
@@ -88,19 +89,10 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   const toastHook = useToast();
 
-  // Generate return number
-  const generateReturnNumber = () => {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `SR-${dateStr}${randomNum}`;
-  };
-
-  // Initialize return number
+  // Initialize return number using centralized generator (local-only, instant)
   useEffect(() => {
-    dispatch({
-      type: 'SET_RETURN_DATA',
-      data: { return_no: generateReturnNumber() }
+    documentNumberGenerator.generateSalesReturnNumber().then(returnNo => {
+      dispatch({ type: 'SET_RETURN_DATA', data: { return_no: returnNo } });
     });
   }, [dispatch]);
 
@@ -904,6 +896,7 @@ ${companyInfo?.name || 'Your Company'}`;
                         placeholder="Search customer by name, phone, or code..."
                         showCreateButton={false}
                         clearable={true}
+                        nextFocusRef={invoiceSearchRef}
                       />
                     </div>
                   </div>

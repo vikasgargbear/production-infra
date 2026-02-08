@@ -11,6 +11,7 @@ import { invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 import { getApiBaseUrl } from '../../../config/apiBase';
 import { useToast } from '../../global';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -111,13 +112,6 @@ export interface UseSalesReturnReturn {
     handlePrint: () => void;
 }
 
-function generateReturnNumber(): string {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `SR-${dateStr}${randomNum}`;
-}
-
 export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturnReturn {
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -132,7 +126,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
 
     // Return data state
     const [returnData, setReturnData] = useState<ReturnData>({
-        return_no: generateReturnNumber(),
+        return_no: '',
         return_date: new Date().toISOString().split('T')[0],
         customer_id: '',
         customer_details: null,
@@ -152,6 +146,13 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         include_gst: true,
         credit_adjustment_type: 'future'
     });
+
+    // Generate return number on mount (local-only, instant)
+    useEffect(() => {
+        documentNumberGenerator.generateSalesReturnNumber().then(returnNo => {
+            setReturnData(prev => ({ ...prev, return_no: returnNo }));
+        });
+    }, []);
 
     const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
     const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);

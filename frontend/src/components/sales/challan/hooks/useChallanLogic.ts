@@ -89,13 +89,10 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             const challanNumber = await documentNumberGenerator.generateChallanNumber();
             setChallan(prev => ({ ...prev, challan_number: challanNumber }));
         } catch (error) {
-            console.error('Failed to generate challan number:', error);
-            const now = new Date();
-            const year = now.getFullYear() % 100;
-            const yearPrefix = year.toString().padStart(2, '0');
-            const timestamp = Date.now();
-            const uniqueNum = 10000000 + (timestamp % 90000000);
-            setChallan(prev => ({ ...prev, challan_number: `DC-${yearPrefix}${uniqueNum}` }));
+            // Fallback: generate locally without backend (instant)
+            const documentNumberGenerator = (await import('../../../../services/offline/documents/documentNumberGenerator')).default;
+            const fallbackNumber = await documentNumberGenerator.generateNumber('DC', false);
+            setChallan(prev => ({ ...prev, challan_number: fallbackNumber }));
         }
     }, [setChallan]);
 
