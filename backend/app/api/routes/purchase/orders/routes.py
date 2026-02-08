@@ -623,18 +623,12 @@ async def create_purchase_with_items(
                 "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
                 "discount_percent": discount_percent,
                 "discount_amount": discount_amount,
-                "cgst_percent": 0,
-                "sgst_percent": 0,
-                "igst_percent": 0,
-                "cgst_amount": 0,
-                "sgst_amount": 0,
-                "igst_amount": 0,
                 "taxable_amount": taxable_amount,
+                "tax_percent": tax_percent,
                 "tax_amount": tax_amount,
                 "line_total": total_price,
                 "batch_number": batch_number,
                 "expiry_date": item.get("expiry_date"),
-                "manufacturing_date": item.get("manufacturing_date"),
                 "hsn_code": item_hsn
             }
             PurchaseOrderRepository.create_po_item(db, po_item_data)

@@ -661,21 +661,15 @@ class PurchaseOrderRepository:
                 ordered_quantity, unit_price, free_quantity,
                 uom, pack_type,
                 discount_percent, discount_amount,
-                cgst_percent, sgst_percent, igst_percent,
-                cgst_amount, sgst_amount, igst_amount,
-                taxable_amount, tax_amount, line_total,
-                batch_number, expiry_date, manufacturing_date,
-                hsn_code
+                taxable_amount, tax_percent, tax_amount, line_total,
+                batch_number, expiry_date, hsn_code
             ) VALUES (
                 :purchase_order_id, :product_id, :product_name,
                 :ordered_quantity, :unit_price, :free_quantity,
                 :uom, :pack_type,
                 :discount_percent, :discount_amount,
-                :cgst_percent, :sgst_percent, :igst_percent,
-                :cgst_amount, :sgst_amount, :igst_amount,
-                :taxable_amount, :tax_amount, :line_total,
-                :batch_number, :expiry_date, :manufacturing_date,
-                :hsn_code
+                :taxable_amount, :tax_percent, :tax_amount, :line_total,
+                :batch_number, :expiry_date, :hsn_code
             ) RETURNING po_item_id
         """), item_data)
         return result.scalar()
@@ -708,7 +702,10 @@ class PurchaseOrderRepository:
         query = f"""
             UPDATE procurement.purchase_order_items
             SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
-            WHERE po_item_id = :item_id AND org_id = :org_id
+            WHERE po_item_id = :item_id
+            AND purchase_order_id IN (
+                SELECT purchase_order_id FROM procurement.purchase_orders WHERE org_id = :org_id
+            )
         """
         db.execute(text(query), {**params, "item_id": item_id, "org_id": org_id})
     
