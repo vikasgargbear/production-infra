@@ -7,7 +7,7 @@ from sqlalchemy import text
 from jose import JWTError, jwt
 import logging
 
-from ..core.jwt_auth import SECRET_KEY, ALGORITHM
+from ..core.auth.jwt_auth import SECRET_KEY, ALGORITHM
 from ..core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
