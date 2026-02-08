@@ -11,7 +11,7 @@
 | Invoice | `test_invoice_e2e.sh` | 3 | 68/68 | PASS |
 | Returns | `test_returns_flow.sh` | 2 | TBD | FIXING |
 | Payments | `test_payments_flow.sh` | 4 | TBD | PENDING |
-| Stock Mgmt | `test_stock_mgmt_e2e.sh` | 5 | TBD | PENDING |
+| Stock Mgmt | `test_stock_mgmt_e2e.sh` | 5 | 62/62 | PASS |
 | DB Integrity | `test_db_integrity.sh` | 7 | 15/16 | PASS |
 
 ---
@@ -241,7 +241,14 @@ POST /stock-writeoff/         → stock_writeoffs (header: reason, cost, itc)
 | `/api/stock-adjustments/` | POST | Adjust stock (damage/expiry/count) |
 | `/api/stock-writeoff/` | POST | Writeoff with ITC reversal |
 
-### Result: TBD (pending first run)
+### Bugs Found During Testing
+| Bug ID | Severity | Description | Status |
+|--------|----------|-------------|--------|
+| STK-1 | DATA LOSS | 6 inventory routes missing `db.commit()`: receive, issue, transfer, adjustment, physical-count, expire-batches. Movements created but rolled back (sequence gaps). Only writeoff had commit. | FIXED |
+| STK-2 | CRASH | `stock_transfer` not registered in DocumentNumberService DOCUMENT_CONFIGS | FIXED |
+| STK-3 | DATA DRIFT | Writeoff service reduced batch qty but never updated `location_wise_stock`, causing LWS drift over time | FIXED |
+
+### Result: 62/62 PASSED
 
 ---
 
@@ -266,6 +273,9 @@ POST /stock-writeoff/         → stock_writeoffs (header: reason, cost, itc)
 |----|--------|----------|-------------|-----|
 | RET-16 | Returns | CRASH (500) | `return_status` column doesn't exist on `sales.sales_returns` — used in 5 SQL queries | Changed to `approval_status` |
 | RET-17 | Returns | CRASH | Cancel route used `return_status` key from dict | Changed to `approval_status` |
+| STK-1 | Stock Mgmt | DATA LOSS | 6 inventory routes missing `db.commit()` — movements rolled back silently | Added `db.commit()` to all 6 routes |
+| STK-2 | Stock Mgmt | CRASH | `stock_transfer` not in DOCUMENT_CONFIGS | Added with prefix `ST` |
+| STK-3 | Stock Mgmt | DATA DRIFT | Writeoff didn't update `location_wise_stock` | Added `update_location_wise_stock()` to writeoff service |
 
 ### Previously Fixed (2026-02-07/08)
 See `docs/WORKFLOW_DIAGRAMS.md` Section 27 and MEMORY.md for full list of 100+ fixes.
