@@ -60,6 +60,11 @@ class OrgContext:
         self.permissions = []
     
     @property
+    def branch_id(self):
+        """Get primary branch_id for backward compatibility with routes using context.branch_id."""
+        return self.branch_ids[0] if self.branch_ids else None
+
+    @property
     def primary_branch_id(self) -> Optional[UUID]:
         """Get user's primary branch (first in list)"""
         return self.branch_ids[0] if self.branch_ids else None
@@ -97,11 +102,12 @@ async def get_org_context(
         logger.warning("⚠️ TEST_MODE enabled - bypassing authentication")
         # Return default test context - adjust org_id to match your test org
         test_org_id = os.getenv("TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a")
+        test_branch_id = int(os.getenv("TEST_BRANCH_ID", "5"))
         return OrgContext(
             org_id=UUID(test_org_id),
             user_id=8,  # Default test user
             branch_scope=BranchScope.ALL,
-            branch_ids=[]
+            branch_ids=[test_branch_id]
         )
     
     if not credentials:

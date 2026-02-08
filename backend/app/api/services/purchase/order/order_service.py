@@ -5,6 +5,7 @@ Uses PurchaseOrderRepository for data access
 """
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import logging
 
 from .order_repository import PurchaseOrderRepository
@@ -326,7 +327,7 @@ class PurchaseOrderService:
         Create a supplier invoice record.
         Returns supplier_invoice_id.
         """
-        from sqlalchemy import text
+
         
         result = db.execute(text("""
             INSERT INTO procurement.supplier_invoices (
@@ -452,7 +453,7 @@ class PurchaseOrderService:
         Get purchase order details for GRN processing.
         TenantAwareSession auto-filters by org_id.
         """
-        from sqlalchemy import text
+
         
         result = db.execute(text("""
             SELECT 
@@ -473,7 +474,7 @@ class PurchaseOrderService:
         """
         Update purchase order status after GRN receipt.
         """
-        from sqlalchemy import text
+
         
         db.execute(text("""
             UPDATE procurement.purchase_orders
@@ -495,7 +496,7 @@ class PurchaseOrderService:
         """
         Get count of batches for a purchase order.
         """
-        from sqlalchemy import text
+
         
         result = db.execute(text("""
             SELECT COUNT(*) FROM inventory.batches b
