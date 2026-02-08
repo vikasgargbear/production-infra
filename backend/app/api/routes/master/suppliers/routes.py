@@ -121,7 +121,7 @@ async def create_supplier(
             count = SupplierService.count_suppliers(db, org_id)
             supplier_code = f"SUP-{count + 1:04d}"
         
-        # Build supplier data dict
+        # Build supplier data dict (map schema fields to DB column names)
         data = {
             "supplier_code": supplier_code,
             "supplier_name": supplier_data.supplier_name,
@@ -133,7 +133,7 @@ async def create_supplier(
             "primary_phone": supplier_data.primary_phone,
             "secondary_phone": supplier_data.secondary_phone,
             "primary_email": supplier_data.primary_email,
-            "contact_person_name": supplier_data.contact_person_name,
+            "contact_person_name": supplier_data.contact_person,
             "contact_person_phone": supplier_data.contact_person_phone,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
@@ -150,9 +150,9 @@ async def create_supplier(
         result = SupplierService.insert_supplier(db, org_id, data)
         supplier_id = result.get("supplier_id")
         
-        # Create address if provided
-        if supplier_data.city and supplier_data.state_name:
-            state_name, state_code = get_state_name_and_code(supplier_data.state_name)
+        # Create address if provided (schema field is 'state', not 'state_name')
+        if supplier_data.city and supplier_data.state:
+            state_name, state_code = get_state_name_and_code(supplier_data.state)
             
             address_data = {
                 "address_line1": supplier_data.address_line1 or "",

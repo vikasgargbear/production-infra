@@ -88,13 +88,20 @@ class SupplierBase(BaseModel):
     primary_email: Optional[EmailStr] = Field(None, description="Primary email address")
     contact_person: Optional[str] = Field(None, max_length=100, description="Contact person name")
     contact_person_phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
-    
+
+    # Banking
+    bank_name: Optional[str] = Field(None, max_length=100, description="Bank name")
+    account_number: Optional[str] = Field(None, max_length=20, description="Bank account number")
+    ifsc_code: Optional[str] = Field(None, max_length=11, description="IFSC code")
+    account_holder_name: Optional[str] = Field(None, max_length=200, description="Account holder name")
+
     # Payment Terms
     payment_terms: Optional[str] = Field(
         "NET30",
         description="Payment terms: CASH, NET15, NET30, NET45, NET60",
         examples=["NET30"]
     )
+    payment_days: Optional[int] = Field(default=30, ge=0, le=180, description="Payment period in days")
     credit_days: int = Field(
         default=30,
         ge=0,
@@ -106,7 +113,12 @@ class SupplierBase(BaseModel):
         ge=0,
         description="Maximum credit amount allowed"
     )
-    
+
+    # Ratings
+    quality_rating: Optional[float] = Field(None, ge=0, le=5, description="Quality rating (0-5)")
+    delivery_rating: Optional[float] = Field(None, ge=0, le=5, description="Delivery rating (0-5)")
+    compliance_rating: Optional[str] = Field(None, max_length=50, description="Compliance rating")
+
     # Notes
     internal_notes: Optional[str] = Field(None, max_length=1000, description="Internal notes")
     

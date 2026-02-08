@@ -428,21 +428,24 @@ async def create_product(
                 "message": "Product already exists"
             }
         
-        # Create product using service method
-        created = ProductService.insert_product(
+        # Create product using service method (returns product_id integer)
+        product_id = ProductService.insert_product(
             db=db,
             org_id=str(org_id),
             product_data=product_data
         )
-        
+
+        product_code_val = product_data["product_code"]
+        product_name_val = product_data["product_name"]
+
         # Create initial batch for products that maintain batches (simplified workflow for non-technical users)
         # Check if product should have batches - either maintain_batch is True OR explicit values provided
         should_create_batch = (
             product_data.get("maintain_batch", True) or  # Default to True for pharmacy products
-            (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or 
+            (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or
             (product.get("mrp") and float(product.get("mrp", 0)) > 0)
         )
-        
+
         if should_create_batch:
             # Database field names ONLY - no aliases (single source of truth)
             mrp_per_unit = float(product.get("mrp_per_unit", PricingDefaults.DEFAULT_MRP))
@@ -490,28 +493,28 @@ async def create_product(
                 "pack_uom": product.get("pack_uom", pack_type),
                 "base_uom": product.get("base_uom", PackDefaults.BASE_UOM)
             }
-            
+
             # Use service method with trigger handling
             try:
                 batch_id = ProductService.create_initial_batch(
                     db=db,
                     org_id=str(org_id),
-                    product_id=created.product_id,
+                    product_id=product_id,
                     batch_data=batch_data
                 )
                 if batch_id:
-                    logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch_id}, MRP: {mrp_per_unit}")
+                    logger.info(f"Initial batch created for product {product_code_val}: Batch ID {batch_id}, MRP: {mrp_per_unit}")
             except Exception as batch_error:
                 logger.warning(f"Could not create initial batch: {str(batch_error)}")
-        
+
         db.commit()
-        
-        logger.info(f"Product created: {created.product_code} - {created.product_name}")
-        
+
+        logger.info(f"Product created: {product_code_val} - {product_name_val}")
+
         return {
-            "product_id": created.product_id,
-            "product_code": created.product_code,
-            "product_name": created.product_name,
+            "product_id": product_id,
+            "product_code": product_code_val,
+            "product_name": product_name_val,
             "message": "Product created successfully with initial stock" if product.get("quantity_available") else "Product created successfully"
         }
         
