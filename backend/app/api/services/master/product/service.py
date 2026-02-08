@@ -1232,54 +1232,47 @@ class ProductService:
         if not batch_number:
             return None
         
-        try:
-            # Disable trigger
-            db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
-            
-            result = db.execute(text("""
-                INSERT INTO inventory.batches (
-                    org_id, product_id, batch_number,
-                    expiry_date, manufacturing_date,
-                    quantity_available, quantity_reserved,
-                    mrp_per_unit, sale_price_per_unit, cost_per_unit,
-                    batch_status, quality_status,
-                    source_type,
-                    pack_type, pack_size, units_per_pack,
-                    packages_per_box, pack_uom, base_uom,
-                    created_at, updated_at
-                ) VALUES (
-                    :org_id, :product_id, :batch_number,
-                    :expiry_date, :mfg_date,
-                    :quantity, 0,
-                    :mrp, :sale_price, :cost,
-                    'active', 'approved',
-                    'MANUAL',
-                    :pack_type, :pack_size, :units_per_pack,
-                    :packages_per_box, :pack_uom, :base_uom,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                ) RETURNING batch_id
-            """), {
-                "org_id": org_id,
-                "product_id": product_id,
-                "batch_number": batch_number,
-                "expiry_date": batch_data.get("expiry_date"),
-                "mfg_date": batch_data.get("manufacturing_date"),
-                "quantity": batch_data.get("quantity", 0),
-                "mrp": batch_data.get("mrp_per_unit", 0),
-                "sale_price": batch_data.get("sale_price_per_unit", 0),
-                "cost": batch_data.get("cost_per_unit", 0),
-                "pack_type": batch_data.get("pack_type", PackDefaults.PACK_TYPE),
-                "pack_size": batch_data.get("pack_size", PackDefaults.PACK_SIZE),
-                "units_per_pack": batch_data.get("units_per_pack", PackDefaults.UNITS_PER_PACK),
-                "packages_per_box": batch_data.get("packages_per_box", PackDefaults.PACKAGES_PER_BOX),
-                "pack_uom": batch_data.get("pack_uom", PackDefaults.PACK_UOM),
-                "base_uom": batch_data.get("base_uom", PackDefaults.BASE_UOM)
-            })
-            
-            return result.scalar()
-        finally:
-            # Always re-enable trigger
-            db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
+        result = db.execute(text("""
+            INSERT INTO inventory.batches (
+                org_id, product_id, batch_number,
+                expiry_date, manufacturing_date,
+                quantity_available, quantity_reserved,
+                mrp_per_unit, sale_price_per_unit, cost_per_unit,
+                batch_status, quality_status,
+                source_type,
+                pack_type, pack_size, units_per_pack,
+                packages_per_box, pack_uom, base_uom,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :product_id, :batch_number,
+                :expiry_date, :mfg_date,
+                :quantity, 0,
+                :mrp, :sale_price, :cost,
+                'active', 'approved',
+                'MANUAL',
+                :pack_type, :pack_size, :units_per_pack,
+                :packages_per_box, :pack_uom, :base_uom,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING batch_id
+        """), {
+            "org_id": org_id,
+            "product_id": product_id,
+            "batch_number": batch_number,
+            "expiry_date": batch_data.get("expiry_date"),
+            "mfg_date": batch_data.get("manufacturing_date"),
+            "quantity": batch_data.get("quantity", 0),
+            "mrp": batch_data.get("mrp_per_unit", 0),
+            "sale_price": batch_data.get("sale_price_per_unit", 0),
+            "cost": batch_data.get("cost_per_unit", 0),
+            "pack_type": batch_data.get("pack_type", PackDefaults.PACK_TYPE),
+            "pack_size": batch_data.get("pack_size", PackDefaults.PACK_SIZE),
+            "units_per_pack": batch_data.get("units_per_pack", PackDefaults.UNITS_PER_PACK),
+            "packages_per_box": batch_data.get("packages_per_box", PackDefaults.PACKAGES_PER_BOX),
+            "pack_uom": batch_data.get("pack_uom", PackDefaults.PACK_UOM),
+            "base_uom": batch_data.get("base_uom", PackDefaults.BASE_UOM)
+        })
+
+        return result.scalar()
     
     @staticmethod
     def update_product_dynamic(

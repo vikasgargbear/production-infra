@@ -494,14 +494,16 @@ async def create_product(
                 "base_uom": product.get("base_uom", PackDefaults.BASE_UOM)
             }
 
-            # Use service method with trigger handling
+            # Use savepoint so batch failure doesn't rollback the product INSERT
             try:
+                savepoint = db.begin_nested()
                 batch_id = ProductService.create_initial_batch(
                     db=db,
                     org_id=str(org_id),
                     product_id=product_id,
                     batch_data=batch_data
                 )
+                savepoint.commit()
                 if batch_id:
                     logger.info(f"Initial batch created for product {product_code_val}: Batch ID {batch_id}, MRP: {mrp_per_unit}")
             except Exception as batch_error:
