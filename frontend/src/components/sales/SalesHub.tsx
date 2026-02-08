@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  FileText, ShoppingCart, Truck, IndianRupee, List
+  FileText, ShoppingCart, Truck, ReceiptText, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { Module } from '../global/navigation/ModuleHub';
@@ -8,44 +8,54 @@ import InvoiceFlow from './invoice/InvoiceFlow';
 import InvoiceList from './invoice/InvoiceList';
 import { SalesOrderFlow } from './order';
 import { ChallanFlow } from './challan';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface SalesHubProps {
   open?: boolean;
   onClose?: () => void;
 }
 
-// Interface SalesModule removed in favor of shared Module interface
-
 const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
-  const salesModules: Module[] = [
-    {
-      id: 'invoice',
-      label: 'Create Invoice',
-      fullLabel: 'Create New Invoice',
-      description: 'GST Tax Invoice',
-      icon: FileText,
-      color: 'blue',
-      component: InvoiceFlow as React.ComponentType<any>
-    },
-    {
-      id: 'challan',
-      label: 'Delivery Challan',
-      fullLabel: 'Create Delivery Challan',
-      description: 'Dispatch Note',
-      icon: Truck,
-      color: 'emerald',
-      component: ChallanFlow as React.ComponentType<any>
-    },
-    {
-      id: 'sales-order',
-      label: 'Sales Order',
-      fullLabel: 'Create Sales Order',
-      description: 'Order Booking',
-      icon: ShoppingCart,
-      color: 'purple',
-      component: SalesOrderFlow as React.ComponentType<any>
-    },
-    {
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission('sales', 'create');
+
+  const salesModules: Module[] = useMemo(() => {
+    const modules: Module[] = [];
+
+    if (canCreate) {
+      modules.push(
+        {
+          id: 'invoice',
+          label: 'Create Invoice',
+          fullLabel: 'Create New Invoice',
+          description: 'GST Tax Invoice',
+          icon: FileText,
+          color: 'blue',
+          component: InvoiceFlow as React.ComponentType<any>
+        },
+        {
+          id: 'challan',
+          label: 'Delivery Challan',
+          fullLabel: 'Create Delivery Challan',
+          description: 'Dispatch Note',
+          icon: Truck,
+          color: 'emerald',
+          component: ChallanFlow as React.ComponentType<any>
+        },
+        {
+          id: 'sales-order',
+          label: 'Sales Order',
+          fullLabel: 'Create Sales Order',
+          description: 'Order Booking',
+          icon: ShoppingCart,
+          color: 'purple',
+          component: SalesOrderFlow as React.ComponentType<any>
+        }
+      );
+    }
+
+    // Sales History is always visible (view permission)
+    modules.push({
       id: 'sales-history',
       label: 'Sales History',
       fullLabel: 'Sales History',
@@ -53,8 +63,10 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       icon: List,
       color: 'gray',
       component: InvoiceList
-    }
-  ];
+    });
+
+    return modules;
+  }, [canCreate]);
 
   return (
     <ModuleHub
@@ -62,9 +74,9 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       onClose={onClose || (() => { })}
       title="Sales"
       subtitle=""
-      icon={IndianRupee}
+      icon={ReceiptText}
       modules={salesModules}
-      defaultModule="invoice"
+      defaultModule={canCreate ? 'invoice' : 'sales-history'}
     />
   );
 };

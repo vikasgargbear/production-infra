@@ -1,7 +1,8 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import queryClient from './queryClient';
 import { useAuth } from './contexts/AuthContext';
+import { usePermissions } from './hooks/usePermissions';
 import LoginPage from './components/auth/LoginPage';
 // import Sidebar from './components/Sidebar';
 import { ErrorBoundary } from './components/global/utilities';
@@ -17,6 +18,7 @@ import { LedgerHub } from './components/ledger';
 import { NotesHub } from './components/returns/notes';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
+import PayrollHub from './components/payroll/PayrollHub';
 import ReportsHub from './components/reports/ReportsHub';
 // OLD AUTH DIAGNOSTIC - Not needed with new AuthContext
 // import AuthDiagnostic from './components/AuthDiagnostic';
@@ -89,6 +91,7 @@ type TabName =
   | 'credit-debit-note'
   | 'gst'
   | 'master'
+  | 'payroll'
   | 'receivables-collection'
   | 'components-test';
 
@@ -129,9 +132,46 @@ const CompliancePlaceholder = React.memo(() => (
   </div>
 ));
 
+// Map each tab to the permission module it requires.
+// Tabs not listed here (home, dashboard) are always accessible.
+const TAB_MODULE_MAP: Partial<Record<TabName, string>> = {
+  sales:                   'sales',
+  purchase:                'purchase',
+  payment:                 'payment',
+  'payment-entry':         'payment',
+  'payment-dashboard':     'payment',
+  payments:                'payment',
+  returns:                 'returns',
+  'sale-return':           'returns',
+  'purchase-return':       'returns',
+  'stock-management':      'inventory',
+  inventory:               'inventory',
+  batches:                 'inventory',
+  'party-ledger':          'ledger',
+  accounting:              'ledger',
+  'credit-debit-note':     'notes',
+  gst:                     'gst',
+  reports:                 'reports',
+  master:                  'master',
+  customers:               'master',
+  profile:                 'master',
+  payroll:                 'master',
+};
+
 const AppContent = (): JSX.Element => {
   const { isAuthenticated, isLoading } = useAuth();
+  const { hasModuleAccess } = usePermissions();
   const [activeTab, setActiveTab] = useState<TabName>('home');
+
+  // Guarded tab setter: only navigate if user has module access
+  const setActiveTabGuarded = useCallback((tab: string) => {
+    const requiredModule = TAB_MODULE_MAP[tab as TabName];
+    if (requiredModule && !hasModuleAccess(requiredModule)) {
+      // User lacks access — stay on home
+      return;
+    }
+    setActiveTab(tab as TabName);
+  }, [hasModuleAccess]);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Authentication handled by AuthContext - no manual initialization needed
@@ -189,7 +229,7 @@ const AppContent = (): JSX.Element => {
     const handleNavigate = (event: Event) => {
       const customEvent = event as CustomEvent;
       if (customEvent.detail?.tab) {
-        setActiveTab(customEvent.detail.tab as TabName);
+        setActiveTabGuarded(customEvent.detail.tab);
       }
     };
 
@@ -200,13 +240,13 @@ const AppContent = (): JSX.Element => {
       window.removeEventListener('navigate', handleNavigate as EventListener);
       syncEngine.stopAutoSync();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, setActiveTabGuarded]);
 
   // Component renderer - removed useCallback to reduce input lag
   const renderActiveComponent = (): JSX.Element => {
     switch (activeTab) {
       case 'home':
-        return <Home key="home" setActiveTab={(tab) => setActiveTab(tab as TabName)} />;
+        return <Home key="home" setActiveTab={setActiveTabGuarded} />;
       case 'sales':
         return <SalesHub key="sales" open={true} onClose={() => setActiveTab('home')} />;
       case 'purchase':
@@ -264,12 +304,14 @@ const AppContent = (): JSX.Element => {
         return <GSTHub key="gst" open={true} onClose={() => setActiveTab('home')} />;
       case 'master':
         return <MasterHub key="master" open={true} onClose={() => setActiveTab('home')} />;
+      case 'payroll':
+        return <PayrollHub key="payroll" open={true} onClose={() => setActiveTab('home')} />;
       case 'receivables-collection':
         return <div key="receivables-collection">Receivables Collection - Use Ledger Module → Collection Center</div>;
       case 'components-test':
         return <div key="components-test">Component Test Page Removed</div>;
       default:
-        return <Home key="home-default" setActiveTab={(tab) => setActiveTab(tab as TabName)} />;
+        return <Home key="home-default" setActiveTab={setActiveTabGuarded} />;
     }
   };
 

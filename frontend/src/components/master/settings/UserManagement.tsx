@@ -4,15 +4,12 @@ import {
   Save, X, Shield, Clock, Key,
   Eye, EyeOff, Lock, Unlock, Loader2, AlertCircle, Check
 } from 'lucide-react';
-import { usersApi } from '../../../services/api';
+import { usersApi, roleManagementApi } from '../../../services/api';
 import {
-  MODULES,
   MODULE_INFO,
-  ROLE_INFO,
-  getRoleDefaults,
-  UserRole
 } from '../../../config/userRoles.config';
 import { User } from '../../../types/models/user';
+import type { Role } from '../../../types/api.types';
 
 interface UserManagementProps {
   open: boolean;
@@ -35,13 +32,28 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
   // User data
   const [users, setUsers] = useState<User[]>([]);
 
+  // DB roles from backend
+  const [dbRoles, setDbRoles] = useState<Role[]>([]);
+
   // Load users on component mount
   useEffect(() => {
     if (open) {
       checkCurrentUserPermissions();
       loadUsers();
+      loadDbRoles();
     }
   }, [open]);
+
+  // Fetch roles from the database
+  const loadDbRoles = async () => {
+    try {
+      const response = await roleManagementApi.getAll();
+      const data = response?.data?.data || response?.data || [];
+      setDbRoles(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn('Failed to load roles from DB, using fallback');
+    }
+  };
 
   // Check current user's permissions
   const checkCurrentUserPermissions = () => {
@@ -183,12 +195,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
     setRefreshing(false);
   };
 
+  // Build role options from DB roles (with "All" filter option)
   const roles = [
-    { value: 'all', label: 'All Roles', color: 'gray' },
-    ...Object.entries(ROLE_INFO).map(([value, info]) => ({
-      value,
-      label: info.label,
-      color: info.color
+    { value: 'all', label: 'All Roles', color: 'gray', role_id: 0 },
+    ...dbRoles.map(r => ({
+      value: r.role_code,
+      label: r.role_name,
+      color: r.is_system_role ? 'blue' : 'purple',
+      role_id: r.role_id
     }))
   ];
 
@@ -263,15 +277,27 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
     }));
   };
 
-  const handleRoleChange = (role: string) => {
-    const roleDefaults = getRoleDefaults(role as UserRole);
+  const handleRoleChange = (roleCode: string) => {
+    const dbRole = dbRoles.find(r => r.role_code === roleCode);
 
-    setFormData(prev => ({
-      ...prev,
-      role: role as any,
-      modules: roleDefaults.modules || [],
-      permissions: roleDefaults.permissions || {}
-    }));
+    if (dbRole) {
+      const perms = dbRole.permissions && typeof dbRole.permissions === 'object' && 'all' in dbRole.permissions
+        ? {} // admin — show all modules with full access
+        : (dbRole.permissions || {});
+      setFormData(prev => ({
+        ...prev,
+        role: roleCode,
+        modules: dbRole.allowed_modules || [],
+        permissions: perms as Record<string, any>
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        role: roleCode,
+        modules: [],
+        permissions: {}
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -289,10 +315,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
 
     try {
       // Prepare data for both table structures
-      const userData: Partial<User> & { password?: string; send_invite_email?: boolean } = {
+      const selectedDbRole = dbRoles.find(r => r.role_code === formData.role);
+      const userData: Partial<User> & { password?: string; send_invite_email?: boolean; role_id?: number } = {
         // Common fields
         email: formData.email,
         role: formData.role,
+        ...(selectedDbRole ? { role_id: selectedDbRole.role_id } : {}),
 
         // org_users fields
         full_name: formData.fullName,
@@ -340,6 +368,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
 
   const handleEdit = (user: User) => {
     setEditingUser(user);
+    // Try to find the DB role for this user to pre-populate permissions preview
+    const userDbRole = dbRoles.find(r => r.role_code === user.role);
+    const isAdminAll = userDbRole?.permissions && typeof userDbRole.permissions === 'object' && 'all' in userDbRole.permissions;
     setFormData({
       username: user.username || '',
       fullName: user.fullName || '',
@@ -348,8 +379,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
       confirmPassword: '',
       role: user.role,
       status: user.status || 'active',
-      modules: user.modules || [],
-      permissions: (user.permissions || {}) as Record<string, any>,
+      modules: userDbRole?.allowed_modules || user.modules || [],
+      permissions: isAdminAll ? {} : ((userDbRole?.permissions || user.permissions || {}) as Record<string, any>),
       phone: user.phone || '',
       sendInviteEmail: false
     });
@@ -819,9 +850,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
                   </div>
 
                   {(() => {
-                    const roleDefaults = getRoleDefaults(formData.role as any);
-                    const roleModules = roleDefaults?.modules || [];
-                    const rolePermissions = (roleDefaults?.permissions || {}) as Record<string, any>;
+                    const dbRole = dbRoles.find(r => r.role_code === formData.role);
+                    const isAdminAll = dbRole?.permissions && typeof dbRole.permissions === 'object' && 'all' in dbRole.permissions;
+                    const roleModules = dbRole?.allowed_modules || formData.modules || [];
+                    const rolePermissions = isAdminAll
+                      ? Object.fromEntries(roleModules.map(m => [m, { view: true, create: true, edit: true, delete: true }]))
+                      : ((dbRole?.permissions || formData.permissions || {}) as Record<string, any>);
 
                     return (
                       <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 overflow-hidden">

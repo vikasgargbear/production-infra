@@ -471,11 +471,19 @@ export interface Organization {
 
 export interface Role {
   role_id: number;
-  name: string;
-  description?: string;
+  role_code: string;
+  role_name: string;
+  role_description?: string;
+  role_level?: number;
   is_system_role: boolean;
-  permissions: string[];
+  permissions: Record<string, Record<string, boolean>> | { all: boolean };
+  allowed_modules: string[];
+  restricted_features?: string[];
+  data_access_level: 'own' | 'branch' | 'organization';
+  parent_role_id?: number | null;
+  user_count?: number;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CreateUserRequest {

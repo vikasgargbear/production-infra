@@ -25,7 +25,7 @@ export interface User {
 
     // Access
     role: string;
-    role_id?: string;
+    role_id?: string | number;
     is_active?: boolean;
     status?: string; // Sometimes mapped from is_active
 

@@ -5,7 +5,7 @@
  * Uses ModuleHub for layout but wraps components to inject extra props.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
@@ -17,6 +17,7 @@ import PurchaseListHistory from './PurchaseListHistory';
 import { purchasesApi } from '../../services/api';
 import { toast } from 'react-toastify';
 import type { PurchaseData, PurchaseItem } from './purchase-entry/hooks';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface PurchaseHubProps {
   open?: boolean;
@@ -24,6 +25,9 @@ interface PurchaseHubProps {
 }
 
 const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission('purchase', 'create');
+
   // State for PO → Purchase Entry navigation
   const [prefilledData, setPrefilledData] = useState<Partial<PurchaseData> | null>(null);
   const [forceModule, setForceModule] = useState<string | null>(null);
@@ -96,47 +100,58 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
     <PurchaseListHistory {...props} onRecordReceipt={handleRecordReceipt} />
   ), [handleRecordReceipt]);
 
-  const purchaseModules = [
-    {
-      id: 'purchase',
-      label: 'Purchase',
-      fullLabel: 'Purchase Entry',
-      description: 'Record purchases',
-      icon: ShoppingBag,
-      color: 'indigo',
-      component: PurchaseEntryWrapper
-    },
-    {
-      id: 'purchase-order',
-      label: 'Order',
-      fullLabel: 'Purchase Order',
-      description: 'Create POs',
-      icon: FileText,
-      color: 'indigo',
-      component: PurchaseOrderFlow
-    },
-    {
-      id: 'grn',
-      label: 'Receipts',
-      fullLabel: 'Goods Receipts',
-      description: 'Receipt history',
-      icon: Package,
-      color: 'green',
-      component: GRNFlow
-    },
-    {
-      id: 'purchase-history',
-      label: 'Purchase History',
-      fullLabel: 'Purchase History',
-      description: 'Invoices, Orders & GRN',
-      icon: List,
-      color: 'gray',
-      component: HistoryWrapper
+  const purchaseModules = useMemo(() => {
+    const modules: any[] = [];
+
+    if (canCreate) {
+      modules.push(
+        {
+          id: 'purchase',
+          label: 'Purchase',
+          fullLabel: 'Purchase Entry',
+          description: 'Record purchases',
+          icon: ShoppingBag,
+          color: 'indigo',
+          component: PurchaseEntryWrapper
+        },
+        {
+          id: 'purchase-order',
+          label: 'Order',
+          fullLabel: 'Purchase Order',
+          description: 'Create POs',
+          icon: FileText,
+          color: 'indigo',
+          component: PurchaseOrderFlow
+        }
+      );
     }
-  ];
+
+    modules.push(
+      {
+        id: 'grn',
+        label: 'Receipts',
+        fullLabel: 'Goods Receipts',
+        description: 'Receipt history',
+        icon: Package,
+        color: 'green',
+        component: GRNFlow
+      },
+      {
+        id: 'purchase-history',
+        label: 'Purchase History',
+        fullLabel: 'Purchase History',
+        description: 'Invoices, Orders & GRN',
+        icon: List,
+        color: 'gray',
+        component: HistoryWrapper
+      }
+    );
+
+    return modules;
+  }, [canCreate, PurchaseEntryWrapper, HistoryWrapper]);
 
   // Use forceModule to switch tab when navigating from PO
-  const defaultModule = forceModule || 'purchase';
+  const defaultModule = forceModule || (canCreate ? 'purchase' : 'grn');
 
   // Reset forceModule after it's been consumed
   if (forceModule) {

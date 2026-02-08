@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText,
   ShoppingCart,
@@ -13,10 +13,12 @@ import {
   Calculator,
   Settings2,
   Bell,
-  Loader2
+  Loader2,
+  Banknote
 } from 'lucide-react';
 import { Card, Button } from './global';
 import NotificationCenter from './global/NotificationCenter';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface HomeProps {
   setActiveTab: (tab: string) => void;
@@ -31,12 +33,29 @@ interface ActionItem {
   shortcut: string;
 }
 
+// Map action IDs to permission modules
+const ACTION_MODULE_MAP: Record<string, string> = {
+  'sales': 'sales',
+  'purchase-entry': 'purchase',
+  'returns': 'returns',
+  'stock-management': 'inventory',
+  'financial-hub': 'payment',
+  'party-ledger': 'ledger',
+  'credit-debit-note': 'notes',
+  'gst': 'gst',
+  'reports': 'reports',
+  'warehouse': 'inventory',
+  'payroll': 'master',
+  'master': 'master',
+};
+
 const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const companyName = localStorage.getItem('companyName') || 'PharmaERP Pro';
   const companyLogo = localStorage.getItem('companyLogo');
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { hasModuleAccess } = usePermissions();
 
   useEffect(() => {
     const loadData = async () => {
@@ -149,6 +168,14 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       shortcut: 'Ctrl+W'
     },
     {
+      id: 'payroll',
+      tab: 'payroll',
+      title: 'Payroll & HR',
+      subtitle: 'Salary, attendance, leaves, and payslips',
+      icon: Banknote,
+      shortcut: 'Ctrl+Shift+P'
+    },
+    {
       id: 'master',
       tab: 'master',
       title: 'Master Management',
@@ -212,6 +239,10 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             case 'r':
               e.preventDefault();
               setActiveTab('reports');
+              break;
+            case 'p':
+              e.preventDefault();
+              setActiveTab('payroll');
               break;
             default:
               break;
@@ -369,34 +400,46 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
         <div className="max-w-7xl mx-auto">
 
           {/* Core Operations Section */}
-          <div className="mb-8">
-            <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
-              Core Operations
-            </h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {coreActions.map((action) => renderActionCard(action, 'blue'))}
+          {coreActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'sales')).length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+                Core Operations
+              </h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {coreActions
+                  .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'sales'))
+                  .map((action) => renderActionCard(action, 'blue'))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Financial Operations Section */}
-          <div className="mb-5">
-            <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
-              Financial Operations
-            </h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {financialActions.map((action) => renderActionCard(action, 'green'))}
+          {financialActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'payment')).length > 0 && (
+            <div className="mb-5">
+              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+                Financial Operations
+              </h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {financialActions
+                  .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'payment'))
+                  .map((action) => renderActionCard(action, 'green'))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Analytics & Warehouse Section */}
-          <div>
-            <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
-              Analytics & Warehouse
-            </h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {analyticsActions.map((action) => renderActionCard(action, 'gray'))}
+          {analyticsActions.filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'reports')).length > 0 && (
+            <div>
+              <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wider mb-4 text-center">
+                Analytics & Warehouse
+              </h2>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {analyticsActions
+                  .filter(a => hasModuleAccess(ACTION_MODULE_MAP[a.id] || 'reports'))
+                  .map((action) => renderActionCard(action, 'gray'))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
