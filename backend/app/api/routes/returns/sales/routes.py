@@ -34,6 +34,23 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
+# Map return_category (schema enum) to reason_code (credit_notes CHECK constraint)
+_CATEGORY_TO_REASON_CODE = {
+    "QUALITY": "QUALITY_ISSUE",
+    "EXPIRED": "EXPIRED",
+    "DAMAGED": "DAMAGED",
+    "WRONG_PRODUCT": "WRONG_ITEM",
+    "EXCESS": "NOT_REQUIRED",
+    "SHORT_EXPIRY": "SHORT_EXPIRY",
+    "RECALL": "BATCH_RECALL",
+    "OTHER": "OTHER",
+}
+
+def _map_return_category_to_reason_code(category: str) -> str:
+    """Map return_category enum to credit_notes reason_code CHECK constraint values."""
+    return _CATEGORY_TO_REASON_CODE.get(category.upper() if category else "OTHER", "SALES_RETURN")
+
+
 router = APIRouter(tags=["sale-returns"])
 
 @router.get("/generate-number")
@@ -418,8 +435,10 @@ async def create_sale_return(
                 cgst_amount=float(cgst_amount),
                 sgst_amount=float(sgst_amount),
                 igst_amount=float(igst_amount),
-                reason_code=return_dict.get("return_reason", "NOT_REQUIRED"),
-                reason=return_dict.get("notes", ""),
+                reason_code=_map_return_category_to_reason_code(
+                    return_dict.get("return_category", "OTHER")
+                ),
+                reason=return_dict.get("return_reason", return_dict.get("notes", "")),
                 invoice_id=return_dict.get("invoice_id"),
                 invoice_number=return_dict.get("invoice_number"),
                 return_date=return_dict.get("return_date", str(date.today())),
