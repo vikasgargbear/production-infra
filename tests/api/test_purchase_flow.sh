@@ -352,7 +352,7 @@ if [ -n "$PO_ID" ] && [ "$PO_ID" != "null" ]; then
     parse_response "$(api_get "/purchases/${PO_ID}/for-entry")"
     assert_status "200" "For-entry after partial receipt"
     REMAINING2=$(echo "$RESPONSE_BODY" | jq -r '.items[0].remaining_quantity')
-    if [ "$REMAINING2" = "5.000" ] || [ "$REMAINING2" = "5" ]; then
+    if [ "$REMAINING2" = "5.000" ] || [ "$REMAINING2" = "5" ] || [ "$REMAINING2" = "5.0" ]; then
         echo -e "  ${GREEN}✓ Remaining quantity after partial: ${REMAINING2}${NC}"; ((PASS_COUNT++))
     else
         echo -e "  ${RED}✗ Remaining: expected 5, got ${REMAINING2}${NC}"; ((FAIL_COUNT++))
