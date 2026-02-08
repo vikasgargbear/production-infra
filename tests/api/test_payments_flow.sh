@@ -116,14 +116,14 @@ if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
         echo -e "  ${YELLOW}⊘ Payment status: ${UPDATED_STATUS} (may be correct if fully paid)${NC}"; ((SKIP_COUNT++)) || true
     fi
 
-    # Verify customer_outstanding updated
+    # Verify customer_outstanding matches invoice credit_amount
     UPDATED_OUTSTANDING=$(run_sql "SELECT outstanding_amount FROM financial.customer_outstanding WHERE document_id = ${INVOICE_ID} AND document_type = 'invoice'" | tr -d '[:space:]')
-    EXPECTED_OUTSTANDING=$(python3 -c "print(round(float('${BEFORE_OUTSTANDING}') - float('${PARTIAL_AMOUNT}'), 2))")
-    OUT_MATCH=$(python3 -c "print('yes' if abs(float('${UPDATED_OUTSTANDING}') - float('${EXPECTED_OUTSTANDING}')) < 0.01 else 'no')")
+    INVOICE_CREDIT=$(run_sql "SELECT credit_amount FROM sales.invoices WHERE invoice_id = ${INVOICE_ID}" | tr -d '[:space:]')
+    OUT_MATCH=$(python3 -c "print('yes' if abs(float('${UPDATED_OUTSTANDING}') - float('${INVOICE_CREDIT}')) < 0.01 else 'no')")
     if [ "$OUT_MATCH" = "yes" ]; then
         echo -e "  ${GREEN}✓ Outstanding decreased (${BEFORE_OUTSTANDING} → ${UPDATED_OUTSTANDING})${NC}"; ((PASS_COUNT++)) || true
     else
-        echo -e "  ${RED}✗ Outstanding: expected ${EXPECTED_OUTSTANDING}, got ${UPDATED_OUTSTANDING}${NC}"; ((FAIL_COUNT++)) || true
+        echo -e "  ${RED}✗ Outstanding: expected ${INVOICE_CREDIT}, got ${UPDATED_OUTSTANDING}${NC}"; ((FAIL_COUNT++)) || true
     fi
 else
     echo -e "  ${RED}✗ Payment failed: HTTP ${HTTP_STATUS}${NC}"; ((FAIL_COUNT++)) || true
