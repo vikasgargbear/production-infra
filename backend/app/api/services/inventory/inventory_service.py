@@ -867,19 +867,30 @@ class InventoryService:
                     "product_id": product_id, "batch_id": batch_id, "quantity": quantity
                 })
             else:
-                # Stock-out but no LWS row exists — log warning, still track
-                logger.warning(
-                    f"⚠️ No location_wise_stock row for product={product_id}, "
-                    f"batch={batch_id}, location={location_id}. Creating with negative qty."
+                # Stock-out but no LWS row exists — backfill from batch then deduct
+                batch_qty = db.execute(text("""
+                    SELECT COALESCE(quantity_available, 0)
+                    FROM inventory.batches
+                    WHERE batch_id = :batch_id AND org_id = :org_id
+                """), {"batch_id": batch_id, "org_id": org_id}).scalar() or 0
+
+                # Batch qty is already deducted by bulk_update_batch_quantities,
+                # so the "before" value was batch_qty + quantity
+                backfill_qty = float(batch_qty) + float(quantity)
+                new_qty = max(float(batch_qty), 0)  # After deduction
+
+                logger.info(
+                    f"📦 Backfilling location_wise_stock for product={product_id}, "
+                    f"batch={batch_id}, location={location_id}: qty={new_qty}"
                 )
                 db.execute(text("""
                     INSERT INTO inventory.location_wise_stock (
                         org_id, location_id, product_id, batch_id,
                         quantity_available, quantity_reserved, last_movement_date
-                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, -:quantity, 0, CURRENT_DATE)
+                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, 0, CURRENT_DATE)
                 """), {
                     "org_id": org_id, "location_id": location_id,
-                    "product_id": product_id, "batch_id": batch_id, "quantity": quantity
+                    "product_id": product_id, "batch_id": batch_id, "quantity": new_qty
                 })
 
             updated += 1
