@@ -47,7 +47,7 @@ const documentTypeConfig = {
   }
 };
 
-const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) => {
+const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRecordReceipt }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, purchases, selectedIds, filters, ui, pagination, loading } = usePurchaseListHistoryState();
 
@@ -349,6 +349,18 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="flex items-center justify-center space-x-1">
+          {/* Record Receipt button - only for PO documents with receivable status */}
+          {documentType === 'purchase_order' && onRecordReceipt &&
+            ['draft', 'pending', 'partial', 'confirmed', 'approved'].includes(purchase.status) && (
+            <button
+              onClick={() => onRecordReceipt(parseInt(purchase.id))}
+              className="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
+              title="Record Receipt (Create Purchase Entry from this PO)"
+            >
+              <Package className="w-3.5 h-3.5 inline mr-1" />
+              Receipt
+            </button>
+          )}
           <button
             onClick={() => toast.info(`Opening purchase ${purchase.po_number} - Feature coming soon`)}
             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -386,7 +398,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           </button>
         </div>
       ),
-      width: '180px'
+      width: '220px'
     }
   ];
 

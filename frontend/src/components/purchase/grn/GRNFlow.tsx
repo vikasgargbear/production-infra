@@ -1,737 +1,264 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer, CheckCircle, CreditCard } from 'lucide-react';
-import { suppliersApi, productsApi, grnApi } from '../../../services/api';
-import { searchCache } from '../../../utils/searchCache';
-import {
-  GlobalDocumentFlow,
-  DocumentSummaryTop,
-  SupplierSearch,
-  ProductSearch,
-
-  SupplierCreationModal,
-  ProductCreationModal,
-  GenericSuccessModal,
-  ContentCard,
-  useToast,
-  NumberInput,
-  MonthYearPicker,
-  StandardDatePicker
-} from '../../global';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import GRNItemsTable from '../ui/GRNItemsTable';
-import { PURCHASE_CONFIG } from '../../../config/purchase.config';
-
 /**
- * EnhancedGRNFlow - Goods Receipt Note using the full global document system
- * Records receipt of goods against purchase orders
- * Updates inventory and validates deliveries
+ * GRNFlow - Goods Receipt Notes (Read-Only Viewer)
+ *
+ * GRNs are now auto-created from Purchase Entry.
+ * This component shows a read-only list of existing GRNs with source badges.
  */
-const GRNFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledData?: any }) => {
-  const toast = useToast();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [createdGRNData, setCreatedGRNData] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<any>({});
+import React, { useState, useEffect, useCallback } from 'react';
+import { Package, FileText, Loader2, RefreshCw, Eye } from 'lucide-react';
+import { grnApi } from '../../../services/api';
+import { DataTable, StatusBadge, ModuleHeader } from '../../global';
+import { formatCurrency } from '../../../utils/formatters';
 
-  const productSearchRef = useRef<any>(null);
+const GRNFlow = ({ onClose }: { onClose: any; prefilledData?: any }) => {
+  const [grns, setGrns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedGrn, setSelectedGrn] = useState<any>(null);
 
-  // GRN data state
-  const [grn, setGrn] = useState<any>({
-    grn_no: '',
-    grn_date: new Date().toISOString().split('T')[0],
-    po_reference: prefilledData?.po_reference || '',
-    supplier_id: prefilledData?.supplier_id || '',
-    supplier_name: prefilledData?.supplier_name || '',
-    supplier_details: prefilledData?.supplier_details || null,
-    supplier_invoice_number: '',
-    supplier_invoice_date: new Date().toISOString().split('T')[0],
-    items: prefilledData?.items || [],
-    quality_check: {
-      checked_by: '',
-      check_date: new Date().toISOString().split('T')[0],
-      quality_status: 'Approved',
-      remarks: ''
-    },
-    gross_amount: 0,
-    tax_amount: 0,
-    net_amount: 0,
-    total_amount: 0,
-    notes: prefilledData?.notes || '',
-    status: 'received'
-  });
-
-  const [selectedSupplier, setSelectedSupplier] = useState<any>(prefilledData?.supplier_details || null);
-
-  // Generate GRN number on mount
-  useEffect(() => {
-    const generateAndSetGRNNumber = async () => {
-      try {
-        const grnNumber = await documentNumberGenerator.generateGRNNumber();
-        setGrn(prev => ({ ...prev, grn_no: grnNumber }));
-      } catch (error) {
-        const fallbackNumber = `GRN-${Date.now().toString().slice(-8)}`;
-        setGrn(prev => ({ ...prev, grn_no: fallbackNumber }));
-      }
-    };
-
-    generateAndSetGRNNumber();
+  const fetchGRNs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await grnApi.getAll({ limit: 50 });
+      const data = response?.data;
+      const grnList = Array.isArray(data) ? data : (data?.grns || data?.data || []);
+      setGrns(grnList);
+    } catch (err) {
+      setGrns([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Calculate totals whenever items change
   useEffect(() => {
-    if (grn.items) {
-      calculateTotals();
-    }
-  }, [grn.items]);
+    fetchGRNs();
+  }, [fetchGRNs]);
 
-  const calculateTotals = () => {
-    if (!grn.items || grn.items.length === 0) {
-      setGrn(prev => ({
-        ...prev,
-        gross_amount: 0,
-        tax_amount: 0,
-        net_amount: 0,
-        total_amount: 0
-      }));
-      return;
-    }
-
-    let grossTotal = 0;
-    let taxTotal = 0;
-
-    (grn.items || []).forEach(item => {
-      if (item.product_id) {
-        const receivedQty = parseFloat(item.received_qty) || 0;
-        const unitPrice = parseFloat(item.unit_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || 0;
-
-        const itemTotal = receivedQty * unitPrice;
-        const itemTax = (itemTotal * taxPercent) / 100;
-
-        grossTotal += itemTotal;
-        taxTotal += itemTax;
-      }
-    });
-
-    const netAmount = grossTotal + taxTotal;
-
-    setGrn(prev => ({
-      ...prev,
-      gross_amount: grossTotal,
-      tax_amount: taxTotal,
-      net_amount: netAmount,
-      total_amount: netAmount
-    }));
-  };
-
-  const handleSupplierSelect = (supplier) => {
-    setSelectedSupplier(supplier);
-    setGrn(prev => ({
-      ...prev,
-      supplier_id: supplier.supplier_id,
-      supplier_name: supplier.supplier_name,
-      supplier_details: supplier
-    }));
-  };
-
-  const handleAddItem = (product) => {
-    const newItem = {
-      id: Date.now() + Math.random(),
-      product_id: product.product_id,
-      product_name: product.product_name,
-      product_code: product.product_code,
-      hsn_code: product.hsn_code || '',
-      batch_number: '',
-      expiry_date: '',
-      manufacturer: product.manufacturer || '',
-      ordered_qty: 0,
-      received_qty: 1,
-      unit: product.unit || product.uom || '',  // No default unit
-      unit_price: product.unit_price || (product.mrp || 0) * 0.7,
-      mrp: product.mrp || 0,
-      selling_price: product.sale_price || product.selling_price || product.mrp || 0,
-      tax_percent: product.tax_percent || 12,
-      discount_percent: 0,
-      free_quantity: 0,
-      pack_type: 'STRIP',
-      pack_size: 10,
-      packages_per_box: 10,
-      quality_status: 'Approved',
-      total: product.unit_price || 0
-    };
-
-    setGrn(prev => ({
-      ...prev,
-      items: [...(prev.items || []), newItem]
-    }));
-
-    if (productSearchRef.current) {
-      setTimeout(() => productSearchRef.current?.focus(), 100);
+  // Source badge colors
+  const sourceBadge = (source: string) => {
+    switch (source) {
+      case 'PO':
+        return <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">From PO</span>;
+      case 'DIRECT':
+        return <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">From Purchase Entry</span>;
+      default:
+        return <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">Manual</span>;
     }
   };
 
-  const handleUpdateItem = (index, field, value) => {
-    setGrn(prev => ({
-      ...prev,
-      items: (prev.items || []).map((item, i) => {
-        if (i === index) {
-          return { ...item, [field]: value };
-        }
-        return item;
-      })
-    }));
-  };
-
-  const handleRemoveItem = (index) => {
-    setGrn(prev => ({
-      ...prev,
-      items: (prev.items || []).filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleSaveGRN = async () => {
-    if (!validateGRN()) {
-      toast.error('Please fix validation errors');
-      return;
+  const columns = [
+    {
+      key: 'grn_number',
+      header: 'GRN #',
+      render: (_: any, grn: any) => (
+        <span className="text-sm font-medium text-gray-900">{grn.grn_number}</span>
+      ),
+      width: '140px'
+    },
+    {
+      key: 'grn_date',
+      header: 'Date',
+      render: (_: any, grn: any) => (
+        <span className="text-sm text-gray-600">
+          {grn.grn_date ? new Date(grn.grn_date).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric'
+          }) : '-'}
+        </span>
+      ),
+      width: '110px'
+    },
+    {
+      key: 'source',
+      header: 'Source',
+      render: (_: any, grn: any) => sourceBadge(grn.source || 'MANUAL'),
+      width: '140px'
+    },
+    {
+      key: 'supplier_invoice_number',
+      header: 'Supplier Invoice',
+      render: (_: any, grn: any) => (
+        <span className="text-sm text-gray-600">{grn.supplier_invoice_number || '-'}</span>
+      ),
+      width: '140px'
+    },
+    {
+      key: 'grn_status',
+      header: 'Status',
+      align: 'center' as const,
+      render: (_: any, grn: any) => {
+        const status = grn.grn_status || 'completed';
+        const map: Record<string, any> = {
+          completed: { status: 'success', label: 'Completed' },
+          draft: { status: 'info', label: 'Draft' },
+          pending: { status: 'warning', label: 'Pending' }
+        };
+        const config = map[status] || { status: 'default', label: status };
+        return <StatusBadge status={config.status} label={config.label} />;
+      },
+      width: '100px'
+    },
+    {
+      key: 'stock_updated',
+      header: 'Stock',
+      align: 'center' as const,
+      render: (_: any, grn: any) => (
+        <span className={`text-xs font-medium ${grn.stock_updated ? 'text-green-600' : 'text-orange-600'}`}>
+          {grn.stock_updated ? 'Updated' : 'Pending'}
+        </span>
+      ),
+      width: '80px'
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'center' as const,
+      render: (_: any, grn: any) => (
+        <button
+          onClick={() => setSelectedGrn(grn)}
+          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+          title="View Details"
+        >
+          <Eye className="w-4 h-4" />
+        </button>
+      ),
+      width: '50px'
     }
+  ];
 
-    setSaving(true);
-    try {
-      const grnData = {
-        grn_no: grn.grn_no,
-        grn_date: grn.grn_date,
-        po_reference: grn.po_reference,
-        supplier_id: parseInt(grn.supplier_id),
-        supplier_invoice_number: grn.supplier_invoice_number,
-        supplier_invoice_date: grn.supplier_invoice_date,
-        items: grn.items.map(item => ({
-          product_id: parseInt(item.product_id),
-          batch_number: item.batch_number,
-          expiry_date: item.expiry_date,
-          ordered_qty: parseFloat(item.ordered_qty) || 0,
-          received_qty: parseFloat(item.received_qty) || 0,
-          unit_price: parseFloat(item.unit_price) || 0,
-          tax_percent: parseFloat(item.tax_percent) || 12,
-          quality_status: item.quality_status || 'Approved'
-        })),
-        quality_check: grn.quality_check,
-        notes: grn.notes
-      };
-
-      const response = await grnApi.create(grnData);
-
-      if (response && response.data) {
-        const grnNumber = response.data.grn_no || grn.grn_no;
-
-        setCreatedGRNData({
-          grnNumber: grnNumber,
-          grnId: response.data.grn_id || response.data.id,
-          supplierName: selectedSupplier?.supplier_name || grn.supplier_name,
-          totalAmount: grn.total_amount
-        });
-
-        setShowSuccessModal(true);
-        toast.success(`GRN ${grnNumber} created successfully!`);
-
-        searchCache.clear();
-      }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create GRN';
-      toast.error(errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const validateGRN = () => {
-    const errors: any = {};
-
-    if (!selectedSupplier) {
-      errors.supplier = 'Supplier is required';
-    }
-
-    if (!grn.supplier_invoice_number) {
-      errors.invoice_number = 'Supplier invoice number is required';
-    }
-
-    if (!grn.items || grn.items.length === 0) {
-      errors.items = 'At least one item is required';
-    }
-
-    return Object.keys(errors).length === 0;
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹${(amount || 0).toFixed(2)}`;
-  };
-
-  // Create content for step 1
-  const createContent = (
-    <>
-      {/* GRN Details */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <FileText className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">RECEIPT INFORMATION</h3>
-        </div>
-        <ContentCard title={undefined} subtitle={undefined} actions={undefined}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <StandardDatePicker
-                label="GRN Date"
-                value={grn.grn_date}
-                onChange={(value) => setGrn(prev => ({ ...prev, grn_date: value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">PO Reference</label>
-              <input
-                type="text"
-                value={grn.po_reference}
-                onChange={(e) => setGrn(prev => ({ ...prev, po_reference: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Purchase order number"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Supplier Invoice No <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={grn.supplier_invoice_number}
-                onChange={(e) => setGrn(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Supplier's invoice number"
-                required
-              />
-            </div>
-          </div>
-        </ContentCard>
-      </div>
-
-      {/* Supplier Section */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-700">SUPPLIER</h3>
-          </div>
-          <button
-            onClick={() => setShowSupplierModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-          >
-            Create Supplier
-          </button>
-        </div>
-        <SupplierSearch
-          value={selectedSupplier}
-          onChange={handleSupplierSelect}
-          onCreateNew={() => {
-            setShowSupplierModal(true);
-          }}
-          displayMode="compact"
-          placeholder="Search supplier by name, phone, or code..."
-          clearable={true}
-        />
-        {errors.supplier && (
-          <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
-        )}
-      </div>
-
-      {/* Products Section */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-700">PRODUCTS RECEIVED</h3>
-          </div>
-          <button
-            onClick={() => setShowProductModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-          >
-            Create Product
-          </button>
-        </div>
-        <ProductSearch
-          onAddItem={handleAddItem}
-          onCreateProduct={(searchQuery) => {
-            setShowProductModal(true);
-          }}
-          showBatchSelection={false}
-          ref={productSearchRef}
-          placeholder="Search products received..."
-        />
-      </div>
-
-      {/* Items Table - Enhanced */}
-      {grn.items && grn.items.length > 0 && (
-        <>
-          <div className="flex items-center gap-2 mb-3">
-            <Package className="w-5 h-5 text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-700">RECEIVED ITEMS</h3>
-          </div>
-          <GRNItemsTable
-            items={grn.items.map(item => ({
-              ...item,
-              quantity: item.received_qty || item.quantity,
-              unit_price: item.unit_price,
-              tax: item.tax_percent,
-              discount_percent: item.discount_percent || 0,
-              free_quantity: item.free_quantity || 0,
-              mrp: item.mrp || 0,
-              batch_number: item.batch_number || '',
-              expiry_date: item.expiry_date || '',
-            }))}
-            onUpdateItem={(index, field, value) => {
-              const mappedField = field === 'unit_price' ? 'unit_price' :
-                field === 'tax' ? 'tax_percent' :
-                  field === 'quantity' ? 'received_qty' :
-                    field;
-              handleUpdateItem(index, mappedField, value);
-            }}
-            onRemoveItem={handleRemoveItem}
+  // Detail view
+  if (selectedGrn) {
+    return (
+      <div className="h-full bg-green-50">
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title={`GRN ${selectedGrn.grn_number}`}
+            documentNumber={selectedGrn.grn_number}
+            status="active"
+            icon={Package}
+            iconColor="text-green-600"
+            onClose={() => setSelectedGrn(null)}
+            showSaveDraft={false}
+            onSaveDraft={() => {}}
           />
-        </>
-      )}
-      {errors.items && (
-        <p className="text-red-500 text-xs mt-1">{errors.items}</p>
-      )}
-
-    </>
-  );
-
-  // Review content for step 2
-  const reviewContent = (
-    <>
-      {/* Quality Check & Transport Details */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <CheckCircle className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">QUALITY CHECK & VERIFICATION</h3>
-        </div>
-        <ContentCard title={undefined} subtitle={undefined} actions={undefined}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Checked By</label>
-              <input
-                type="text"
-                value={grn.quality_check?.checked_by || ''}
-                onChange={(e) => setGrn(prev => ({
-                  ...prev,
-                  quality_check: { ...prev.quality_check, checked_by: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="QC Inspector name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Quality Status</label>
-              <select
-                value={grn.quality_check?.quality_status || 'Approved'}
-                onChange={(e) => setGrn(prev => ({
-                  ...prev,
-                  quality_check: { ...prev.quality_check, quality_status: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              >
-                <option value="Approved">Approved</option>
-                <option value="Partial">Partial Approval</option>
-                <option value="Rejected">Rejected</option>
-              </select>
-            </div>
-            <div>
-              <StandardDatePicker
-                label="Check Date"
-                value={grn.quality_check?.check_date || new Date().toISOString().split('T')[0]}
-                onChange={(value) => setGrn(prev => ({
-                  ...prev,
-                  quality_check: { ...prev.quality_check, check_date: value }
-                }))}
-              />
-            </div>
-            <div className="col-span-3">
-              <label className="block text-sm font-medium text-gray-600 mb-1">Quality Remarks</label>
-              <textarea
-                value={grn.quality_check?.remarks || ''}
-                onChange={(e) => setGrn(prev => ({
-                  ...prev,
-                  quality_check: { ...prev.quality_check, remarks: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Quality inspection notes..."
-                rows={2}
-              />
-            </div>
-          </div>
-        </ContentCard>
-      </div>
-
-      {/* GRN Preview with Actions */}
-      <ContentCard
-        title="Goods Receipt Note Preview"
-        subtitle={undefined}
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={handleSaveGRN}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save GRN'}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-          </div>
-        }
-      >
-        <div className="bg-white rounded-lg p-6">
-          {/* Company Branding Header */}
-          <div className="text-center mb-6 pb-4 border-b-2 border-gray-300">
-            <h1 className="text-3xl font-bold text-green-600 mb-2">PHARMA SOLUTIONS PVT. LTD.</h1>
-            <p className="text-sm text-gray-600">Wholesale Pharmaceutical Distributor</p>
-            <p className="text-sm text-gray-600">GST: {localStorage.getItem('company_gst_number') || ''} | Drug License: {localStorage.getItem('drug_license') || ''}</p>
-            <p className="text-sm text-gray-600">{localStorage.getItem('company_address') || ''}</p>
-          </div>
-
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold">GOODS RECEIPT NOTE</h2>
-            <p className="text-gray-600">GRN No: <span className="font-semibold">{grn.grn_no}</span></p>
-            <p className="text-gray-600">Date: {new Date(grn.grn_date).toLocaleDateString('en-IN')}</p>
-            <p className="text-gray-600">PO Reference: {grn.po_reference}</p>
-            <p className="text-gray-600">Supplier Invoice: {grn.supplier_invoice_number}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            {/* From (Company) */}
-            <div className="p-4 bg-green-50 rounded-lg">
-              <h3 className="font-semibold mb-2 text-green-900">Receiver:</h3>
-              <p className="text-green-900 font-medium">Pharma Solutions Pvt. Ltd.</p>
-              <p className="text-green-800 text-sm">{localStorage.getItem('company_address_line1') || ''}</p>
-              <p className="text-green-800 text-sm">{localStorage.getItem('company_address_line2') || ''}</p>
-              <p className="text-green-800 text-sm">Warehouse: Main Branch</p>
-            </div>
-
-            {/* From (Supplier) */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-semibold mb-2 text-gray-700">Supplier:</h3>
-              <p className="text-gray-900 font-medium">{selectedSupplier?.supplier_name}</p>
-              {selectedSupplier?.phone && <p className="text-gray-600 text-sm">Phone: {selectedSupplier.phone}</p>}
-              {selectedSupplier?.gst_number && <p className="text-gray-600 text-sm">GST: {selectedSupplier.gst_number}</p>}
-              {selectedSupplier?.address && <p className="text-gray-600 text-sm">{selectedSupplier.address}</p>}
-            </div>
-          </div>
-
-          <table className="w-full mb-6">
-            <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="text-left py-2">Item</th>
-                <th className="text-center py-2">Pack</th>
-                <th className="text-center py-2">Batch</th>
-                <th className="text-center py-2">Expiry</th>
-                <th className="text-center py-2">Ordered</th>
-                <th className="text-center py-2">Received</th>
-                <th className="text-center py-2">Free</th>
-                <th className="text-right py-2">MRP</th>
-                <th className="text-right py-2">Rate</th>
-                <th className="text-right py-2">Tax</th>
-                <th className="text-center py-2">Status</th>
-                <th className="text-right py-2">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(grn.items || []).map((item, index) => {
-                const receivedQty = parseFloat(item.received_qty) || 0;
-                const unitPrice = parseFloat(item.unit_price) || 0;
-                const taxPercent = parseFloat(item.tax_percent) || 0;
-                const itemTotal = receivedQty * unitPrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-                const totalWithTax = itemTotal + itemTax;
-
-                return (
-                  <tr key={index} className="border-b border-gray-200">
-                    <td className="py-2">{item.product_name}</td>
-                    <td className="text-center py-2 text-sm">
-                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.packages_per_box || 10}
-                    </td>
-                    <td className="text-center py-2">{item.batch_number || '-'}</td>
-                    <td className="text-center py-2">
-                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: '2-digit', year: '2-digit' }) : '-'}
-                    </td>
-                    <td className="text-center py-2">{item.ordered_qty || '-'}</td>
-                    <td className="text-center py-2 font-medium">{receivedQty}</td>
-                    <td className="text-center py-2">{item.free_quantity || 0}</td>
-                    <td className="text-right py-2">{formatCurrency(item.mrp)}</td>
-                    <td className="text-right py-2">{formatCurrency(unitPrice)}</td>
-                    <td className="text-right py-2">{taxPercent}%</td>
-                    <td className="text-center py-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.quality_status === 'Approved' ? 'bg-green-100 text-green-800' :
-                        item.quality_status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                        {item.quality_status || 'Pending'}
-                      </span>
-                    </td>
-                    <td className="text-right py-2 font-medium">{formatCurrency(totalWithTax)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-300">
-                <td colSpan={11} className="text-right py-2 font-medium">Subtotal:</td>
-                <td className="text-right py-2 font-medium">{formatCurrency(grn.gross_amount)}</td>
-              </tr>
-              <tr>
-                <td colSpan={11} className="text-right py-2">Tax:</td>
-                <td className="text-right py-2">{formatCurrency(grn.tax_amount)}</td>
-              </tr>
-              <tr className="border-t border-gray-300">
-                <td colSpan={11} className="text-right py-2 text-lg font-bold">Total Amount:</td>
-                <td className="text-right py-2 text-lg font-bold">{formatCurrency(grn.total_amount)}</td>
-              </tr>
-            </tfoot>
-          </table>
-
-          {grn.quality_check?.checked_by && (
-            <div className="mt-6 p-4 bg-green-50 rounded-lg">
-              <h4 className="font-medium text-green-900 mb-2">Quality Verification:</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm text-green-800">
-                <div>Checked By: {grn.quality_check.checked_by}</div>
-                <div>Status: {grn.quality_check.quality_status || 'Approved'}</div>
-                <div>Date: {new Date(grn.quality_check.check_date || grn.grn_date).toLocaleDateString('en-IN')}</div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Header Info */}
+              <div className="bg-white rounded-lg border p-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-500">GRN Number</span>
+                    <p className="font-medium">{selectedGrn.grn_number}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Date</span>
+                    <p className="font-medium">
+                      {selectedGrn.grn_date ? new Date(selectedGrn.grn_date).toLocaleDateString('en-IN') : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Source</span>
+                    <p className="mt-1">{sourceBadge(selectedGrn.source || 'MANUAL')}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">Supplier Invoice</span>
+                    <p className="font-medium">{selectedGrn.supplier_invoice_number || '-'}</p>
+                  </div>
+                  {selectedGrn.purchase_order_id && (
+                    <div>
+                      <span className="text-sm text-gray-500">Linked PO</span>
+                      <p className="font-medium text-purple-600">PO #{selectedGrn.purchase_order_id}</p>
+                    </div>
+                  )}
+                  {selectedGrn.supplier_invoice_id && (
+                    <div>
+                      <span className="text-sm text-gray-500">Linked Invoice</span>
+                      <p className="font-medium text-blue-600">Invoice #{selectedGrn.supplier_invoice_id}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-              {grn.quality_check.remarks && (
-                <p className="mt-2 text-sm text-green-700">Remarks: {grn.quality_check.remarks}</p>
+
+              {/* Info Banner */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  <p className="text-sm text-blue-800">
+                    This GRN was auto-generated from {selectedGrn.source === 'PO' ? 'a Purchase Order receipt' : 'a Purchase Entry'}.
+                    Stock has {selectedGrn.stock_updated ? 'been updated' : 'not been updated yet'}.
+                  </p>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedGrn.notes && (
+                <div className="bg-white rounded-lg border p-4">
+                  <span className="text-sm text-gray-500">Notes</span>
+                  <p className="mt-1 text-sm">{selectedGrn.notes}</p>
+                </div>
               )}
             </div>
-          )}
-
-          {grn.notes && (
-            <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
-              <h4 className="font-medium text-yellow-900 mb-2">Notes:</h4>
-              <p className="text-sm text-yellow-800">{grn.notes}</p>
-            </div>
-          )}
+          </div>
         </div>
-      </ContentCard>
-    </>
-  );
+      </div>
+    );
+  }
 
   return (
-    <>
-      <GlobalDocumentFlow
-        documentType="grn"
-        documentData={grn}
-        onDocumentUpdate={setGrn}
-        onClose={onClose}
-
-        // Two-step flow
-        currentStep={currentStep}
-        onStepChange={setCurrentStep}
-
-        // Step content
-        createContent={createContent}
-        reviewContent={reviewContent}
-
-        // Validation & Actions
-        canProceedToReview={() => {
-          return !!selectedSupplier &&
-            !!grn.supplier_invoice_number &&
-            grn.items &&
-            grn.items.length > 0;
-        }}
-        onSave={handleSaveGRN}
-        onPrint={handlePrint}
-        isSaving={saving}
-
-        // Footer totals
-        footerTotals={{
-          itemCount: grn.items?.length || 0,
-          totalAmount: grn.total_amount,
-          subtotal: grn.gross_amount,
-          tax: grn.tax_amount,
-          grandTotal: grn.total_amount
-        }}
-
-        // Keyboard shortcuts
-        keyboardShortcuts={{
-          1: [
-            { key: 'Ctrl+N', action: 'Add Supplier' },
-            { key: 'Ctrl+F', action: 'Search Products' },
-            { key: 'Ctrl+S', action: 'Proceed to Review' },
-            { key: 'Esc', action: 'Close' }
-          ],
-          2: [
-            { key: 'Ctrl+S', action: 'Save GRN' },
-            { key: 'Ctrl+P', action: 'Print' },
-            { key: 'Esc', action: 'Back to Edit' }
-          ]
-        }}
-      />
-
-      {/* Modals */}
-      {showSupplierModal && (
-        <SupplierCreationModal
-          isOpen={showSupplierModal}
-          onClose={() => setShowSupplierModal(false)}
-          onSupplierCreated={(supplier) => {
-            handleSupplierSelect(supplier);
-            setShowSupplierModal(false);
-            toast.success('Supplier created successfully');
-            searchCache.clear();
-          }}
-        />
-      )}
-
-      {showProductModal && (
-        <ProductCreationModal
-          show={showProductModal}
-          onClose={() => setShowProductModal(false)}
-          onProductCreated={(product) => {
-            setShowProductModal(false);
-            toast.success('Product created successfully');
-            searchCache.clear();
-            if (product) {
-              handleAddItem(product);
+    <div className="h-full bg-green-50">
+      <div className="h-full flex flex-col">
+        <ModuleHeader
+          title="Goods Receipts"
+          documentNumber=""
+          status="active"
+          icon={Package}
+          iconColor="text-green-600"
+          onClose={onClose}
+          showSaveDraft={false}
+          onSaveDraft={() => {}}
+          additionalActions={[
+            {
+              label: "",
+              onClick: fetchGRNs,
+              variant: "ghost",
+              icon: RefreshCw,
+              title: "Refresh"
             }
-          }}
+          ] as any}
         />
-      )}
 
-      {/* Success Modal */}
-      {showSuccessModal && createdGRNData && (
-        <GenericSuccessModal
-          isOpen={showSuccessModal}
-          onClose={() => {
-            setShowSuccessModal(false);
-            onClose();
-          }}
-          title="GRN Created!"
-          documentNumber={createdGRNData.grnNumber}
-          documentId={createdGRNData.grnId}
-          documentType="grn"
-          customerName={createdGRNData.supplierName}
-          totalAmount={createdGRNData.totalAmount}
-          onPrint={handlePrint}
-          showCopy={true}
-        />
-      )}
-    </>
+        {/* Info Banner */}
+        <div className="px-6 py-3 bg-green-50 border-b border-green-200">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-green-600" />
+            <p className="text-sm text-green-800">
+              Goods Receipt Notes are auto-generated when you create a Purchase Entry.
+              Use the <strong>Purchase Entry</strong> tab to record new receipts.
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                <span className="ml-2">Loading receipts...</span>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm">
+                <DataTable
+                  columns={columns}
+                  data={grns}
+                  keyField="grn_id"
+                  loading={false}
+                  emptyMessage="No goods receipts yet. Create a Purchase Entry to auto-generate GRNs."
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

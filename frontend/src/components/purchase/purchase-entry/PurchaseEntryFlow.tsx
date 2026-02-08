@@ -98,6 +98,23 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
   // Create content for step 1
   const createContent = (
     <>
+      {/* PO Linking Banner */}
+      {purchase.purchase_order_id && (
+        <div className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Package className="w-5 h-5 text-green-600" />
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Recording receipt for PO #{purchase.po_number}
+              </p>
+              <p className="text-xs text-green-600">
+                Items are pre-filled from the purchase order. Adjust quantities as received.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Compact PDF Upload Option */}
       <div className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
         <div className="flex items-center justify-between">

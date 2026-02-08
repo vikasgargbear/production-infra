@@ -21,6 +21,7 @@ export interface PurchaseOrder {
 
 export interface PurchaseListHistoryProps {
     onClose?: () => void;
+    onRecordReceipt?: (poId: number) => void;
 }
 
 export interface PurchaseFiltersProps {

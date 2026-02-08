@@ -44,9 +44,11 @@ export interface PurchaseOrderItem {
 const ENDPOINTS = {
     BASE: '/purchases/',
     ORDERS: '/purchases/',
+    PURCHASE_ENTRY: '/purchases/purchase-entry',
     BY_SUPPLIER: (id: number) => `/purchases/supplier/${id}`,
     APPROVE: (id: number) => `/purchases/${id}/approve`,
-    RECEIVE: (id: number) => `/purchases/${id}/receive`
+    RECEIVE: (id: number) => `/purchases/${id}/receive`,
+    FOR_ENTRY: (id: number) => `/purchases/${id}/for-entry`
 } as const;
 
 // ============================================
@@ -68,6 +70,11 @@ export const purchasesApi = {
 
     create: (data: PurchaseOrderData): Promise<AxiosResponse> => {
         return apiHelpers.post(ENDPOINTS.BASE, data);
+    },
+
+    // Create purchase entry (supplier invoice + batches + auto-GRN)
+    createEntry: (data: any): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.PURCHASE_ENTRY, data);
     },
 
     update: (poId: number, data: Partial<PurchaseOrderData>): Promise<AxiosResponse> => {
@@ -102,6 +109,11 @@ export const purchasesApi = {
     // Search purchase orders
     search: (query: string, params: PurchaseParams = {}): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.ORDERS, { params: { ...params, search: query } });
+    },
+
+    // Get PO data formatted for Purchase Entry pre-fill
+    getForEntry: (poId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.FOR_ENTRY(poId));
     },
 
     // Alias for getOrders

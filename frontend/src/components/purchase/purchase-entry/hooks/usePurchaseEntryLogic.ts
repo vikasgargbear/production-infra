@@ -14,9 +14,11 @@ import { useToast } from '../../../global';
 // Types
 export interface PurchaseItem {
     id?: string | number;
+    po_item_id?: number;
     product_id: string | number;
     product_name: string;
     quantity: number;
+    ordered_quantity?: number;
     unit_price: number;
     tax_percent: number;
     batch?: string;
@@ -61,6 +63,9 @@ export interface PurchaseData {
     net_amount: number;
     total_amount: number;
     notes: string;
+    // PO linking fields (set when pre-filled from a Purchase Order)
+    purchase_order_id?: number;
+    po_number?: string;
     [key: string]: any;
 }
 
@@ -150,7 +155,9 @@ const getInitialPurchase = (prefilledData?: Partial<PurchaseData> | null): Purch
     round_off: 0,
     net_amount: 0,
     total_amount: 0,
-    notes: prefilledData?.notes || ''
+    notes: prefilledData?.notes || '',
+    purchase_order_id: prefilledData?.purchase_order_id,
+    po_number: prefilledData?.po_number
 });
 
 export function usePurchaseEntryLogic({
@@ -438,11 +445,13 @@ export function usePurchaseEntryLogic({
                         }
                     }
                     return {
+                        po_item_id: item.po_item_id || undefined,
                         product_id: productId,
                         product_name: item.product_name || '',
                         batch_number: item.batch_number || item.batch_number || '',
                         expiry_date: item.expiry_date || null,
                         manufacturing_date: item.manufacturing_date || null,
+                        ordered_quantity: parseFloat(String(item.ordered_quantity || item.quantity)) || 1,
                         quantity: parseFloat(String(item.quantity)) || 1,
                         free_quantity: parseFloat(String(item.free_quantity)) || 0,
                         unit_price: parseFloat(String(item.unit_price)) || 0,
@@ -468,10 +477,12 @@ export function usePurchaseEntryLogic({
                 notes: purchase.notes,
                 transport_company: purchase.transport_company,
                 vehicle_number: purchase.vehicle_number,
-                lr_number: purchase.lr_number
+                lr_number: purchase.lr_number,
+                // PO linking (set when pre-filled from a Purchase Order)
+                purchase_order_id: purchase.purchase_order_id || undefined
             };
 
-            const response = await (purchasesApi as any).create(purchaseData as any);
+            const response = await (purchasesApi as any).createEntry(purchaseData as any);
 
             if (response?.data) {
                 const purchaseNumber = response.data.purchase_number || purchase.purchase_number;
