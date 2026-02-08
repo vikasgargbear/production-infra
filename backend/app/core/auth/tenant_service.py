@@ -138,42 +138,45 @@ class TenantQueryBuilder:
     TENANT_TABLES = {
         # ===== PARTIES SCHEMA =====
         'customers', 'suppliers', 'customer_groups',
-        
+
         # ===== INVENTORY SCHEMA =====
-        'products', 'product_categories', 'product_types',
-        'batches', 'inventory_batches',
-        'location_wise_stock', 'inventory_movements', 'movement_summary',
-        
+        # NOTE: product_types does NOT have org_id (secured via product FK)
+        'products', 'product_categories',
+        'batches',
+        'location_wise_stock', 'inventory_movements',
+
         # ===== SALES SCHEMA =====
-        # NOTE: invoice_items, order_items, challan_items do NOT have org_id column
-        # They are secured via FK to parent tables (invoices, orders, challans) which DO have org_id
-        'invoices',  # HAS org_id
-        'orders',    # HAS org_id
-        'delivery_challans',  # HAS org_id
+        # NOTE: Child item tables do NOT have org_id column — secured via FK to parent:
+        #   invoice_items, order_items, challan_items, sales_return_items,
+        #   scheme_customers, scheme_products, scheme_volume_slabs,
+        #   loyalty_tiers, loyalty_transactions
+        'invoices', 'orders', 'delivery_challans',
         'credit_notes', 'debit_notes',
-        'sales_returns',  # HAS org_id (but sales_return_items does NOT)
-        'promotional_schemes', 'scheme_customers', 'scheme_products', 'scheme_volume_slabs',
-        'loyalty_programs', 'loyalty_tiers', 'loyalty_transactions',
-        'payment_promises',
-        
+        'sales_returns',
+        'promotional_schemes',
+        'loyalty_programs',
+
         # ===== PROCUREMENT SCHEMA =====
-        'purchase_orders', 'purchase_order_items',
-        'purchases', 'supplier_invoices', 'supplier_invoice_items',
-        'goods_receipt_notes', 'grn_items',
+        # NOTE: purchase_order_items, supplier_invoice_items, grn_items do NOT have org_id
+        # They are secured via FK to parent tables
+        'purchase_orders',
+        'supplier_invoices',
+        'goods_receipt_notes',
         'purchase_returns',
-        
+
         # ===== FINANCIAL SCHEMA =====
+        # NOTE: journal_entry_lines, expense_claim_items do NOT have org_id (FK to parent)
         'payments', 'payment_methods',
-        'journal_entries', 'journal_entry_lines',
-        'expense_claims', 'expense_claim_items',
-        'credit_debit_notes', 'customer_outstanding', 'supplier_outstanding',
+        'journal_entries',
+        'expense_claims',
+        'customer_outstanding', 'supplier_outstanding',
         'chart_of_accounts',
-        
+
         # ===== MASTER SCHEMA =====
         'org_branches', 'org_bank_accounts', 'org_users',
         'departments', 'employees', 'addresses',
-        'roles',  # Org-specific roles
-        
+        'roles',
+
         # ===== COMPLIANCE SCHEMA =====
         'drug_licenses', 'pharmacist_registrations',
         'compliance_audits', 'compliance_alerts', 'corrective_actions',
