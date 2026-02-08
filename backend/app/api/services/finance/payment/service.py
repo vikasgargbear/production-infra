@@ -140,10 +140,6 @@ class PaymentService:
             SET paid_amount = :paid_amount,
                 credit_amount = :credit_amount,
                 payment_status = :payment_status,
-                payment_date = CASE
-                    WHEN :payment_status = 'paid' THEN :payment_date
-                    ELSE payment_date
-                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE invoice_id = :invoice_id
         """), {
@@ -151,7 +147,6 @@ class PaymentService:
             "paid_amount": new_paid_amount,
             "credit_amount": new_credit_amount,
             "payment_status": new_payment_status,
-            "payment_date": payment_data.get("payment_date", date.today())
         })
 
         # Update customer_outstanding

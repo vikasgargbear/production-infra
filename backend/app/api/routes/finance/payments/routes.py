@@ -270,7 +270,7 @@ async def record_payment(
         logger.error(f"Error recording payment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record payment: {str(e)}")
 
-@router.get("/invoice/{invoice_id}", response_model=PaymentListResponse)
+@router.get("/invoice/{invoice_id}")
 @with_tenant_context
 async def get_invoice_payments(
     invoice_id: int,
@@ -281,7 +281,7 @@ async def get_invoice_payments(
     """Get all payments for a specific invoice"""
     try:
         payments = PaymentService.get_invoice_payments(db, invoice_id)
-        return PaymentListResponse(payments=payments, total=len(payments))
+        return {"payments": payments, "total": len(payments)}
     except Exception as e:
         logger.error(f"Error getting invoice payments: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retrieve payments")
