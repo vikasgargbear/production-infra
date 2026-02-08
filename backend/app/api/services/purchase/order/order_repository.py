@@ -747,7 +747,179 @@ class PurchaseOrderRepository:
     def count_purchase_batches(db: Session, purchase_id: int, org_id: str) -> int:
         """Count batches created for a purchase."""
         result = db.execute(text("""
-            SELECT COUNT(*) FROM inventory.batches 
+            SELECT COUNT(*) FROM inventory.batches
             WHERE purchase_id = :id AND org_id = :org_id
         """), {"id": purchase_id, "org_id": org_id})
         return result.scalar() or 0
+
+    # ==================== PO → PURCHASE ENTRY HELPERS ====================
+
+    @staticmethod
+    def get_po_with_remaining_items(db: Session, po_id: int, org_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get PO header + items with remaining quantities for Purchase Entry pre-fill.
+        Only returns items where remaining_qty > 0.
+        """
+        # Get PO header with supplier info
+        po = db.execute(text("""
+            SELECT po.purchase_order_id, po.po_number, po.po_date, po.po_status,
+                   po.supplier_id, po.supplier_name, po.payment_terms, po.notes,
+                   po.subtotal_amount, po.discount_amount, po.tax_amount, po.total_amount,
+                   s.gst_number as supplier_gst_number, s.address as supplier_address,
+                   s.phone as supplier_phone
+            FROM procurement.purchase_orders po
+            LEFT JOIN parties.suppliers s ON po.supplier_id = s.supplier_id
+            WHERE po.purchase_order_id = :po_id AND po.org_id = :org_id
+              AND po.po_status NOT IN ('completed', 'cancelled')
+        """), {"po_id": po_id, "org_id": org_id}).first()
+
+        if not po:
+            return None
+
+        # Get items with remaining quantities
+        items = db.execute(text("""
+            SELECT poi.po_item_id, poi.product_id, poi.product_name, poi.hsn_code,
+                   poi.ordered_quantity, COALESCE(poi.received_quantity, 0) as received_quantity,
+                   (poi.ordered_quantity - COALESCE(poi.received_quantity, 0)) as remaining_quantity,
+                   poi.unit_price, poi.mrp, poi.discount_percent, poi.tax_percent,
+                   poi.uom, poi.pack_type, poi.pack_size, poi.free_quantity,
+                   poi.batch_number, poi.expiry_date, poi.manufacturing_date
+            FROM procurement.purchase_order_items poi
+            WHERE poi.purchase_order_id = :po_id
+              AND (poi.ordered_quantity - COALESCE(poi.received_quantity, 0)) > 0
+              AND COALESCE(poi.item_status, 'pending') != 'cancelled'
+            ORDER BY poi.po_item_id
+        """), {"po_id": po_id})
+
+        return {
+            **dict(po._mapping),
+            "items": [dict(row._mapping) for row in items]
+        }
+
+    @staticmethod
+    def increment_received_quantity(db: Session, po_item_id: int, qty: Decimal) -> None:
+        """Atomically increment received_quantity on a PO item."""
+        db.execute(text("""
+            UPDATE procurement.purchase_order_items
+            SET received_quantity = COALESCE(received_quantity, 0) + :qty
+            WHERE po_item_id = :po_item_id
+        """), {"qty": qty, "po_item_id": po_item_id})
+
+    @staticmethod
+    def compute_and_update_po_status(db: Session, po_id: int) -> str:
+        """
+        Compute PO status based on all items' received vs ordered quantities.
+        Returns the new status: 'partial' or 'completed'.
+        """
+        result = db.execute(text("""
+            SELECT
+                SUM(ordered_quantity) as total_ordered,
+                SUM(COALESCE(received_quantity, 0)) as total_received
+            FROM procurement.purchase_order_items
+            WHERE purchase_order_id = :po_id
+              AND COALESCE(item_status, 'pending') != 'cancelled'
+        """), {"po_id": po_id}).first()
+
+        total_ordered = result.total_ordered or 0
+        total_received = result.total_received or 0
+
+        if total_received >= total_ordered:
+            new_status = "completed"
+            receipt_status = "received"
+        elif total_received > 0:
+            new_status = "partial"
+            receipt_status = "partial"
+        else:
+            new_status = "draft"
+            receipt_status = "pending"
+
+        db.execute(text("""
+            UPDATE procurement.purchase_orders
+            SET po_status = :status, receipt_status = :receipt_status, updated_at = CURRENT_TIMESTAMP
+            WHERE purchase_order_id = :po_id
+        """), {"status": new_status, "receipt_status": receipt_status, "po_id": po_id})
+
+        return new_status
+
+    @staticmethod
+    def create_auto_grn(
+        db: Session, org_id: str, branch_id: int,
+        grn_number: str, supplier_id: int, supplier_invoice_id: int,
+        supplier_invoice_number: str, items: List[Dict[str, Any]],
+        created_by: int, purchase_order_id: Optional[int] = None,
+        source: str = 'DIRECT'
+    ) -> int:
+        """
+        Create a GRN as an audit log record (no inventory movement).
+        Sets stock_updated=True to prevent double-counting.
+        Returns grn_id.
+        """
+        grn_result = db.execute(text("""
+            INSERT INTO procurement.goods_receipt_notes (
+                org_id, branch_id, grn_number, grn_date, grn_type,
+                purchase_order_id, supplier_id,
+                supplier_invoice_number, supplier_invoice_date,
+                received_by, qc_required, qc_status,
+                grn_status, approval_status,
+                stock_updated, stock_updated_at,
+                source, supplier_invoice_id,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :branch_id, :grn_number, CURRENT_DATE, 'purchase',
+                :purchase_order_id, :supplier_id,
+                :supplier_invoice_number, CURRENT_DATE,
+                :received_by, false, 'not_required',
+                'completed', 'approved',
+                true, CURRENT_TIMESTAMP,
+                :source, :supplier_invoice_id,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING grn_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "grn_number": grn_number,
+            "purchase_order_id": purchase_order_id,
+            "supplier_id": supplier_id,
+            "supplier_invoice_number": supplier_invoice_number,
+            "received_by": created_by,
+            "source": source,
+            "supplier_invoice_id": supplier_invoice_id
+        })
+        grn_id = grn_result.scalar()
+
+        # Create GRN items
+        for item in items:
+            db.execute(text("""
+                INSERT INTO procurement.grn_items (
+                    grn_id, po_item_id, product_id,
+                    batch_number, expiry_date, manufacturing_date,
+                    ordered_quantity, received_quantity, accepted_quantity,
+                    free_quantity, uom, pack_type, pack_size,
+                    unit_price, mrp,
+                    qc_status, item_status
+                ) VALUES (
+                    :grn_id, :po_item_id, :product_id,
+                    :batch_number, :expiry_date, :manufacturing_date,
+                    :ordered_quantity, :received_quantity, :received_quantity,
+                    :free_quantity, :uom, :pack_type, :pack_size,
+                    :unit_price, :mrp,
+                    'approved', 'accepted'
+                )
+            """), {
+                "grn_id": grn_id,
+                "po_item_id": item.get("po_item_id"),
+                "product_id": item.get("product_id"),
+                "batch_number": item.get("batch_number", ""),
+                "expiry_date": item.get("expiry_date"),
+                "manufacturing_date": item.get("manufacturing_date"),
+                "ordered_quantity": item.get("ordered_quantity", item.get("quantity", 0)),
+                "received_quantity": item.get("quantity", 0),
+                "free_quantity": item.get("free_quantity", 0),
+                "uom": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+                "unit_price": item.get("cost_price", item.get("unit_price", 0)),
+                "mrp": item.get("mrp", 0)
+            })
+
+        return grn_id

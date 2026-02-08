@@ -220,6 +220,7 @@ async def create_purchase_entry(
         # Create supplier invoice items
         items = purchase_data.get("items", [])
         items_created = 0
+        grn_items = []  # Collect items for auto-GRN creation
         
         # Log the received data for debugging
         logger.info(f"Processing {len(items)} items for purchase entry")
@@ -365,16 +366,77 @@ async def create_purchase_entry(
             )
             
             items_created += 1
-        
+            # Collect item data for GRN
+            grn_items.append({
+                "po_item_id": item.get("po_item_id"),
+                "product_id": product_id,
+                "batch_number": batch_number,
+                "expiry_date": expiry_date,
+                "manufacturing_date": item.get("manufacturing_date"),
+                "quantity": quantity,
+                "ordered_quantity": item.get("ordered_quantity", quantity),
+                "free_quantity": item.get("free_quantity", 0),
+                "uom": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
+                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
+                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE),
+                "cost_price": cost_price,
+                "mrp": mrp_value
+            })
+
+        # --- Auto-create GRN as audit log ---
+        purchase_order_id = purchase_data.get("purchase_order_id")
+        grn_number = DocumentNumberService.generate_number(db, "grn", str(context.org_id))
+        source = 'PO' if purchase_order_id else 'DIRECT'
+
+        grn_id = PurchaseOrderRepository.create_auto_grn(
+            db=db,
+            org_id=str(context.org_id),
+            branch_id=branch_id,
+            grn_number=grn_number,
+            supplier_id=purchase_data.get("supplier_id"),
+            supplier_invoice_id=supplier_invoice_id,
+            supplier_invoice_number=invoice_number,
+            items=grn_items,
+            created_by=created_by,
+            purchase_order_id=purchase_order_id,
+            source=source
+        )
+
+        # --- If linked to a PO, update received quantities and PO status ---
+        po_status = None
+        if purchase_order_id:
+            # Link PO to supplier invoice
+            db.execute(text("""
+                UPDATE procurement.supplier_invoices
+                SET purchase_order_ids = array_append(COALESCE(purchase_order_ids, ARRAY[]::integer[]), :po_id)
+                WHERE supplier_invoice_id = :inv_id
+            """), {"po_id": purchase_order_id, "inv_id": supplier_invoice_id})
+
+            # Update received quantities on PO items
+            for grn_item in grn_items:
+                if grn_item.get("po_item_id"):
+                    PurchaseOrderRepository.increment_received_quantity(
+                        db, grn_item["po_item_id"], Decimal(str(grn_item["quantity"]))
+                    )
+
+            # Compute and update PO status
+            po_status = PurchaseOrderRepository.compute_and_update_po_status(db, purchase_order_id)
+
         db.commit()
-        
-        return {
+
+        result = {
             "invoice_id": supplier_invoice_id,
             "invoice_number": invoice_number,
+            "grn_id": grn_id,
+            "grn_number": grn_number,
             "items_created": items_created,
-            "message": "Purchase entry (supplier invoice) created successfully"
+            "message": "Purchase entry created successfully"
         }
-        
+        if purchase_order_id:
+            result["purchase_order_id"] = purchase_order_id
+            result["po_status"] = po_status
+        return result
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating purchase entry: {str(e)}")
@@ -440,36 +502,7 @@ async def create_purchase_with_items(
         purchase_id = PurchaseOrderRepository.create_po_header_simple(
             db, str(context.org_id), branch_id, order_data, created_by
         )
-        
-        # Create supplier invoice using repository
-        invoice_number = purchase_data.get("invoice_number", purchase_number)
-        invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
-        
-        invoice_data = {
-            "invoice_number": invoice_number,
-            "invoice_date": invoice_date,
-            "supplier_id": purchase_data.get("supplier_id"),
-            "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
-            "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
-            "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
-            "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-            "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
-            "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
-            "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
-            "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
-            "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
-            "other": Decimal(str(purchase_data.get("other_charges", 0))),
-            "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
-            "total": Decimal(str(purchase_data.get("final_amount", 0))),
-            "payment_terms": purchase_data.get("payment_terms", "immediate"),
-            "due_date": purchase_data.get("due_date", invoice_date),
-            "payment_status": purchase_data.get("payment_status", "pending"),
-            "invoice_status": purchase_data.get("invoice_status", "draft")
-        }
-        supplier_invoice_id = PurchaseOrderRepository.create_supplier_invoice_with_po(
-            db, str(context.org_id), branch_id, invoice_data, purchase_id, created_by
-        )
-        
+
         # Create purchase items if provided
         items = purchase_data.get("items", [])
         items_created = 0
@@ -554,40 +587,6 @@ async def create_purchase_with_items(
             }
             PurchaseOrderRepository.create_po_item(db, po_item_data)
 
-            # Also create supplier invoice item
-            # Use GSTService for consistent GST split
-            gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
-            cgst_percent = gst["cgst_percent"]
-            sgst_percent = gst["sgst_percent"]
-            igst_percent = gst["igst_percent"]
-            cgst_amount = gst["cgst_amount"]
-            sgst_amount = gst["sgst_amount"]
-            igst_amount = gst["igst_amount"]
-
-            # Create supplier invoice item using repository
-            invoice_item = {
-                "product_id": product_id,
-                "batch_number": batch_number,
-                "quantity": quantity,
-                "free_quantity": item.get("free_quantity", 0),
-                "unit_price": cost_price,
-                "discount_percent": discount_percent,
-                "discount_amount": discount_amount,
-                "taxable_amount": taxable_amount,
-                "cgst_percent": cgst_percent,
-                "sgst_percent": sgst_percent,
-                "igst_percent": igst_percent,
-                "cgst_amount": cgst_amount,
-                "sgst_amount": sgst_amount,
-                "igst_amount": igst_amount,
-                "total_amount": total_price,
-                "hsn_code": item_hsn,
-                "unit": item.get("uom", ProductDefaults.DEFAULT_BASE_UOM),
-                "pack_type": item.get("pack_type", PackDefaults.PACK_TYPE),
-                "pack_size": item.get("pack_size", PackDefaults.PACK_SIZE)
-            }
-            PurchaseOrderRepository.create_supplier_invoice_item(db, supplier_invoice_id, invoice_item)
-            
             items_created += 1
         
         db.commit()
@@ -603,6 +602,40 @@ async def create_purchase_with_items(
         db.rollback()
         logger.error(f"Error creating purchase with items: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
+
+@router.get("/{purchase_id}/for-entry")
+@with_tenant_context
+async def get_po_for_entry(
+    purchase_id: int,
+    _: dict = Depends(PermissionChecker("procurement", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Get PO data formatted for Purchase Entry pre-fill.
+    Returns supplier info and items with remaining quantities (ordered - received).
+    Only works on POs with status not 'completed' or 'cancelled'.
+    """
+    try:
+        data = PurchaseOrderRepository.get_po_with_remaining_items(
+            db, purchase_id, str(context.org_id)
+        )
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail="Purchase order not found or already fully received"
+            )
+        if not data.get("items"):
+            raise HTTPException(
+                status_code=400,
+                detail="All items on this PO have already been received"
+            )
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching PO for entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{purchase_id}/items")
 @with_tenant_context
