@@ -94,8 +94,9 @@ async def create_stock_adjustment(
         )
         
         movement_result = InventoryService.record_stock_movement(db, movement_data)
+        db.commit()
         new_quantity = batch.get("quantity_available", 0) + quantity_adjusted
-        
+
         return {
             "movement_id": movement_result.movement_id,
             "message": "Stock adjustment created successfully",
@@ -161,7 +162,8 @@ async def process_physical_count(
                     "counted_quantity": counted_quantity,
                     "difference": difference
                 })
-        
+
+        db.commit()
         return {"message": "Physical count processed successfully", "adjustments_created": len(adjustments_created), "details": adjustments_created}
     except Exception as e:
         db.rollback()
@@ -200,7 +202,7 @@ async def expire_batches(
             
             movement_result = InventoryService.record_stock_movement(db, movement_data)
             InventoryService.update_batch_status(db, batch.get("batch_id"), "expired")
-            
+
             adjustments_created.append({
                 "movement_id": movement_result.movement_id,
                 "batch_id": batch.get("batch_id"),
@@ -209,7 +211,8 @@ async def expire_batches(
                 "quantity_expired": batch.get("quantity_available"),
                 "expiry_date": str(batch.get("expiry_date"))
             })
-        
+
+        db.commit()
         return {"message": "Expired batches processed", "batches_expired": len(adjustments_created), "details": adjustments_created}
     except Exception as e:
         db.rollback()

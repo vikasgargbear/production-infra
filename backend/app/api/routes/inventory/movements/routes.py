@@ -155,6 +155,7 @@ async def create_stock_receive(
             created_by=context.user_id
         )
         result = InventoryService.record_stock_movement(db, movement_data)
+        db.commit()
 
         return {
             "status": "success",
@@ -226,6 +227,7 @@ async def create_stock_issue(
             created_by=context.user_id
         )
         result = InventoryService.record_stock_movement(db, movement_data)
+        db.commit()
 
         return {
             "status": "success",
@@ -280,6 +282,7 @@ async def create_stock_transfer(
             reason=transfer_data.get("reason", "Stock transfer"),
             created_by=context.user_id
         )
+        db.commit()
 
         return {
             "status": "success",
