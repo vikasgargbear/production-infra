@@ -686,7 +686,7 @@ class PaymentService:
                 """), {
                     "payment_id": payment_id,
                     "reference_id": invoice_id,
-                    "reference_number": invoice.invoice_number or f"INV-{invoice_id}",
+                    "reference_number": invoice.invoice_number,
                     "allocated_amount": actual_allocation,
                     "created_by": user_id
                 })

@@ -735,17 +735,19 @@ class InventoryService:
         db: Session,
         movement_records: List[dict],
         invoice_id: int,
-        created_by: int
+        created_by: int,
+        invoice_number: str = ""
     ) -> int:
         """
         Bulk insert inventory movements for invoice processing.
         Used by background tasks for performance.
-        
+
         Args:
             movement_records: List of movement data dicts
             invoice_id: Invoice ID for reference
             created_by: User ID who created the invoice
-            
+            invoice_number: Actual invoice document number for reference_number
+
         Returns:
             Number of movements inserted
         """
@@ -775,7 +777,7 @@ class InventoryService:
             mv_params[f"unit_cost_{i}"] = mv.get("unit_cost", 0)
             mv_params[f"total_cost_{i}"] = mv.get("total_cost", 0)
             mv_params[f"invoice_id_{i}"] = invoice_id
-            mv_params[f"reference_number_{i}"] = f"INV-{invoice_id}"
+            mv_params[f"reference_number_{i}"] = invoice_number
             mv_params[f"created_by_{i}"] = created_by
         
         bulk_mv_sql = f"""

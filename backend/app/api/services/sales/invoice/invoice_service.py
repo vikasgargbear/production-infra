@@ -319,7 +319,7 @@ class InvoiceService:
                         })
 
                 if movement_records:
-                    InventoryService.bulk_insert_movements(db, movement_records, invoice_id, actual_user_id)
+                    InventoryService.bulk_insert_movements(db, movement_records, invoice_id, actual_user_id, invoice_number)
                     logger.info(f"✅ Recorded {len(movement_records)} inventory movements")
 
                 # 9.7. Create customer outstanding entry
@@ -1016,7 +1016,7 @@ class InvoiceService:
                 "org_id": org_id,
                 "customer_id": customer_id,
                 "invoice_id": invoice_id,
-                "invoice_number": invoice_number or f"INV-{invoice_id}",
+                "invoice_number": invoice_number,
                 "invoice_date": doc_date,
                 "amount": amount,
                 "outstanding": outstanding,

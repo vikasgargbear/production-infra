@@ -83,16 +83,19 @@ def process_inventory_background(
         db = Session()
         
         try:
+            # Extract invoice_number early for movement references
+            invoice_number = (invoice_totals or {}).get("invoice_number", "")
+
             # Use service methods for bulk operations
-            
+
             # 1. Bulk update batch quantities
             if batch_deductions:
                 InventoryService.bulk_update_batch_quantities(db, batch_deductions, org_id)
                 logger.info(f"✅ [BACKGROUND] Updated {len(batch_deductions)} batch quantities for invoice {invoice_id}")
-            
+
             # 2. Bulk insert inventory movements
             if movement_records:
-                InventoryService.bulk_insert_movements(db, movement_records, invoice_id, created_by)
+                InventoryService.bulk_insert_movements(db, movement_records, invoice_id, created_by, invoice_number)
                 logger.info(f"✅ [BACKGROUND] Inserted {len(movement_records)} inventory movements for invoice {invoice_id}")
             
             # 3. Update invoice totals
