@@ -340,12 +340,12 @@ async def create_sale_return(
             item_igst = float(gst["igst_amount"])
 
             # Determine disposition - prefer explicit disposition from request
+            item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
             explicit_disposition = item.get("disposition")
             if explicit_disposition and explicit_disposition.upper() in ("RESTOCK", "QUARANTINE", "DESTROY"):
                 disposition = explicit_disposition.upper()
                 is_damaged = disposition in ("QUARANTINE", "DESTROY")
             else:
-                item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
                 should_restock = item.get("restock", None)
                 disposition, is_damaged = ReturnService.determine_disposition(
                     item_return_reason, explicit_restock=should_restock

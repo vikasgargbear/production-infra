@@ -23,12 +23,17 @@ echo "=============================================="
 echo " Returns Module E2E Tests"
 echo "=============================================="
 
-# Find a posted invoice with items to return
+# Find a posted invoice with items that haven't been fully returned
 RETURNABLE=$(run_sql "
 SELECT i.invoice_id, i.invoice_number, ii.invoice_item_id, ii.product_id, ii.batch_id, ii.quantity
 FROM sales.invoices i
 JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
-WHERE i.invoice_status = 'posted' AND ii.quantity > 0
+LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id
+    AND sri.return_id IN (SELECT return_id FROM sales.sales_returns WHERE approval_status != 'cancelled')
+WHERE i.invoice_status = 'posted'
+  AND ii.quantity > 1
+GROUP BY i.invoice_id, i.invoice_number, ii.invoice_item_id, ii.product_id, ii.batch_id, ii.quantity
+HAVING ii.quantity - COALESCE(SUM(sri.return_quantity), 0) > 0
 ORDER BY i.invoice_id DESC LIMIT 1")
 
 if [ -z "$RETURNABLE" ]; then
