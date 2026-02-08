@@ -209,10 +209,10 @@ class PaymentService:
             SELECT p.payment_id, p.payment_number, p.payment_date,
                    p.payment_amount, p.payment_status, p.party_name,
                    a.allocated_amount, a.allocation_id,
-                   pm.method_name as payment_method
+                   (SELECT pm.method_name FROM financial.payment_methods pm
+                    WHERE pm.payment_method_id = p.payment_method_id LIMIT 1) as payment_method
             FROM financial.allocations a
             JOIN financial.payments p ON a.payment_id = p.payment_id
-            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE a.reference_type = 'INVOICE'
               AND a.reference_id = :invoice_id
               AND a.allocation_status = 'active'
@@ -369,13 +369,15 @@ class PaymentService:
                    p.payment_type, p.party_type, p.party_id, p.party_name,
                    p.payment_amount, p.payment_status, p.reference_number,
                    p.allocation_status, p.allocated_amount, p.narration,
-                   pm.method_name as payment_method,
-                   a.reference_number as invoice_number,
-                   a.reference_id as invoice_id
+                   (SELECT pm.method_name FROM financial.payment_methods pm
+                    WHERE pm.payment_method_id = p.payment_method_id LIMIT 1) as payment_method,
+                   (SELECT a.reference_number FROM financial.allocations a
+                    WHERE a.payment_id = p.payment_id AND a.reference_type = 'INVOICE'
+                    AND a.allocation_status = 'active' LIMIT 1) as invoice_number,
+                   (SELECT a.reference_id FROM financial.allocations a
+                    WHERE a.payment_id = p.payment_id AND a.reference_type = 'INVOICE'
+                    AND a.allocation_status = 'active' LIMIT 1) as invoice_id
             FROM financial.payments p
-            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
-            LEFT JOIN financial.allocations a ON a.payment_id = p.payment_id
-                AND a.reference_type = 'INVOICE' AND a.allocation_status = 'active'
             WHERE p.payment_id = :payment_id
         """), {"payment_id": payment_id}).first()
         return dict(result._mapping) if result else None
@@ -525,16 +527,19 @@ class PaymentService:
         TenantAwareSession auto-filters by org_id.
         """
         params = {"cancelled_status": "cancelled"}
+        # Use subquery for payment_method to avoid ambiguous org_id
+        # (TenantAwareSession injects unqualified org_id, both payments
+        # and payment_methods have org_id column)
         select_cols = """
             SELECT p.payment_id, p.payment_number, p.payment_date,
                    p.payment_type, p.party_type, p.party_id, p.party_name,
                    p.payment_amount, p.payment_status, p.reference_number,
                    p.allocation_status, p.allocated_amount,
-                   pm.method_name as payment_method
+                   (SELECT pm.method_name FROM financial.payment_methods pm
+                    WHERE pm.payment_method_id = p.payment_method_id LIMIT 1) as payment_method
         """
         from_clause = """
             FROM financial.payments p
-            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.payment_status != :cancelled_status
         """
 
@@ -591,9 +596,9 @@ class PaymentService:
             SELECT p.payment_id, p.payment_number, p.payment_date,
                    p.payment_type, p.party_type, p.party_id, p.party_name,
                    p.payment_amount, p.payment_status, p.reference_number,
-                   pm.method_name as payment_method
+                   (SELECT pm.method_name FROM financial.payment_methods pm
+                    WHERE pm.payment_method_id = p.payment_method_id LIMIT 1) as payment_method
             FROM financial.payments p
-            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.payment_status = :pending_status
                 OR (p.payment_method_id IS NOT NULL AND p.clearance_date IS NULL)
         """
