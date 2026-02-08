@@ -762,8 +762,8 @@ class PurchaseOrderRepository:
             SELECT po.purchase_order_id, po.po_number, po.po_date, po.po_status,
                    po.supplier_id, po.supplier_name, po.payment_terms, po.notes,
                    po.subtotal_amount, po.discount_amount, po.tax_amount, po.total_amount,
-                   s.gst_number as supplier_gst_number, s.address as supplier_address,
-                   s.phone as supplier_phone
+                   s.gst_number as supplier_gst_number,
+                   s.primary_phone as supplier_phone
             FROM procurement.purchase_orders po
             LEFT JOIN parties.suppliers s ON po.supplier_id = s.supplier_id
             WHERE po.purchase_order_id = :po_id AND po.org_id = :org_id
@@ -780,7 +780,7 @@ class PurchaseOrderRepository:
                    (poi.ordered_quantity - COALESCE(poi.received_quantity, 0)) as remaining_quantity,
                    poi.unit_price, poi.mrp, poi.discount_percent, poi.tax_percent,
                    poi.uom, poi.pack_type, poi.pack_size, poi.free_quantity,
-                   poi.batch_number, poi.expiry_date, poi.manufacturing_date
+                   poi.batch_number, poi.expiry_date
             FROM procurement.purchase_order_items poi
             WHERE poi.purchase_order_id = :po_id
               AND (poi.ordered_quantity - COALESCE(poi.received_quantity, 0)) > 0
