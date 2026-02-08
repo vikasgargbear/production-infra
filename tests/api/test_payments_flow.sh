@@ -222,7 +222,7 @@ fi
 # =============================================
 section "Test 4: Payment Search"
 
-parse_response "$(api_get "/payments/search?customer_id=${CUSTOMER_ID}&limit=5")"
+parse_response "$(api_get "/payments/search?party_id=${CUSTOMER_ID}&party_type=customer&limit=5")"
 
 if [ "$HTTP_STATUS" = "200" ]; then
     echo -e "  ${GREEN}✓ Payment search endpoint: ${HTTP_STATUS}${NC}"; ((PASS_COUNT++)) || true

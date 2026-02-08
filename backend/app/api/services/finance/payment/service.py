@@ -53,7 +53,7 @@ class PaymentService:
         """
         # Get invoice details (TenantAwareSession auto-adds org_id filter)
         invoice = db.execute(text("""
-            SELECT invoice_id, invoice_number, final_amount as total_amount, 
+            SELECT invoice_id, invoice_number, final_amount as total_amount,
                    COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
@@ -69,8 +69,9 @@ class PaymentService:
         if payment_amount > balance_amount:
             raise ValueError(f"Payment amount exceeds balance. Balance: {balance_amount}")
         
-        # Generate payment reference
-        payment_reference = PaymentService.generate_payment_number(db, org_id)
+        # Generate payment reference (use invoice's org_id if not provided)
+        effective_org_id = org_id or str(invoice.org_id)
+        payment_reference = PaymentService.generate_payment_number(db, effective_org_id)
         
         # Resolve payment_method_id from payment_mode string
         payment_mode = payment_data.get("payment_mode", PaymentMethod.CASH.value)
@@ -119,11 +120,11 @@ class PaymentService:
         """), {**payment_record, "created_by": payment_data.get("created_by")})
         
         payment_id = result.scalar()
-        
+
         # Calculate new totals
         new_paid_amount = Decimal(str(invoice.paid_amount)) + payment_amount
         total_amount = Decimal(str(invoice.total_amount))
-        
+
         # Determine new payment status
         if new_paid_amount >= total_amount:
             new_payment_status = PaymentStatus.PAID.value
@@ -131,25 +132,34 @@ class PaymentService:
             new_payment_status = PaymentStatus.PARTIAL.value
         else:
             new_payment_status = PaymentStatus.PENDING.value
-        
+
         new_credit_amount = max(Decimal("0"), total_amount - new_paid_amount)
 
-        # Update invoice paid amount, credit amount, and status
+        # Create allocation row (links payment to invoice).
+        # DB trigger trg_update_reference_paid_amount auto-updates
+        # sales.invoices (paid_amount, credit_amount, payment_status).
+        created_by = payment_data.get("created_by")
+        if not created_by:
+            created_by = db.execute(text(
+                "SELECT user_id FROM master.org_users WHERE org_id = :org_id LIMIT 1"
+            ), {"org_id": effective_org_id}).scalar()
         db.execute(text("""
-            UPDATE sales.invoices
-            SET paid_amount = :paid_amount,
-                credit_amount = :credit_amount,
-                payment_status = :payment_status,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE invoice_id = :invoice_id
+            INSERT INTO financial.allocations (
+                payment_id, reference_type, reference_id, reference_number,
+                allocated_amount, source_type, created_by
+            ) VALUES (
+                :payment_id, 'INVOICE', :invoice_id, :invoice_number,
+                :amount, 'payment', :created_by
+            )
         """), {
+            "payment_id": payment_id,
             "invoice_id": invoice_id,
-            "paid_amount": new_paid_amount,
-            "credit_amount": new_credit_amount,
-            "payment_status": new_payment_status,
+            "invoice_number": invoice.invoice_number if hasattr(invoice, 'invoice_number') else str(invoice_id),
+            "amount": payment_amount,
+            "created_by": created_by,
         })
 
-        # Update customer_outstanding
+        # Update customer_outstanding (no trigger handles this)
         outstanding_status = "paid" if new_payment_status == PaymentStatus.PAID.value else "partial"
         db.execute(text("""
             UPDATE financial.customer_outstanding
@@ -187,19 +197,25 @@ class PaymentService:
     
     @staticmethod
     def get_invoice_payments(
-        db: Session, 
+        db: Session,
         invoice_id: int,
         org_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get all payments for an invoice.
-        TenantAwareSession auto-filters by org_id.
+        Get all payments allocated to a specific invoice.
+        Joins through financial.allocations for precise invoice-payment linking.
         """
         payments = db.execute(text("""
-            SELECT p.* 
-            FROM financial.payments p
-            JOIN sales.invoices i ON p.party_id = i.customer_id AND p.party_type = 'customer'
-            WHERE i.invoice_id = :invoice_id
+            SELECT p.payment_id, p.payment_number, p.payment_date,
+                   p.payment_amount, p.payment_status, p.party_name,
+                   a.allocated_amount, a.allocation_id,
+                   pm.method_name as payment_method
+            FROM financial.allocations a
+            JOIN financial.payments p ON a.payment_id = p.payment_id
+            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
+            WHERE a.reference_type = 'INVOICE'
+              AND a.reference_id = :invoice_id
+              AND a.allocation_status = 'active'
             ORDER BY p.payment_date DESC, p.created_at DESC
         """), {"invoice_id": invoice_id}).fetchall()
         return [dict(payment._mapping) for payment in payments]
@@ -504,55 +520,56 @@ class PaymentService:
         TenantAwareSession auto-filters by org_id.
         """
         params = {"cancelled_status": "cancelled"}
-        query = """
-            SELECT p.*, 
-                COALESCE(c.customer_name, s.supplier_name) as party_name
+        select_cols = """
+            SELECT p.payment_id, p.payment_number, p.payment_date,
+                   p.payment_type, p.party_type, p.party_id, p.party_name,
+                   p.payment_amount, p.payment_status, p.reference_number,
+                   p.allocation_status, p.allocated_amount,
+                   pm.method_name as payment_method
+        """
+        from_clause = """
             FROM financial.payments p
-            LEFT JOIN parties.customers c ON p.party_id = c.customer_id AND p.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON p.party_id = s.supplier_id AND p.party_type = 'supplier'
+            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.payment_status != :cancelled_status
         """
-        
+
         if q:
-            query += """ AND (
-                p.payment_number ILIKE :q 
-                OR p.transaction_reference ILIKE :q
-                OR c.customer_name ILIKE :q
-                OR s.supplier_name ILIKE :q
+            from_clause += """ AND (
+                p.payment_number ILIKE :q
+                OR p.reference_number ILIKE :q
+                OR p.party_name ILIKE :q
             )"""
             params["q"] = f"%{q}%"
-        
+
         if party_id and party_type == "customer":
-            query += " AND p.party_id = :party_id AND p.party_type = 'customer'"
+            from_clause += " AND p.party_id = :party_id AND p.party_type = 'customer'"
             params["party_id"] = party_id
         elif party_id and party_type == "supplier":
-            query += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
+            from_clause += " AND p.party_id = :party_id AND p.party_type = 'supplier'"
             params["party_id"] = party_id
-            
-        if payment_mode:
-            query += " AND p.payment_mode = :payment_mode"
-            params["payment_mode"] = payment_mode
-            
+        elif party_id:
+            from_clause += " AND p.party_id = :party_id"
+            params["party_id"] = party_id
+
         if date_from:
-            query += " AND p.payment_date >= :date_from"
+            from_clause += " AND p.payment_date >= :date_from"
             params["date_from"] = date_from
         if date_to:
-            query += " AND p.payment_date <= :date_to"
+            from_clause += " AND p.payment_date <= :date_to"
             params["date_to"] = date_to
-            
-        query += " ORDER BY p.payment_date DESC LIMIT :limit OFFSET :offset"
+
+        query = select_cols + from_clause + " ORDER BY p.payment_date DESC LIMIT :limit OFFSET :offset"
         params["limit"] = limit
         params["offset"] = offset
-        
+
         result = db.execute(text(query), params)
         payments = [dict(row._mapping) for row in result]
-        
+
         # Get total count
-        count_query = query.replace("SELECT p.*", "SELECT COUNT(*)")
-        count_query = count_query.split("ORDER BY")[0]
+        count_query = "SELECT COUNT(*) " + from_clause
         count_result = db.execute(text(count_query), {k: v for k, v in params.items() if k not in ["limit", "offset"]})
         total = count_result.scalar() or 0
-        
+
         return {"payments": payments, "total": total}
     
     @staticmethod
@@ -682,7 +699,7 @@ class PaymentService:
         """
         # Get payment details
         payment = db.execute(text("""
-            SELECT payment_id, amount, customer_id, payment_type
+            SELECT payment_id, payment_amount, party_id, payment_type
             FROM financial.payments
             WHERE payment_id = :payment_id AND payment_status IN ('completed', 'cleared')
         """), {"payment_id": payment_id}).first()
@@ -737,17 +754,17 @@ class PaymentService:
         db.execute(text("""
             UPDATE financial.payments
             SET allocated_amount = :allocated_amount,
-                unallocated_amount = amount - :allocated_amount
+                unallocated_amount = payment_amount - :allocated_amount
             WHERE payment_id = :payment_id
         """), {
             "allocated_amount": total_allocated,
             "payment_id": payment_id
         })
-        
+
         return {
             "payment_id": payment_id,
             "total_allocated": total_allocated,
-            "unallocated_amount": float(payment.amount) - total_allocated,
+            "unallocated_amount": float(payment.payment_amount) - total_allocated,
             "status": "success"
         }
     
