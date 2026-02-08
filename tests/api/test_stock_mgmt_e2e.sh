@@ -795,10 +795,10 @@ report "CROSS-SCENARIO VALIDATION"
 report "========================================"
 section "Cross-Scenario Validation"
 
-echo "  Expected running totals:"
-echo "    Batch qty: ${INITIAL_BATCH_QTY} + 10 - 5 - 0(transfer) - 2 - 1 = ${EXPECTED_BATCH_QTY}"
-echo "    LWS primary: ${INITIAL_LWS_QTY} + 10 - 5 - 3 - 2 - 1 = ${EXPECTED_LWS_PRIMARY}"
-echo "    LWS test: 0 + 3 = ${EXPECTED_LWS_TEST}"
+echo "  Expected running totals (based on scenarios that passed):"
+echo "    Batch qty: ${EXPECTED_BATCH_QTY}"
+echo "    LWS primary: ${EXPECTED_LWS_PRIMARY}"
+echo "    LWS test: ${EXPECTED_LWS_TEST}"
 
 report "  Expected: batch=${EXPECTED_BATCH_QTY}, lws_primary=${EXPECTED_LWS_PRIMARY}, lws_test=${EXPECTED_LWS_TEST}"
 
@@ -818,20 +818,22 @@ report "  Actual: batch=${FINAL_BATCH_QTY}, lws_primary=${FINAL_LWS_PRIMARY}, lw
 echo ""
 echo -e "  ${BLUE}Final Batch Quantity${NC}"
 cross_validate "$FINAL_BATCH_QTY" "$EXPECTED_BATCH_QTY" \
-    "CROSS: Final batch qty matches running total (init ${INITIAL_BATCH_QTY} +10 -5 -2 -1 = ${EXPECTED_BATCH_QTY})"
+    "CROSS: Final batch qty matches running total (expected ${EXPECTED_BATCH_QTY})"
 
 echo -e "  ${BLUE}Final LWS at Primary Location${NC}"
 cross_validate "$FINAL_LWS_PRIMARY" "$EXPECTED_LWS_PRIMARY" \
-    "CROSS: Final LWS primary matches (init ${INITIAL_LWS_QTY} +10 -5 -3 -2 -1 = ${EXPECTED_LWS_PRIMARY})"
+    "CROSS: Final LWS primary matches (expected ${EXPECTED_LWS_PRIMARY})"
 
 echo -e "  ${BLUE}Final LWS at Test Location${NC}"
+# Handle empty LWS (no row created if transfer didn't run)
+if [ -z "$FINAL_LWS_TEST" ]; then
+    FINAL_LWS_TEST="0"
+fi
 cross_validate "$FINAL_LWS_TEST" "$EXPECTED_LWS_TEST" \
-    "CROSS: Final LWS test matches (0 +3 = ${EXPECTED_LWS_TEST})"
+    "CROSS: Final LWS test matches (expected ${EXPECTED_LWS_TEST})"
 
 # Verify batch = SUM(all locations LWS)
-TOTAL_LWS=$(python3 -c "print(round(float('${FINAL_LWS_PRIMARY}') + float('${FINAL_LWS_TEST}'), 2))")
-# NOTE: batch qty may include stock at other locations too, so total_lws <= batch_qty
-# Only check if batch has stock ONLY at these two locations
+echo -e "  ${BLUE}LWS Sum vs Batch Qty${NC}"
 ALL_LWS_SUM=$(run_sql "SELECT COALESCE(SUM(quantity_available), 0) FROM inventory.location_wise_stock WHERE batch_id = ${BATCH_ID}" | tr -d '[:space:]')
 cross_validate "$ALL_LWS_SUM" "$FINAL_BATCH_QTY" \
     "CROSS: SUM(all LWS) = batch qty (${ALL_LWS_SUM} vs ${FINAL_BATCH_QTY})"

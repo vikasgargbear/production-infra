@@ -140,6 +140,12 @@ DOCUMENT_CONFIGS = {
         "column": "movement_number",
         "id_column": "movement_id"
     },
+    "stock_transfer": {
+        "prefix": "ST",
+        "table": "inventory.stock_movements",
+        "column": "movement_number",
+        "id_column": "movement_id"
+    },
     "writeoff": {
         "prefix": "WO",
         "table": "inventory.stock_writeoffs",

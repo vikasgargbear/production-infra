@@ -93,6 +93,18 @@ class WriteoffService:
             raise ValueError(f"Insufficient stock in batch {batch_id} for writeoff of {quantity}")
     
     @staticmethod
+    def update_location_wise_stock(db: Session, org_id: str, product_id: int, batch_id: int, location_id: int, quantity: Decimal) -> None:
+        """Decrement location_wise_stock for writeoff."""
+        db.execute(text("""
+            UPDATE inventory.location_wise_stock
+            SET quantity_available = quantity_available - :quantity,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE batch_id = :batch_id
+            AND location_id = :location_id
+            AND org_id = :org_id
+        """), {"batch_id": batch_id, "location_id": location_id, "org_id": org_id, "quantity": quantity})
+
+    @staticmethod
     def insert_stock_movement(db: Session, data: Dict[str, Any]) -> None:
         """Insert stock movement record for writeoff into inventory.inventory_movements."""
         db.execute(text("""

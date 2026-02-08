@@ -17,6 +17,7 @@ from ....services.inventory.writeoff.service import WriteoffService
 from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from .....core.auth.org_context import OrgContext, get_org_context
 from .....core.security.permissions import PermissionChecker
+from .....core.utils.branch_utils import resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -171,10 +172,12 @@ async def create_stock_writeoff(
                 "gst_percent": item.gst_percent or 0
             })
             
-            # Update batch inventory
+            # Update batch inventory + location stock
             if item.batch_id:
                 WriteoffService.reduce_batch_quantity(db, org_id, item.batch_id, item.quantity)
-            
+                location_id = resolve_location_id(db, org_id, branch_id)
+                WriteoffService.update_location_wise_stock(db, org_id, item.product_id, item.batch_id, location_id, item.quantity)
+
             # Create stock movement record (quantity is positive; direction='out' in the INSERT)
             WriteoffService.insert_stock_movement(db, {
                 "org_id": org_id,
