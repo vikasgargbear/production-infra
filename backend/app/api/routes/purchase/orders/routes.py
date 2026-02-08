@@ -294,8 +294,7 @@ async def create_purchase_entry(
             # Generate batch number if not provided
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
-                import uuid
-                batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(uuid.uuid4().int % 10000).zfill(4)}"
+                batch_number = DocumentNumberService.generate_batch_number()
 
             # Calculate pricing values
             mrp_value = Decimal(str(item.get("mrp", 0)))

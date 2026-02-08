@@ -15,6 +15,7 @@ from ...core.auth.tenant_service import get_tenant_aware_db, with_tenant_context
 from ...core.auth.org_context import get_org_context, OrgContext
 from ...core.security.permissions import PermissionChecker
 from ...core.auth.jwt_auth import get_org_id_string
+from ..services.document_number_service import DocumentNumberService
 # get_org_id_string replaced with OrgContext
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,8 @@ async def create_scheme(
     - Product/customer filtering
     """
     try:
-        # Generate scheme code
-        scheme_code = f"SCH-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        # Generate scheme code using central service
+        scheme_code = DocumentNumberService.generate_number(db, "scheme", org_id)
         
         # Prepare scheme data
         scheme_data = {

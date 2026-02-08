@@ -163,6 +163,24 @@ DOCUMENT_CONFIGS = {
         "table": "inventory.products",
         "column": "product_code",
         "id_column": "product_id"
+    },
+    "payroll_run": {
+        "prefix": "PRL",
+        "table": "payroll.payroll_runs",
+        "column": "run_number",
+        "id_column": "payroll_run_id"
+    },
+    "salary_slip": {
+        "prefix": "SLP",
+        "table": "payroll.payroll_slips",
+        "column": "slip_number",
+        "id_column": "payroll_slip_id"
+    },
+    "gst_filing": {
+        "prefix": "GST",
+        "table": "gst.return_filing_status",
+        "column": "reference_number",
+        "id_column": "filing_id"
     }
 }
 

@@ -1029,46 +1029,16 @@ class PaymentService:
     @staticmethod
     def generate_receipt_sequence(
         db: Session,
-        payment_type: str = "receipt"
+        payment_type: str = "receipt",
+        org_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generate unique receipt/payment number using atomic sequence.
-        Format: RCT-YYYYMMDD-NNNN or PAY-YYYYMMDD-NNNN
+        Generate unique receipt/payment number using centralized DocumentNumberService.
+        Format: RCT-YYYYMMDDNNNN or PAY-YYYYMMDDNNNN
         """
-        from datetime import datetime
-        
-        current_date = date.today()
-        prefix = "RCT" if payment_type == "receipt" else "PAY"
-        date_part = current_date.strftime("%Y%m%d")
-        
-        # Regex patterns for sequence extraction
-        pattern = f"^{prefix}-{date_part}-[0-9]+$"
-        extract_pattern = f"{prefix}-{date_part}-([0-9]+)$"
-        like_pattern = f"{prefix}-{date_part}-%"
-        
-        # Get next sequence number atomically
-        result = db.execute(text("""
-            SELECT COALESCE(MAX(
-                CASE 
-                    WHEN payment_number ~ :pattern THEN 
-                        CAST(SUBSTRING(payment_number FROM :extract_pattern) AS BIGINT)
-                    ELSE 0 
-                END
-            ), 0) + 1 as next_number
-            FROM financial.payments 
-            WHERE 1=1
-                AND payment_date = :payment_date
-                AND payment_number LIKE :like_pattern
-        """), {
-            "payment_date": current_date,
-            "pattern": pattern,
-            "extract_pattern": extract_pattern,
-            "like_pattern": like_pattern
-        }).fetchone()
-        
-        next_number = str(result.next_number).zfill(4)
-        receipt_number = f"{prefix}-{date_part}-{next_number}"
-        
+        doc_type = "receipt" if payment_type == "receipt" else "payment"
+        receipt_number = DocumentNumberService.generate_number(db, doc_type, org_id)
+
         return {
             "receipt_number": receipt_number,
             "payment_type": payment_type,

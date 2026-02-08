@@ -95,14 +95,6 @@ class ConversionService:
         """), {"order_id": order_id, "status": status})
     
     @staticmethod
-    def get_next_challan_sequence(db: Session, org_id: str, pattern: str) -> int:
-        """Get next challan sequence number."""
-        return db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(challan_number FROM '[0-9]+$') AS BIGINT)), 0) + 1
-            FROM challans WHERE org_id = :org_id AND challan_number LIKE :pattern
-        """), {"org_id": org_id, "pattern": pattern}).scalar() or 1
-    
-    @staticmethod
     def create_challan(db: Session, data: Dict[str, Any]) -> int:
         """Create challan and return challan_id."""
         result = db.execute(text("""

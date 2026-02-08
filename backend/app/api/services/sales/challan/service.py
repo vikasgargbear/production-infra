@@ -16,14 +16,6 @@ class ChallanService:
     """Service class for Challan operations"""
     
     @staticmethod
-    def get_next_challan_sequence(db: Session, pattern: str) -> int:
-        """Get next challan sequence number."""
-        result = db.execute(text("""
-            SELECT COUNT(*) + 1 as next_seq FROM sales.delivery_challans WHERE challan_number LIKE :pattern
-        """), {"pattern": pattern})
-        return result.scalar() or 1
-    
-    @staticmethod
     def get_branch_id(db: Session, org_id: str) -> Optional[int]:
         """Get branch_id from org_branches."""
         try:

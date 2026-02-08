@@ -19,6 +19,7 @@ from ....core.security.permissions import PermissionChecker
 from ....core.utils.branch_utils import get_default_branch_id
 from ...services.compliance.gst_service import GSTService
 from ...services.compliance.gst_engine import GSTType
+from ...services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +287,7 @@ async def file_gst_return(
         # For now, simulate successful filing
 
         filed_date = datetime.now()
-        reference_number = f"GST{filed_date.strftime('%Y%m%d%H%M%S')}"
+        reference_number = DocumentNumberService.generate_number(db, "gst_filing", org_id)
 
         return {
             "success": True,

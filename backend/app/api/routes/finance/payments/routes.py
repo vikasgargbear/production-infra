@@ -170,10 +170,11 @@ async def generate_receipt_number(
     Format: RCT-YYYYMMDD-NNNN or PAY-YYYYMMDD-NNNN
     """
     try:
-        # Use service method for atomic sequence generation
+        # Use centralized DocumentNumberService via service method
         return PaymentService.generate_receipt_sequence(
             db=db,
-            payment_type=payment_type
+            payment_type=payment_type,
+            org_id=str(context.org_id)
         )
         
     except Exception as e:
