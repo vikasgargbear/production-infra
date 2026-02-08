@@ -339,15 +339,20 @@ async def create_sale_return(
             item_sgst = float(gst["sgst_amount"])
             item_igst = float(gst["igst_amount"])
 
-            # Determine disposition
-            item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
-            should_restock = item.get("restock", None)
-            disposition, is_damaged = ReturnService.determine_disposition(
-                item_return_reason, explicit_restock=should_restock
-            )
+            # Determine disposition - prefer explicit disposition from request
+            explicit_disposition = item.get("disposition")
+            if explicit_disposition and explicit_disposition.upper() in ("RESTOCK", "QUARANTINE", "DESTROY"):
+                disposition = explicit_disposition.upper()
+                is_damaged = disposition in ("QUARANTINE", "DESTROY")
+            else:
+                item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
+                should_restock = item.get("restock", None)
+                disposition, is_damaged = ReturnService.determine_disposition(
+                    item_return_reason, explicit_restock=should_restock
+                )
 
             # Set quantities based on disposition
-            if is_damaged or should_restock is False:
+            if is_damaged:
                 damaged_qty = round(float(return_qty), 2)
                 saleable_qty = 0
             else:
