@@ -791,9 +791,102 @@ class InventoryService:
         """
         db.execute(text(bulk_mv_sql), mv_params)
         logger.info(f"✅ Bulk inserted {len(movement_records)} inventory movements")
-        
+
+        # Update location_wise_stock for each movement (direction='out' for sales)
+        InventoryService.bulk_update_location_wise_stock(db, movement_records, direction='out')
+
         return len(movement_records)
     
+    @staticmethod
+    def bulk_update_location_wise_stock(
+        db: Session,
+        movement_records: List[dict],
+        direction: str = 'out'
+    ) -> int:
+        """
+        Bulk update location_wise_stock for a list of movement records.
+        Handles both 'in' (increase) and 'out' (decrease) directions.
+        Uses UPSERT: creates row if missing (for 'in'), updates if exists.
+
+        Args:
+            movement_records: List of dicts with org_id, product_id, batch_id, quantity, location_id
+            direction: 'in' for stock increase, 'out' for stock decrease
+
+        Returns:
+            Number of location stock rows updated/inserted
+        """
+        if not movement_records:
+            return 0
+
+        updated = 0
+        for mv in movement_records:
+            org_id = mv.get("org_id")
+            product_id = mv.get("product_id")
+            batch_id = mv.get("batch_id")
+            quantity = mv.get("quantity", 0)
+            location_id = mv.get("location_id")
+
+            if not location_id or not org_id or not product_id:
+                continue
+
+            # Check if row exists
+            existing = db.execute(text("""
+                SELECT stock_id FROM inventory.location_wise_stock
+                WHERE org_id = :org_id AND product_id = :product_id
+                AND location_id = :location_id
+                AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
+            """), {
+                "org_id": org_id, "product_id": product_id,
+                "location_id": location_id, "batch_id": batch_id
+            }).scalar()
+
+            if existing:
+                if direction == 'in':
+                    db.execute(text("""
+                        UPDATE inventory.location_wise_stock
+                        SET quantity_available = quantity_available + :quantity,
+                            last_movement_date = CURRENT_DATE, last_updated = CURRENT_TIMESTAMP
+                        WHERE stock_id = :stock_id
+                    """), {"quantity": quantity, "stock_id": existing})
+                else:
+                    db.execute(text("""
+                        UPDATE inventory.location_wise_stock
+                        SET quantity_available = quantity_available - :quantity,
+                            last_movement_date = CURRENT_DATE, last_updated = CURRENT_TIMESTAMP
+                        WHERE stock_id = :stock_id
+                    """), {"quantity": quantity, "stock_id": existing})
+            elif direction == 'in':
+                # Only create new rows for stock-in (purchase/receive)
+                db.execute(text("""
+                    INSERT INTO inventory.location_wise_stock (
+                        org_id, location_id, product_id, batch_id,
+                        quantity_available, quantity_reserved, last_movement_date
+                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, 0, CURRENT_DATE)
+                """), {
+                    "org_id": org_id, "location_id": location_id,
+                    "product_id": product_id, "batch_id": batch_id, "quantity": quantity
+                })
+            else:
+                # Stock-out but no LWS row exists — log warning, still track
+                logger.warning(
+                    f"⚠️ No location_wise_stock row for product={product_id}, "
+                    f"batch={batch_id}, location={location_id}. Creating with negative qty."
+                )
+                db.execute(text("""
+                    INSERT INTO inventory.location_wise_stock (
+                        org_id, location_id, product_id, batch_id,
+                        quantity_available, quantity_reserved, last_movement_date
+                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, -:quantity, 0, CURRENT_DATE)
+                """), {
+                    "org_id": org_id, "location_id": location_id,
+                    "product_id": product_id, "batch_id": batch_id, "quantity": quantity
+                })
+
+            updated += 1
+
+        logger.info(f"✅ Bulk updated {updated} location_wise_stock entries (direction={direction})")
+        return updated
+
     # =========================================================================
     # MOVEMENT QUERY METHODS
     # =========================================================================
