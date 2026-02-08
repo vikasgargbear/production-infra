@@ -1143,7 +1143,7 @@ class ProductService:
             ) VALUES (
                 :org_id, :product_code, :product_name, :generic_name,
                 :brand, :manufacturer, :category_id, :product_type,
-                :hsn_code, :gst_percent, :composition::jsonb, :strength,
+                :hsn_code, :gst_percent, CAST(:composition AS jsonb), :strength,
                 :is_active, :is_saleable, :maintain_batch,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id
