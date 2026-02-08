@@ -4,8 +4,8 @@
  * Generates consistent, sequential document numbers across all modules
  * Works offline and online with automatic sync
  * 
- * Format: PREFIX-YYYYMMDD-XXXX
- * Example: INV-20241027-0001, PO-20241027-0023, DC-20241027-0015
+ * Format: PREFIX-YYYYMMDDXXXX (matches backend DocumentNumberService)
+ * Example: INV-202602080001, PO-202602080023, DC-202602080015
  */
 
 import { apiClient, documentsApi } from '../../api';
@@ -122,7 +122,7 @@ class DocumentNumberGenerator {
      * 
      * @param docType - Document type from DOC_TYPES
      * @param tryBackend - Try to get number from backend first (default: true)
-     * @returns Document number (e.g., "INV-20241027-0001")
+     * @returns Document number (e.g., "INV-202602080001")
      */
     async generateNumber(docType: DocumentType, tryBackend: boolean = true): Promise<string> {
         await this.initialize();
@@ -151,18 +151,27 @@ class DocumentNumberGenerator {
         // Save to IndexedDB and memory
         await this.updateCounter(key, sequence);
 
-        // Format: PREFIX-YYYYMMDD-XXXX
+        // Format: PREFIX-YYYYMMDDXXXX (matches backend)
         const formattedSequence = String(sequence).padStart(4, '0');
-        return `${docType}-${today}-${formattedSequence}`;
+        return `${docType}-${today}${formattedSequence}`;
     }
 
     /**
      * Extract sequence number from document number
-     * Example: "INV-20241027-0015" -> 15
+     * Format: PREFIX-YYYYMMDDXXXX → extracts last 4 digits as sequence
+     * Example: "INV-202602080015" -> 15
      */
     extractSequence(docNumber: string): number {
         const parts = docNumber.split('-');
+        if (parts.length === 2) {
+            // Backend format: PREFIX-YYYYMMDDXXXX
+            const numberPart = parts[1];
+            if (numberPart.length >= 12) {
+                return parseInt(numberPart.slice(-4), 10);
+            }
+        }
         if (parts.length === 3) {
+            // Legacy format: PREFIX-YYYYMMDD-XXXX (backwards compat)
             return parseInt(parts[2], 10);
         }
         return 0;
@@ -221,11 +230,23 @@ class DocumentNumberGenerator {
         await this.initialize();
 
         const parts = docNumber.split('-');
-        if (parts.length !== 3) return;
+        let prefix: string, dateStr: string, sequence: number;
 
-        const [prefix, dateStr, seqStr] = parts;
+        if (parts.length === 2) {
+            // Backend format: PREFIX-YYYYMMDDXXXX
+            prefix = parts[0];
+            dateStr = parts[1].slice(0, 8);
+            sequence = parseInt(parts[1].slice(-4), 10);
+        } else if (parts.length === 3) {
+            // Legacy format: PREFIX-YYYYMMDD-XXXX
+            prefix = parts[0];
+            dateStr = parts[1];
+            sequence = parseInt(parts[2], 10);
+        } else {
+            return;
+        }
+
         const key = `${prefix}_${dateStr}`;
-        const sequence = parseInt(seqStr, 10);
 
         // Only update if this sequence is higher than current
         const current = this.counters.get(key) || 0;

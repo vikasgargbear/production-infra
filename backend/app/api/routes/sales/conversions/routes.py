@@ -114,9 +114,7 @@ async def convert_sales_order_to_challan(
             raise HTTPException(status_code=400, detail=f"Cannot convert. Order status: {order['order_status']}")
         
         challan_date = request.target_date or date.today()
-        date_part = challan_date.strftime("%Y%m%d")
-        seq = ConversionService.get_next_challan_sequence(db, org_id, f"DC{date_part}%")
-        challan_number = f"DC{date_part}{seq:04d}"
+        challan_number = DocumentNumberService.generate_number(db, "delivery_challan", org_id)
         
         challan_id = ConversionService.create_challan(db, {
             "org_id": org_id, "challan_number": challan_number, "challan_date": challan_date,

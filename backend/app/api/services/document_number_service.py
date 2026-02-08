@@ -2,12 +2,12 @@
 Unified Document Number Generation Service
 Provides consistent document number generation across all modules
 
-Format: PREFIX-YYXXXXXXXX
-- PREFIX: Document type identifier (2-3 letters)
-- YY: Last 2 digits of year
-- XXXXXXXX: 8-digit sequential number (10000000-99999999)
+Format: PREFIX-YYYYMMDDNNNN
+- PREFIX: Document type identifier (2-4 letters)
+- YYYYMMDD: Date of generation
+- NNNN: 4-digit sequential number per date (0001-9999)
 
-This provides 90,000,000 unique numbers per document type per year
+Scoped by: document_type + org_id + date → each org gets its own 0001 per type per day
 """
 from typing import Dict, Optional
 from datetime import datetime

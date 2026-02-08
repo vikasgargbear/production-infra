@@ -13,6 +13,7 @@ from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_d
 from .....core.auth.org_context import get_org_context, OrgContext  
 from .....core.security.permissions import PermissionChecker
 from ....services.sales.challan.service import ChallanService
+from ....services.document_number_service import DocumentNumberService
 from .....core.utils.constants import ProductDefaults
 
 logger = logging.getLogger(__name__)
@@ -113,10 +114,7 @@ async def create_delivery_challan(
                 taxable_amount = (Decimal(str(order.get("final_amount", 0))) - freight) / Decimal("1.12")
                 gst_amount = Decimal(str(order.get("final_amount", 0))) - freight - taxable_amount
         
-        today = datetime.now()
-        date_part = today.strftime("%Y%m%d")
-        next_seq = ChallanService.get_next_challan_sequence(db, f"DC{date_part}%")
-        challan_number = f"DC{date_part}{next_seq:04d}"
+        challan_number = DocumentNumberService.generate_number(db, "delivery_challan", org_id)
         
         challan_id = ChallanService.create_challan(db, {
             "org_id": org_id, "branch_id": branch_id, "order_id": request.order_id,

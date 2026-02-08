@@ -801,7 +801,7 @@ async def receive_purchase_items(
             )
         
         # Update purchase status using repository
-        grn_number = f"GRN-{purchase['po_number']}"
+        grn_number = DocumentNumberService.generate_number(db, "grn", str(context.org_id))
         PurchaseOrderRepository.mark_po_received(db, purchase_id, grn_number)
         
         db.commit()

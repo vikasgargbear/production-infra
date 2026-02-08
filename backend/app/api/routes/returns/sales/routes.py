@@ -213,7 +213,7 @@ async def create_sale_return(
         # Generate credit note number if customer has GST
         credit_note_no = None
         if customer.get("gst_number"):
-            credit_note_no = f"CN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            credit_note_no = DocumentNumberService.generate_number(db, "credit_note", org_id)
         
         # Calculate totals using ReturnService (DRY)
         # Determine GST type automatically based on org state vs customer state
