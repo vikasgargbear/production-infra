@@ -24,6 +24,7 @@ from .....core.security.permissions import PermissionChecker
 from .....core.utils.constants import (
     ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
 )
+from .....core.utils.branch_utils import resolve_location_id
 
 logger = logging.getLogger(__name__)
 
@@ -335,8 +336,59 @@ async def create_purchase_entry(
             )
             logger.info(f"Batch {batch_id} created for product {product_id}")
 
-            # Note: Pricing is stored at batch level, not product level
-            # Each batch can have different MRP and cost prices
+            # Create inventory movement for audit trail
+            location_id = resolve_location_id(db, str(context.org_id), branch_id)
+            db.execute(text("""
+                INSERT INTO inventory.inventory_movements (
+                    org_id, product_id, batch_id,
+                    movement_type, movement_direction, movement_date,
+                    quantity, location_id, unit_cost, total_cost,
+                    reference_type, reference_id, reference_number,
+                    notes, created_by, created_at
+                ) VALUES (
+                    :org_id, :product_id, :batch_id,
+                    'purchase', 'in', CURRENT_TIMESTAMP,
+                    :quantity, :location_id, :unit_cost, :total_cost,
+                    'supplier_invoice', :reference_id, :reference_number,
+                    :notes, :created_by, CURRENT_TIMESTAMP
+                )
+            """), {
+                "org_id": str(context.org_id),
+                "product_id": product_id,
+                "batch_id": batch_id,
+                "quantity": quantity,
+                "location_id": location_id,
+                "unit_cost": cost_price,
+                "total_cost": quantity * cost_price,
+                "reference_id": supplier_invoice_id,
+                "reference_number": invoice_number,
+                "notes": f"Purchase entry - {batch_number}",
+                "created_by": created_by
+            })
+
+            # Update location_wise_stock
+            db.execute(text("""
+                INSERT INTO inventory.location_wise_stock (
+                    org_id, product_id, batch_id, location_id,
+                    quantity_available, quantity_reserved,
+                    stock_in_date, unit_cost, created_at, last_updated
+                ) VALUES (
+                    :org_id, :product_id, :batch_id, :location_id,
+                    :quantity, 0,
+                    CURRENT_DATE, :unit_cost, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (product_id, batch_id, location_id) DO UPDATE SET
+                    quantity_available = location_wise_stock.quantity_available + :quantity,
+                    unit_cost = :unit_cost,
+                    last_updated = CURRENT_TIMESTAMP
+            """), {
+                "org_id": str(context.org_id),
+                "product_id": product_id,
+                "batch_id": batch_id,
+                "location_id": location_id,
+                "quantity": quantity,
+                "unit_cost": cost_price
+            })
 
             # Create supplier invoice item using repository
             invoice_item = {
