@@ -2,9 +2,15 @@
 FastAPI Main Application
 Reorganized with domain-based folder structure
 """
+import os
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+
+from .core.logging_config import setup_logging
+from .middleware.error_handler import global_exception_handler
+from .middleware.security_headers import SecurityHeadersMiddleware
+from .middleware.request_logger import RequestLoggerMiddleware
 
 # =============================================================================
 # DOMAIN-BASED IMPORTS - Organized by module
@@ -57,8 +63,19 @@ from .api.routes.finance import tax as tax_entries
 from .api.routes.finance import credit_notes as credit_debit_notes
 from .api.routes.finance import expenses as expense_claims
 
+# Payroll Module
+from .api.routes.payroll import (
+    salary_structure_router,
+    leave_policy_router,
+    attendance_router,
+    leave_router,
+    payroll_run_router,
+    salary_slips_router,
+)
+
 # Compliance Module
 from .api.routes.compliance import gst
+from .api.routes.compliance import gstr2b
 from .api.routes.compliance import compliance
 
 # Reports Module (formerly Analytics)
@@ -94,9 +111,23 @@ from .api.routes import test_routes  # TEST MODE verification
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting Pharma ERP Backend...")
+    # Initialize structured logging before anything else
+    setup_logging()
+
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # SECURITY: Block TEST_MODE in production at startup
+    env = os.getenv("ENV", "development").lower()
+    if env in ("production", "prod") and os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
+        raise RuntimeError(
+            "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
+            "Remove TEST_MODE env var or set ENV=development."
+        )
+
+    logger.info("Starting Pharma ERP Backend...")
     yield
-    print("👋 Shutting down...")
+    logger.info("Shutting down...")
 
 app = FastAPI(
     title="Pharma ERP API",
@@ -105,14 +136,39 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration
+# =============================================================================
+# MIDDLEWARE STACK (order matters: last added = first executed)
+# =============================================================================
+
+# Global exception handler (catch-all for unhandled errors)
+app.add_exception_handler(Exception, global_exception_handler)
+
+# Security headers (X-Frame-Options, HSTS, etc.)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Request logging with correlation IDs
+app.add_middleware(RequestLoggerMiddleware)
+
+# CORS Configuration — env-based whitelist in production
+_cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if _cors_origins_env:
+    _allowed_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+else:
+    # Development fallback
+    _allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Org-Id", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
     max_age=3600,
 )
 
@@ -189,8 +245,17 @@ api.include_router(tax_entries.router, prefix="/tax-entries", tags=["Tax Entries
 api.include_router(credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
 api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
+# --- Payroll ---
+api.include_router(salary_structure_router, prefix="/payroll/salary-structures", tags=["Payroll"])
+api.include_router(leave_policy_router, prefix="/payroll/leave-policies", tags=["Payroll"])
+api.include_router(attendance_router, prefix="/payroll/attendance", tags=["Payroll"])
+api.include_router(leave_router, prefix="/payroll/leave", tags=["Payroll"])
+api.include_router(payroll_run_router, prefix="/payroll", tags=["Payroll"])
+api.include_router(salary_slips_router, prefix="/payroll/slips", tags=["Payroll"])
+
 # --- Compliance ---
 api.include_router(gst.router, prefix="/gst", tags=["GST"])
+api.include_router(gstr2b.router, prefix="/gst", tags=["GST"])
 api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 
 # --- Analytics ---
