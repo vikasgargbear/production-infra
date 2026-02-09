@@ -28,7 +28,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/")
 @with_tenant_context
-def get_org_users(
+async def get_org_users(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by name, email or username"),
@@ -122,7 +122,7 @@ def get_org_users(
 
 @router.get("/roles")
 @with_tenant_context
-def get_available_roles(
+async def get_available_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
     context: OrgContext = Depends(get_org_context)
@@ -180,7 +180,7 @@ def get_available_roles(
 
 @router.get("/{user_id}")
 @with_tenant_context
-def get_org_user(
+async def get_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
@@ -237,7 +237,7 @@ def get_org_user(
 
 @router.post("/")
 @with_tenant_context
-def create_org_user(
+async def create_org_user(
     user_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "create")),
@@ -395,7 +395,7 @@ def create_org_user(
 
 @router.put("/{user_id}")
 @with_tenant_context
-def update_org_user(
+async def update_org_user(
     user_id: int,
     user_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -521,7 +521,7 @@ def update_org_user(
 
 @router.delete("/{user_id}")
 @with_tenant_context
-def delete_org_user(
+async def delete_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "delete")),
@@ -584,7 +584,7 @@ def delete_org_user(
 
 @router.post("/{user_id}/permissions")
 @with_tenant_context
-def update_user_permissions(
+async def update_user_permissions(
     user_id: int,
     permissions_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),

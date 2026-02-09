@@ -27,7 +27,7 @@ router = APIRouter(prefix="/roles", tags=["Role Management"])
 
 @router.get("/")
 @with_tenant_context
-def get_roles(
+async def get_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
     context: OrgContext = Depends(get_org_context)
@@ -72,7 +72,7 @@ def get_roles(
 
 @router.post("/setup-defaults")
 @with_tenant_context
-def setup_default_roles(
+async def setup_default_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
     context: OrgContext = Depends(get_org_context)
@@ -96,7 +96,7 @@ def setup_default_roles(
 
 @router.post("/assign")
 @with_tenant_context
-def assign_role_to_users(
+async def assign_role_to_users(
     assignment_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit")),
@@ -162,7 +162,7 @@ def assign_role_to_users(
 
 @router.post("/validate")
 @with_tenant_context
-def validate_permission(
+async def validate_permission(
     validation_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker()),
@@ -198,7 +198,7 @@ def validate_permission(
 
 @router.get("/user/{user_id}/permissions")
 @with_tenant_context
-def get_user_permissions(
+async def get_user_permissions(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker()),
@@ -257,7 +257,7 @@ def get_user_permissions(
 
 @router.get("/{role_id}")
 @with_tenant_context
-def get_role_details(
+async def get_role_details(
     role_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
@@ -317,7 +317,7 @@ def get_role_details(
 
 @router.post("/")
 @with_tenant_context
-def create_custom_role(
+async def create_custom_role(
     role_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
@@ -359,7 +359,7 @@ def create_custom_role(
 
 @router.put("/{role_id}")
 @with_tenant_context
-def update_role(
+async def update_role(
     role_id: int,
     role_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -430,7 +430,7 @@ def update_role(
 
 @router.delete("/{role_id}")
 @with_tenant_context
-def delete_role(
+async def delete_role(
     role_id: int,
     reassign_to: Optional[int] = None,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
