@@ -72,7 +72,7 @@ api_post() {
 api_put() {
     local endpoint="$1"
     local data="$2"
-    curl -s -w "\n%{http_code}" "${API_BASE}${endpoint}" \
+    curl -s -w "\n%{http_code}" -X PUT "${API_BASE}${endpoint}" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -d "$data"
@@ -111,11 +111,11 @@ assert_status() {
 
     if [ "$actual" = "$expected" ]; then
         echo -e "  ${GREEN}✓ ${test_name}: ${actual}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ ${test_name}: expected ${expected}, got ${actual}${NC}"
         echo -e "  ${RED}  Response: $(echo "$RESPONSE_BODY" | head -c 200)${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
 
@@ -129,10 +129,10 @@ assert_json_field() {
 
     if [ "$actual" = "$expected" ]; then
         echo -e "  ${GREEN}✓ ${test_name}: ${actual}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ ${test_name}: expected '${expected}', got '${actual}'${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
 
@@ -145,10 +145,10 @@ assert_json_exists() {
 
     if [ -n "$actual" ] && [ "$actual" != "null" ]; then
         echo -e "  ${GREEN}✓ ${test_name}: ${actual}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ ${test_name}: field is empty/null${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
 
@@ -164,10 +164,10 @@ assert_db_count() {
 
     if [ "$actual" = "$expected" ]; then
         echo -e "  ${GREEN}✓ ${test_name}: ${actual}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ ${test_name}: expected ${expected}, got ${actual}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
 
@@ -183,10 +183,10 @@ assert_db_gt() {
 
     if [ "$actual" -gt "$min_val" ] 2>/dev/null; then
         echo -e "  ${GREEN}✓ ${test_name}: ${actual} (> ${min_val})${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ ${test_name}: expected > ${min_val}, got ${actual}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 }
 
@@ -213,5 +213,5 @@ section() {
 
 skip_test() {
     echo -e "  ${YELLOW}⊘ SKIPPED: $1${NC}"
-    ((SKIP_COUNT++))
+    SKIP_COUNT=$((SKIP_COUNT + 1))
 }

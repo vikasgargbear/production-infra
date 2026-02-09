@@ -145,7 +145,7 @@ async def get_available_roles(
             logger.info(f"No roles found for org {org_id}, creating defaults...")
             role_manager = RoleManager(db)
             role_manager.setup_default_roles(str(org_id))
-            # TenantAwareSession auto-commits
+            db.commit()
             logger.info(f"Created default roles for org {org_id}")
         
         result = db.execute(
@@ -288,6 +288,7 @@ async def create_org_user(
             # Auto-create default roles
             role_manager = RoleManager(db)
             role_manager.setup_default_roles(str(org_id))
+            db.commit()
             logger.info(f"Auto-created default roles for org {org_id}")
         
         # Look up role_id if role code/name provided
@@ -346,7 +347,7 @@ async def create_org_user(
         )
         
         new_user = result.first()
-        # TenantAwareSession auto-commits
+        db.commit()
         
         # Send invite email if requested
         send_invite = user_data.get('send_invite_email', False)
@@ -504,7 +505,7 @@ async def update_org_user(
         )
         
         updated_user = result.first()
-        # TenantAwareSession auto-commits
+        db.commit()
         
         return {
             "success": True,
@@ -568,8 +569,8 @@ async def delete_org_user(
             {"user_id": user_id, "org_id": org_id}
         )
         
-        # TenantAwareSession auto-commits
-        
+        db.commit()
+
         return {
             "success": True,
             "message": "User deactivated successfully"

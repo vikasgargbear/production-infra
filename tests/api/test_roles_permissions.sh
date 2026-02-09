@@ -91,10 +91,10 @@ echo -e "  ${BLUE}ℹ Roles count: ${ROLE_COUNT}${NC}"
 
 if [ "$ROLE_COUNT" -ge 7 ]; then
     echo -e "  ${GREEN}✓ At least 7 roles exist (seeded defaults)${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected ≥7 roles, got ${ROLE_COUNT}${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # Verify response includes modules and permission_types metadata
@@ -120,7 +120,7 @@ if [ -n "$ADMIN_ROLE_ID" ] && [ "$ADMIN_ROLE_ID" != "null" ]; then
     assert_json_exists ".data.users" "Role has users array"
 else
     echo -e "  ${YELLOW}⊘ Admin role not found, skipping detail test${NC}"
-    ((SKIP_COUNT++))
+    SKIP_COUNT=$((SKIP_COUNT + 1))
 fi
 
 # ── 1.3 Create custom role ───────────────────────
@@ -145,10 +145,10 @@ assert_json_field ".success" "true" "Response success=true"
 CUSTOM_ROLE_ID=$(echo "$RESPONSE_BODY" | jq -r '.role_id // empty')
 if [ -n "$CUSTOM_ROLE_ID" ]; then
     echo -e "  ${GREEN}✓ Custom role created: id=${CUSTOM_ROLE_ID}${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ No role_id returned${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # Verify in DB
@@ -156,19 +156,19 @@ if [ -n "$CUSTOM_ROLE_ID" ]; then
     DB_CHECK=$(run_sql "SELECT role_code, is_system_role FROM master.roles WHERE role_id = ${CUSTOM_ROLE_ID}")
     if echo "$DB_CHECK" | grep -q "delivery_boy"; then
         echo -e "  ${GREEN}✓ DB confirms role exists with code 'delivery_boy'${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ DB check failed: ${DB_CHECK}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 
     DB_SYSTEM=$(echo "$DB_CHECK" | grep -o '[tf]$' || echo "")
     if [ "$DB_SYSTEM" = "f" ]; then
         echo -e "  ${GREEN}✓ DB confirms is_system_role=false${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected is_system_role=false, got: ${DB_SYSTEM}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 fi
 
@@ -214,10 +214,10 @@ parse_response "$RESP"
 ROLE_COUNT_AFTER=$(echo "$RESPONSE_BODY" | jq '.data | length')
 if [ "$ROLE_COUNT_AFTER" -ge 7 ]; then
     echo -e "  ${GREEN}✓ Still ≥7 roles after re-seed (idempotent): ${ROLE_COUNT_AFTER}${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected ≥7 roles after re-seed, got ${ROLE_COUNT_AFTER}${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 
@@ -252,10 +252,10 @@ if [ -n "$VIEWER_ROLE_ID" ] && [ "$VIEWER_ROLE_ID" != "null" ]; then
     NEW_ROLE=$(run_sql "SELECT role_id FROM master.org_users WHERE user_id = 7" | tr -d '[:space:]')
     if [ "$NEW_ROLE" = "$VIEWER_ROLE_ID" ]; then
         echo -e "  ${GREEN}✓ DB confirms user 7 now has role_id=${NEW_ROLE}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected role_id=${VIEWER_ROLE_ID}, got ${NEW_ROLE}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No viewer role_id found"
@@ -293,10 +293,10 @@ HAS_ALL=$(echo "$PERM_DATA" | jq 'has("all")')
 
 if [ "$HAS_ALL" = "true" ] || [ "$HAS_MODULES" = "true" ]; then
     echo -e "  ${GREEN}✓ Permissions structure is valid (has modules or all flag)${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Permissions structure invalid: neither 'modules' nor 'all' found${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # Restore original role
@@ -326,7 +326,7 @@ assert_status "200" "List users returns 200"
 USER_COUNT=$(echo "$RESPONSE_BODY" | jq '.data | length // 0')
 if [ "$USER_COUNT" -gt 0 ]; then
     echo -e "  ${GREEN}✓ Found ${USER_COUNT} users${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 
     # Check first user has expected fields
     FIRST_USER=$(echo "$RESPONSE_BODY" | jq '.data[0]')
@@ -334,15 +334,15 @@ if [ "$USER_COUNT" -gt 0 ]; then
         VAL=$(echo "$FIRST_USER" | jq -r ".${FIELD} // empty")
         if [ -n "$VAL" ]; then
             echo -e "  ${GREEN}✓ User has field '${FIELD}': ${VAL}${NC}"
-            ((PASS_COUNT++))
+            PASS_COUNT=$((PASS_COUNT + 1))
         else
             echo -e "  ${RED}✗ User missing field '${FIELD}'${NC}"
-            ((FAIL_COUNT++))
+            FAIL_COUNT=$((FAIL_COUNT + 1))
         fi
     done
 else
     echo -e "  ${RED}✗ No users found${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # ── 3.2 Get available roles ──────────────────────
@@ -355,10 +355,10 @@ assert_status "200" "Get available roles returns 200"
 AVAIL_ROLE_COUNT=$(echo "$RESPONSE_BODY" | jq '.data | length // 0')
 if [ "$AVAIL_ROLE_COUNT" -ge 7 ]; then
     echo -e "  ${GREEN}✓ Available roles: ${AVAIL_ROLE_COUNT} (≥7 defaults)${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected ≥7 available roles, got ${AVAIL_ROLE_COUNT}${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # ── 3.3 Create user ──────────────────────────────
@@ -382,10 +382,10 @@ assert_status "200" "Create user returns 200"
 TEST_USER_ID=$(echo "$RESPONSE_BODY" | jq -r '.user_id // .data.user_id // empty')
 if [ -n "$TEST_USER_ID" ] && [ "$TEST_USER_ID" != "null" ]; then
     echo -e "  ${GREEN}✓ User created: id=${TEST_USER_ID}${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ No user_id returned. Response: $(echo "$RESPONSE_BODY" | head -c 300)${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
     # Try to find the user in DB
     TEST_USER_ID=$(run_sql "SELECT user_id FROM master.org_users WHERE username LIKE 'test_e2e_user_%' ORDER BY created_at DESC LIMIT 1" | tr -d '[:space:]')
     if [ -n "$TEST_USER_ID" ]; then
@@ -406,10 +406,10 @@ if [ -n "$TEST_USER_ID" ] && [ "$TEST_USER_ID" != "null" ]; then
     GOT_EMAIL=$(echo "$RESPONSE_BODY" | jq -r '.data.email // .email // empty')
     if [ -n "$GOT_EMAIL" ]; then
         echo -e "  ${GREEN}✓ User email: ${GOT_EMAIL}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ No email in response${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 
     GOT_ROLE=$(echo "$RESPONSE_BODY" | jq -r '.data.role_code // .role_code // empty')
@@ -434,10 +434,10 @@ if [ -n "$TEST_USER_ID" ] && [ "$TEST_USER_ID" != "null" ] && [ -n "$BILLING_ROL
     DB_ROLE=$(run_sql "SELECT role_id FROM master.org_users WHERE user_id = ${TEST_USER_ID}" | tr -d '[:space:]')
     if [ "$DB_ROLE" = "$BILLING_ROLE_ID" ]; then
         echo -e "  ${GREEN}✓ DB confirms role changed to billing (${DB_ROLE})${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected role_id=${BILLING_ROLE_ID}, got ${DB_ROLE}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No test user or billing role to update"
@@ -457,10 +457,10 @@ if [ -n "$TEST_USER_ID" ] && [ "$TEST_USER_ID" != "null" ]; then
     IS_ACTIVE=$(run_sql "SELECT is_active FROM master.org_users WHERE user_id = ${TEST_USER_ID}" | tr -d '[:space:]')
     if [ "$IS_ACTIVE" = "f" ]; then
         echo -e "  ${GREEN}✓ DB confirms user is_active=false (soft-deleted)${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected is_active=false, got ${IS_ACTIVE}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No test user to delete"
@@ -484,10 +484,10 @@ assert_status "200" "Get admin permissions returns 200"
 IS_ALL=$(echo "$RESPONSE_BODY" | jq '.data.all // false')
 if [ "$IS_ALL" = "true" ]; then
     echo -e "  ${GREEN}✓ Admin has {all: true} permissions${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected admin to have {all: true}, got: $(echo "$RESPONSE_BODY" | jq '.data' | head -c 200)${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 # ── 4.2 Verify viewer has limited permissions ────
@@ -506,18 +506,18 @@ if [ -n "$VIEWER_ROLE_ID" ] && [ "$VIEWER_ROLE_ID" != "null" ]; then
 
     if [ "$SALES_VIEW" = "true" ]; then
         echo -e "  ${GREEN}✓ Viewer has sales:view=true${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected viewer sales:view=true${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 
     if [ "$SALES_CREATE" = "false" ]; then
         echo -e "  ${GREEN}✓ Viewer has sales:create=false${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Expected viewer sales:create=false, got ${SALES_CREATE}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No viewer role to check"
@@ -544,10 +544,10 @@ if [ -n "$NON_ADMIN_ID" ] && [ "$NON_ADMIN_ID" != "" ]; then
     NON_ADMIN_ALL=$(echo "$PERMS_BEFORE" | jq '.all // false')
     if [ "$NON_ADMIN_ALL" != "true" ]; then
         echo -e "  ${GREEN}✓ Non-admin does NOT have {all: true}${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Non-admin should not have {all: true}${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No non-admin user found"
@@ -580,10 +580,10 @@ if [ -n "$ADMIN_ROLE_ID" ] && [ "$ADMIN_ROLE_ID" != "null" ]; then
     DB_EXISTS=$(run_sql "SELECT COUNT(*) FROM master.roles WHERE role_id = ${ADMIN_ROLE_ID}" | tr -d '[:space:]')
     if [ "$DB_EXISTS" = "1" ]; then
         echo -e "  ${GREEN}✓ Admin role still exists in DB${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Admin role was deleted!${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No admin role_id to test"
@@ -646,10 +646,10 @@ if [ -n "$CUSTOM_ROLE_ID" ]; then
     DB_EXISTS=$(run_sql "SELECT COUNT(*) FROM master.roles WHERE role_id = ${CUSTOM_ROLE_ID}" | tr -d '[:space:]')
     if [ "$DB_EXISTS" = "0" ]; then
         echo -e "  ${GREEN}✓ Custom role deleted from DB${NC}"
-        ((PASS_COUNT++))
+        PASS_COUNT=$((PASS_COUNT + 1))
     else
         echo -e "  ${RED}✗ Custom role still in DB${NC}"
-        ((FAIL_COUNT++))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 else
     skip_test "No custom role to delete"
@@ -686,10 +686,10 @@ ORPHAN_COUNT=$(run_sql "
 
 if [ "$ORPHAN_COUNT" = "0" ]; then
     echo -e "  ${GREEN}✓ No orphaned role_ids (all reference valid roles)${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Found ${ORPHAN_COUNT} users with invalid role_id${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 echo ""
@@ -702,10 +702,10 @@ EMPTY_PERMS=$(run_sql "
 
 if [ "$EMPTY_PERMS" = "0" ]; then
     echo -e "  ${GREEN}✓ All system roles have non-empty permissions${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Found ${EMPTY_PERMS} system roles with empty permissions${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 echo ""
@@ -718,10 +718,10 @@ ADMIN_MISMATCH=$(run_sql "
 
 if [ "$ADMIN_MISMATCH" = "0" ]; then
     echo -e "  ${GREEN}✓ All admin-role users have is_admin=true${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Found ${ADMIN_MISMATCH} admin-role users with is_admin=false${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 echo ""
@@ -731,18 +731,18 @@ VIEWER_LEVEL=$(run_sql "SELECT role_level FROM master.roles WHERE org_id = '${OR
 
 if [ "$ADMIN_LEVEL" = "1" ]; then
     echo -e "  ${GREEN}✓ Admin role_level=1${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected admin level=1, got ${ADMIN_LEVEL}${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 if [ "$VIEWER_LEVEL" = "5" ]; then
     echo -e "  ${GREEN}✓ Viewer role_level=5${NC}"
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
 else
     echo -e "  ${RED}✗ Expected viewer level=5, got ${VIEWER_LEVEL}${NC}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
 
 
