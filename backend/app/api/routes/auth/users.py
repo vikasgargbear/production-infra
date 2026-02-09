@@ -12,7 +12,7 @@ from uuid import UUID
 
 from ...services.email.email_service import send_user_invite
 
-from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession, with_tenant_context
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import (
     PermissionChecker,
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/")
+@with_tenant_context
 def get_org_users(
     skip: int = 0,
     limit: int = 100,
@@ -120,6 +121,7 @@ def get_org_users(
         raise HTTPException(status_code=500, detail=f"Failed to get org users: {str(e)}")
 
 @router.get("/roles")
+@with_tenant_context
 def get_available_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
@@ -177,6 +179,7 @@ def get_available_roles(
         raise HTTPException(status_code=500, detail=f"Failed to get roles: {str(e)}")
 
 @router.get("/{user_id}")
+@with_tenant_context
 def get_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -233,6 +236,7 @@ def get_org_user(
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 @router.post("/")
+@with_tenant_context
 def create_org_user(
     user_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -390,6 +394,7 @@ def create_org_user(
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 @router.put("/{user_id}")
+@with_tenant_context
 def update_org_user(
     user_id: int,
     user_data: dict,
@@ -515,6 +520,7 @@ def update_org_user(
         raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
 
 @router.delete("/{user_id}")
+@with_tenant_context
 def delete_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -577,6 +583,7 @@ def delete_org_user(
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
 
 @router.post("/{user_id}/permissions")
+@with_tenant_context
 def update_user_permissions(
     user_id: int,
     permissions_data: dict,

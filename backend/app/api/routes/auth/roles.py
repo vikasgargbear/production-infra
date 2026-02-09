@@ -12,7 +12,7 @@ from sqlalchemy import text
 import json
 import logging
 
-from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession, with_tenant_context
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ....core.security.role_management import RoleManager
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/roles", tags=["Role Management"])
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/")
+@with_tenant_context
 def get_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
@@ -70,6 +71,7 @@ def get_roles(
         raise HTTPException(status_code=500, detail=f"Failed to fetch roles: {str(e)}")
 
 @router.post("/setup-defaults")
+@with_tenant_context
 def setup_default_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
@@ -93,6 +95,7 @@ def setup_default_roles(
         raise HTTPException(status_code=500, detail=f"Failed to setup roles: {str(e)}")
 
 @router.post("/assign")
+@with_tenant_context
 def assign_role_to_users(
     assignment_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -158,6 +161,7 @@ def assign_role_to_users(
         raise HTTPException(status_code=500, detail=f"Failed to assign roles: {str(e)}")
 
 @router.post("/validate")
+@with_tenant_context
 def validate_permission(
     validation_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -193,6 +197,7 @@ def validate_permission(
         raise HTTPException(status_code=500, detail=f"Failed to validate permission: {str(e)}")
 
 @router.get("/user/{user_id}/permissions")
+@with_tenant_context
 def get_user_permissions(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -251,6 +256,7 @@ def get_user_permissions(
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/{role_id}")
+@with_tenant_context
 def get_role_details(
     role_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -310,6 +316,7 @@ def get_role_details(
         raise HTTPException(status_code=500, detail=f"Failed to fetch role: {str(e)}")
 
 @router.post("/")
+@with_tenant_context
 def create_custom_role(
     role_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -351,6 +358,7 @@ def create_custom_role(
         raise HTTPException(status_code=500, detail=f"Failed to create role: {str(e)}")
 
 @router.put("/{role_id}")
+@with_tenant_context
 def update_role(
     role_id: int,
     role_data: Dict[str, Any],
@@ -421,6 +429,7 @@ def update_role(
         raise HTTPException(status_code=500, detail=f"Failed to update role: {str(e)}")
 
 @router.delete("/{role_id}")
+@with_tenant_context
 def delete_role(
     role_id: int,
     reassign_to: Optional[int] = None,
