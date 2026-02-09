@@ -9,8 +9,8 @@
 |--------|--------|-----------|-------|--------|
 | Purchase | `test_purchase_flow.sh` | 5 | 35/35 | PASS |
 | Invoice | `test_invoice_e2e.sh` | 3 | 68/68 | PASS |
-| Returns | `test_returns_flow.sh` | 2 | TBD | FIXING |
-| Payments | `test_payments_flow.sh` | 4 | TBD | PENDING |
+| Returns | `test_returns_flow.sh` | 2 | 5/5 | PASS |
+| Payments | `test_payments_flow.sh` | 4 | 13/13 | PASS |
 | Stock Mgmt | `test_stock_mgmt_e2e.sh` | 5 | 62/62 | PASS |
 | DB Integrity | `test_db_integrity.sh` | 7 | 15/16 | PASS |
 
@@ -133,7 +133,7 @@ POST /sale-returns/ → sales.sales_returns (header)
                     → financial.customer_outstanding (reduce outstanding)
 ```
 
-### Result: TBD (awaiting deploy)
+### Result: 5/5 PASSED
 
 ---
 
@@ -141,31 +141,53 @@ POST /sale-returns/ → sales.sales_returns (header)
 
 ### Scenarios Tested
 1. **Partial Payment** (cash) against invoice
-   - Verify payment record created
-   - Verify invoice paid_amount updated
-   - Verify customer_outstanding decreased
+   - Verify payment record created in DB
+   - Verify invoice paid_amount updated (old + partial)
+   - Verify payment_status = 'partial'
+   - Verify customer_outstanding decreased to match invoice credit_amount
 2. **Full Payment** (UPI) → remaining balance
-   - Verify payment_status=paid
-   - Verify credit_amount=0
-   - Verify outstanding_amount=0
-3. **Get Payments** for invoice
+   - Verify payment_status = 'paid'
+   - Verify credit_amount = 0
+   - Verify outstanding_amount = 0
+   - Verify outstanding status = 'paid'
+3. **Get Payments** for invoice (via allocations)
+   - Verify endpoint returns 200
+   - Verify found correct number of payment records
 4. **Payment Search** by customer
+   - Verify search endpoint returns 200
 
-### Tables Verified
-- `financial.payments` - payment record with mode, amount, reference
-- `sales.invoices` - paid_amount, credit_amount, payment_status updated
-- `financial.customer_outstanding` - outstanding_amount, paid_amount, status updated
-- `financial.allocations` - allocation record linking payment to invoice
+### Tables Verified (4 total)
+1. `financial.payments` - payment record with method_id, amount, party info
+2. `sales.invoices` - paid_amount, credit_amount, payment_status updated
+3. `financial.customer_outstanding` - outstanding_amount, paid_amount, status updated
+4. `financial.allocations` - allocation record linking payment to invoice
 
 ### Data Flow
 ```
-POST /payments/record → financial.payments (payment record)
-                      → financial.allocations (link to invoice)
-                      → sales.invoices (trigger updates paid_amount, credit_amount, payment_status)
-                      → financial.customer_outstanding (manual update)
+POST /payments/record → financial.payments (payment record, status=cleared)
+                      → financial.allocations (link payment to invoice)
+                      → sales.invoices (manual UPDATE: paid_amount, credit_amount, payment_status)
+                      → financial.customer_outstanding (manual UPDATE: outstanding, status)
+                      → sales.orders (UPDATE payment_status if fully paid)
 ```
 
-### Result: TBD (pending test run)
+### Bugs Found During Testing
+| Bug ID | Severity | Description | Status |
+|--------|----------|-------------|--------|
+| PAY-1 | CRASH | `payment_mode` column doesn't exist on `financial.payments` — actual column is `payment_method_id` (FK to payment_methods) | FIXED |
+| PAY-2 | CRASH | Missing `branch_id` (NOT NULL) and `party_name` (NOT NULL) in INSERT | FIXED |
+| PAY-3 | CRASH | `created_by` NOT NULL violation — route wasn't passing user_id | FIXED |
+| PAY-4 | CRASH | `payment_date` column doesn't exist on `sales.invoices` — was in UPDATE SET clause | FIXED |
+| PAY-5 | DATA | PaymentResponse schema mismatch — service returns dict with different fields than Pydantic model | FIXED |
+| PAY-6 | CRASH | Payment number collision — `org_id` not passed to `generate_payment_number` (used NULL) | FIXED |
+| PAY-7 | DATA | `get_invoice_payments` joined by customer_id (returned ALL customer payments, not invoice-specific) | FIXED |
+| PAY-8 | CRASH | Ambiguous `org_id` — TenantAwareSession injects unqualified `org_id`, ambiguous with payment_methods JOIN | FIXED |
+| PAY-9 | DATA | `search_payments` referenced nonexistent columns (`transaction_reference`, `payment_mode`) | FIXED |
+| PAY-10 | CRASH | `allocate_payment_to_invoices` used wrong column names (`amount`→`payment_amount`, `customer_id`→`party_id`) | FIXED |
+| PAY-11 | CRASH | Orders UPDATE ambiguous `org_id` — JOIN between orders and invoices (both have org_id) | FIXED |
+| PAY-12 | DATA | Document number sequence had NULL org_id from old code, causing collision with new org-scoped sequences | FIXED (DB) |
+
+### Result: 13/13 PASSED
 
 ---
 
@@ -271,11 +293,23 @@ POST /stock-writeoff/         → stock_writeoffs (header: reason, cost, itc)
 
 | ID | Module | Severity | Description | Fix |
 |----|--------|----------|-------------|-----|
-| RET-16 | Returns | CRASH (500) | `return_status` column doesn't exist on `sales.sales_returns` — used in 5 SQL queries | Changed to `approval_status` |
+| RET-16 | Returns | CRASH | `return_status` column doesn't exist on `sales.sales_returns` — used in 5 SQL queries | Changed to `approval_status` |
 | RET-17 | Returns | CRASH | Cancel route used `return_status` key from dict | Changed to `approval_status` |
-| STK-1 | Stock Mgmt | DATA LOSS | 6 inventory routes missing `db.commit()` — movements rolled back silently | Added `db.commit()` to all 6 routes |
+| PAY-1 | Payments | CRASH | `payment_mode` column doesn't exist — actual is `payment_method_id` FK | Added method_id lookup from mode string |
+| PAY-2 | Payments | CRASH | Missing NOT NULL columns `branch_id`, `party_name` in INSERT | Added subquery lookups |
+| PAY-3 | Payments | CRASH | `created_by` NOT NULL violation | Pass user_id from OrgContext |
+| PAY-4 | Payments | CRASH | `payment_date` column doesn't exist on `sales.invoices` | Removed from UPDATE |
+| PAY-5 | Payments | DATA | PaymentResponse schema mismatch | Return dict directly |
+| PAY-6 | Payments | CRASH | Payment number collision (NULL org_id in sequences) | Pass invoice.org_id + fix DB sequence |
+| PAY-7 | Payments | DATA | `get_invoice_payments` returned ALL customer payments | Rewritten to use allocations |
+| PAY-8 | Payments | CRASH | Ambiguous `org_id` with payment_methods JOIN | Use subqueries instead of JOINs |
+| PAY-9 | Payments | DATA | `search_payments` nonexistent columns | Fixed column names |
+| PAY-10 | Payments | CRASH | `allocate_payment_to_invoices` wrong columns (`amount`→`payment_amount`) | Fixed column names |
+| PAY-11 | Payments | CRASH | Orders UPDATE ambiguous `org_id` | Separate SELECT + UPDATE |
+| PAY-12 | Payments | DATA | Document sequence NULL org_id from old code | Updated DB sequence row |
+| STK-1 | Stock Mgmt | DATA LOSS | 6 inventory routes missing `db.commit()` | Added to all 6 routes |
 | STK-2 | Stock Mgmt | CRASH | `stock_transfer` not in DOCUMENT_CONFIGS | Added with prefix `ST` |
-| STK-3 | Stock Mgmt | DATA DRIFT | Writeoff didn't update `location_wise_stock` | Added `update_location_wise_stock()` to writeoff service |
+| STK-3 | Stock Mgmt | DATA DRIFT | Writeoff didn't update `location_wise_stock` | Added update method |
 
 ### Previously Fixed (2026-02-07/08)
 See `docs/WORKFLOW_DIAGRAMS.md` Section 27 and MEMORY.md for full list of 100+ fixes.
@@ -294,7 +328,8 @@ export TOKEN=$(python3 -c "
 import jwt, time
 payload = {'aud':'authenticated','exp':int(time.time())+3600,'iat':int(time.time()),
 'iss':'https://jfrairkkzxwkhbtqejnz.supabase.co/auth/v1',
-'sub':'692013e9-1092-48bd-8815-0b69f47cdc9b','email':'engineering@synapticks.com','role':'authenticated'}
+'sub':'692013e9-1092-48bd-8815-0b69f47cdc9b','email':'engineering@synapticks.com','role':'authenticated',
+'org_id':'e78d6777-35f6-4b19-994f-caaede2f021a','user_id':8}
 print(jwt.encode(payload, '$JWT_SECRET', algorithm='HS256'))
 ")
 
