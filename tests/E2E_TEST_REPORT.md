@@ -1,6 +1,6 @@
 # E2E Test Report - AASO ERP
 
-**Date**: 2026-02-08
+**Date**: 2026-02-09
 **Environment**: Production (Railway)
 
 ## Test Suite Overview
@@ -12,6 +12,7 @@
 | Returns | `test_returns_flow.sh` | 2 | 5/5 | PASS |
 | Payments | `test_payments_flow.sh` | 4 | 13/13 | PASS |
 | Stock Mgmt | `test_stock_mgmt_e2e.sh` | 5 | 62/62 | PASS |
+| GST | `test_gst_e2e.sh` | 12 | 50/50 | PASS |
 | DB Integrity | `test_db_integrity.sh` | 7 | 15/16 | PASS |
 
 ---
@@ -274,7 +275,49 @@ POST /stock-writeoff/         → stock_writeoffs (header: reason, cost, itc)
 
 ---
 
-## Module 6: DB Integrity
+## Module 6: GST & Compliance
+
+### Scenarios Tested
+1. **GST Settings** - GSTIN, state code, tax rate slabs
+2. **GST Dashboard** - output tax, input credit, net payable, DB cross-check
+3. **GST Calculation (Intra-state)** - CGST=90, SGST=90, IGST=0, total=1180
+4. **GST Calculation (Inter-state)** - CGST=0, SGST=0, IGST=180, total=1180
+5. **GST Returns Status** - GSTR-1, GSTR-3B, GSTR-2B status and due dates
+6. **GST Verification** - verification score, invoice issue detection
+7. **GST Compliance Status** - compliance score, recommendations
+8. **GST Metrics** - currentMonth sales/purchases/tax aggregates
+9. **GSTR-2A Report** - supplier invoices, ITC summary
+10. **Credit/Debit Notes Report** - credit notes, debit notes, net adjustment
+11. **GSTR-2B Status** - newly mounted router, upload history
+12. **DB Integrity** - org GSTIN, product gst_percent, invoice GST amounts, GSTR-2B tables
+
+### API Endpoints Covered
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/gst/settings` | GET | Organization GST configuration |
+| `/api/gst/dashboard` | GET | Tax summary with output/input/net |
+| `/api/gst/calculate` | GET | GST amount calculation (intra/inter) |
+| `/api/gst/returns/status` | GET | GSTR-1/3B/2B filing status |
+| `/api/gst/verification` | GET | Data accuracy verification |
+| `/api/gst/compliance/status` | GET | Compliance score and issues |
+| `/api/gst/metrics` | GET | Monthly tax metrics |
+| `/api/gst/reports/tax/gstr2a` | GET | Inward supplies report |
+| `/api/gst/reports/credit-debit-notes` | GET | Credit/debit notes for GST |
+| `/api/gst/gstr2b/status` | GET | GSTR-2B reconciliation status |
+
+### Bugs Found During Testing
+| Bug ID | Severity | Description | Status |
+|--------|----------|-------------|--------|
+| GST-1 | CRASH | `/gst/calculate` called `GSTService.determine_gst_type(seller_gstin=..., buyer_gstin=...)` but method signature is `(db, org_id, customer_id, supplier_id, ...)` | FIXED |
+| GST-2 | CRASH | `/gst/calculate` response accessed `gst_amounts["total_tax"]` but actual key is `"total_tax_amount"` | FIXED |
+| GST-3 | MISSING | GSTR-2B router (`gstr2b.py`) never mounted in `main.py` — 4 endpoints unreachable | FIXED |
+| GST-4 | MISSING | `gst.gstr2b_uploads` and `gst.gstr2b_invoices` tables did not exist | FIXED (DB) |
+
+### Result: 50/50 PASSED
+
+---
+
+## Module 7: DB Integrity
 
 ### Checks Performed
 1. **Trigger Status** - verify disabled/enabled triggers
@@ -310,6 +353,10 @@ POST /stock-writeoff/         → stock_writeoffs (header: reason, cost, itc)
 | STK-1 | Stock Mgmt | DATA LOSS | 6 inventory routes missing `db.commit()` | Added to all 6 routes |
 | STK-2 | Stock Mgmt | CRASH | `stock_transfer` not in DOCUMENT_CONFIGS | Added with prefix `ST` |
 | STK-3 | Stock Mgmt | DATA DRIFT | Writeoff didn't update `location_wise_stock` | Added update method |
+| GST-1 | GST | CRASH | `determine_gst_type()` called with wrong kwargs (seller_gstin/buyer_gstin) | Direct GSTIN state code comparison |
+| GST-2 | GST | CRASH | Response key `total_tax` doesn't exist — actual is `total_tax_amount` | Fixed key name |
+| GST-3 | GST | MISSING | GSTR-2B router never imported/mounted in `main.py` | Added import + include_router |
+| GST-4 | GST | MISSING | `gst.gstr2b_uploads` + `gst.gstr2b_invoices` tables missing | Created tables + indexes |
 
 ### Previously Fixed (2026-02-07/08)
 See `docs/WORKFLOW_DIAGRAMS.md` Section 27 and MEMORY.md for full list of 100+ fixes.
@@ -339,6 +386,7 @@ bash tests/api/test_invoice_e2e.sh      # Invoice: 3 scenarios (partial/full/cre
 bash tests/api/test_returns_flow.sh     # Returns: returnable items + create return
 bash tests/api/test_payments_flow.sh    # Payments: record + verify outstanding
 bash tests/api/test_stock_mgmt_e2e.sh   # Stock: receive/issue/transfer/adjust/writeoff
+bash tests/api/test_gst_e2e.sh          # GST: settings/dashboard/calculate/reports
 bash tests/api/test_db_integrity.sh     # DB: cross-table consistency checks
 
 # 3. Run all tests
