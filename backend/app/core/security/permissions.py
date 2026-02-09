@@ -59,8 +59,15 @@ class PermissionChecker:
         import os
         
         # TEST MODE: Bypass permission checks for automated testing
+        # SECURITY: Block TEST_MODE in production
         if os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
-            logger.warning("⚠️ TEST_MODE enabled in PermissionChecker - bypassing all permission checks")
+            if os.getenv("ENV", "development").lower() in ("production", "prod"):
+                logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Service configuration error"
+                )
+            logger.warning("TEST_MODE enabled in PermissionChecker - bypassing all permission checks")
             # Return test user with admin permissions
             return {
                 "user_id": 8,
@@ -168,14 +175,24 @@ class PermissionChecker:
             return user_dict
             
         except JWTError:
+            logger.warning(
+                "Permission denied: invalid/expired token",
+                extra={"event_type": "auth_failure"}
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token expired or invalid"
             )
-        except HTTPException:
+        except HTTPException as he:
+            # Log 403 permission denials for security monitoring
+            if he.status_code == status.HTTP_403_FORBIDDEN:
+                logger.warning(
+                    f"Permission denied: {he.detail}",
+                    extra={"event_type": "permission_denied"}
+                )
             raise
         except Exception as e:
-            logger.error(f"Permission check error: {str(e)}")
+            logger.error(f"Permission check error: {type(e).__name__}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Permission check failed"

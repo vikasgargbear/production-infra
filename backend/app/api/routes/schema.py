@@ -15,14 +15,19 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
 import json
+import logging
 
 from ...core.database import get_db
+from ...core.security.permissions import PermissionChecker
 
 router = APIRouter(prefix="/schema", tags=["Schema Documentation"])
 
 
 @router.get("/all")
-async def get_all_schemas(db: Session = Depends(get_db)):
+async def get_all_schemas(
+    _: dict = Depends(PermissionChecker("master", "view")),
+    db: Session = Depends(get_db)
+):
     """
     Get complete database schema documentation.
     Returns all schemas, tables, and columns from the live database.
@@ -117,11 +122,16 @@ async def get_all_schemas(db: Session = Depends(get_db)):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get schema: {str(e)}")
+        logging.getLogger(__name__).error(f"Schema query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve schema information")
 
 
 @router.get("/{schema_name}")
-async def get_schema(schema_name: str, db: Session = Depends(get_db)):
+async def get_schema(
+    schema_name: str,
+    _: dict = Depends(PermissionChecker("master", "view")),
+    db: Session = Depends(get_db)
+):
     """
     Get all tables and columns for a specific schema.
     """
@@ -187,11 +197,17 @@ async def get_schema(schema_name: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get schema: {str(e)}")
+        logging.getLogger(__name__).error(f"Schema query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve schema information")
 
 
 @router.get("/{schema_name}/{table_name}")
-async def get_table(schema_name: str, table_name: str, db: Session = Depends(get_db)):
+async def get_table(
+    schema_name: str,
+    table_name: str,
+    _: dict = Depends(PermissionChecker("master", "view")),
+    db: Session = Depends(get_db)
+):
     """
     Get column details for a specific table.
     """
@@ -247,11 +263,17 @@ async def get_table(schema_name: str, table_name: str, db: Session = Depends(get
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get table: {str(e)}")
+        logging.getLogger(__name__).error(f"Table query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve table information")
 
 
 @router.get("/quick/{schema_name}/{table_name}")
-async def get_table_columns_quick(schema_name: str, table_name: str, db: Session = Depends(get_db)):
+async def get_table_columns_quick(
+    schema_name: str,
+    table_name: str,
+    _: dict = Depends(PermissionChecker("master", "view")),
+    db: Session = Depends(get_db)
+):
     """
     Get just the column names for a specific table (simplified for quick reference).
     Perfect for checking what columns exist before writing a query.
@@ -283,4 +305,5 @@ async def get_table_columns_quick(schema_name: str, table_name: str, db: Session
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get table: {str(e)}")
+        logging.getLogger(__name__).error(f"Table query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve table information")

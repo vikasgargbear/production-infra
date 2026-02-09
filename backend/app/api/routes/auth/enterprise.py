@@ -9,6 +9,7 @@ import logging
 
 from ....core.database import get_db  # Regular session for auth (no tenant context yet)
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.rate_limiting import rate_limit
 from ...services.auth import (
     AuthService,
     InvalidCredentialsError,
@@ -29,7 +30,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _mask_email(email: str) -> str:
+    """Mask email for safe logging: 'user@example.com' -> 'u***@e***.com'"""
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    return f"{local[0]}***@{domain[0]}***"
+
+
 @router.post("/login")  # response_model removed - works without validation
+@rate_limit(requests=5, window=60)  # 5 login attempts per minute per IP
 async def login(
     request_data: LoginRequest,
     req: Request,
@@ -84,7 +94,9 @@ async def login(
         return result
         
     except InvalidCredentialsError as e:
-        logger.warning(f"Login failed: Invalid credentials for {request_data.email}")
+        # SECURITY: Don't log full email — mask it
+        masked = _mask_email(request_data.email)
+        logger.warning(f"Login failed: Invalid credentials for {masked}, ip={req.client.host}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -93,9 +105,10 @@ async def login(
                 "error_code": e.error_code
             }
         )
-    
+
     except AccountDisabledError as e:
-        logger.warning(f"Login failed: Account disabled - {request_data.email}")
+        masked = _mask_email(request_data.email)
+        logger.warning(f"Login failed: Account disabled - {masked}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -104,9 +117,10 @@ async def login(
                 "error_code": e.error_code
             }
         )
-    
+
     except OrganizationDisabledError as e:
-        logger.warning(f"Login failed: Organization disabled - {request_data.email}")
+        masked = _mask_email(request_data.email)
+        logger.warning(f"Login failed: Organization disabled - {masked}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -115,9 +129,10 @@ async def login(
                 "error_code": e.error_code
             }
         )
-    
+
     except PasswordNotSetError as e:
-        logger.error(f"Login failed: No password set - {request_data.email}")
+        masked = _mask_email(request_data.email)
+        logger.error(f"Login failed: No password set - {masked}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -127,9 +142,10 @@ async def login(
                 "action": "contact_administrator"
             }
         )
-    
+
     except Exception as e:
-        logger.error(f"Login failed: Unexpected error - {request_data.email}: {e}")
+        masked = _mask_email(request_data.email)
+        logger.error(f"Login failed: Unexpected error - {masked}: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

@@ -18,6 +18,7 @@ from .....core.utils.constants import ProductDefaults, PackDefaults
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
+from .....core.utils.file_validation import validate_upload, sanitize_filename
 
 try:
     from bill_parser import parse_pdf
@@ -118,8 +119,8 @@ async def check_supplier(
         
         return {"exists": False}
     except Exception as e:
-        logger.error(f"Error checking supplier: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error checking supplier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to check supplier")
 
 
 @router.post("/parse-pdf")
@@ -132,11 +133,12 @@ async def parse_purchase_invoice_safe(
 ):
     """Parse a purchase invoice PDF with better error handling"""
     try:
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are supported")
-        
+        # Validate file size (10MB) and type (magic number check)
+        content = await validate_upload(file, allowed_types=["pdf"], max_size_mb=10)
+        safe_name = sanitize_filename(file.filename)
+
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-            shutil.copyfileobj(file.file, tmp_file)
+            tmp_file.write(content)
             tmp_path = tmp_file.name
         
         try:
@@ -230,9 +232,11 @@ async def parse_purchase_invoice_safe(
         finally:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in parse_invoice_safe: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to process invoice: {str(e)}")
+        logger.error(f"Error in parse_invoice_safe: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to process invoice")
 
 
 @router.post("/parse-invoice")
@@ -311,8 +315,8 @@ async def parse_purchase_invoice(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error parsing invoice: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to parse invoice: {str(e)}")
+        logger.error(f"Error parsing invoice: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to parse invoice")
 
 
 @router.post("/create-from-parsed")
@@ -387,8 +391,8 @@ async def create_purchase_from_parsed(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating purchase: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create purchase order: {str(e)}")
+        logger.error(f"Error creating purchase: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create purchase order")
 
 
 @router.get("/parse-history")
@@ -439,5 +443,5 @@ async def validate_invoice_data(
         
         return validations
     except Exception as e:
-        logger.error(f"Error validating invoice: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to validate invoice: {str(e)}")
+        logger.error(f"Error validating invoice: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to validate invoice")

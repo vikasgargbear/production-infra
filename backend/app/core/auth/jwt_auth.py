@@ -26,7 +26,8 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours for development
+_is_prod = os.getenv("ENV", "development").lower() in ("production", "prod")
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 if _is_prod else 1440  # 1h prod, 24h dev
 
 # Password hashing
 # Configure bcrypt to avoid 72-byte initialization issues
@@ -38,8 +39,8 @@ pwd_context = CryptContext(
     bcrypt__ident="2b"
 )
 
-# OAuth2 scheme - auto_error=False makes it optional for backward compatibility
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash"""
@@ -263,6 +264,24 @@ async def get_current_user_and_org(
         raise credentials_exception
 
 def verify_user_org_access(user_id: str, org_id: str, db) -> bool:
-    """Verify user has access to organization"""
-    # Simple implementation - in production, check against database
-    return True
+    """Verify user has access to organization by checking auth.user_organizations or master.org_users."""
+    from sqlalchemy import text
+    try:
+        result = db.execute(
+            text("""
+                SELECT 1 FROM master.org_users
+                WHERE user_id = :user_id
+                  AND org_id = :org_id
+                  AND is_active = true
+                LIMIT 1
+            """),
+            {"user_id": user_id, "org_id": org_id}
+        )
+        return result.first() is not None
+    except Exception:
+        import logging
+        logging.getLogger(__name__).error(
+            f"verify_user_org_access failed for user_id={user_id}",
+            exc_info=True
+        )
+        return False

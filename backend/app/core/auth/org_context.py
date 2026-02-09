@@ -98,8 +98,15 @@ async def get_org_context(
     import os
     
     # TEST MODE: Bypass auth for automated testing
+    # SECURITY: Block TEST_MODE in production
     if os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
-        logger.warning("⚠️ TEST_MODE enabled - bypassing authentication")
+        if os.getenv("ENV", "development").lower() in ("production", "prod"):
+            logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
+            raise HTTPException(
+                status_code=503,
+                detail="Service configuration error"
+            )
+        logger.warning("TEST_MODE enabled - bypassing authentication")
         # Return default test context - adjust org_id to match your test org
         test_org_id = os.getenv("TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a")
         test_branch_id = int(os.getenv("TEST_BRANCH_ID", "5"))

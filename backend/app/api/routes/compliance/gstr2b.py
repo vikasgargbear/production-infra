@@ -59,12 +59,10 @@ async def upload_gstr2b(
     org_id = str(context.org_id)
     
     try:
-        # Validate file
-        if not file.filename.endswith('.json'):
-            raise HTTPException(status_code=400, detail="Only JSON files are supported")
-        
-        # Read file content
-        content = await file.read()
+        # Validate file type + size (10MB max, JSON only with magic check)
+        from ....core.utils.file_validation import validate_upload, sanitize_filename
+        content = await validate_upload(file, allowed_types=["json"], max_size_mb=10)
+        safe_name = sanitize_filename(file.filename)
         file_size = len(content)
         
         try:
@@ -100,7 +98,7 @@ async def upload_gstr2b(
             'upload_id': upload_id,
             'org_id': org_id,
             'return_period': return_period,
-            'file_name': file.filename,
+            'file_name': safe_name,
             'file_size': file_size,
             'gstin': gstin
         })
@@ -209,8 +207,8 @@ async def upload_gstr2b(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"GSTR-2B upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"GSTR-2B upload error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to process GSTR-2B upload")
 
 
 @router.post("/gstr2b/reconcile/{upload_id}")
@@ -385,8 +383,8 @@ async def reconcile_gstr2b(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"GSTR-2B reconciliation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"GSTR-2B reconciliation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to reconcile GSTR-2B data")
 
 
 @router.get("/gstr2b/status")
@@ -449,10 +447,10 @@ async def get_gstr2b_status(
             })
         
         return {"uploads": results}
-        
+
     except Exception as e:
-        logger.error(f"GSTR-2B status error: {e}")
-        return {"uploads": [], "error": str(e)}
+        logger.error(f"GSTR-2B status error: {e}", exc_info=True)
+        return {"uploads": [], "error": "Failed to retrieve GSTR-2B status"}
 
 
 @router.get("/gstr2b/mismatches")
@@ -530,8 +528,8 @@ async def get_gstr2b_mismatches(
         }
         
     except Exception as e:
-        logger.error(f"GSTR-2B mismatches error: {e}")
-        return {"invoices": [], "error": str(e)}
+        logger.error(f"GSTR-2B mismatches error: {e}", exc_info=True)
+        return {"invoices": [], "error": "Failed to retrieve mismatch data"}
 
 
 # Export router

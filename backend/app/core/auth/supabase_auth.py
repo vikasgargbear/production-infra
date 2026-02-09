@@ -32,9 +32,8 @@ class SupabaseAuthService:
                     self.supabase_url = f"https://{project_ref}.supabase.co"
                     logger.info(f"Derived Supabase URL from DATABASE_URL: {self.supabase_url}")
         
-        # Use JWT_SECRET_KEY as service key if SUPABASE_SERVICE_ROLE_KEY not set
-        if not self.supabase_service_key:
-            self.supabase_service_key = os.getenv("JWT_SECRET_KEY")
+        # SECURITY: Do NOT fallback to JWT_SECRET_KEY — it's a different key type
+        # If SUPABASE_SERVICE_ROLE_KEY is not set, Supabase admin features are disabled
         
         if not all([self.supabase_url, self.supabase_service_key]):
             logger.warning("Supabase configuration not complete. Auth features may be limited.")

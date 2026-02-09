@@ -55,39 +55,39 @@ class AuthService:
             AccountDisabledError: User or org disabled
             PasswordNotSetError: User has no password configured
         """
-        logger.info(f"Authentication attempt for email: {email}")
-        
+        # SECURITY: Never log full email — use user_id after lookup
+        logger.info("Authentication attempt started")
+
         # Step 1: Find user
         user_data = UserRepository.find_by_email(email, db)
-        
+
         if not user_data:
-            logger.warning(f"Authentication failed: User not found - {email}")
+            logger.warning("Authentication failed: user not found")
             # Don't reveal if email exists (security best practice)
             raise InvalidCredentialsError("Invalid email or password")
-        
 
-        
+        uid = user_data["user_id"]
+
         # Step 2: Check account status
         if not user_data.get("is_active"):
-            logger.warning(f"Authentication failed: User disabled - {email}")
+            logger.warning(f"Authentication failed: user disabled - user_id={uid}")
             raise AccountDisabledError("Your account has been disabled")
-        
+
         if not user_data.get("org_active"):
-            logger.warning(f"Authentication failed: Organization disabled - {email}")
+            logger.warning(f"Authentication failed: org disabled - user_id={uid}")
             raise OrganizationDisabledError("Your organization account is disabled")
-        
+
         # Step 3: Check password exists
         password_hash = user_data.get("password_hash")
         if not password_hash:
-            logger.error(f"Authentication failed: No password set for user {user_data['user_id']}")
+            logger.error(f"Authentication failed: no password set - user_id={uid}")
             raise PasswordNotSetError(
                 "Password not configured for this account. Contact administrator."
             )
-        
+
         # Step 4: Verify password
         if not verify_password(password, password_hash):
-            logger.warning(f"Authentication failed: Wrong password - {email}")
-            # Record failed attempt for rate limiting
+            logger.warning(f"Authentication failed: wrong password - user_id={uid}")
             # TODO: Increment failed_login_count in database
             raise InvalidCredentialsError("Invalid email or password")
         

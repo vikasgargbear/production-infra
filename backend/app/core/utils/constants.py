@@ -369,3 +369,62 @@ class ParserConfidence:
     HIGH = 0.8      # Auto-accept threshold
     MEDIUM = 0.5    # Needs review
     LOW = 0.3       # Likely incorrect
+
+
+# =============================================================================
+# PAYROLL STATUSES
+# =============================================================================
+
+class PayrollRunStatus(str, Enum):
+    """Payroll run status constants"""
+    DRAFT = "draft"
+    CALCULATED = "calculated"
+    CONFIRMED = "confirmed"
+    PAID = "paid"
+
+
+class AttendanceStatus(str, Enum):
+    """Attendance status constants"""
+    PRESENT = "present"
+    ABSENT = "absent"
+    HALF_DAY = "half_day"
+    LEAVE = "leave"
+    HOLIDAY = "holiday"
+    WEEK_OFF = "week_off"
+
+
+class LeaveStatus(str, Enum):
+    """Leave application status constants"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class LeaveType(str, Enum):
+    """Standard leave types for Indian companies"""
+    CL = "CL"    # Casual Leave
+    SL = "SL"    # Sick Leave
+    EL = "EL"    # Earned Leave / Privilege Leave
+    LOP = "LOP"  # Loss of Pay
+
+
+class PayrollDefaults:
+    """Indian payroll statutory defaults"""
+    PF_EMPLOYEE_PERCENT = 12.0       # Employee PF contribution
+    PF_EMPLOYER_PERCENT = 12.0       # Employer PF contribution
+    PF_CEILING_BASIC = 15000         # PF applicable on min(basic, 15000)
+    ESI_EMPLOYEE_PERCENT = 0.75      # Employee ESI if gross <= 21000
+    ESI_EMPLOYER_PERCENT = 3.25      # Employer ESI if gross <= 21000
+    ESI_CEILING_GROSS = 21000        # ESI applicability ceiling
+    # Maharashtra Professional Tax slabs
+    PT_SLAB_MALE = [
+        (0, 7500, 0),          # Up to 7500: Nil
+        (7501, 10000, 175),    # 7501-10000: 175/month
+        (10001, 999999, 200),  # Above 10000: 200/month (except Feb: 300)
+    ]
+    PT_SLAB_FEMALE = [
+        (0, 10000, 0),         # Up to 10000: Nil
+        (10001, 999999, 200),  # Above 10000: 200/month
+    ]
+    DEFAULT_WORKING_DAYS = 26  # Standard working days per month
