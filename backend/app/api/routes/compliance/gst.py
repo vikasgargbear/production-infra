@@ -18,7 +18,6 @@ from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ....core.utils.branch_utils import get_default_branch_id
 from ...services.compliance.gst_service import GSTService
-from ...services.compliance.gst_engine import GSTType
 from ...services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -324,32 +323,32 @@ async def calculate_gst(
         if not seller_gstin:
             seller_gstin = get_organization_gstin(db, org_id)
 
-        # Determine GST type
-        gst_type = GSTService.determine_gst_type(
-            seller_gstin=seller_gstin,
-            buyer_gstin=buyer_gstin
-        )
+        # Determine GST type from GSTINs or explicit flag
+        gst_type_str = "IGST" if is_interstate else "CGST/SGST"
 
-        # Override GST type if interstate flag is set
-        if is_interstate:
-            gst_type = GSTType.IGST
+        # If both GSTINs provided, compare state codes (first 2 digits)
+        if not is_interstate and seller_gstin and buyer_gstin:
+            seller_state = seller_gstin[:2] if len(seller_gstin) >= 2 else ""
+            buyer_state = buyer_gstin[:2] if len(buyer_gstin) >= 2 else ""
+            if seller_state and buyer_state and seller_state != buyer_state:
+                gst_type_str = "IGST"
 
         # Calculate GST amounts
         gst_amounts = GSTService.calculate_gst_amounts(
             taxable_amount=Decimal(str(amount)),
             gst_rate=Decimal(str(gst_rate)),
-            gst_type=gst_type
+            gst_type=gst_type_str
         )
 
         return {
             "taxableAmount": float(amount),
             "gstRate": gst_rate,
-            "gstType": gst_type.value,
+            "gstType": gst_type_str,
             "cgst": float(gst_amounts["cgst_amount"]),
             "sgst": float(gst_amounts["sgst_amount"]),
             "igst": float(gst_amounts["igst_amount"]),
-            "totalTax": float(gst_amounts["total_tax"]),
-            "total": float(amount) + float(gst_amounts["total_tax"])
+            "totalTax": float(gst_amounts["total_tax_amount"]),
+            "total": float(amount) + float(gst_amounts["total_tax_amount"])
         }
 
     except Exception as e:

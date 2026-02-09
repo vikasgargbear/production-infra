@@ -502,8 +502,8 @@ else
 fi
 
 # Check 2: Products have gst_rate values
-PRODUCTS_WITH_GST=$(run_sql "SELECT COUNT(*) FROM master.products WHERE gst_rate IS NOT NULL AND gst_rate > 0" | tr -d '[:space:]')
-TOTAL_PRODUCTS=$(run_sql "SELECT COUNT(*) FROM master.products" | tr -d '[:space:]')
+PRODUCTS_WITH_GST=$(run_sql "SELECT COUNT(*) FROM inventory.products WHERE gst_rate IS NOT NULL AND gst_rate > 0" | tr -d '[:space:]')
+TOTAL_PRODUCTS=$(run_sql "SELECT COUNT(*) FROM inventory.products" | tr -d '[:space:]')
 if [ "$PRODUCTS_WITH_GST" -gt "0" ] 2>/dev/null; then
     echo -e "  ${GREEN}✓ Products with GST rate: ${PRODUCTS_WITH_GST}/${TOTAL_PRODUCTS}${NC}"; ((PASS_COUNT++)) || true
 else
