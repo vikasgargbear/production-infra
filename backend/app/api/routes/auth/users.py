@@ -13,6 +13,7 @@ from uuid import UUID
 from ...services.email.email_service import send_user_invite
 
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import (
     PermissionChecker,
     check_permission,
@@ -33,7 +34,8 @@ def get_org_users(
     role_filter: Optional[str] = Query(None, description="Filter by role"),
     module_filter: Optional[str] = Query(None, description="Filter by module access"),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get organization users with enhanced filtering and permission checks"""
     try:
@@ -120,7 +122,8 @@ def get_org_users(
 @router.get("/roles")
 def get_available_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Get available roles for the organization.
@@ -177,7 +180,8 @@ def get_available_roles(
 def get_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get detailed user information with permissions"""
     try:
@@ -232,7 +236,8 @@ def get_org_user(
 def create_org_user(
     user_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "create"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "create")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new user with role and permissions"""
     try:
@@ -389,7 +394,8 @@ def update_org_user(
     user_id: int,
     user_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update user with role and permissions"""
     try:
@@ -512,7 +518,8 @@ def update_org_user(
 def delete_org_user(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "delete"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "delete")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete (deactivate) a user"""
     try:
@@ -574,7 +581,8 @@ def update_user_permissions(
     user_id: int,
     permissions_data: dict,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     DEPRECATED: User-level permissions removed in Role-First RBAC refactor.

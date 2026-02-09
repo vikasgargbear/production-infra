@@ -13,6 +13,7 @@ import json
 import logging
 
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
+from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ....core.security.role_management import RoleManager
 
@@ -27,7 +28,8 @@ router = APIRouter(prefix="/roles", tags=["Role Management"])
 @router.get("/")
 def get_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all roles for the organization"""
     try:
@@ -70,7 +72,8 @@ def get_roles(
 @router.post("/setup-defaults")
 def setup_default_roles(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Setup default roles for the organization (Admin only)"""
     try:
@@ -93,7 +96,8 @@ def setup_default_roles(
 def assign_role_to_users(
     assignment_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Assign role to multiple users"""
     try:
@@ -138,7 +142,7 @@ def assign_role_to_users(
         )
 
         updated_count = result.rowcount
-        # TenantAwareSession auto-commits
+        db.commit()
 
         return {
             "success": True,
@@ -157,7 +161,8 @@ def assign_role_to_users(
 def validate_permission(
     validation_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker())
+    current_user: Dict[str, Any] = Depends(PermissionChecker()),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Validate if current user has specific permission"""
     try:
@@ -191,7 +196,8 @@ def validate_permission(
 def get_user_permissions(
     user_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker())
+    current_user: Dict[str, Any] = Depends(PermissionChecker()),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get effective permissions for a user.
 
@@ -248,7 +254,8 @@ def get_user_permissions(
 def get_role_details(
     role_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get detailed information about a specific role"""
     try:
@@ -306,7 +313,8 @@ def get_role_details(
 def create_custom_role(
     role_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a custom role (Admin only)"""
     try:
@@ -347,13 +355,14 @@ def update_role(
     role_id: int,
     role_data: Dict[str, Any],
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update a role (Admin only)"""
     try:
         org_id = current_user.get('org_id')
 
-        # Check if role exists and is not a system role
+        # Check if role exists
         result = db.execute(
             text("""
                 SELECT is_system_role FROM master.roles
@@ -397,7 +406,7 @@ def update_role(
             params
         )
 
-        # TenantAwareSession auto-commits
+        db.commit()
 
         return {
             "success": True,
@@ -416,7 +425,8 @@ def delete_role(
     role_id: int,
     reassign_to: Optional[int] = None,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True))
+    current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Delete a role (Admin only)"""
     try:
@@ -469,7 +479,7 @@ def delete_role(
             {"role_id": role_id, "org_id": org_id}
         )
 
-        # TenantAwareSession auto-commits
+        db.commit()
 
         return {
             "success": True,
