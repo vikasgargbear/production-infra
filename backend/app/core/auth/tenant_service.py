@@ -554,12 +554,15 @@ class TenantAwareSession:
         
         return base_query
     
+    def begin_nested(self):
+        return self.session.begin_nested()
+
     def commit(self):
         return self.session.commit()
-    
+
     def rollback(self):
         return self.session.rollback()
-    
+
     def close(self):
         return self.session.close()
 

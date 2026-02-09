@@ -115,13 +115,14 @@ assert_json_notempty() {
 }
 
 # --- Helper: assert_json_eq ---
+# Handles booleans correctly (jq's // operator treats false as falsy)
 assert_json_eq() {
     local field="$1"
     local expected="$2"
     local test_name="${3:-JSON ${field} == ${expected}}"
 
     local actual
-    actual=$(echo "$RESPONSE_BODY" | jq -r "$field // empty")
+    actual=$(echo "$RESPONSE_BODY" | jq -r "if ($field) == null then \"\" else ($field) | tostring end")
 
     if [ "$actual" = "$expected" ]; then
         echo -e "  ${GREEN}PASS ${test_name}: ${actual}${NC}"; ((PASS_COUNT++)) || true
@@ -357,8 +358,8 @@ else
     parse_response "$RESPONSE"
     assert_status "200" "S1.5: List products HTTP status"
 
-    # Response may be {total, products} or just an array
-    TOTAL=$(echo "$RESPONSE_BODY" | jq -r '.total // (if type == "array" then length else .products | length end) // 0')
+    # Response is an array (products list returns array directly)
+    TOTAL=$(echo "$RESPONSE_BODY" | jq 'if type == "array" then length elif .total then .total elif .products then (.products | length) else 0 end')
     if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
         echo -e "  ${GREEN}PASS S1.5: Products list total > 0: ${TOTAL}${NC}"; ((PASS_COUNT++)) || true
         report_pass "S1.5: Products list total=${TOTAL}"
@@ -929,8 +930,8 @@ else
     parse_response "$RESPONSE"
     assert_status "200" "S3.5: List suppliers HTTP status"
 
-    # Response may be {total, suppliers} or just an array
-    SUPP_TOTAL=$(echo "$RESPONSE_BODY" | jq -r '.total // (if type == "array" then length else 0 end) // 0')
+    # Response is an array (suppliers list returns array directly)
+    SUPP_TOTAL=$(echo "$RESPONSE_BODY" | jq 'if type == "array" then length elif .total then .total elif .suppliers then (.suppliers | length) else 0 end')
     if [ "$SUPP_TOTAL" -gt 0 ] 2>/dev/null; then
         echo -e "  ${GREEN}PASS S3.5: Suppliers list total > 0: ${SUPP_TOTAL}${NC}"; ((PASS_COUNT++)) || true
         report_pass "S3.5: Suppliers list total=${SUPP_TOTAL}"
