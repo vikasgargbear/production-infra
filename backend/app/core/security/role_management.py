@@ -407,25 +407,27 @@ class RoleManager:
         
         return roles
     
-    def validate_permission(self, user_id: int, module: str, 
+    def validate_permission(self, user_id: int, module: str,
                           permission: str) -> bool:
         """
         Validate if a user has specific permission
         """
+        from ..auth.tenant_service import TenantContext
+        org_id = TenantContext.get_org_id()
         result = self.db.execute(
             text("""
-                SELECT 
+                SELECT
                     u.is_admin,
                     u.permissions as user_permissions,
                     r.permissions as role_permissions,
                     r.allowed_modules
                 FROM master.org_users u
-                LEFT JOIN master.roles r ON u.role_id = r.role_id
-                WHERE u.user_id = :user_id AND u.is_active = true
+                LEFT JOIN master.roles r ON u.role_id = r.role_id AND r.org_id = u.org_id
+                WHERE u.user_id = :user_id AND u.is_active = true AND u.org_id = :org_id
             """),
-            {"user_id": user_id}
+            {"user_id": user_id, "org_id": str(org_id)}
         ).first()
-        
+
         if not result:
             return False
         
@@ -461,9 +463,11 @@ class RoleManager:
         """
         Get effective permissions for a user (merged role + user permissions)
         """
+        from ..auth.tenant_service import TenantContext
+        org_id = TenantContext.get_org_id()
         result = self.db.execute(
             text("""
-                SELECT 
+                SELECT
                     u.is_admin,
                     u.permissions as user_permissions,
                     r.permissions as role_permissions,
@@ -471,10 +475,10 @@ class RoleManager:
                     r.restricted_features,
                     r.data_access_level
                 FROM master.org_users u
-                LEFT JOIN master.roles r ON u.role_id = r.role_id
-                WHERE u.user_id = :user_id
+                LEFT JOIN master.roles r ON u.role_id = r.role_id AND r.org_id = u.org_id
+                WHERE u.user_id = :user_id AND u.org_id = :org_id
             """),
-            {"user_id": user_id}
+            {"user_id": user_id, "org_id": str(org_id)}
         ).first()
         
         if not result:
