@@ -14,6 +14,8 @@ import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 
 interface TransportDetails {
   transport_mode: string;
@@ -102,6 +104,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [returnableInvoices, setReturnableInvoices] = useState<any[]>([]);
   const [availableBatches, setAvailableBatches] = useState({});
 
+  // Network status for offline-first
+  const { isOnline } = useNetworkStatus();
+
   // Load return reasons from system settings
   useEffect(() => {
     const loadReturnReasons = async () => {
@@ -167,10 +172,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             }
             break;
           case 'p':
+            // Print only available after generation (in success modal)
             e.preventDefault();
-            if (currentStep === 2) {
-              handlePrint();
-            }
             break;
         }
       }
@@ -439,59 +442,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }
   };
 
-  // Save return
-  const handleSaveReturn = async () => {
-    if (!validateReturn()) return;
-
-    setSaving(true);
-    try {
-      // Debug logging
-
-      const filteredItems = returnData.items.filter(item => {
-        const hasQuantity = (item.return_quantity || 0) > 0;
-        return item.selected && hasQuantity;
-      });
-
-      const returnPayload = {
-        ...returnData,
-        purchase_id: selectedInvoice?.supplier_invoice_id || selectedInvoice?.invoice_id,  // Set purchase_id for transformer
-        reason: returnData.return_reason,  // Transformer expects 'reason' not 'return_reason'
-        original_purchase: selectedInvoice,  // Keep for reference
-        items: filteredItems
-          .map(item => {
-            const mappedItem = {
-              invoice_item_id: item.invoice_item_id || item.id,
-              product_id: item.product_id,
-              batch_id: item.batch_id,
-              batch_number: item.batch_number,
-              return_quantity: item.return_quantity,  // Transformer expects this
-              quantity: item.return_quantity,  // Backend expects this
-              unit_price: parseFloat((item.unit_price || 0).toString()),
-              cost_per_unit: parseFloat((item.unit_price || 0).toString()),  // Transformer expects this
-              discount_percent: item.discount_percent || 0,
-              tax_percent: item.tax_percent || item.gst_percent || 0,
-              return_reason: item.return_reason || returnData.return_reason,
-              selected: true,
-              restock: item.restock !== false,
-              disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
-            };
-            return mappedItem;
-          })
-      };
-
-      const response = await returnsApi.createPurchaseReturn(returnPayload);
-
-      toast.success('Purchase return created successfully');
-
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create return');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Offline-first save hook
+  const { saving: offlineSaving, handleSaveReturn } = usePurchaseReturnSave({
+    returnData,
+    selectedInvoice,
+    isOnline,
+    validateReturn,
+    onClose,
+    toast
+  });
 
   // Handle print
   const handlePrint = () => {
@@ -801,7 +760,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           totalAmount={returnData.total_amount}
           proceedText="Generate Debit Note"
           backText="Back"
-          saving={saving}
+          saving={offlineSaving || saving}
         />
       </div>
     </div>

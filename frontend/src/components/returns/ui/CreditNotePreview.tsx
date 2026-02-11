@@ -61,7 +61,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
     // For invoice-linked returns, item-level rates override this
     // For manual returns, this determines IGST vs CGST/SGST
     const customerState = customer?.state || customer?.billing_address?.state || customer?.address_info?.billing_state || '';
-    const documentGstType = determineGstType(companyDetails?.company_state, customerState);
+    const documentGstType = determineGstType(companyDetails?.company_state, customerState, companyDetails?.company_gst_number, customer?.gst_number);
 
     returnItems.forEach(item => {
       // Only calculate for paid quantities

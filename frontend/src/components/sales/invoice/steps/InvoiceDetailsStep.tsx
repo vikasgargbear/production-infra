@@ -107,7 +107,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                             setAddAddressMode(false);
                                             // Re-determine GST type based on delivery address state (place of supply)
                                             const addrState = (addressData as any)?.state;
-                                            const gstType = determineGstType(companyInfo?.state, addrState);
+                                            const gstType = determineGstType(companyInfo?.state, addrState, companyInfo?.gst_number, selectedCustomer?.gst_number);
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,
@@ -602,14 +602,14 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                         if (remaining > 0) {
                             return (
-                                <span className="text-amber-600 font-semibold">
-                                    ₹{remaining.toFixed(2)} goes to credit
+                                <span className="text-sm text-gray-700">
+                                    Credit: <strong className="text-gray-900">₹{remaining.toFixed(2)}</strong>
                                 </span>
                             );
                         } else if (remaining < 0) {
                             return (
-                                <span className="text-red-600 font-semibold">
-                                    Payment exceeds by ₹{Math.abs(remaining).toFixed(2)}
+                                <span className="text-sm text-red-600">
+                                    Overpaid: <strong>₹{Math.abs(remaining).toFixed(2)}</strong>
                                 </span>
                             );
                         }

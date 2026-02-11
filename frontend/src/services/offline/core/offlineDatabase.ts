@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 11;  // Bumped for sales_returns and purchase_returns stores
+const DB_VERSION = 12;  // Bumped for delivery_challans, purchase_orders, purchase_entries, suppliers stores
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -94,6 +94,30 @@ export interface OfflineSchema extends DBSchema {
             bank_details: any;
             updated_at: string;
         };
+    };
+    // Delivery Challans store for offline-first challan creation
+    delivery_challans: {
+        key: string;  // temp_id or challan_id
+        value: any;
+        indexes: { 'challan_number': string; 'customer_id': string; 'sync_status': string; 'created_at': string };
+    };
+    // Suppliers store for offline-first purchase flows
+    suppliers: {
+        key: string | number;
+        value: any;
+        indexes: { 'name': string; 'phone': string; 'sync_status': string; 'updated_at': string };
+    };
+    // Purchase Orders store for offline-first PO creation
+    purchase_orders: {
+        key: string;  // temp_id or order_id
+        value: any;
+        indexes: { 'po_number': string; 'supplier_id': string; 'sync_status': string; 'created_at': string };
+    };
+    // Purchase Entries store for offline-first GRN/purchase entry creation
+    purchase_entries: {
+        key: string;  // temp_id or invoice_id
+        value: any;
+        indexes: { 'invoice_number': string; 'supplier_id': string; 'sync_status': string; 'created_at': string };
     };
     // Sales Returns store for offline-first returns
     sales_returns: {
@@ -268,6 +292,42 @@ class OfflineDatabase {
                 // Company Profile store (for offline-first company info access)
                 if (!db.objectStoreNames.contains('company_profile')) {
                     db.createObjectStore('company_profile', { keyPath: 'key' });
+                }
+
+                // Delivery Challans store (for offline-first challan creation)
+                if (!db.objectStoreNames.contains('delivery_challans')) {
+                    const challanStore = db.createObjectStore('delivery_challans', { keyPath: 'temp_id' });
+                    challanStore.createIndex('challan_number', 'challan_number');
+                    challanStore.createIndex('customer_id', 'customer_id');
+                    challanStore.createIndex('sync_status', 'sync_status');
+                    challanStore.createIndex('created_at', 'created_at');
+                }
+
+                // Suppliers store (for offline-first purchase flows)
+                if (!db.objectStoreNames.contains('suppliers')) {
+                    const supplierStore = db.createObjectStore('suppliers', { keyPath: 'id' });
+                    supplierStore.createIndex('name', 'name');
+                    supplierStore.createIndex('phone', 'phone');
+                    supplierStore.createIndex('sync_status', 'sync_status');
+                    supplierStore.createIndex('updated_at', 'updated_at');
+                }
+
+                // Purchase Orders store (for offline-first PO creation)
+                if (!db.objectStoreNames.contains('purchase_orders')) {
+                    const poStore = db.createObjectStore('purchase_orders', { keyPath: 'temp_id' });
+                    poStore.createIndex('po_number', 'po_number');
+                    poStore.createIndex('supplier_id', 'supplier_id');
+                    poStore.createIndex('sync_status', 'sync_status');
+                    poStore.createIndex('created_at', 'created_at');
+                }
+
+                // Purchase Entries store (for offline-first GRN/purchase entry)
+                if (!db.objectStoreNames.contains('purchase_entries')) {
+                    const peStore = db.createObjectStore('purchase_entries', { keyPath: 'temp_id' });
+                    peStore.createIndex('invoice_number', 'invoice_number');
+                    peStore.createIndex('supplier_id', 'supplier_id');
+                    peStore.createIndex('sync_status', 'sync_status');
+                    peStore.createIndex('created_at', 'created_at');
                 }
 
                 // Sales Returns store (for offline-first returns)
@@ -547,7 +607,13 @@ class OfflineDatabase {
             // Update with server ID
             const idField = storeName === 'invoices' ? 'invoice_id' :
                 storeName === 'customers' ? 'customer_id' :
-                    storeName === 'products' ? 'product_id' : 'id';
+                    storeName === 'products' ? 'product_id' :
+                        storeName === 'sales_orders' ? 'order_id' :
+                            storeName === 'delivery_challans' ? 'challan_id' :
+                                storeName === 'purchase_orders' ? 'order_id' :
+                                    storeName === 'purchase_entries' ? 'invoice_id' :
+                                        storeName === 'sales_returns' ? 'return_id' :
+                                            storeName === 'purchase_returns' ? 'return_id' : 'id';
 
             item[idField] = serverId;
             item.sync_status = SYNC_STATUS.SYNCED;
@@ -599,6 +665,60 @@ class OfflineDatabase {
                 }
             } catch (err) {
                 console.warn(`${LOG_PREFIX} Could not deduct stock for product ${product_id}:`, err);
+            }
+        }
+
+        await tx.done;
+    }
+
+    /**
+     * Add stock locally (for offline-first GRN/purchase entry)
+     * Inverse of deductStockLocally - increases quantity_available
+     *
+     * @param additions Array of { product_id, batch_id, quantity, batch_data? }
+     */
+    async addStockLocally(additions: Array<{ product_id: string | number; batch_id: string | number; quantity: number; batch_data?: any }>): Promise<void> {
+        if (!additions || additions.length === 0) return;
+
+        const db = await this.init();
+        const tx = db.transaction('products', 'readwrite');
+        const store = tx.objectStore('products');
+
+        for (const { product_id, batch_id, quantity, batch_data } of additions) {
+            try {
+                const product = await store.get(String(product_id));
+                if (!product) continue;
+
+                if (!product.batches) product.batches = [];
+
+                const batchIndex = product.batches.findIndex(
+                    (b: any) => String(b.batch_id) === String(batch_id)
+                );
+
+                if (batchIndex !== -1) {
+                    // Existing batch - add quantity
+                    product.batches[batchIndex].quantity_available = (product.batches[batchIndex].quantity_available || 0) + quantity;
+                } else if (batch_data) {
+                    // New batch from GRN - add it
+                    product.batches.push({
+                        batch_id: String(batch_id),
+                        product_id: String(product_id),
+                        quantity_available: quantity,
+                        ...batch_data
+                    });
+                }
+
+                // Update product total_stock if present
+                if (typeof product.total_stock === 'number') {
+                    product.total_stock += quantity;
+                }
+
+                product.updated_at = new Date().toISOString();
+                await store.put(product);
+
+                console.log(`${LOG_PREFIX} ✅ Added ${quantity} to product ${product_id}, batch ${batch_id}`);
+            } catch (err) {
+                console.warn(`${LOG_PREFIX} Could not add stock for product ${product_id}:`, err);
             }
         }
 

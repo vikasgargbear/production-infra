@@ -115,7 +115,11 @@ const numberToWords = (num: number): string => {
  */
 const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
     const totalAmount = parseFloat(String(invoiceData.final_amount || 0));
-    const totalGst = (parseFloat(String(invoiceData.cgst_amount || 0))) + (parseFloat(String(invoiceData.sgst_amount || 0)));
+    const cgstAmt = parseFloat(String(invoiceData.cgst_amount || 0));
+    const sgstAmt = parseFloat(String(invoiceData.sgst_amount || 0));
+    const igstAmt = parseFloat(String(invoiceData.igst_amount || 0));
+    const totalGst = cgstAmt + sgstAmt + igstAmt;
+    const isIGST = igstAmt > 0;
 
     const documentTitle = invoiceData.invoice_number ? 'INVOICE' : 'SALES ORDER';
     const documentNumber = invoiceData.invoice_number || invoiceData.order_number || 'DOC-' + Date.now();
@@ -598,15 +602,22 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
         <!-- Summary Section -->
         <div class="summary-section">
             <div class="summary-box">
-                <h4 class="summary-title">GST Breakdown</h4>
+                <h4 class="summary-title">GST Breakdown ${isIGST ? '(Inter-State)' : '(Intra-State)'}</h4>
+                ${isIGST ? `
                 <div class="summary-item">
-                    <span>CGST (6%)</span>
-                    <span>₹${(parseFloat(String(invoiceData.cgst_amount)) || 0).toFixed(2)}</span>
+                    <span>IGST</span>
+                    <span>₹${igstAmt.toFixed(2)}</span>
+                </div>
+                ` : `
+                <div class="summary-item">
+                    <span>CGST</span>
+                    <span>₹${cgstAmt.toFixed(2)}</span>
                 </div>
                 <div class="summary-item">
-                    <span>SGST (6%)</span>
-                    <span>₹${(parseFloat(String(invoiceData.sgst_amount)) || 0).toFixed(2)}</span>
+                    <span>SGST</span>
+                    <span>₹${sgstAmt.toFixed(2)}</span>
                 </div>
+                `}
                 <div class="summary-item total">
                     <span>Total GST</span>
                     <span>₹${totalGst.toFixed(2)}</span>

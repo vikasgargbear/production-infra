@@ -8,7 +8,7 @@
  */
 
 import offlineDB from '../core/offlineDatabase';
-import { invoicesApi, customersApi, productsApi, paymentsApi } from '../../api';
+import { invoicesApi, customersApi, productsApi, paymentsApi, ordersApi, challansApi } from '../../api';
 import { cleanData } from '../../api/utils/dataUtils';
 import { toast } from 'react-toastify';
 import { AxiosResponse } from 'axios';
@@ -381,6 +381,36 @@ class SyncEngine {
                     response = await this.syncCustomerAddress(item.data as CustomerAddressData);
                     break;
 
+                case 'sales_orders':
+                case 'sales_order':
+                    response = await this.syncSalesOrder(item.data as Record<string, unknown>);
+                    break;
+
+                case 'delivery_challans':
+                case 'delivery_challan':
+                    response = await this.syncChallan(item.data as Record<string, unknown>);
+                    break;
+
+                case 'purchase_orders':
+                case 'purchase_order':
+                    response = await this.syncPurchaseOrder(item.data as Record<string, unknown>);
+                    break;
+
+                case 'purchase_entries':
+                case 'purchase_entry':
+                    response = await this.syncPurchaseEntry(item.data as Record<string, unknown>);
+                    break;
+
+                case 'sales_returns':
+                case 'sales_return':
+                    response = await this.syncSalesReturn(item.data as Record<string, unknown>);
+                    break;
+
+                case 'purchase_returns':
+                case 'purchase_return':
+                    response = await this.syncPurchaseReturn(item.data as Record<string, unknown>);
+                    break;
+
                 default:
                     throw new Error(`Unknown sync type: ${item.entity_type || item.type}`);
             }
@@ -588,6 +618,141 @@ class SyncEngine {
         const response = await customersApi.createAddress(String(customer_id), cleanedAddress);
 
         console.log('[SyncEngine] Customer address synced:', response.data);
+        return response;
+    }
+
+    /**
+     * Sync sales order
+     */
+    async syncSalesOrder(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...orderData } = data;
+        const cleaned = cleanData(orderData);
+        const response = await ordersApi.create(cleaned);
+
+        if (response.data?.order_id && _localId) {
+            await offlineDB.updateLocalId('sales_orders', _localId as string, response.data.order_id);
+        }
+
+        // Trigger delta sync for products after sync
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['products'], 'manual');
+        } catch (e) { /* ignore */ }
+
+        return response;
+    }
+
+    /**
+     * Sync delivery challan
+     */
+    async syncChallan(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, reserved_batches, ...challanData } = data;
+        const cleaned = cleanData(challanData);
+        const response = await challansApi.create(cleaned);
+
+        if (response.data?.challan_id && _localId) {
+            await offlineDB.updateLocalId('delivery_challans', _localId as string, response.data.challan_id);
+        }
+
+        // Clear batch reservations after successful sync
+        if (reserved_batches && Array.isArray(reserved_batches)) {
+            for (const reservation of reserved_batches as Array<{ product_id: string | number; batch_id: string | number; quantity: number }>) {
+                await offlineDB.clearReservedQuantity(reservation.product_id, reservation.batch_id, reservation.quantity);
+            }
+        }
+
+        // Trigger delta sync for batches/products after challan sync
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'manual');
+        } catch (e) { /* ignore */ }
+
+        return response;
+    }
+
+    /**
+     * Sync purchase order
+     */
+    async syncPurchaseOrder(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...poData } = data;
+        const cleaned = cleanData(poData);
+
+        const { purchasesApi } = await import('../../api');
+        const response = await purchasesApi.create(cleaned);
+
+        if (response.data?.order_id && _localId) {
+            await offlineDB.updateLocalId('purchase_orders', _localId as string, response.data.order_id);
+        }
+
+        return response;
+    }
+
+    /**
+     * Sync purchase entry (GRN)
+     */
+    async syncPurchaseEntry(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...entryData } = data;
+        const cleaned = cleanData(entryData);
+
+        const { purchasesApi } = await import('../../api');
+        const response = await purchasesApi.createEntry(cleaned);
+
+        if (response.data?.invoice_id && _localId) {
+            await offlineDB.updateLocalId('purchase_entries', _localId as string, response.data.invoice_id);
+        }
+
+        // Trigger delta sync for batches/products after GRN
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'grn_approved');
+        } catch (e) { /* ignore */ }
+
+        return response;
+    }
+
+    /**
+     * Sync sales return
+     */
+    async syncSalesReturn(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...returnData } = data;
+        const cleaned = cleanData(returnData);
+
+        const { returnsApi } = await import('../../api');
+        const response = await returnsApi.createSaleReturn(cleaned);
+
+        if (response.data?.return_id && _localId) {
+            await offlineDB.updateLocalId('sales_returns', _localId as string, response.data.return_id);
+        }
+
+        // Trigger delta sync for batches/products
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'manual');
+        } catch (e) { /* ignore */ }
+
+        return response;
+    }
+
+    /**
+     * Sync purchase return
+     */
+    async syncPurchaseReturn(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...returnData } = data;
+        const cleaned = cleanData(returnData);
+
+        const { returnsApi } = await import('../../api');
+        const response = await returnsApi.createPurchaseReturn(cleaned);
+
+        if (response.data?.return_id && _localId) {
+            await offlineDB.updateLocalId('purchase_returns', _localId as string, response.data.return_id);
+        }
+
+        // Trigger delta sync for batches/products
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'manual');
+        } catch (e) { /* ignore */ }
+
         return response;
     }
 

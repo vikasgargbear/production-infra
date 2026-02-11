@@ -11,6 +11,8 @@ import { purchasesApi } from '../../../../services/api';
 import { searchCache } from '../../../../utils/searchCache';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
 import { useToast } from '../../../global';
+import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 
 // Types
 export interface PurchaseOrderItem {
@@ -146,6 +148,9 @@ export function usePurchaseOrderLogic({
     // Data States
     const [createdPOData, setCreatedPOData] = useState<CreatedPOData | null>(null);
 
+    // Network status for offline-first
+    const { isOnline } = useNetworkStatus();
+
     // Generate PO number on mount
     useEffect(() => {
         const generateAndSetPONumber = async () => {
@@ -278,54 +283,15 @@ export function usePurchaseOrderLogic({
         return Object.keys(newErrors).length === 0;
     }, [selectedSupplier, purchaseOrder.items]);
 
-    const handleSavePurchaseOrder = useCallback(async () => {
-        if (!validatePurchaseOrder()) {
-            toast.error('Please fix validation errors');
-            return;
-        }
-
-        setSaving(true);
-        try {
-            const poData = {
-                po_no: purchaseOrder.po_no,
-                po_date: purchaseOrder.po_date,
-                expected_delivery_date: purchaseOrder.expected_delivery_date,
-                supplier_id: parseInt(String(purchaseOrder.supplier_id)),
-                items: purchaseOrder.items.map(item => ({
-                    product_id: parseInt(String(item.product_id)),
-                    quantity: parseFloat(String(item.quantity)) || 1,
-                    unit_price: parseFloat(String(item.unit_price)) || 0,
-                    tax_percent: parseFloat(String(item.tax_percent)) || 12
-                })),
-                payment_terms: purchaseOrder.payment_terms,
-                delivery_terms: purchaseOrder.delivery_terms,
-                delivery_location: purchaseOrder.delivery_location,
-                discount_amount: Number(purchaseOrder.discount_amount) || 0,
-                freight_charges: Number(purchaseOrder.freight_charges) || 0,
-                notes: purchaseOrder.notes
-            };
-
-            const response = await (purchasesApi as any).create(poData);
-
-            if (response?.data) {
-                const poNumber = response.data.po_no || purchaseOrder.po_no;
-                setCreatedPOData({
-                    poNumber,
-                    poId: response.data.po_id || response.data.id,
-                    supplierName: selectedSupplier?.supplier_name || purchaseOrder.supplier_name,
-                    totalAmount: purchaseOrder.total_amount
-                });
-                setShowSuccessModal(true);
-                toast.success(`Purchase Order ${poNumber} created successfully!`);
-                searchCache.clear();
-            }
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.detail || error.message || 'Failed to create purchase order';
-            toast.error(errorMessage);
-        } finally {
-            setSaving(false);
-        }
-    }, [purchaseOrder, selectedSupplier, validatePurchaseOrder, toast]);
+    // Offline-first save hook
+    const { saving: offlineSaving, handleSavePurchaseOrder } = usePurchaseOrderSave({
+        purchaseOrder,
+        selectedSupplier,
+        isOnline,
+        setCreatedPOData,
+        setShowSuccessModal,
+        validatePurchaseOrder
+    });
 
     const handlePrint = useCallback(() => {
         window.print();
@@ -342,7 +308,7 @@ export function usePurchaseOrderLogic({
         setSelectedSupplier,
         currentStep,
         setCurrentStep,
-        saving,
+        saving: offlineSaving || saving,
         errors,
         showSupplierModal,
         setShowSupplierModal,

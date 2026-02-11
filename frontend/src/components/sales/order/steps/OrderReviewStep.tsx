@@ -224,7 +224,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     onChange={(address: string) => setOrder(prev => ({ ...prev, shipping_address: address }))}
                                     onSave={(addressData: any) => {
                                         const addrState = addressData?.state;
-                                        const gstType = determineGstType(companyInfo?.state, addrState);
+                                        const gstType = determineGstType(companyInfo?.state, addrState, companyInfo?.gst_number, selectedCustomer?.gst_number);
                                         setOrder(prev => ({
                                             ...prev,
                                             shipping_address_data: addressData,
@@ -238,7 +238,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                         setSameAsBilling(same);
                                         if (same) {
                                             const billingState = (order.billing_address_data as any)?.state;
-                                            const gstType = determineGstType(companyInfo?.state, billingState);
+                                            const gstType = determineGstType(companyInfo?.state, billingState, companyInfo?.gst_number, selectedCustomer?.gst_number);
                                             setOrder(prev => ({
                                                 ...prev,
                                                 shipping_address: prev.billing_address,

@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
+import { determineGstType } from '../../gst/utils/gstCalculations';
 
 interface ReturnItem {
   id?: string | number;
@@ -82,9 +83,18 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
     item.selected && item.return_quantity > 0
   );
 
+  // Determine GST type using GSTIN state codes
+  const gstType = determineGstType(
+    companyDetails?.company_state,
+    undefined,
+    companyDetails?.company_gst_number,
+    supplier?.gst_number
+  );
+  const isIGST = gstType === 'IGST';
+
   // Calculate GST breakup
   const calculateGSTBreakup = () => {
-    const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; totalTax: number }> = {};
+    const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; igst: number; totalTax: number }> = {};
 
     returnItems.forEach(item => {
       const price = parseFloat(String(item.unit_price || 0));
@@ -100,13 +110,18 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
+          igst: 0,
           totalTax: 0
         };
       }
 
       gstBreakup[taxPercent].taxableAmount += afterDiscount;
-      gstBreakup[taxPercent].cgst += taxAmount / 2;
-      gstBreakup[taxPercent].sgst += taxAmount / 2;
+      if (isIGST) {
+        gstBreakup[taxPercent].igst += taxAmount;
+      } else {
+        gstBreakup[taxPercent].cgst += taxAmount / 2;
+        gstBreakup[taxPercent].sgst += taxAmount / 2;
+      }
       gstBreakup[taxPercent].totalTax += taxAmount;
     });
 
@@ -342,18 +357,30 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-2">GST%</th>
                     <th className="text-right py-2">Taxable</th>
-                    <th className="text-right py-2">CGST</th>
-                    <th className="text-right py-2">SGST</th>
+                    {isIGST ? (
+                      <th className="text-right py-2">IGST</th>
+                    ) : (
+                      <>
+                        <th className="text-right py-2">CGST</th>
+                        <th className="text-right py-2">SGST</th>
+                      </>
+                    )}
                     <th className="text-right py-2">Total Tax</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(gstBreakup).map(([unit_price, values]) => (
-                    <tr key={unit_price} className="border-b border-gray-100">
-                      <td className="py-2">{unit_price}%</td>
+                  {Object.entries(gstBreakup).map(([rate, values]) => (
+                    <tr key={rate} className="border-b border-gray-100">
+                      <td className="py-2">{rate}%</td>
                       <td className="text-right py-2">{formatCurrency(values.taxableAmount)}</td>
-                      <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
-                      <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
+                      {isIGST ? (
+                        <td className="text-right py-2">{formatCurrency(values.igst)}</td>
+                      ) : (
+                        <>
+                          <td className="text-right py-2">{formatCurrency(values.cgst)}</td>
+                          <td className="text-right py-2">{formatCurrency(values.sgst)}</td>
+                        </>
+                      )}
                       <td className="text-right py-2 font-medium">{formatCurrency(values.totalTax)}</td>
                     </tr>
                   ))}

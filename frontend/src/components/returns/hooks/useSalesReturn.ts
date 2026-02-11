@@ -12,6 +12,8 @@ import offlineStorage from '../../../services/offlineStorage';
 import { getApiBaseUrl } from '../../../config/apiBase';
 import { useToast } from '../../global';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import { useSalesReturnSave } from './useSalesReturnSave';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -117,6 +119,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const toast = useToast();
+    const { isOnline } = useNetworkStatus();
 
     // Refs
     const customerSearchRef = useRef<any>(null);
@@ -492,37 +495,13 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
         }
     }, [validateReturn]);
 
-    const handleSaveReturn = useCallback(async () => {
-        if (!validateReturn()) return;
-
-        setSaving(true);
-        try {
-            const response = await returnsApi.createSaleReturn(returnData);
-
-            if (response.data) {
-                const { credit_note_no, has_gst, message } = response.data;
-
-                if (credit_note_no) {
-                    toast.success(`Sales return created with Credit Note: ${credit_note_no}`);
-                } else if (has_gst === false) {
-                    toast.success('Sales return created (No GST credit note)');
-                } else {
-                    toast.success(message || 'Sales return created successfully');
-                }
-            } else {
-                toast.success('Sales return created successfully');
-            }
-
-            setTimeout(() => onClose(), 2500);
-        } catch (error: any) {
-            const errorMessage = Array.isArray(error.message)
-                ? error.message[0]?.msg || 'Failed to create return'
-                : error.message || 'Failed to create return';
-            toast.error(errorMessage);
-        } finally {
-            setSaving(false);
-        }
-    }, [returnData, validateReturn, toast, onClose]);
+    // Offline-first save hook
+    const { saving: offlineSaving, handleSaveReturn } = useSalesReturnSave({
+        returnData,
+        isOnline,
+        validateReturn,
+        onClose
+    });
 
     const handlePrint = useCallback(() => {
         window.print();
@@ -531,7 +510,7 @@ export function useSalesReturn({ onClose }: UseSalesReturnProps): UseSalesReturn
     return {
         currentStep,
         loading,
-        saving,
+        saving: offlineSaving || saving,
         returnData,
         selectedCustomer,
         selectedInvoice,

@@ -13,6 +13,8 @@ import { challansApi } from '../../../../services/api';
 import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
+import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { useChallanSave } from './useChallanSave';
 import {
     Challan,
     ChallanItem,
@@ -78,6 +80,9 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
 
+    // ==================== NETWORK STATUS ====================
+    const { isOnline } = useNetworkStatus();
+
     // ==================== CHALLAN-SPECIFIC REFS ====================
     const customerSearchRef = useRef<HTMLInputElement>(null);
     const challanFormRef = useRef<HTMLFormElement>(null);
@@ -95,6 +100,18 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
             setChallan(prev => ({ ...prev, challan_number: fallbackNumber }));
         }
     }, [setChallan]);
+
+    // ==================== OFFLINE-FIRST SAVE HOOK ====================
+    const { saving: offlineSaving, handleSaveChallan: offlineSaveChallan } = useChallanSave({
+        challan,
+        selectedCustomer: selectedCustomer as CustomerDetails,
+        companyInfo,
+        isOnline,
+        setChallan,
+        setCreatedChallanData,
+        setShowSuccessModal,
+        generateChallanNumber
+    });
 
     // ==================== ENHANCED CUSTOMER SELECT (with delivery address logic) ====================
     const handleCustomerSelect = useCallback(async (customer: CustomerDetails | null) => {
@@ -181,109 +198,8 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         }
     }, [handleCustomerSelect, recalculateTotals, setChallan, setSelectedCustomer]);
 
-    // ==================== SAVE CHALLAN ====================
-    const saveChallan = useCallback(async () => {
-        setSaving(true);
-        try {
-            if (!challan.customer_id) {
-                alert('Please select a customer');
-                setSaving(false);
-                return;
-            }
-
-            if (!challan.items || challan.items.length === 0) {
-                alert('Please add at least one item');
-                setSaving(false);
-                return;
-            }
-
-            // Determine GST type based on delivery state vs company state
-            const deliveryState = challan.delivery_state || (selectedCustomer as CustomerDetails)?.state || '';
-            const gstType = determineGstType(companyInfo?.state, deliveryState);
-            const isIGST = gstType === 'IGST';
-
-            const apiItems = challan.items.map(item => ({
-                product_id: item.product_id,
-                product_name: item.product_name,
-                batch_id: item.batch_id || null,
-                batch_number: item.batch_number || null,
-                expiry_date: item.expiry_date || null,
-                ordered_quantity: null,
-                dispatched_quantity: item.quantity,
-                unit_price: item.unit_price || item.sale_price || 0,
-                gst_percent: item.gst_percent || 0,
-                cgst_percent: isIGST ? 0 : (item.gst_percent || 0) / 2,
-                sgst_percent: isIGST ? 0 : (item.gst_percent || 0) / 2,
-                igst_percent: isIGST ? (item.gst_percent || 0) : 0,
-                uom: item.unit || item.base_uom || 'NOS',
-                package_type: 'UNIT'
-            }));
-
-            const totalAmount = apiItems.reduce((sum, item) =>
-                sum + ((item.dispatched_quantity || 0) * (item.unit_price || 0)), 0
-            ) + (parseFloat(String(challan.freight_charges)) || 0);
-
-            let finalChallanNumber = challan.challan_number;
-            if (!finalChallanNumber) {
-                await generateChallanNumber();
-                finalChallanNumber = challan.challan_number;
-            }
-
-            const challanData = {
-                challan_number: finalChallanNumber,
-                challan_date: challan.challan_date,
-                expected_delivery_date: challan.expected_delivery_date || challan.challan_date,
-                customer_id: challan.customer_id,
-                customer_name: challan.customer_name,
-                delivery_address: challan.delivery_address || (selectedCustomer as CustomerDetails)?.address || 'N/A',
-                delivery_city: challan.delivery_city || (selectedCustomer as CustomerDetails)?.city || 'Mumbai',
-                delivery_state: challan.delivery_state || (selectedCustomer as CustomerDetails)?.state || 'Maharashtra',
-                delivery_pincode: challan.delivery_pincode || (selectedCustomer as CustomerDetails)?.pincode || '400001',
-                items: apiItems,
-                transport_company: challan.transport_company || '',
-                vehicle_number: challan.vehicle_number || '',
-                driver_phone: challan.driver_phone || '',
-                freight_charges: parseFloat(String(challan.freight_charges)) || 0,
-                lr_number: challan.lr_number || '',
-                notes: challan.notes || '',
-                total_amount: totalAmount
-            };
-
-            const response = await challansApi.create(challanData);
-
-            if (response.data) {
-                const challanNumber = response.data.challan_number || challan.challan_number || `DC-${response.data.challan_id}`;
-                const createdData: CreatedChallanData = {
-                    ...response.data,
-                    challan_id: response.data.challan_id,
-                    challan_number: challanNumber,
-                    customer_name: challan.customer_name,
-                    customer_details: challan.customer_details || undefined,
-                    items: challan.items,
-                    total_amount: challan.total_amount
-                };
-                setCreatedChallanData(createdData);
-                setShowSuccessModal(true);
-            }
-        } catch (error: unknown) {
-            const err = error as { response?: { data?: { detail?: unknown } }; message?: string };
-            let errorMsg = 'Failed to save challan';
-            if (err.response?.data?.detail) {
-                if (Array.isArray(err.response.data.detail)) {
-                    errorMsg = err.response.data.detail.map((e: { loc?: string[]; msg?: string }) =>
-                        typeof e === 'object' ? `${e.loc?.join('.') || 'Field'}: ${e.msg}` : String(e)
-                    ).join('\n');
-                } else {
-                    errorMsg = String(err.response.data.detail);
-                }
-            } else if (err.message) {
-                errorMsg = err.message;
-            }
-            alert(`Error: ${errorMsg}`);
-        } finally {
-            setSaving(false);
-        }
-    }, [challan, selectedCustomer, generateChallanNumber]);
+    // ==================== SAVE CHALLAN (offline-first) ====================
+    const saveChallan = offlineSaveChallan;
 
     // ==================== SHARE ON WHATSAPP ====================
     const shareOnWhatsApp = useCallback(() => {
@@ -393,7 +309,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         // Challan-specific UI State
         currentStep,
         setCurrentStep,
-        saving,
+        saving: offlineSaving || saving,
         showCreateCustomer,
         setShowCreateCustomer,
         showCreateProduct,

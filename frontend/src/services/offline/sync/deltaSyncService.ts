@@ -33,6 +33,12 @@ export type SyncTrigger =
     | 'customer_created'
     | 'product_created'
     | 'stock_adjusted'
+    | 'sales_order_created'
+    | 'challan_created'
+    | 'purchase_order_created'
+    | 'purchase_entry_created'
+    | 'sales_return_created'
+    | 'purchase_return_created'
     | 'manual'
     | 'background'
     | 'page_focus';
@@ -45,14 +51,20 @@ const BACKGROUND_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 // Maps actions to tables that need syncing
 const ACTION_TABLE_MAP: Record<SyncTrigger, string[]> = {
-    'invoice_created': ['batches', 'products'],   // Stock changed
-    'grn_approved': ['batches', 'products'],       // New stock received
+    'invoice_created': ['batches', 'products'],       // Stock changed
+    'grn_approved': ['batches', 'products'],           // New stock received
     'customer_created': ['customers'],
     'product_created': ['products'],
     'stock_adjusted': ['batches', 'products'],
-    'manual': [],                                  // Caller specifies
-    'background': ['products', 'batches'],         // Periodic refresh
-    'page_focus': ['products', 'batches']          // User came back
+    'sales_order_created': ['products'],               // No stock change, refresh products
+    'challan_created': ['batches', 'products'],        // Stock dispatched
+    'purchase_order_created': [],                      // No stock change
+    'purchase_entry_created': ['batches', 'products'], // New stock received
+    'sales_return_created': ['batches', 'products'],   // Stock returned
+    'purchase_return_created': ['batches', 'products'],// Stock sent back
+    'manual': [],                                      // Caller specifies
+    'background': ['products', 'batches'],             // Periodic refresh
+    'page_focus': ['products', 'batches']              // User came back
 };
 
 // ==================== SERVICE CLASS ====================
@@ -393,6 +405,54 @@ class DeltaSyncService {
     async afterProductCreated(): Promise<DeltaSyncResult> {
         console.log('[DeltaSync] Triggered after product created');
         return this.syncTables(ACTION_TABLE_MAP.product_created, 'product_created');
+    }
+
+    /**
+     * Call after creating a sales order
+     */
+    async afterSalesOrderCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after sales order created');
+        return this.syncTables(ACTION_TABLE_MAP.sales_order_created, 'sales_order_created');
+    }
+
+    /**
+     * Call after creating a delivery challan
+     */
+    async afterChallanCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after challan created');
+        return this.syncTables(ACTION_TABLE_MAP.challan_created, 'challan_created');
+    }
+
+    /**
+     * Call after creating a purchase order
+     */
+    async afterPurchaseOrderCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after purchase order created');
+        return this.syncTables(ACTION_TABLE_MAP.purchase_order_created, 'purchase_order_created');
+    }
+
+    /**
+     * Call after creating a purchase entry / GRN
+     */
+    async afterPurchaseEntryCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after purchase entry created');
+        return this.syncTables(ACTION_TABLE_MAP.purchase_entry_created, 'purchase_entry_created');
+    }
+
+    /**
+     * Call after creating a sales return
+     */
+    async afterSalesReturnCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after sales return created');
+        return this.syncTables(ACTION_TABLE_MAP.sales_return_created, 'sales_return_created');
+    }
+
+    /**
+     * Call after creating a purchase return
+     */
+    async afterPurchaseReturnCreated(): Promise<DeltaSyncResult> {
+        console.log('[DeltaSync] Triggered after purchase return created');
+        return this.syncTables(ACTION_TABLE_MAP.purchase_return_created, 'purchase_return_created');
     }
 
     /**

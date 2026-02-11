@@ -8,6 +8,8 @@ import { toast } from 'react-toastify';
 import { apiClient, usersApi, authApi } from '../../../../services/api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
+import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { determineGstType } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
@@ -166,6 +168,21 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [selectedBankAccount, setSelectedBankAccount] = useState<BankAccount | null>(null);
     const [createdOrderData, setCreatedOrderData] = useState<CreatedOrderData | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    // Network status for offline-first
+    const { isOnline } = useNetworkStatus();
+
+    // Offline-first save hook
+    const { saving: offlineSaving, handleSaveOrder: offlineSaveOrder } = useSalesOrderSave({
+        order,
+        selectedCustomer,
+        isOnline,
+        setOrder,
+        setCreatedOrderData,
+        setShowSuccessModal,
+        setMessage,
+        setMessageType
+    });
 
     // Modal states
     const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -407,7 +424,12 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         }
 
         const customerState = addressData.state || customer.state || '';
-        const gstType = determineGstType(companyInfo?.state, customerState);
+        const gstType = determineGstType(
+            companyInfo?.state,
+            customerState,
+            (companyInfo as any)?.gst_number,
+            customer.gst_number
+        );
 
         setOrder(prev => ({
             ...prev,
@@ -573,99 +595,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         recalculateTotals(updatedItems);
     }, [order.items, removeItem, recalculateTotals]);
 
-    // Save order
-    const saveOrder = useCallback(async (): Promise<void> => {
-        setSaving(true);
-        try {
-            const orderNumber = await documentNumberGenerator.generateSalesOrderNumber();
-
-            const salesOrderData = {
-                customer_id: parseInt(String(order.customer_id)),
-                order_date: order.order_date || new Date().toISOString().split('T')[0],
-                delivery_date: order.expected_delivery_date || order.order_date,
-                order_type: 'sales',
-                payment_terms: 'credit',
-                items: order.items.map(item => {
-                    const quantity = parseInt(String(item.quantity)) || 1;
-                    const freeQuantity = parseInt(String(item.free_quantity)) || 0;
-                    const unitPrice = parseFloat(String(item.unit_price)) || 0;
-                    const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                    const taxPercent = parseFloat(String(item.gst_percent)) || 0;
-
-                    const subtotal = quantity * unitPrice;
-                    const discountAmount = (subtotal * discountPercent) / 100;
-                    const taxableAmount = subtotal - discountAmount;
-                    const taxAmount = (taxableAmount * taxPercent) / 100;
-
-                    return {
-                        product_id: parseInt(String(item.product_id)),
-                        product_code: item.product_code || null,
-                        batch_id: item.batch_id ? parseInt(String(item.batch_id)) : null,
-                        batch_number: item.batch_number || null,
-                        quantity,
-                        free_quantity: freeQuantity,
-                        unit_price: unitPrice,
-                        mrp: parseFloat(String(item.mrp)) || unitPrice,
-                        discount_percent: discountPercent,
-                        discount_amount: discountAmount,
-                        tax_percent: taxPercent,
-                        tax_amount: taxAmount,
-                        gst_type: order.gst_type || 'CGST/SGST',
-                        uom: item.uom || null,
-                        pack_type: item.pack_type || null
-                    };
-                }),
-                notes: order.notes || '',
-                billing_address: order.billing_address || '',
-                shipping_address: order.shipping_address || '',
-                discount_amount: parseFloat(String(order.discount_amount)) || 0,
-                other_charges: parseFloat(String(order.other_charges)) || 0
-            };
-
-            const response = await apiClient.post('/sales-orders/', salesOrderData);
-
-            if (response?.data) {
-                const createdOrderId = response.data.order_id || response.data.id;
-                const createdOrderNumber = response.data.order_number || response.data.order_no || orderNumber;
-
-                setOrder(prev => ({ ...prev, order_number: createdOrderNumber, order_id: createdOrderId }));
-                setCreatedOrderData({
-                    orderId: createdOrderId,
-                    orderNumber: createdOrderNumber,
-                    customerName: selectedCustomer?.customer_name || order.customer_name,
-                    totalAmount: order.total_amount || 0
-                });
-
-                toast.success('Sales order created successfully!');
-                setShowSuccessModal(true);
-            } else {
-                throw new Error('Invalid response from server');
-            }
-        } catch (error: unknown) {
-            toast.error('Failed to create sales order');
-            const err = error as { response?: { data?: { detail?: unknown } }; message?: string };
-            let errorMessage = 'Failed to create sales order';
-
-            if (err.response?.data?.detail) {
-                const details = err.response.data.detail;
-                if (Array.isArray(details)) {
-                    errorMessage = details.map((e: { loc?: string[]; msg: string }) =>
-                        `${e.loc?.join('.') || 'Field'}: ${e.msg}`
-                    ).join('\n');
-                } else {
-                    errorMessage = String(details);
-                }
-            } else if (err.message) {
-                errorMessage = err.message;
-            }
-
-            setMessage(errorMessage);
-            setMessageType('error');
-            toast.error(errorMessage);
-        } finally {
-            setSaving(false);
-        }
-    }, [order, selectedCustomer]);
+    // Save order - delegates to offline-first useSalesOrderSave hook
+    const saveOrder = offlineSaveOrder;
 
     // Print order
     const printOrder = useCallback((): void => {
@@ -711,7 +642,7 @@ Expected Delivery: ${order.expected_delivery_date}
         sameAsBilling,
         setSameAsBilling,
         employees,
-        saving,
+        saving: offlineSaving || saving,
         message,
         messageType,
         selectedBankAccount,
