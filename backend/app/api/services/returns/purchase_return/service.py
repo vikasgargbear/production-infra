@@ -73,12 +73,12 @@ class PurchaseReturnService:
                 org_id, branch_id, return_number, return_date, return_type,
                 supplier_invoice_id, grn_id, supplier_id, return_reason, detailed_reason,
                 return_amount, tax_amount, total_amount, cgst_amount, sgst_amount, igst_amount,
-                debit_note_number, debit_note_date, debit_note_status, notes, created_by
+                debit_note_number, debit_note_date, debit_note_status, gst_type, notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :return_number, :return_date, 'PURCHASE',
                 :supplier_invoice_id, :grn_id, :supplier_id, :return_reason, :detailed_reason,
                 :return_amount, :tax_amount, :total_amount, :cgst_amount, :sgst_amount, :igst_amount,
-                :debit_note_number, CURRENT_DATE, :debit_note_status, :notes, :created_by
+                :debit_note_number, CURRENT_DATE, :debit_note_status, :gst_type, :notes, :created_by
             ) RETURNING return_id
         """), data)
         return result.scalar()

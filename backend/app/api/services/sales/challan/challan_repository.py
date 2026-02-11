@@ -49,7 +49,8 @@ class ChallanRepository:
         shipping_address_id: int,
         totals: Dict[str, Any],
         notes: str,
-        created_by: int
+        created_by: int,
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Create delivery challan record.
@@ -63,6 +64,7 @@ class ChallanRepository:
                 subtotal_amount, discount_amount, taxable_amount,
                 cgst_amount, sgst_amount, igst_amount, total_tax_amount,
                 round_off_amount, final_amount,
+                gst_type,
                 notes, created_by, created_at
             ) VALUES (
                 :org_id, :branch_id, :challan_number, :challan_date,
@@ -71,6 +73,7 @@ class ChallanRepository:
                 :subtotal, :discount, :taxable,
                 :cgst, :sgst, :igst, :tax,
                 :round_off, :final,
+                :gst_type,
                 :notes, :created_by, CURRENT_TIMESTAMP
             ) RETURNING challan_id
         """), {
@@ -91,6 +94,7 @@ class ChallanRepository:
             "tax": totals.get("total_tax_amount", 0),
             "round_off": totals.get("round_off_amount", 0),
             "final": totals.get("final_amount", 0),
+            "gst_type": gst_type,
             "notes": notes,
             "created_by": created_by
         })

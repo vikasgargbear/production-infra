@@ -24,11 +24,12 @@ class PurchaseOrderRepository:
         branch_id: int,
         order_data: Dict[str, Any],
         totals: Dict[str, Any],
-        user_id: int
+        user_id: int,
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Create purchase order header record.
-        
+
         Returns:
             purchase_order_id
         """
@@ -40,6 +41,7 @@ class PurchaseOrderRepository:
                 tax_amount, total_amount,
                 expected_delivery_date, delivery_address,
                 payment_terms, po_status, receipt_status,
+                gst_type,
                 notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :po_number, :po_date, :po_type,
@@ -48,6 +50,7 @@ class PurchaseOrderRepository:
                 :tax_amount, :total_amount,
                 :expected_delivery_date, :delivery_address,
                 :payment_terms, :po_status, :receipt_status,
+                :gst_type,
                 :notes, :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING purchase_order_id
         """), {
@@ -68,6 +71,7 @@ class PurchaseOrderRepository:
             "payment_terms": order_data.get("payment_terms", "immediate"),
             "po_status": order_data.get("po_status", "draft"),
             "receipt_status": order_data.get("receipt_status", "pending"),
+            "gst_type": gst_type,
             "notes": order_data.get("notes"),
             "created_by": user_id
         })

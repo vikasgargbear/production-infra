@@ -12,6 +12,7 @@ from .order_repository import PurchaseOrderRepository
 from ..calculations import PurchaseCalculator
 from ...document_number_service import DocumentNumberService
 from ...master.product.service import ProductService
+from ...compliance.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +57,35 @@ class PurchaseOrderService:
             
             order_data["po_number"] = po_number
             
-            # Calculate totals using PurchaseCalculator
+            # Determine GST type from GSTIN state codes
+            supplier_id = order_data.get("supplier_id")
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=org_id,
+                supplier_id=int(supplier_id) if supplier_id else None
+            ) if supplier_id else order_data.get("gst_type", "CGST/SGST")
+            logger.info(f"GST type determined for PO: {gst_type}")
+
+            # Strip pre-calculated tax values to force backend recalculation
             items = order_data.get("items", [])
+            for item in items:
+                item.pop('line_total', None)
+                item.pop('cgst_amount', None)
+                item.pop('sgst_amount', None)
+                item.pop('igst_amount', None)
+                item.pop('total_tax', None)
+                item.pop('total_tax_amount', None)
+
+            # Calculate totals using PurchaseCalculator
             calc_result = PurchaseCalculator.calculate_purchase_order_totals(
                 items=items,
-                gst_type=order_data.get("gst_type", "CGST/SGST")
+                gst_type=gst_type
             )
             
             # Create order header via repository
             order_id = PurchaseOrderRepository.create_order_header(
-                db, org_id, branch_id, order_data, calc_result, user_id
+                db, org_id, branch_id, order_data, calc_result, user_id,
+                gst_type=gst_type
             )
             
             # Create order items with calculated values

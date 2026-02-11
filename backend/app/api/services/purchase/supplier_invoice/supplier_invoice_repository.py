@@ -24,11 +24,12 @@ class SupplierInvoiceRepository:
         branch_id: int,
         invoice_data: Dict[str, Any],
         totals: Dict[str, Any],
-        user_id: int
+        user_id: int,
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Create supplier invoice header record.
-        
+
         Returns:
             supplier_invoice_id
         """
@@ -42,7 +43,7 @@ class SupplierInvoiceRepository:
                 round_off_amount, invoice_total,
                 tds_applicable, tds_percent, tds_amount,
                 payment_terms, due_date, payment_status,
-                invoice_status, notes, created_by
+                invoice_status, gst_type, notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :supplier_invoice_number, :invoice_date,
                 :supplier_id, :purchase_order_ids, :grn_ids,
@@ -52,7 +53,7 @@ class SupplierInvoiceRepository:
                 :round_off_amount, :invoice_total,
                 :tds_applicable, :tds_percent, :tds_amount,
                 :payment_terms, :due_date, :payment_status,
-                :invoice_status, :notes, :created_by
+                :invoice_status, :gst_type, :notes, :created_by
             ) RETURNING supplier_invoice_id
         """), {
             "org_id": org_id,
@@ -82,6 +83,7 @@ class SupplierInvoiceRepository:
             "due_date": invoice_data.get("due_date"),
             "payment_status": invoice_data.get("payment_status", "unpaid"),
             "invoice_status": invoice_data.get("invoice_status", "pending"),
+            "gst_type": gst_type,
             "notes": invoice_data.get("notes"),
             "created_by": user_id
         })

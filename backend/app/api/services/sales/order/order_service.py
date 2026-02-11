@@ -11,6 +11,7 @@ from .order_repository import OrderRepository
 from .order_validator import OrderValidator
 from ..invoice.invoice_service import InvoiceService as InvoiceCalc
 from ...document_number_service import DocumentNumberService
+from ...compliance.gst_service import GSTService
 from .....core.utils.constants import PackDefaults
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,19 @@ class OrderService:
             actual_branch_id = branch_id or context["branch_id"]
             actual_user_id = user_id or context["user_id"]
             
-            # 3. Calculate totals
-            items = [item.model_dump() if hasattr(item, 'model_dump') else item 
+            # 3. Determine GST type from GSTIN state codes
+            gst_type = GSTService.determine_gst_type(
+                db=db, org_id=org_id, customer_id=order_data.customer_id
+            )
+            logger.info(f"GST type determined for order: {gst_type}")
+
+            # Calculate totals
+            items = [item.model_dump() if hasattr(item, 'model_dump') else item
                     for item in order_data.items]
-            
+
             totals = InvoiceCalc.calculate_invoice_totals(
                 items=items,
-                gst_type=getattr(order_data, 'gst_type', 'CGST/SGST'),
+                gst_type=gst_type,
                 freight_charges=float(getattr(order_data, 'freight_charges', 0) or 0),
                 insurance_charges=float(getattr(order_data, 'insurance_charges', 0) or 0),
                 other_charges=float(getattr(order_data, 'other_charges', 0) or 0),
@@ -84,7 +91,8 @@ class OrderService:
                 order_date=order_data.order_date,
                 customer_id=order_data.customer_id,
                 totals=totals,
-                created_by=actual_user_id
+                created_by=actual_user_id,
+                gst_type=gst_type
             )
             
             # 6. Prepare order items data

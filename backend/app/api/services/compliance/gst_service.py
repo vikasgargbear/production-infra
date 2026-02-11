@@ -418,6 +418,11 @@ class GSTService:
         if not gst_number[2:12].isalnum():
             return False, "PAN portion (characters 3-12) must be alphanumeric"
 
+        # Validate PAN format within GSTIN (chars 3-12): AAAAA9999A
+        pan_portion = gst_number[2:12]
+        if not re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', pan_portion):
+            return False, "PAN portion must be in format AAAAA9999A (5 letters, 4 digits, 1 letter)"
+
         if not gst_number[13] == 'Z':
             return False, "14th character must be 'Z'"
 

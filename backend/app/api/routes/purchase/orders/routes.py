@@ -226,6 +226,15 @@ async def create_purchase_entry(
         # Log the received data for debugging
         logger.info(f"Processing {len(items)} items for purchase entry")
         
+        # Determine GST type from GSTIN state codes (IGST vs CGST/SGST)
+        supplier_id = purchase_data.get("supplier_id")
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=context.org_id,
+            supplier_id=int(supplier_id) if supplier_id else None
+        ) if supplier_id else "CGST/SGST"
+        logger.info(f"GST type determined for purchase entry: {gst_type}")
+
         # OPTIMIZATION: Batch fetch all existing products BEFORE the loop using repository
         product_names = [item.get("product_name") for item in items if item.get("product_name") and not item.get("product_id")]
         product_lookup = {}
@@ -283,7 +292,7 @@ async def create_purchase_entry(
             total_price = taxable_amount + tax_amount
 
             # Use GSTService for consistent GST split
-            gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, "CGST/SGST")
+            gst = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
             cgst_percent = gst["cgst_percent"]
             sgst_percent = gst["sgst_percent"]
             igst_percent = gst["igst_percent"]

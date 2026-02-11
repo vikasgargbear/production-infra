@@ -162,7 +162,8 @@ class InvoiceRepository:
         payment_status: str = "pending",
         credit_amount: Optional[Decimal] = None,
         salesperson_id: Optional[int] = None,
-        invoice_status: str = "posted"
+        invoice_status: str = "posted",
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Create invoice record.
@@ -198,6 +199,7 @@ class InvoiceRepository:
                 invoice_status, payment_status, paid_amount,
                 credit_amount,
                 salesperson_id,
+                gst_type,
                 created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
@@ -211,6 +213,7 @@ class InvoiceRepository:
                 :invoice_status, :payment_status, :paid_amount,
                 :credit_amount,
                 :salesperson_id,
+                :gst_type,
                 :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
@@ -245,6 +248,7 @@ class InvoiceRepository:
             "paid_amount": paid_amount,
             "credit_amount": credit_amount,
             "salesperson_id": salesperson_id,
+            "gst_type": gst_type,
             "created_by": created_by
         })
         

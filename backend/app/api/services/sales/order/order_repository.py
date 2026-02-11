@@ -45,7 +45,8 @@ class OrderRepository:
         order_date: Any,
         customer_id: int,
         totals: Dict[str, Any],
-        created_by: int
+        created_by: int,
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Create sales order record.
@@ -56,11 +57,13 @@ class OrderRepository:
                 org_id, branch_id, order_number, order_date, order_type,
                 customer_id, subtotal_amount, discount_amount, taxable_amount,
                 cgst_amount, sgst_amount, igst_amount, tax_amount, final_amount,
+                gst_type,
                 created_by, created_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, 'sales',
                 :customer_id, :subtotal, :discount, :taxable,
                 :cgst, :sgst, :igst, :tax, :final,
+                :gst_type,
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING order_id
         """), {
@@ -77,6 +80,7 @@ class OrderRepository:
             "igst": totals.get("igst_amount", 0),
             "tax": totals.get("total_tax_amount", 0),
             "final": totals.get("final_amount", 0),
+            "gst_type": gst_type,
             "created_by": created_by
         })
         

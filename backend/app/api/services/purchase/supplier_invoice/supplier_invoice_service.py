@@ -13,6 +13,7 @@ from .supplier_invoice_repository import SupplierInvoiceRepository
 from ..calculations import PurchaseCalculator
 from ...document_number_service import DocumentNumberService
 from .....core.utils.constants import InvoicePaymentStatus, SupplierInvoiceStatus
+from ...compliance.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +56,29 @@ class SupplierInvoiceService:
             if not invoice_number:
                 invoice_number = SupplierInvoiceService.generate_invoice_number(db, org_id)
             
-            # Calculate totals using PurchaseCalculator
+            # Determine GST type from GSTIN state codes
+            supplier_id = invoice_data.get("supplier_id")
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=org_id,
+                supplier_id=int(supplier_id) if supplier_id else None
+            ) if supplier_id else invoice_data.get("gst_type", "CGST/SGST")
+            logger.info(f"GST type determined for supplier invoice: {gst_type}")
+
+            # Strip pre-calculated tax values to force backend recalculation
             items = invoice_data.get("items", [])
+            for item in items:
+                item.pop('line_total', None)
+                item.pop('cgst_amount', None)
+                item.pop('sgst_amount', None)
+                item.pop('igst_amount', None)
+                item.pop('total_tax', None)
+                item.pop('total_tax_amount', None)
+
+            # Calculate totals using PurchaseCalculator
             calc_result = PurchaseCalculator.calculate_supplier_invoice_totals(
                 items=items,
-                gst_type=invoice_data.get("gst_type", "CGST/SGST"),
+                gst_type=gst_type,
                 freight_charges=float(invoice_data.get("freight_charges", 0)),
                 insurance_charges=float(invoice_data.get("insurance_charges", 0)),
                 other_charges=float(invoice_data.get("other_charges", 0)),
@@ -74,7 +93,8 @@ class SupplierInvoiceService:
             
             # Create invoice header via repository
             invoice_id = SupplierInvoiceRepository.create_invoice_header(
-                db, org_id, branch_id, invoice_data, calc_result, user_id
+                db, org_id, branch_id, invoice_data, calc_result, user_id,
+                gst_type=gst_type
             )
             
             # Create invoice items

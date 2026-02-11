@@ -220,7 +220,8 @@ class InvoiceService:
                 payment_status=payment_status,
                 credit_amount=credit_amount,
                 salesperson_id=salesperson_id,
-                invoice_status=invoice_status
+                invoice_status=invoice_status,
+                gst_type=gst_type
             )
             
             # 8. Prepare invoice items data

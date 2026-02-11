@@ -270,7 +270,8 @@ async def create_sale_return(
             return_data=return_dict,
             totals=totals,
             credit_note_no=credit_note_no,
-            created_by=created_by
+            created_by=created_by,
+            gst_type=gst_type
         )
         
         # ====================================================================

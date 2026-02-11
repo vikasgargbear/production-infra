@@ -173,6 +173,7 @@ async def create_purchase_return(
             "cgst_amount": float(totals["cgst_amount"]), "sgst_amount": float(totals["sgst_amount"]),
             "igst_amount": float(totals["igst_amount"]),
             "debit_note_number": None, "debit_note_status": "pending",
+            "gst_type": gst_type,
             "notes": return_dict.get("notes"), "created_by": user_id
         })
 

@@ -794,7 +794,8 @@ class ReturnService:
         return_data: dict,
         totals: dict,
         credit_note_no: Optional[str],
-        created_by: int
+        created_by: int,
+        gst_type: str = "CGST/SGST"
     ) -> int:
         """
         Insert a new sales return record and return the return_id.
@@ -823,6 +824,7 @@ class ReturnService:
                 credit_note_number, credit_note_date, credit_note_status,
                 adjusted_amount, pending_amount,
                 return_quantity,
+                gst_type,
                 notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :return_number, :return_date,
@@ -834,6 +836,7 @@ class ReturnService:
                 :credit_note_no, :credit_note_date, :credit_note_status,
                 0, :total_amount,
                 :return_quantity,
+                :gst_type,
                 :notes, :created_by
             )
             RETURNING return_id
@@ -856,6 +859,7 @@ class ReturnService:
             "sgst_amount": float(totals["sgst_amount"]),
             "igst_amount": float(totals["igst_amount"]),
             "return_quantity": float(totals.get("total_return_quantity", 0)),
+            "gst_type": gst_type,
             "credit_note_no": credit_note_no,
             "credit_note_date": return_data["return_date"] if credit_note_no else None,
             "credit_note_status": "issued" if credit_note_no else None,
