@@ -97,32 +97,66 @@ class GSTService:
             str: "CGST/SGST" or "IGST"
         """
         try:
-            # Get company/organization state from branch GST number (first 2 chars = state code)
-            # or from address JSONB field
+            # ====================================================================
+            # PRIORITY 1: GSTIN-based state code comparison (most reliable)
+            # First 2 digits of GSTIN = state code (e.g., 08=Rajasthan, 27=Maharashtra)
+            # This is how Tally, Zoho, and all Indian ERPs determine IGST vs CGST/SGST
+            # ====================================================================
+            company_gstin = db.execute(text("""
+                SELECT COALESCE(
+                    ob.branch_gst_number,
+                    o.gst_number
+                )
+                FROM master.org_branches ob
+                JOIN master.organizations o ON o.org_id = ob.org_id
+                WHERE ob.org_id = :org_id AND ob.is_default_location = true
+                LIMIT 1
+            """), {"org_id": org_id}).scalar()
+
+            party_gstin = None
+            if customer_id:
+                party_gstin = db.execute(text("""
+                    SELECT gst_number FROM parties.customers
+                    WHERE customer_id = :customer_id
+                """), {"customer_id": customer_id}).scalar()
+            elif supplier_id:
+                party_gstin = db.execute(text("""
+                    SELECT gst_number FROM parties.suppliers
+                    WHERE supplier_id = :supplier_id
+                """), {"supplier_id": supplier_id}).scalar()
+
+            # Compare GSTIN state codes if both are available
+            if company_gstin and party_gstin and len(company_gstin) >= 2 and len(party_gstin) >= 2:
+                company_state_code = company_gstin[:2]
+                party_state_code = party_gstin[:2]
+                if company_state_code.isdigit() and party_state_code.isdigit():
+                    if company_state_code == party_state_code:
+                        logger.debug(f"GSTIN match: {company_state_code} == {party_state_code} → CGST/SGST")
+                        return "CGST/SGST"
+                    else:
+                        logger.debug(f"GSTIN mismatch: {company_state_code} != {party_state_code} → IGST")
+                        return "IGST"
+
+            # ====================================================================
+            # PRIORITY 2: Address-based state comparison (fallback when GSTIN missing)
+            # ====================================================================
             result = db.execute(text("""
-                SELECT 
-                    COALESCE(
-                        address->>'state',
-                        address->>'state_name',
-                        (SELECT gs.state_name FROM (VALUES
-                            ('01','Jammu & Kashmir'),('02','Himachal Pradesh'),('03','Punjab'),
-                            ('04','Chandigarh'),('05','Uttarakhand'),('06','Haryana'),('07','Delhi'),
-                            ('08','Rajasthan'),('09','Uttar Pradesh'),('10','Bihar'),('27','Maharashtra'),
-                            ('29','Karnataka'),('32','Kerala'),('33','Tamil Nadu'),('36','Telangana')
-                        ) AS gs(code, state_name) WHERE gs.code = LEFT(branch_gst_number, 2))
-                    ) as company_state
+                SELECT COALESCE(
+                    address->>'state',
+                    address->>'state_name'
+                ) as company_state
                 FROM master.org_branches
                 WHERE org_id = :org_id AND is_default_location = true
                 LIMIT 1
             """), {"org_id": org_id}).scalar()
-            
+
             company_state = result
 
             if not company_state:
                 logger.warning(f"Company state not found for org_id={org_id}, defaulting to CGST/SGST")
                 return "CGST/SGST"
 
-            # Get party state (customer or supplier)
+            # Get party state from addresses
             party_state = None
 
             # Try delivery address first (most accurate for GST)
@@ -177,7 +211,7 @@ class GSTService:
                 logger.debug(f"Intra-state: {company_state} - CGST/SGST")
                 return "CGST/SGST"
             else:
-                logger.debug(f"Inter-state: {company_state} - {party_state} - IGST")
+                logger.debug(f"Inter-state: {company_state} → {party_state} - IGST")
                 return "IGST"
 
         except Exception as e:

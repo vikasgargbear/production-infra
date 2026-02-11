@@ -75,8 +75,19 @@ class InvoiceService:
                 delivery_address_id=getattr(invoice_data, 'shipping_address_id', None),
                 billing_address_id=getattr(invoice_data, 'billing_address_id', None)
             )
-            logger.debug(f"GST type determined: {gst_type}")
-            
+            logger.info(f"GST type determined: {gst_type}")
+
+            # CRITICAL: Strip pre-calculated line_total from items to force backend recalculation.
+            # Frontend calculations are for display only; backend is source of truth for GST split.
+            # This prevents frontend sending CGST/SGST when backend determines IGST (or vice versa).
+            for item in items:
+                item.pop('line_total', None)
+                item.pop('cgst_amount', None)
+                item.pop('sgst_amount', None)
+                item.pop('igst_amount', None)
+                item.pop('total_tax', None)
+                item.pop('total_tax_amount', None)
+
             # Use the static calculate_invoice_totals method (eliminates 50+ lines of duplication)
             totals = InvoiceService.calculate_invoice_totals(
                 items=items,
