@@ -51,7 +51,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
     pincode: customer?.pincode || '',
 
     // Compliance & GST
-    gst_number: customer?.gst_number || customer?.gst_number || '',
+    gst_number: customer?.gst_number || '',
     pan_number: customer?.pan_number || '',
     drug_license_number: customer?.drug_license_number || '',
     drug_license_validity: customer?.drug_license_validity || '',

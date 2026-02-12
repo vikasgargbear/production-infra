@@ -175,8 +175,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
                 await bankAccountsApi.update(editingId, accountData);
             } else {
                 // Create new account
-                // @ts-ignore
-                await bankAccountsApi.createBankAccount(accountData);
+                await bankAccountsApi.create(accountData);
             }
 
             // Refresh the list

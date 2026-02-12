@@ -7,7 +7,7 @@
 import React, { useEffect } from 'react';
 import {
     Ruler, Search, Plus, Edit2, Trash2,
-    Download, Upload, Loader2, AlertCircle, Check,
+    Loader2, AlertCircle, Check,
     ArrowRight, X, RefreshCw
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
@@ -73,15 +73,13 @@ const INITIAL_FORM_DATA: UnitFormData = {
 // Helper Functions
 // ============================================================================
 
-const getCategoryColor = (category: string): string => {
-    const colors: Record<string, string> = {
-        quantity: 'blue',
-        volume: 'green',
-        weight: 'purple',
-        special: 'orange'
-    };
-    return colors[category] || 'gray';
+const CATEGORY_STYLES: Record<string, string> = {
+    quantity: 'bg-blue-100 text-blue-800',
+    volume: 'bg-green-100 text-green-800',
+    weight: 'bg-purple-100 text-purple-800',
+    special: 'bg-orange-100 text-orange-800',
 };
+const DEFAULT_CATEGORY_STYLE = 'bg-gray-100 text-gray-800';
 
 const getConversionChain = (unit: Unit, allUnits: Unit[]): Unit[] => {
     const chain = [unit];
@@ -107,6 +105,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
         filteredEntities,
         isLoading,
         error,
+        setError,
         successMessage,
         refreshing,
         searchTerm,
@@ -170,8 +169,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
 
         const dependentUnits = units.filter(u => u.baseUnit === unit.code);
         if (dependentUnits.length > 0) {
-            // Can't use setError directly since we need custom message
-            window.alert(`Cannot delete ${unit.name}. ${dependentUnits.length} units depend on it.`);
+            setError(`Cannot delete ${unit.name}. ${dependentUnits.length} units depend on it.`);
             return;
         }
 
@@ -198,12 +196,6 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                         >
                             {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                        </button>
-                        <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2">
-                            <Upload className="w-4 h-4" /><span>Import</span>
-                        </button>
-                        <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2">
-                            <Download className="w-4 h-4" /><span>Export</span>
                         </button>
                         <button
                             onClick={() => setShowModal(true)}
@@ -296,7 +288,7 @@ const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
                                                     <p className="text-xs text-gray-500">Code: {unit.code}{unit.description && ` • ${unit.description}`}</p>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 text-xs rounded-full bg-${getCategoryColor(unit.category)}-100 text-${getCategoryColor(unit.category)}-800`}>
+                                                    <span className={`px-2 py-1 text-xs rounded-full ${CATEGORY_STYLES[unit.category] || DEFAULT_CATEGORY_STYLE}`}>
                                                         {unit.category}
                                                     </span>
                                                 </td>

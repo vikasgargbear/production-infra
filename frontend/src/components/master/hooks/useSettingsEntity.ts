@@ -70,6 +70,7 @@ export interface UseSettingsEntityReturn<T, F> {
     filteredEntities: T[];
     isLoading: boolean;
     error: string | null;
+    setError: (error: string | null) => void;
     successMessage: string;
     refreshing: boolean;
 
@@ -324,6 +325,7 @@ export function useSettingsEntity<T extends { isActive?: boolean; is_active?: bo
         filteredEntities,
         isLoading,
         error,
+        setError,
         successMessage,
         refreshing,
 

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
     Package2, Search, Plus, Edit2, Trash2,
-    Calendar, AlertTriangle, Clock, CheckCircle,
-    Download, Upload, Loader2, AlertCircle, Check,
-    ArrowRight, TrendingUp, Activity, Filter, X
+    AlertTriangle, CheckCircle,
+    Loader2, AlertCircle, Check,
+    TrendingUp, Activity, X
 } from 'lucide-react';
 import { batchesApi, productsApi } from '../../../services/api';
 
@@ -88,7 +88,7 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                 // Transform backend data to match frontend structure
                 const transformedBatches = (response as any).data.map((batch: any) => ({
                     id: batch.id,
-                    batchNumber: batch.batch_number || batch.batch_number || `BT-${batch.id}`,
+                    batchNumber: batch.batch_number || `BT-${batch.id}`,
                     productId: batch.product_id || batch.productId,
                     productName: batch.product_name || batch.productName || 'Unknown Product',
                     productCode: batch.product_code || batch.productCode || 'N/A',
@@ -364,26 +364,22 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
         });
     };
 
-    const handleExport = () => {
-        // TODO: Implement export functionality
-        alert('Export functionality coming soon!');
+    const STATUS_ICON_STYLES: Record<string, string> = {
+        active: 'w-5 h-5 text-green-500 mr-2',
+        expiring: 'w-5 h-5 text-amber-500 mr-2',
+        expired: 'w-5 h-5 text-red-500 mr-2',
+        finished: 'w-5 h-5 text-gray-500 mr-2',
+        out_of_stock: 'w-5 h-5 text-gray-500 mr-2',
+        unknown: 'w-5 h-5 text-gray-500 mr-2',
     };
 
-    const handleImport = () => {
-        // TODO: Implement import functionality
-        alert('Import functionality coming soon!');
-    };
-
-    const getStatusColor = (status: string) => {
-        const colors: { [key: string]: string } = {
-            active: 'green',
-            expiring: 'amber',
-            expired: 'red',
-            finished: 'gray',
-            out_of_stock: 'gray',
-            unknown: 'gray'
-        };
-        return colors[status] || 'gray';
+    const STATUS_BADGE_STYLES: Record<string, string> = {
+        active: 'px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 capitalize',
+        expiring: 'px-2 py-1 text-xs rounded-full bg-amber-100 text-amber-800 capitalize',
+        expired: 'px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 capitalize',
+        finished: 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800 capitalize',
+        out_of_stock: 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800 capitalize',
+        unknown: 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800 capitalize',
     };
 
     const getStatusIcon = (status: string) => {
@@ -439,20 +435,6 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                         >
                             <Activity className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                        </button>
-                        <button
-                            onClick={handleImport}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
-                        >
-                            <Upload className="w-4 h-4" />
-                            <span>Import</span>
-                        </button>
-                        <button
-                            onClick={handleExport}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            <span>Export</span>
                         </button>
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -708,8 +690,8 @@ const BatchMaster: React.FC<BatchMasterProps> = ({ open, onClose }) => {
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
                                                         <div className="flex items-center justify-center">
-                                                            <StatusIcon className={`w-5 h-5 text-${getStatusColor(batch.status)}-500 mr-2`} />
-                                                            <span className={`px-2 py-1 text-xs rounded-full bg-${getStatusColor(batch.status)}-100 text-${getStatusColor(batch.status)}-800 capitalize`}>
+                                                            <StatusIcon className={STATUS_ICON_STYLES[batch.status] || STATUS_ICON_STYLES.unknown} />
+                                                            <span className={STATUS_BADGE_STYLES[batch.status] || STATUS_BADGE_STYLES.unknown}>
                                                                 {batch.status}
                                                             </span>
                                                         </div>
