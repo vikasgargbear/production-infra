@@ -11,7 +11,7 @@ import documentNumberGenerator from '../../../../services/offline/documents/docu
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -423,8 +423,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             }
         }
 
-        const customerState = addressData.state || customer.state || '';
-        const gstType = determineGstType(
+        const customerState = addressData.state || addressData.state_name || customer.state || '';
+        const gstType = determineGstTypeForSupply(
             companyInfo?.state,
             customerState,
             (companyInfo as any)?.gst_number,

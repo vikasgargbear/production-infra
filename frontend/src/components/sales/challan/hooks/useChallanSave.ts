@@ -9,7 +9,7 @@ import { useDocumentSave } from '../../../global/hooks/useDocumentSave';
 import { challansApi } from '../../../../services/api';
 import { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
 import { deductStockLocally } from '../../utils/offlineSaveHelpers';
-import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Challan, ChallanItem, CreatedChallanData, CustomerDetails } from '../types/challanTypes';
 
 export interface UseChallanSaveProps {
@@ -41,7 +41,7 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
 
     const buildPayload = () => {
         const deliveryState = challan.delivery_state || (selectedCustomer as CustomerDetails)?.state || '';
-        const gstType = determineGstType(
+        const gstType = determineGstTypeForSupply(
             companyInfo?.state,
             deliveryState,
             companyInfo?.gst_number,

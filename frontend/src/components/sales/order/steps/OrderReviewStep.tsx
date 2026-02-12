@@ -12,7 +12,7 @@ import {
 } from '../../../global';
 import BankAccountSelector from '../../../global/selector/BankAccountSelector';
 import { numberToWords } from '../../../../utils/formatters';
-import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, BankAccount, Customer } from '../../../../types/models';
 
 // Using canonical Customer type from /types/models - no local duplicate
@@ -223,8 +223,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     addressType="shipping"
                                     onChange={(address: string) => setOrder(prev => ({ ...prev, shipping_address: address }))}
                                     onSave={(addressData: any) => {
-                                        const addrState = addressData?.state;
-                                        const gstType = determineGstType(companyInfo?.state, addrState, companyInfo?.gst_number, selectedCustomer?.gst_number);
+                                        const addrState = addressData?.state || addressData?.state_name;
+                                        const gstType = determineGstTypeForSupply(
+                                            companyInfo?.state, addrState,
+                                            companyInfo?.gst_number, selectedCustomer?.gst_number
+                                        );
                                         setOrder(prev => ({
                                             ...prev,
                                             shipping_address_data: addressData,
@@ -237,8 +240,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     onSameAsBillingChange={(same: boolean) => {
                                         setSameAsBilling(same);
                                         if (same) {
-                                            const billingState = (order.billing_address_data as any)?.state;
-                                            const gstType = determineGstType(companyInfo?.state, billingState, companyInfo?.gst_number, selectedCustomer?.gst_number);
+                                            const billingState = (order.billing_address_data as any)?.state || (order.billing_address_data as any)?.state_name;
+                                            const gstType = determineGstTypeForSupply(
+                                                companyInfo?.state, billingState,
+                                                companyInfo?.gst_number, selectedCustomer?.gst_number
+                                            );
                                             setOrder(prev => ({
                                                 ...prev,
                                                 shipping_address: prev.billing_address,

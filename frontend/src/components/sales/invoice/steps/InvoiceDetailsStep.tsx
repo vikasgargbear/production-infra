@@ -5,7 +5,7 @@ import { FileText, Plus } from 'lucide-react';
 import { ModuleHeader, AddressForm, DocumentFooter } from '../../../global';
 
 // GST Type Determination
-import { determineGstType } from '../../../gst/utils/gstCalculations';
+import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import { useCompany } from '../../../../contexts/CompanyContext';
 
 // Shared Types
@@ -105,13 +105,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         }}
                                         onSave={(addressData: unknown) => {
                                             setAddAddressMode(false);
-                                            // CRITICAL GST FIX: For goods, Place of Supply = delivery address state (IGST Act Section 10)
-                                            // Do NOT use GSTIN comparison here — GSTIN tells registration state, not delivery location
-                                            // Example: Customer registered in MH (27) but delivery to RJ (08) = Intra-state with RJ seller
+                                            // Uses global GST utility — delivery address state = Place of Supply (IGST Act Section 10)
                                             const addrState = (addressData as any)?.state || (addressData as any)?.state_name;
-                                            const gstType = addrState
-                                                ? determineGstType(companyInfo?.state, addrState)  // Delivery address = place of supply
-                                                : determineGstType(companyInfo?.state, null, companyInfo?.gst_number, selectedCustomer?.gst_number);  // Fallback to GSTIN when no delivery state
+                                            const gstType = determineGstTypeForSupply(
+                                                companyInfo?.state, addrState,
+                                                companyInfo?.gst_number, selectedCustomer?.gst_number
+                                            );
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,

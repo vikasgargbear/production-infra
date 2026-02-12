@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { challansApi } from '../../../../services/api';
 import { useSalesTransaction } from '../../hooks/useSalesTransaction';
-import { determineGstType } from '../../../gst/utils/gstCalculations';
+
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useChallanSave } from './useChallanSave';

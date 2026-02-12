@@ -18,13 +18,9 @@ export type GstType = 'IGST' | 'CGST/SGST';
 /**
  * Determine GST Type based on GSTIN state codes or company/customer state names.
  *
- * Indian GST Rules:
- * - IGST (Integrated GST) = Inter-state transactions (different states)
- * - CGST/SGST (Central + State GST) = Intra-state transactions (same state)
- *
- * Priority:
- * 1. GSTIN state codes (first 2 digits) — most reliable
- * 2. State name comparison — fallback when GSTIN unavailable
+ * WARNING: This uses GSTIN registration state, NOT delivery address.
+ * For invoice/supply scenarios, prefer `determineGstTypeForSupply()` which
+ * correctly uses delivery address as Place of Supply per IGST Act Section 10.
  *
  * @param companyState - The seller's/company's state name
  * @param partyState - The buyer's/customer's/supplier's state name
@@ -38,7 +34,7 @@ export function determineGstType(
     companyGstin?: string | null,
     partyGstin?: string | null
 ): GstType {
-    // Priority 1: GSTIN-based comparison (most reliable — first 2 digits = state code)
+    // Priority 1: GSTIN-based comparison (first 2 digits = state code)
     if (companyGstin && partyGstin && companyGstin.length >= 2 && partyGstin.length >= 2) {
         const companyStateCode = companyGstin.substring(0, 2);
         const partyStateCode = partyGstin.substring(0, 2);
@@ -57,6 +53,45 @@ export function determineGstType(
     }
 
     return normalizedCompanyState !== normalizedPartyState ? 'IGST' : 'CGST/SGST';
+}
+
+/**
+ * Determine GST type for goods/services SUPPLY based on Place of Supply rules.
+ *
+ * USE THIS for invoices, credit notes, purchase returns — anywhere goods move.
+ *
+ * Indian GST Law:
+ *   GOODS  (IGST Act Section 10): Place of Supply = where goods movement terminates (delivery address)
+ *   SERVICES (IGST Act Section 12): Place of Supply = location of recipient
+ *
+ * Priority:
+ *   1. Delivery address state (Place of Supply) — legally correct for goods
+ *   2. GSTIN state codes — fallback when delivery state unknown
+ *   3. State name comparison — last resort
+ *
+ * Example: Customer registered in Maharashtra (27) but delivery to Rajasthan (08)
+ *          Seller in Rajasthan (08) → Same state → CGST/SGST (NOT IGST!)
+ *
+ * @param sellerState - Seller/company state name
+ * @param placeOfSupply - Delivery address state (for goods) or recipient state (for services)
+ * @param sellerGstin - Seller's GSTIN (fallback only)
+ * @param buyerGstin - Buyer's GSTIN (fallback only)
+ */
+export function determineGstTypeForSupply(
+    sellerState: string | undefined | null,
+    placeOfSupply: string | undefined | null,
+    sellerGstin?: string | null,
+    buyerGstin?: string | null
+): GstType {
+    // PRIMARY: Place of Supply (delivery address state) vs Seller state
+    if (placeOfSupply && sellerState) {
+        const normalizedSeller = sellerState.toLowerCase().trim();
+        const normalizedPOS = placeOfSupply.toLowerCase().trim();
+        return normalizedSeller !== normalizedPOS ? 'IGST' : 'CGST/SGST';
+    }
+
+    // FALLBACK: When place of supply is unknown, use GSTIN/state comparison
+    return determineGstType(sellerState, null, sellerGstin, buyerGstin);
 }
 
 // =============================================================================
