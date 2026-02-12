@@ -14,6 +14,11 @@ import { collectionCenterApi } from './modules/analytics/collectionCenter.api';
 import { customerOutstandingApi } from './modules/analytics/customerOutstanding.api';
 
 // =========================================================================
+// AUDIT
+// =========================================================================
+import { auditApi } from './modules/audit/audit.api';
+
+// =========================================================================
 // AUTH
 // =========================================================================
 import { authApi } from './modules/auth/auth.api';
@@ -118,6 +123,9 @@ export {
   apiClient,
   apiHelpers,
 
+  // Audit
+  auditApi,
+
   // Analytics
   dashboardApi,
   reportsApi,
@@ -217,6 +225,9 @@ export const clearGSTCache = (): void => {
 const apiModules = {
   // Analytics
   analytics: { dashboard: dashboardApi, reports: reportsApi, collectionCenter: collectionCenterApi, customerOutstanding: customerOutstandingApi },
+
+  // Audit
+  audit: { auditLogs: auditApi },
 
   // Auth
   auth: { auth: authApi, users: usersApi, roles: roleManagementApi },

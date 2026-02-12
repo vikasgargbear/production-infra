@@ -493,20 +493,43 @@ async def update_org_user(
             raise HTTPException(status_code=400, detail="No fields to update")
         
         update_fields.append("updated_at = CURRENT_TIMESTAMP")
-        
+
         result = db.execute(
             text(f"""
-                UPDATE master.org_users 
+                UPDATE master.org_users
                 SET {', '.join(update_fields)}
                 WHERE user_id = :user_id AND org_id = :org_id
                 RETURNING user_id, username, email, full_name
             """),
             params
         )
-        
+
         updated_user = result.first()
+
+        # Log deactivation to audit trail
+        if 'is_active' in user_data and user_data['is_active'] is False:
+            try:
+                db.execute(
+                    text("""
+                        INSERT INTO system_config.audit_logs
+                        (org_id, activity_type, entity_type, entity_id, entity_name,
+                         action_performed, user_id, user_name, result_status)
+                        VALUES (:org_id, 'delete', 'user', :target_user_id, :target_username,
+                                'User deactivated', :admin_user_id, :admin_username, 'success')
+                    """),
+                    {
+                        "org_id": org_id,
+                        "target_user_id": str(user_id),
+                        "target_username": updated_user.username if updated_user else str(user_id),
+                        "admin_user_id": current_user.get('user_id'),
+                        "admin_username": current_user.get('username', 'unknown'),
+                    }
+                )
+            except Exception as audit_err:
+                logger.warning(f"Failed to write audit log for user deactivation: {audit_err}")
+
         db.commit()
-        
+
         return {
             "success": True,
             "data": dict(updated_user._mapping),
@@ -559,16 +582,43 @@ async def delete_org_user(
                 detail="Only admins can delete admin users"
             )
         
+        # Get username before deactivation for audit log
+        target_user = db.execute(
+            text("SELECT username FROM master.org_users WHERE user_id = :user_id AND org_id = :org_id"),
+            {"user_id": user_id, "org_id": org_id}
+        ).first()
+
         # Soft delete
         db.execute(
             text("""
-                UPDATE master.org_users 
+                UPDATE master.org_users
                 SET is_active = false, updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = :user_id AND org_id = :org_id
             """),
             {"user_id": user_id, "org_id": org_id}
         )
-        
+
+        # Log to audit trail
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO system_config.audit_logs
+                    (org_id, activity_type, entity_type, entity_id, entity_name,
+                     action_performed, user_id, user_name, result_status)
+                    VALUES (:org_id, 'delete', 'user', :target_user_id, :target_username,
+                            'User deactivated (deleted)', :admin_user_id, :admin_username, 'success')
+                """),
+                {
+                    "org_id": org_id,
+                    "target_user_id": str(user_id),
+                    "target_username": target_user.username if target_user else str(user_id),
+                    "admin_user_id": current_user.get('user_id'),
+                    "admin_username": current_user.get('username', 'unknown'),
+                }
+            )
+        except Exception as audit_err:
+            logger.warning(f"Failed to write audit log for user deletion: {audit_err}")
+
         db.commit()
 
         return {

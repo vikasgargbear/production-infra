@@ -10,6 +10,7 @@ import { ModuleHub } from '../global';
 import { CompanySettings } from './company';
 import { EmployeeManagement } from './employees';
 import { MasterSettings } from './master';
+import AuditTrail from '../master/settings/AuditTrail';
 
 interface SettingsHubProps {
     open?: boolean;
@@ -44,6 +45,15 @@ const SettingsHub: React.FC<SettingsHubProps> = ({ open = true, onClose }) => {
             icon: Database,
             color: 'purple',
             component: MasterSettings
+        },
+        {
+            id: 'audit',
+            label: 'Audit',
+            fullLabel: 'Audit Trail',
+            description: 'Activity logs & security',
+            icon: Shield,
+            color: 'red',
+            component: AuditTrail
         }
     ];
 

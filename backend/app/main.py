@@ -22,6 +22,9 @@ from .api.routes.auth import oauth as auth_oauth
 from .api.routes.auth import users
 from .api.routes.auth import roles as role_management
 
+# Audit Module
+from .api.routes.audit import audit_router
+
 # Master Data Module
 from .api.routes.master import customers
 from .api.routes.master import suppliers
@@ -204,6 +207,9 @@ api.include_router(auth_enterprise.router, tags=["Authentication"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
 api.include_router(users.router, tags=["Users"])
 api.include_router(role_management.router, tags=["Role Management"])
+
+# --- Audit ---
+api.include_router(audit_router, tags=["Audit Trail"])
 
 # --- Master Data ---
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])

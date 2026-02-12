@@ -49,9 +49,11 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid - redirect to login
-      // Token expired or invalid - redirect to login
+    if (error.response?.status === 401 ||
+        (error.response?.status === 403 &&
+         typeof error.response?.data?.detail === 'string' &&
+         error.response.data.detail.toLowerCase().includes('deactivated'))) {
+      // Token expired, invalid, or account deactivated - redirect to login
       storageService.removeItem(STORAGE_KEYS.AUTH_TOKEN);
       storageService.removeItem(STORAGE_KEYS.USER);
       window.location.href = '/login';

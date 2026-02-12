@@ -133,8 +133,8 @@ class PermissionChecker:
             
             if not user:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="User not found or inactive"
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account deactivated or not found"
                 )
             
             user_dict = dict(user._mapping)
@@ -184,10 +184,10 @@ class PermissionChecker:
                 detail="Token expired or invalid"
             )
         except HTTPException as he:
-            # Log 403 permission denials for security monitoring
-            if he.status_code == status.HTTP_403_FORBIDDEN:
+            # Log 401/403 denials for security monitoring
+            if he.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
                 logger.warning(
-                    f"Permission denied: {he.detail}",
+                    f"Access denied ({he.status_code}): {he.detail}",
                     extra={"event_type": "permission_denied"}
                 )
             raise
