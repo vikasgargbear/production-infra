@@ -18,8 +18,11 @@ import {
 } from 'lucide-react';
 
 // Import global components
-import { CustomerSearch, CustomerCreation } from '../../global';
+import { CustomerSearch, CustomerCreation, useToast } from '../../global';
 import { paymentsApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 import type { Customer as BaseCustomer } from '../../../types/models';
 
 
@@ -104,6 +107,7 @@ interface LocalPayment {
 }
 
 const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, onClose }) => {
+  const toast = useToast();
   const [formData, setFormData] = useState<FormData>({
     party: null,
     paymentType: 'order_payment',
@@ -129,15 +133,20 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [showCustomerCreationModal, setShowCustomerCreationModal] = useState(false);
 
-  // Check for locally stored payments
-  const checkLocalPayments = () => {
-    const localPayments: LocalPayment[] = JSON.parse(localStorage.getItem('localPayments') || '[]');
-    if (localPayments.length > 0) {
-      alert(`Found ${localPayments.length} payments stored locally:\n\n${localPayments.map(p =>
-        `₹${p.amount} - ${p.payment_date} - ${p.remarks || 'Advance Payment'}`
-      ).join('\n')}\n\nThese will be synced once backend is fixed.`);
-    } else {
-      alert('No local payments found.');
+  // Check for locally stored payments (now checks IDB sync queue)
+  const checkLocalPayments = async () => {
+    try {
+      const queue = await offlineDB.getSyncQueue();
+      const pendingPayments = queue.filter(item =>
+        item.entity_type === 'payment' || item.entity_type === 'payments'
+      );
+      if (pendingPayments.length > 0) {
+        toast.info(`${pendingPayments.length} payment(s) pending sync`);
+      } else {
+        toast.success('No pending payments');
+      }
+    } catch {
+      toast.info('No pending payments');
     }
   };
 
@@ -341,36 +350,42 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
           amount: inv.payingAmount
         }))
         : [],
-      outstanding_invoices: outstandingInvoices // Pass all outstanding invoices for FIFO allocation
+      outstanding_invoices: outstandingInvoices
     };
 
     try {
+      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const paymentNumber = await documentNumberGenerator.generatePaymentNumber();
 
-      const response = await paymentsApi.create(paymentData as any);
+      // 1. Save to IDB first (offline-first)
+      const localRecord = {
+        temp_id: tempId,
+        _localId: tempId,
+        payment_number: paymentNumber,
+        ...paymentData,
+        invoice_id: paymentData.invoice_allocations?.[0]?.invoice_id || null,
+        sync_status: 'pending',
+        created_at: new Date().toISOString(),
+        created_offline: true
+      };
 
-      // Show success message with backend status
-      if (response.data?.message === 'Payment recorded locally (backend unavailable)') {
-        alert('⚠️ Payment saved locally (Backend issues detected)\n\nYour payment data is safely stored in the browser and will be synced once the backend is fixed.');
-      } else {
-        alert('✅ Payment saved successfully to backend!');
+      const db = await offlineDB.init();
+      await db.put('payments', localRecord);
+
+      // 2. Add to sync queue
+      await offlineDB.addToSyncQueue('payment', tempId, 'create', localRecord);
+
+      toast.success(`Payment of ₹${totalAmount.toLocaleString()} saved${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
+
+      // 3. Background sync if online
+      if (navigator.onLine) {
+        syncEngine.startSync().catch(() => {});
       }
 
-      // Reset form and close
       onClose();
     } catch (error: any) {
-
-      // Show error message with more details
-      let errorMessage = 'Failed to save payment';
-
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      alert(`Error: ${errorMessage}`);
+      console.error('[PaymentEntry] Save failed:', error);
+      toast.error('Failed to save payment');
     } finally {
       setLoading(false);
     }

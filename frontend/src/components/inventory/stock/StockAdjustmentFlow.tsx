@@ -8,6 +8,9 @@ import {
   NotesSection, useToast
 } from '../../global';
 import { stockApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../../constants/stockAdjustment';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
@@ -365,6 +368,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
 
     setSaving(true);
     try {
+      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const adjustmentNumber = await documentNumberGenerator.generateAdjustmentNumber();
+
       const adjustmentPayload = {
         adjustment_type: adjustmentData.adjustment_type,
         reason: adjustmentData.reason,
@@ -377,38 +383,48 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         }))
       };
 
-      if (!navigator.onLine) {
-        // Queue offline operation - offlineStorage not imported
-        // offlineStorage.queueOfflineOperation({
-        //   type: 'STOCK_ADJUSTMENT',
-        //   endpoint: 'stock.createAdjustment',
-        //   payload: adjustmentPayload,
-        //   priority: 'high'
-        // });
+      // 1. Save locally first (offline-first)
+      const localRecord = {
+        temp_id: tempId,
+        _localId: tempId,
+        adjustment_number: adjustmentNumber,
+        ...adjustmentPayload,
+        sync_status: 'pending',
+        created_at: new Date().toISOString(),
+        created_offline: true
+      };
 
-        toast.info('Offline: Stock adjustment queued. It will sync automatically when online.');
+      const db = await offlineDB.init();
+      await db.put('stock_adjustments', localRecord);
+
+      // 2. Update local stock optimistically
+      const stockUpdates = adjustmentData.items.map(item => ({
+        product_id: item.product_id,
+        batch_id: item.batch_id,
+        quantity: item.adjustment_quantity
+      }));
+
+      if (adjustmentData.adjustment_type === 'increase') {
+        await offlineDB.addStockLocally(stockUpdates);
       } else {
-        await stockApi.createAdjustment(adjustmentPayload);
-        toast.success('Stock adjustment completed successfully');
+        await offlineDB.deductStockLocally(stockUpdates);
       }
 
-      // Reset form
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      // 3. Add to sync queue
+      await offlineDB.addToSyncQueue('stock_adjustment', tempId, 'create', localRecord);
+
+      toast.success(`Stock adjustment saved${navigator.onLine ? '' : ' (offline)'}. ${!navigator.onLine ? 'Will sync when online.' : ''}`);
+
+      // 4. Background sync if online
+      if (navigator.onLine) {
+        syncEngine.startSync().catch(() => {});
+      }
+
+      setTimeout(() => onClose(), 1500);
 
     } catch (error) {
-
-      // Queue on server error/network issues as well
-      // Queue on server error/network issues as well - offlineStorage not imported
-      // offlineStorage.queueOfflineOperation({
-      //   type: 'STOCK_ADJUSTMENT',
-      //   endpoint: 'stock.createAdjustment',
-      //   payload: {...},
-      //   priority: 'high'
-      // });
-
-      toast.info('Network issue: Stock adjustment saved locally and queued for sync.');
+      console.error('[StockAdjustment] Save failed:', error);
+      toast.error('Failed to save stock adjustment');
     } finally {
       setSaving(false);
     }

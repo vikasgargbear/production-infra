@@ -3,6 +3,8 @@ import {
   X, Save, Loader2, Truck, Phone, Building, CreditCard, Shield, Banknote
 } from 'lucide-react';
 import { suppliersApi, metadataApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 import { useToast } from '../../global/ui/feedback/Toast';
 import Input from '../../global/ui/forms/Input';
 import Button from '../../global/ui/Button';
@@ -184,22 +186,50 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         credit_limit: parseFloat(String(formData.credit_limit)) || 0,
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         minimum_order_value: parseFloat(String(formData.minimum_order_value)) || 0,
-        // Map GST field properly
         gst_number: formData.gst_number
       };
 
       if (supplier) {
+        // UPDATE: still requires network
         const response = await suppliersApi.update(supplier.supplier_id, dataToSave);
         toast.success('Supplier updated successfully');
         onSave(response.data || dataToSave);
       } else {
-        // Generate supplier code if not provided
+        // CREATE: offline-first pattern
         if (!dataToSave.supplier_code) {
           dataToSave.supplier_code = `SUPP${Date.now().toString().slice(-6)}`;
         }
-        const response = await suppliersApi.create(dataToSave);
-        toast.success('Supplier created successfully');
-        onSave(response.data || dataToSave);
+
+        const tempId = `LOCAL_SUPP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Save to IDB suppliers store
+        const localRecord = {
+          id: tempId,
+          supplier_id: tempId,
+          _localId: tempId,
+          ...dataToSave,
+          name: dataToSave.supplier_name,
+          phone: dataToSave.primary_phone,
+          sync_status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          created_offline: true
+        };
+
+        const db = await offlineDB.init();
+        await db.put('suppliers', localRecord);
+
+        // Add to sync queue
+        await offlineDB.addToSyncQueue('supplier', tempId, 'create', localRecord);
+
+        toast.success(`Supplier created${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
+
+        // Background sync if online
+        if (navigator.onLine) {
+          syncEngine.startSync().catch(() => {});
+        }
+
+        onSave(localRecord);
       }
 
       onClose();

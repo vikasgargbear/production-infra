@@ -7,8 +7,10 @@ import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NumberInput, NotesSection, useToast, ModuleHeader
 } from '../../global';
-import { stockApi } from '../../../services/api';
-import { settingsApi } from '../../../services/api';
+import { stockApi, settingsApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 
 const StockTransfer = ({ open = true, onClose }) => {
   const toast = useToast();
@@ -167,22 +169,50 @@ const StockTransfer = ({ open = true, onClose }) => {
     if (!validate()) return;
     setSaving(true);
     try {
-      // Process each item as a separate transfer
-      for (const item of transferData.items) {
-        await stockApi.transfer({
+      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const transferNumber = await documentNumberGenerator.generateTransferNumber();
+
+      // 1. Save locally first (offline-first)
+      const localRecord = {
+        temp_id: tempId,
+        _localId: tempId,
+        transfer_number: transferNumber,
+        source_location: transferData.source_location,
+        destination_location: transferData.destination_location,
+        movement_date: transferData.movement_date,
+        reason: transferData.reason || 'Stock transfer',
+        notes: transferData.notes,
+        items: transferData.items.map(item => ({
           product_id: item.product_id,
           batch_id: item.batch_id,
-          quantity: item.transfer_quantity,
-          source_location: transferData.source_location!,
-          destination_location: transferData.destination_location!,
-          movement_date: transferData.movement_date,
-          reason: transferData.reason || 'Stock transfer'
-        });
+          batch_number: item.batch_number,
+          product_name: item.product_name,
+          transfer_quantity: item.transfer_quantity
+        })),
+        sync_status: 'pending',
+        created_at: new Date().toISOString(),
+        created_offline: true
+      };
+
+      const db = await offlineDB.init();
+      await db.put('stock_transfers', localRecord);
+
+      // 2. No local stock update for transfers (multi-location, let server process + delta sync)
+
+      // 3. Add to sync queue
+      await offlineDB.addToSyncQueue('stock_transfer', tempId, 'create', localRecord);
+
+      toast.success(`Stock transfer saved${navigator.onLine ? '' : ' (offline)'}. ${!navigator.onLine ? 'Will sync when online.' : ''}`);
+
+      // 4. Background sync if online
+      if (navigator.onLine) {
+        syncEngine.startSync().catch(() => {});
       }
-      toast.success(`Stock transfer completed for ${transferData.items.length} item(s)`);
+
       setTimeout(() => onClose(), 1500);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to process transfer');
+      console.error('[StockTransfer] Save failed:', err);
+      toast.error('Failed to save stock transfer');
     } finally {
       setSaving(false);
     }

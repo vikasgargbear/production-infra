@@ -8,7 +8,7 @@
  */
 
 import offlineDB from '../core/offlineDatabase';
-import { invoicesApi, customersApi, productsApi, paymentsApi, ordersApi, challansApi } from '../../api';
+import { invoicesApi, customersApi, productsApi, paymentsApi, ordersApi, challansApi, stockApi, suppliersApi } from '../../api';
 import { cleanData } from '../../api/utils/dataUtils';
 import { toast } from 'react-toastify';
 import { AxiosResponse } from 'axios';
@@ -411,6 +411,21 @@ class SyncEngine {
                     response = await this.syncPurchaseReturn(item.data as Record<string, unknown>);
                     break;
 
+                case 'stock_adjustments':
+                case 'stock_adjustment':
+                    response = await this.syncStockAdjustment(item.data as Record<string, unknown>);
+                    break;
+
+                case 'stock_transfers':
+                case 'stock_transfer':
+                    response = await this.syncStockTransfer(item.data as Record<string, unknown>);
+                    break;
+
+                case 'suppliers':
+                case 'supplier':
+                    response = await this.syncSupplier(item.data as Record<string, unknown>);
+                    break;
+
                 default:
                     throw new Error(`Unknown sync type: ${item.entity_type || item.type}`);
             }
@@ -754,6 +769,83 @@ class SyncEngine {
         } catch (e) { /* ignore */ }
 
         return response;
+    }
+
+    /**
+     * Sync stock adjustment
+     */
+    async syncStockAdjustment(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, ...adjData } = data;
+        const cleaned = cleanData(adjData);
+        const response = await stockApi.createAdjustment(cleaned);
+
+        if (response.data?.adjustment_id && _localId) {
+            await offlineDB.updateLocalId('stock_adjustments', _localId as string, response.data.adjustment_id);
+        }
+
+        // Trigger delta sync for batches/products after adjustment
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'stock_adjusted');
+        } catch (e) { /* ignore */ }
+
+        return response;
+    }
+
+    /**
+     * Sync stock transfer
+     */
+    async syncStockTransfer(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, items, ...transferMeta } = data;
+        const transferItems = items as Array<Record<string, unknown>> || [];
+
+        let lastResponse: AxiosResponse | null = null;
+
+        // Process each item as a separate transfer call
+        for (const item of transferItems) {
+            const transferPayload = {
+                product_id: item.product_id,
+                batch_id: item.batch_id,
+                quantity: item.transfer_quantity,
+                source_location: transferMeta.source_location,
+                destination_location: transferMeta.destination_location,
+                movement_date: transferMeta.movement_date,
+                reason: transferMeta.reason || 'Stock transfer'
+            };
+            lastResponse = await stockApi.transfer(cleanData(transferPayload));
+        }
+
+        if (lastResponse && _localId) {
+            await offlineDB.updateLocalId('stock_transfers', _localId as string, lastResponse.data?.transfer_id || Date.now());
+        }
+
+        // Trigger delta sync for batches/products
+        try {
+            const { default: deltaSyncService } = await import('./deltaSyncService');
+            deltaSyncService.syncTables(['batches', 'products'], 'stock_adjusted');
+        } catch (e) { /* ignore */ }
+
+        return lastResponse!;
+    }
+
+    /**
+     * Sync supplier
+     */
+    async syncSupplier(data: Record<string, unknown>): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, ...supplierData } = data;
+        const cleaned = cleanData(supplierData);
+
+        if (supplierData.supplier_id && !String(supplierData.supplier_id).startsWith('LOCAL_')) {
+            return await suppliersApi.update(supplierData.supplier_id as string, cleaned);
+        } else {
+            const response = await suppliersApi.create(cleaned);
+
+            if (response.data?.supplier_id && _localId) {
+                await offlineDB.updateLocalId('suppliers', _localId as string, response.data.supplier_id);
+            }
+
+            return response;
+        }
     }
 
     /**

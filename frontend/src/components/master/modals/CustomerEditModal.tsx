@@ -3,6 +3,8 @@ import {
   X, Save, Loader2, User, Phone, Building, CreditCard, Shield
 } from 'lucide-react';
 import { customersApi, metadataApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 import { useToast } from '../../global/ui/feedback/Toast';
 import Input from '../../global/ui/forms/Input';
 import Button from '../../global/ui/Button';
@@ -177,20 +179,47 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         credit_days: parseInt(String(formData.credit_days)) || 0,
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         security_deposit: parseFloat(String(formData.security_deposit)) || 0,
-        // Map GST field properly
         gst_number: formData.gst_number
       };
 
       if (customer) {
+        // UPDATE: still requires network (editing existing customer)
         await customersApi.update(customer.customer_id, dataToSave);
         toast.success('Customer updated successfully');
       } else {
-        // Generate customer code if not provided
+        // CREATE: offline-first pattern
         if (!dataToSave.customer_code) {
           dataToSave.customer_code = `CUST${Date.now().toString().slice(-6)}`;
         }
-        await customersApi.create(dataToSave);
-        toast.success('Customer created successfully');
+
+        const tempId = `LOCAL_CUST_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Save to IDB customers store
+        const localRecord = {
+          id: tempId,
+          customer_id: tempId,
+          _localId: tempId,
+          ...dataToSave,
+          name: dataToSave.customer_name,
+          phone: dataToSave.primary_phone,
+          sync_status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          created_offline: true
+        };
+
+        const db = await offlineDB.init();
+        await db.put('customers', localRecord);
+
+        // Add to sync queue
+        await offlineDB.addToSyncQueue('customer', tempId, 'create', localRecord);
+
+        toast.success(`Customer created${navigator.onLine ? '' : ' (offline)'}${!navigator.onLine ? ' - will sync when online' : ''}`);
+
+        // Background sync if online
+        if (navigator.onLine) {
+          syncEngine.startSync().catch(() => {});
+        }
       }
 
       onSave();

@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 12;  // Bumped for delivery_challans, purchase_orders, purchase_entries, suppliers stores
+const DB_VERSION = 13;  // Bumped for stock_adjustments, stock_transfers stores
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -130,6 +130,18 @@ export interface OfflineSchema extends DBSchema {
         key: string;  // temp_id or return_id
         value: any;
         indexes: { 'return_number': string; 'supplier_id': string; 'sync_status': string; 'created_at': string };
+    };
+    // Stock Adjustments store for offline-first stock adjustments
+    stock_adjustments: {
+        key: string;  // temp_id or adjustment_id
+        value: any;
+        indexes: { 'adjustment_number': string; 'sync_status': string; 'created_at': string };
+    };
+    // Stock Transfers store for offline-first stock transfers
+    stock_transfers: {
+        key: string;  // temp_id or transfer_id
+        value: any;
+        indexes: { 'transfer_number': string; 'sync_status': string; 'created_at': string };
     };
 }
 
@@ -346,6 +358,22 @@ class OfflineDatabase {
                     purchaseReturnStore.createIndex('supplier_id', 'supplier_id');
                     purchaseReturnStore.createIndex('sync_status', 'sync_status');
                     purchaseReturnStore.createIndex('created_at', 'created_at');
+                }
+
+                // Stock Adjustments store (for offline-first stock adjustments)
+                if (!db.objectStoreNames.contains('stock_adjustments')) {
+                    const adjStore = db.createObjectStore('stock_adjustments', { keyPath: 'temp_id' });
+                    adjStore.createIndex('adjustment_number', 'adjustment_number');
+                    adjStore.createIndex('sync_status', 'sync_status');
+                    adjStore.createIndex('created_at', 'created_at');
+                }
+
+                // Stock Transfers store (for offline-first stock transfers)
+                if (!db.objectStoreNames.contains('stock_transfers')) {
+                    const transferStore = db.createObjectStore('stock_transfers', { keyPath: 'temp_id' });
+                    transferStore.createIndex('transfer_number', 'transfer_number');
+                    transferStore.createIndex('sync_status', 'sync_status');
+                    transferStore.createIndex('created_at', 'created_at');
                 }
             },
         });
@@ -613,7 +641,10 @@ class OfflineDatabase {
                                 storeName === 'purchase_orders' ? 'order_id' :
                                     storeName === 'purchase_entries' ? 'invoice_id' :
                                         storeName === 'sales_returns' ? 'return_id' :
-                                            storeName === 'purchase_returns' ? 'return_id' : 'id';
+                                            storeName === 'purchase_returns' ? 'return_id' :
+                                                storeName === 'stock_adjustments' ? 'adjustment_id' :
+                                                    storeName === 'stock_transfers' ? 'transfer_id' :
+                                                        storeName === 'suppliers' ? 'supplier_id' : 'id';
 
             item[idField] = serverId;
             item.sync_status = SYNC_STATUS.SYNCED;

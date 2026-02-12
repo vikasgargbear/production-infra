@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, ChangeEvent, KeyboardEvent } from 'react';
 import { Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productsApi } from '../../../services/api';
+import offlineDB from '../../../services/offline/core/offlineDatabase';
+import syncEngine from '../../../services/offline/sync/syncEngine';
 import PackTypeSelector from '../selector/PackTypeSelector';
 import MonthYearPicker from '../ui/forms/MonthYearPicker';
 import { useToast } from '../ui/feedback/Toast';
@@ -353,42 +355,65 @@ const ProductCreationModal: React.FC<ProductCreationModalProps> = ({
                 packages_per_box: packConfig.packages_per_box ? parseInt(String(packConfig.packages_per_box)) : null
             };
 
-            const productResponse = await productsApi.create(apiData) as any;
+            const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
+            const tempId = `LOCAL_PROD_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            if (productResponse) {
-                const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
+            // Save to IDB first (offline-first)
+            const localRecord = {
+                id: tempId,
+                product_id: tempId,
+                _localId: tempId,
+                ...apiData,
+                name: apiData.product_name,
+                batches: [],
+                sync_status: 'pending',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                created_offline: true
+            };
 
-                const createdProduct: Product = {
-                    ...productResponse,
-                    product_id: productResponse.product_id || productResponse.id,
-                    product_name: productResponse.product_name || newProduct.product_name,
-                    batch_number: batchNumber,
-                    manufacturing_date: newProduct.manufacturing_date,
-                    expiry_date: newProduct.expiry_date,
-                    quantity_available: parseInt(newProduct.quantity_available) || 0,
-                    mrp_per_unit: parseFloat(newProduct.mrp) || 0,
-                    sale_price_per_unit: parseFloat(newProduct.sale_price) || 0,
-                    cost_per_unit: parseFloat(newProduct.cost_per_unit) || 0,
-                    mrp: parseFloat(newProduct.mrp) || 0,
-                    sale_price: parseFloat(newProduct.sale_price) || 0,
-                    gst_percent: parseFloat(String(newProduct.gst_percent)) || 0,
-                    hsn_code: newProduct.hsn_code || '3004',
-                    pack_type: packConfig.sale_unit || 'STRIP',
-                    pack_size: packConfig.units_per_pack || 1,
-                    sale_unit: packConfig.sale_unit,
-                    units_per_pack: packConfig.units_per_pack,
-                    packages_per_box: packConfig.use_boxes ? packConfig.packages_per_box : null
-                };
+            const db = await offlineDB.init();
+            await db.put('products', localRecord);
 
-                toast.created(`Product "${createdProduct.product_name}"`, 4000);
+            // Add to sync queue
+            await offlineDB.addToSyncQueue('product', tempId, 'create', localRecord);
 
-                if (createdProduct.quantity_available) {
-                    toast.info(`Stock: ${createdProduct.quantity_available} units available`, 3000);
-                }
+            // Build the product object for the callback
+            const createdProduct = {
+                ...localRecord,
+                product_id: tempId,
+                product_name: apiData.product_name,
+                batch_number: batchNumber,
+                manufacturing_date: newProduct.manufacturing_date,
+                expiry_date: newProduct.expiry_date,
+                quantity_available: parseInt(newProduct.quantity_available) || 0,
+                mrp_per_unit: parseFloat(newProduct.mrp) || 0,
+                sale_price_per_unit: parseFloat(newProduct.sale_price) || 0,
+                cost_per_unit: parseFloat(newProduct.cost_per_unit) || 0,
+                mrp: parseFloat(newProduct.mrp) || 0,
+                sale_price: parseFloat(newProduct.sale_price) || 0,
+                gst_percent: parseFloat(String(newProduct.gst_percent)) || 0,
+                hsn_code: newProduct.hsn_code || '3004',
+                pack_type: packConfig.sale_unit || 'STRIP',
+                pack_size: packConfig.units_per_pack || 1,
+                sale_unit: packConfig.sale_unit,
+                units_per_pack: packConfig.units_per_pack,
+                packages_per_box: packConfig.use_boxes ? packConfig.packages_per_box : null
+            };
 
-                onProductCreated(createdProduct);
-                onClose();
+            toast.created(`Product "${createdProduct.product_name}"${navigator.onLine ? '' : ' (offline)'}`, 4000);
+
+            if (createdProduct.quantity_available) {
+                toast.info(`Stock: ${createdProduct.quantity_available} units available`, 3000);
             }
+
+            // Background sync if online
+            if (navigator.onLine) {
+                syncEngine.startSync().catch(() => {});
+            }
+
+            onProductCreated(createdProduct as unknown as Product);
+            onClose();
         } catch (error: unknown) {
             let errorMessages: string[] = [];
             const err = error as {
