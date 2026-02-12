@@ -1,4 +1,4 @@
-import React, { RefObject } from 'react';
+import React, { RefObject, useEffect, useCallback } from 'react';
 import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
@@ -112,6 +112,20 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     showItemProfitModal,
     setShowItemProfitModal
 }) => {
+    // Ctrl+Enter → Continue shortcut
+    const continueDisabled = !selectedCustomer || !invoice.items || invoice.items.length === 0;
+    const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.ctrlKey && e.key === 'Enter' && !continueDisabled) {
+            e.preventDefault();
+            onContinue();
+        }
+    }, [continueDisabled, onContinue]);
+
+    useEffect(() => {
+        document.addEventListener('keydown', handleGlobalKeyDown);
+        return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [handleGlobalKeyDown]);
+
     return (
         <div className="h-full bg-blue-50">
             <div className="h-full flex flex-col">
@@ -226,6 +240,8 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     placeholder="Search customer by name, phone, or code..."
                                     showCreateButton={false}
                                     clearable={true}
+                                    tabIndex={4}
+                                    nextFocusRef={productSearchRef as any}
                                 />
                             </div>
                         </div>
@@ -248,6 +264,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 onAddItem={handleAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
                                 ref={productSearchRef}
+                                tabIndex={5}
                             />
                         </div>
 
@@ -282,7 +299,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onContinue={onContinue}
                     cancelLabel="Reset"
                     continueLabel="Continue"
-                    continueDisabled={!selectedCustomer || !invoice.items || invoice.items.length === 0}
+                    continueDisabled={continueDisabled}
                     continueButtonColor="blue"
                 />
 

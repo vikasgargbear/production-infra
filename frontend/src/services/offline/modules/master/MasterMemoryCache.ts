@@ -2,15 +2,20 @@
  * Master Memory Cache - O(1) lookups for master data
  */
 
+import { GenericCollectionCache } from '../../core/GenericCollectionCache';
 import type { OfflineEmployee, OfflineWarehouse, OfflineCategory, OfflineManufacturer } from '../../types/master.types';
 
 class MasterMemoryCache {
-    private employees = new Map<string, OfflineEmployee>();
-    private warehouses = new Map<string, OfflineWarehouse>();
-    private categories = new Map<string, OfflineCategory>();
-    private manufacturers = new Map<string, OfflineManufacturer>();
-
-    private isWarmed = false;
+    private employees = new GenericCollectionCache<OfflineEmployee>({
+        idField: 'employee_id',
+        searchFields: ['employee_name']
+    });
+    private warehouses = new GenericCollectionCache<OfflineWarehouse>({ idField: 'warehouse_id' });
+    private categories = new GenericCollectionCache<OfflineCategory>({ idField: 'category_id' });
+    private manufacturers = new GenericCollectionCache<OfflineManufacturer>({
+        idField: 'manufacturer_id',
+        searchFields: ['manufacturer_name']
+    });
 
     warmCache(
         employees: OfflineEmployee[],
@@ -18,66 +23,31 @@ class MasterMemoryCache {
         categories: OfflineCategory[],
         manufacturers: OfflineManufacturer[]
     ): void {
-        this.clear();
-
+        // Pre-compute phone search field before warmCache (not handled by GenericCollectionCache)
         for (const emp of employees) {
-            emp._search_name = emp.employee_name.toLowerCase();
             emp._search_phone = emp.phone?.replace(/\D/g, '') || '';
-            this.employees.set(String(emp.employee_id), emp);
         }
 
-        for (const wh of warehouses) {
-            this.warehouses.set(String(wh.warehouse_id), wh);
-        }
+        this.employees.warmCache(employees);
+        this.warehouses.warmCache(warehouses);
+        this.categories.warmCache(categories);
+        this.manufacturers.warmCache(manufacturers);
 
-        for (const cat of categories) {
-            this.categories.set(String(cat.category_id), cat);
-        }
-
-        for (const man of manufacturers) {
-            man._search_name = man.manufacturer_name.toLowerCase();
-            this.manufacturers.set(String(man.manufacturer_id), man);
-        }
-
-        this.isWarmed = true;
         console.log(`[MasterCache] ✅ Warmed: ${employees.length} employees, ${warehouses.length} warehouses, ${categories.length} categories, ${manufacturers.length} manufacturers`);
     }
 
-    getEmployee(id: string): OfflineEmployee | null {
-        return this.employees.get(String(id)) || null;
-    }
+    getEmployee(id: string): OfflineEmployee | null { return this.employees.get(id); }
+    getWarehouse(id: string): OfflineWarehouse | null { return this.warehouses.get(id); }
+    getCategory(id: string): OfflineCategory | null { return this.categories.get(id); }
+    getManufacturer(id: string): OfflineManufacturer | null { return this.manufacturers.get(id); }
 
-    getWarehouse(id: string): OfflineWarehouse | null {
-        return this.warehouses.get(String(id)) || null;
-    }
-
-    getCategory(id: string): OfflineCategory | null {
-        return this.categories.get(String(id)) || null;
-    }
-
-    getManufacturer(id: string): OfflineManufacturer | null {
-        return this.manufacturers.get(String(id)) || null;
-    }
-
-    getAllEmployees(): OfflineEmployee[] {
-        return Array.from(this.employees.values()).map(e => ({ ...e }));
-    }
-
-    getAllWarehouses(): OfflineWarehouse[] {
-        return Array.from(this.warehouses.values()).map(w => ({ ...w }));
-    }
-
-    getAllCategories(): OfflineCategory[] {
-        return Array.from(this.categories.values()).map(c => ({ ...c }));
-    }
-
-    getAllManufacturers(): OfflineManufacturer[] {
-        return Array.from(this.manufacturers.values()).map(m => ({ ...m }));
-    }
+    getAllEmployees(): OfflineEmployee[] { return this.employees.getAll().map(e => ({ ...e })); }
+    getAllWarehouses(): OfflineWarehouse[] { return this.warehouses.getAll().map(w => ({ ...w })); }
+    getAllCategories(): OfflineCategory[] { return this.categories.getAll().map(c => ({ ...c })); }
+    getAllManufacturers(): OfflineManufacturer[] { return this.manufacturers.getAll().map(m => ({ ...m })); }
 
     searchEmployees(query: string, limit = 20): OfflineEmployee[] {
         if (!query || query.length < 2) return [];
-
         const lowerQuery = query.toLowerCase();
         const results: OfflineEmployee[] = [];
 
@@ -96,11 +66,10 @@ class MasterMemoryCache {
         this.warehouses.clear();
         this.categories.clear();
         this.manufacturers.clear();
-        this.isWarmed = false;
     }
 
     isReady(): boolean {
-        return this.isWarmed;
+        return this.employees.isReady();
     }
 }
 

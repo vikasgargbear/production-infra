@@ -507,27 +507,27 @@ const GSTR2BUpload: React.FC<GSTR2BUploadProps> = ({
                             Summary
                         </h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="bg-slate-800 rounded-lg p-4">
-                                <p className="text-xs text-slate-400">Total Invoices</p>
-                                <p className="text-xl font-bold text-white mt-1">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                <p className="text-xs text-gray-500">Total Invoices</p>
+                                <p className="text-xl font-bold text-gray-900 mt-1">
                                     {parsedData.summary.total_invoices}
                                 </p>
                             </div>
-                            <div className="bg-slate-800 rounded-lg p-4">
-                                <p className="text-xs text-slate-400">Total Value</p>
-                                <p className="text-xl font-bold text-white mt-1">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                <p className="text-xs text-gray-500">Total Value</p>
+                                <p className="text-xl font-bold text-gray-900 mt-1">
                                     {formatCurrency(parsedData.summary.total_value)}
                                 </p>
                             </div>
-                            <div className="bg-slate-800 rounded-lg p-4">
-                                <p className="text-xs text-slate-400">Total Tax</p>
-                                <p className="text-xl font-bold text-emerald-400 mt-1">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200 border-l-4 border-l-green-500">
+                                <p className="text-xs text-gray-500">Total Tax</p>
+                                <p className="text-xl font-bold text-green-700 mt-1">
                                     {formatCurrency(parsedData.summary.total_tax)}
                                 </p>
                             </div>
-                            <div className="bg-slate-800 rounded-lg p-4">
-                                <p className="text-xs text-slate-400">ITC Available</p>
-                                <p className="text-xl font-bold text-blue-400 mt-1">
+                            <div className="bg-white rounded-lg p-4 border border-gray-200 border-l-4 border-l-blue-500">
+                                <p className="text-xs text-gray-500">ITC Available</p>
+                                <p className="text-xl font-bold text-blue-700 mt-1">
                                     {formatCurrency(parsedData.summary.total_tax)}
                                 </p>
                             </div>

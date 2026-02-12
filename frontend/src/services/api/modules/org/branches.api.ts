@@ -2,7 +2,7 @@
  * Branches API Module
  */
 
-import { apiHelpers } from '../../apiClient';
+import { createCrudApi } from '../../utils/createCrudApi';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -29,35 +29,17 @@ export interface BranchData {
 }
 
 // ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/branches'
-} as const;
-
-// ============================================
 // API Module
 // ============================================
 
+const crud = createCrudApi({ basePath: '/branches', useCleanData: false });
+
 export const branchesApi = {
-    getAll: (params: BranchParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
-    },
-
-    getById: (branchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${branchId}`);
-    },
-
-    create: (data: BranchData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
-
-    update: (branchId: number, data: Partial<BranchData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${branchId}`, data);
-    },
-
-    delete: (branchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${branchId}`);
-    }
+    ...crud,
+} as {
+    getAll: (params?: BranchParams) => Promise<AxiosResponse>;
+    getById: (branchId: number | string) => Promise<AxiosResponse>;
+    create: (data: BranchData) => Promise<AxiosResponse>;
+    update: (branchId: number | string, data: Partial<BranchData>) => Promise<AxiosResponse>;
+    delete: (branchId: number | string) => Promise<AxiosResponse>;
 };

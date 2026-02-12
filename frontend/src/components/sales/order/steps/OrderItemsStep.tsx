@@ -3,18 +3,19 @@
  * Step 1 of sales order flow - customer and product selection
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
     CheckCircle, AlertCircle, FileInput, User, Package
 } from 'lucide-react';
 import {
     CustomerSearch,
     ProductSearch,
-    ItemsTable,
+    ItemsTableKeyboard,
     StandardDatePicker
 } from '../../../global';
 import type { Order, OrderItem } from '../../../../types/models';
 import type { Customer, Product } from '../../../../types/models';
+import type { ProductSearchRef } from '../../../global/search/ProductSearch';
 
 // Using canonical types from /types/models - no local duplicates
 
@@ -49,6 +50,8 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     onShowImportModal,
     onCreateProduct
 }) => {
+    const productSearchRef = useRef<ProductSearchRef>(null);
+    const itemsTableRef = useRef<HTMLDivElement>(null);
     return (
         <div className="max-w-6xl mx-auto px-6 py-6">
             {/* Message Display */}
@@ -110,6 +113,8 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         placeholder="Search customer by name, phone, or code..."
                         showCreateButton={false}
                         clearable={true}
+                        tabIndex={1}
+                        nextFocusRef={productSearchRef as any}
                     />
                 </div>
             </div>
@@ -129,8 +134,10 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     </button>
                 </div>
                 <ProductSearch
+                    ref={productSearchRef}
                     onAddItem={onProductSelect as any}
                     onCreateProduct={onCreateProduct as any}
+                    tabIndex={2}
                 />
             </div>
 
@@ -141,10 +148,13 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         <Package className="w-4 h-4 mr-2" />
                         ORDER ITEMS
                     </h3>
-                    <ItemsTable
+                    <ItemsTableKeyboard
+                        ref={itemsTableRef as any}
                         items={order.items as any}
                         onUpdateItem={onUpdateItem}
                         onRemoveItem={onRemoveItem}
+                        productSearchRef={productSearchRef as any}
+                        currencySymbol="₹"
                     />
                 </div>
             )}

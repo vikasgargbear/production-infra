@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { createCrudApi } from '../../utils/createCrudApi';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -30,50 +31,24 @@ export interface ExpenseData {
 }
 
 // ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/expenses',
-    CATEGORIES: '/expenses/categories',
-    SUMMARY: '/expenses/summary'
-} as const;
-
-// ============================================
 // API Module
 // ============================================
 
+const crud = createCrudApi({ basePath: '/expenses', useCleanData: false });
+
 export const expensesApi = {
-    getAll: (params: ExpenseParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
-    },
-
-    getById: (expenseId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${expenseId}`);
-    },
-
-    create: (data: ExpenseData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
-
-    update: (expenseId: number, data: Partial<ExpenseData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${expenseId}`, data);
-    },
-
-    delete: (expenseId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${expenseId}`);
-    },
+    ...crud,
 
     getCategories: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.CATEGORIES);
+        return apiHelpers.get('/expenses/categories');
     },
 
     getSummary: (params: ExpenseParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.SUMMARY, { params });
+        return apiHelpers.get('/expenses/summary', { params });
     },
 
-    // Alias for expense types (alias for getCategories)
+    // Alias for getCategories
     getExpenseTypes: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.CATEGORIES);
+        return apiHelpers.get('/expenses/categories');
     }
 };

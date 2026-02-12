@@ -2,43 +2,35 @@
  * Payments Memory Cache - O(1) lookups for payments and receipts
  */
 
+import { GenericCollectionCache } from '../../core/GenericCollectionCache';
 import type { OfflinePayment, OfflinePaymentReceipt } from '../../types/payments.types';
 
 class PaymentsMemoryCache {
-    private payments = new Map<string, OfflinePayment>();
-    private paymentReceipts = new Map<string, OfflinePaymentReceipt>();
+    private payments = new GenericCollectionCache<OfflinePayment>({ idField: 'payment_id' });
+    private receipts = new GenericCollectionCache<OfflinePaymentReceipt>({ idField: 'receipt_id' });
     private paymentsByParty = new Map<string, OfflinePayment[]>();
 
-    private isWarmed = false;
-
     warmCache(payments: OfflinePayment[], receipts: OfflinePaymentReceipt[]): void {
-        this.clear();
+        this.payments.warmCache(payments);
+        this.receipts.warmCache(receipts);
 
+        this.paymentsByParty.clear();
         for (const payment of payments) {
-            const id = String(payment.payment_id);
-            this.payments.set(id, payment);
-
             const partyId = String(payment.party_id);
             const existing = this.paymentsByParty.get(partyId) || [];
             existing.push(payment);
             this.paymentsByParty.set(partyId, existing);
         }
 
-        for (const receipt of receipts) {
-            const id = String(receipt.receipt_id);
-            this.paymentReceipts.set(id, receipt);
-        }
-
-        this.isWarmed = true;
         console.log(`[PaymentsCache] ✅ Warmed: ${payments.length} payments, ${receipts.length} receipts`);
     }
 
     getPayment(id: string): OfflinePayment | null {
-        return this.payments.get(String(id)) || null;
+        return this.payments.get(id);
     }
 
     getReceipt(id: string): OfflinePaymentReceipt | null {
-        return this.paymentReceipts.get(String(id)) || null;
+        return this.receipts.get(id);
     }
 
     getPaymentsByParty(partyId: string): OfflinePayment[] {
@@ -47,13 +39,12 @@ class PaymentsMemoryCache {
 
     clear(): void {
         this.payments.clear();
-        this.paymentReceipts.clear();
+        this.receipts.clear();
         this.paymentsByParty.clear();
-        this.isWarmed = false;
     }
 
     isReady(): boolean {
-        return this.isWarmed;
+        return this.payments.isReady();
     }
 }
 

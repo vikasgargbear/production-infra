@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Bell, Search, Plus, Edit2, Trash2, Check, X,
+  Bell, Search, Plus, Trash2, Check, X,
   AlertCircle, Package, Clock, CreditCard, Calendar,
   Users, TrendingUp, ShoppingCart, Filter, Save,
   Mail, MessageSquare, Smartphone, Monitor, Loader2, RefreshCw
@@ -167,8 +167,8 @@ const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose
     return icons[type] || AlertCircle;
   };
 
-  const getColorForType = (type) => {
-    const colors = {
+  const getColorForType = (type: string) => {
+    const colors: Record<string, string> = {
       stock: 'red',
       expiry: 'amber',
       payment: 'blue',
@@ -176,6 +176,15 @@ const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose
       system: 'gray'
     };
     return colors[type] || 'gray';
+  };
+
+  // Static color maps for Tailwind (dynamic template literals are purged at build time)
+  const ICON_COLOR_CLASSES: Record<string, string> = {
+    red: 'text-red-600',
+    amber: 'text-amber-600',
+    blue: 'text-blue-600',
+    green: 'text-green-600',
+    gray: 'text-gray-600',
   };
 
   const getSeverityColor = (severity) => {
@@ -398,7 +407,7 @@ const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose
                   <div key={rule.id} className="bg-white rounded-lg border border-gray-200 p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
-                        {IconComponent && <IconComponent className={`w-5 h-5 text-${rule.color}-600`} />}
+                        {IconComponent && <IconComponent className={`w-5 h-5 ${ICON_COLOR_CLASSES[rule.color || 'gray'] || 'text-gray-600'}`} />}
                         <div>
                           <h3 className="font-medium text-gray-900">{rule.name}</h3>
                           <p className="text-sm text-gray-500">{rule.condition}</p>
@@ -413,12 +422,6 @@ const NotificationsAlerts: React.FC<NotificationsAlertsProps> = ({ open, onClose
                             }`}
                         >
                           {rule.enabled ? 'Enabled' : 'Disabled'}
-                        </button>
-                        <button
-                          onClick={() => {/* Edit rule */ }}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                          <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteRule(rule.id)}

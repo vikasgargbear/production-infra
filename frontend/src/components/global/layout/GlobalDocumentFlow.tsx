@@ -332,12 +332,9 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                 }
             }
 
-            // Ctrl+P - Print (step 2 only)
-            if (e.ctrlKey && e.key === 'p' && localStep === 2) {
+            // Ctrl+P - Prevent browser print dialog (print only available after generation)
+            if (e.ctrlKey && e.key === 'p') {
                 e.preventDefault();
-                if (onPrint) {
-                    onPrint();
-                }
             }
 
             // Escape - Close or go back
@@ -433,7 +430,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         roundOffAmount={footerTotals.roundOff || 0}
                         grandTotal={footerTotals.grandTotal || 0}
                         showActionButtons={true}
-                        onPrint={onPrint}
+                        showPrintOptions={false}
                         onSave={onSave}
                         isSaving={isSaving}
                         saveLabel={config.saveLabel || saveLabel || 'Save'}

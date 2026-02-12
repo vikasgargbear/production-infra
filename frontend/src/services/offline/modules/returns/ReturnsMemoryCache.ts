@@ -2,49 +2,44 @@
  * Returns Memory Cache - O(1) lookups for sales/purchase returns
  */
 
+import { GenericCollectionCache } from '../../core/GenericCollectionCache';
 import type { OfflineSalesReturn, OfflinePurchaseReturn } from '../../types/returns.types';
 
 class ReturnsMemoryCache {
-    private salesReturns = new Map<string, OfflineSalesReturn>();
-    private purchaseReturns = new Map<string, OfflinePurchaseReturn>();
+    private salesReturns = new GenericCollectionCache<OfflineSalesReturn>({ idField: 'return_id' });
+    private purchaseReturns = new GenericCollectionCache<OfflinePurchaseReturn>({ idField: 'return_id' });
     private salesReturnsByCustomer = new Map<string, OfflineSalesReturn[]>();
     private purchaseReturnsBySupplier = new Map<string, OfflinePurchaseReturn[]>();
 
-    private isWarmed = false;
-
     warmCache(salesReturns: OfflineSalesReturn[], purchaseReturns: OfflinePurchaseReturn[]): void {
-        this.clear();
+        this.salesReturns.warmCache(salesReturns);
+        this.purchaseReturns.warmCache(purchaseReturns);
 
+        this.salesReturnsByCustomer.clear();
         for (const ret of salesReturns) {
-            const id = String(ret.return_id);
-            this.salesReturns.set(id, ret);
-
             const customerId = String(ret.customer_id);
             const existing = this.salesReturnsByCustomer.get(customerId) || [];
             existing.push(ret);
             this.salesReturnsByCustomer.set(customerId, existing);
         }
 
+        this.purchaseReturnsBySupplier.clear();
         for (const ret of purchaseReturns) {
-            const id = String(ret.return_id);
-            this.purchaseReturns.set(id, ret);
-
             const supplierId = String(ret.supplier_id);
             const existing = this.purchaseReturnsBySupplier.get(supplierId) || [];
             existing.push(ret);
             this.purchaseReturnsBySupplier.set(supplierId, existing);
         }
 
-        this.isWarmed = true;
         console.log(`[ReturnsCache] ✅ Warmed: ${salesReturns.length} sales, ${purchaseReturns.length} purchase returns`);
     }
 
     getSalesReturn(id: string): OfflineSalesReturn | null {
-        return this.salesReturns.get(String(id)) || null;
+        return this.salesReturns.get(id);
     }
 
     getPurchaseReturn(id: string): OfflinePurchaseReturn | null {
-        return this.purchaseReturns.get(String(id)) || null;
+        return this.purchaseReturns.get(id);
     }
 
     getSalesReturnsByCustomer(customerId: string): OfflineSalesReturn[] {
@@ -60,11 +55,10 @@ class ReturnsMemoryCache {
         this.purchaseReturns.clear();
         this.salesReturnsByCustomer.clear();
         this.purchaseReturnsBySupplier.clear();
-        this.isWarmed = false;
     }
 
     isReady(): boolean {
-        return this.isWarmed;
+        return this.salesReturns.isReady();
     }
 }
 

@@ -2,7 +2,7 @@
  * Departments API Module
  */
 
-import { apiHelpers } from '../../apiClient';
+import { createCrudApi } from '../../utils/createCrudApi';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -23,35 +23,17 @@ export interface DepartmentData {
 }
 
 // ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/departments'
-} as const;
-
-// ============================================
 // API Module
 // ============================================
 
+const crud = createCrudApi({ basePath: '/departments', useCleanData: false });
+
 export const departmentsApi = {
-    getAll: (params: DepartmentParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
-    },
-
-    getById: (departmentId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${departmentId}`);
-    },
-
-    create: (data: DepartmentData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
-
-    update: (departmentId: number, data: Partial<DepartmentData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${departmentId}`, data);
-    },
-
-    delete: (departmentId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${departmentId}`);
-    }
+    ...crud,
+} as {
+    getAll: (params?: DepartmentParams) => Promise<AxiosResponse>;
+    getById: (departmentId: number | string) => Promise<AxiosResponse>;
+    create: (data: DepartmentData) => Promise<AxiosResponse>;
+    update: (departmentId: number | string, data: Partial<DepartmentData>) => Promise<AxiosResponse>;
+    delete: (departmentId: number | string) => Promise<AxiosResponse>;
 };

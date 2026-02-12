@@ -1,16 +1,13 @@
 /**
  * useCustomerEdit Hook
- * 
- * Extracts state management and form logic from CustomerEditModal.tsx
+ *
+ * Thin wrapper around usePartyEdit with customer-specific config.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { customersApi, metadataApi } from '../../../services/api';
-import { useToast } from '../../global/ui/feedback/Toast';
+import { usePartyEdit, type FormErrors } from './usePartyEdit';
+import { customersApi } from '../../../services/api';
 
-// ============================================
-// Type Definitions
-// ============================================
+export { type FormErrors };
 
 export interface CustomerFormData {
     customer_name: string;
@@ -38,18 +35,6 @@ export interface CustomerFormData {
     notes: string;
 }
 
-export interface FormErrors {
-    customer_name?: string;
-    gst_number?: string;
-    primary_phone?: string;
-    email?: string;
-    [key: string]: string | undefined;
-}
-
-// ============================================
-// Default Values
-// ============================================
-
 const getInitialFormData = (): CustomerFormData => ({
     customer_name: '',
     customer_code: '',
@@ -76,178 +61,50 @@ const getInitialFormData = (): CustomerFormData => ({
     notes: ''
 });
 
-// ============================================
-// Hook Implementation
-// ============================================
-
 export function useCustomerEdit(
     customer: any | null,
     onSave: () => void,
     onClose: () => void
 ) {
-    const toast = useToast();
-
-    const [formData, setFormData] = useState<CustomerFormData>(getInitialFormData());
-    const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState<FormErrors>({});
-
-    // Metadata
-    const [states, setStates] = useState<string[]>([]);
-    const [paymentTerms, setPaymentTerms] = useState<string[]>([
-        'Immediate', 'Net 7', 'Net 15', 'Net 30', 'Net 45', 'COD'
-    ]);
-    const [customerTypes, setCustomerTypes] = useState<string[]>([
-        'Retail', 'Wholesale', 'B2B', 'B2C'
-    ]);
-
-    // ============================================
-    // Effects
-    // ============================================
-
-    useEffect(() => {
-        if (customer) {
-            setFormData({
-                customer_name: customer.customer_name || '',
-                customer_code: customer.customer_code || '',
-                customer_type: customer.customer_type || 'Retail',
-                gst_number: customer.gst_number || '',
-                pan_number: customer.pan_number || '',
-                drug_license_number: customer.drug_license_number || '',
-                fssai_number: customer.fssai_number || '',
-                primary_phone: customer.primary_phone || '',
-                secondary_phone: customer.secondary_phone || '',
-                email: customer.email || '',
-                address_line1: customer.address_line1 || '',
-                address_line2: customer.address_line2 || '',
-                city: customer.city || '',
-                state: customer.state || '',
-                pincode: customer.pincode || '',
-                country: customer.country || 'India',
-                shipping_address: customer.shipping_address || '',
-                payment_terms: customer.payment_terms || 'Immediate',
-                credit_limit: customer.credit_limit || 0,
-                credit_days: customer.credit_days || 0,
-                discount_percentage: customer.discount_percentage || 0,
-                is_active: customer.is_active !== false,
-                notes: customer.notes || ''
-            });
-        } else {
-            setFormData(getInitialFormData());
-        }
-        setErrors({});
-    }, [customer]);
-
-    useEffect(() => {
-        loadMetadata();
-    }, []);
-
-    // ============================================
-    // API Actions
-    // ============================================
-
-    const loadMetadata = useCallback(async () => {
-        try {
-            const response = await metadataApi.getStates();
-            if (response.data) {
-                setStates(response.data.map((s: any) => s.state || s.name || s));
-            }
-        } catch (error) {
-            setStates([
-                'Andhra Pradesh', 'Karnataka', 'Kerala', 'Maharashtra', 'Tamil Nadu',
-                'Telangana', 'Gujarat', 'Rajasthan', 'Uttar Pradesh', 'Delhi'
-            ]);
-        }
-    }, []);
-
-    // ============================================
-    // Form Actions
-    // ============================================
-
-    const handleInputChange = useCallback((field: string, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-        if (errors[field]) {
-            setErrors(prev => ({ ...prev, [field]: undefined }));
-        }
-    }, [errors]);
-
-    const validateForm = useCallback((): boolean => {
-        const newErrors: FormErrors = {};
-
-        if (!formData.customer_name.trim()) {
-            newErrors.customer_name = 'Customer name is required';
-        }
-
-        if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
-            newErrors.gst_number = 'Invalid GSTIN format';
-        }
-
-        if (formData.primary_phone && !/^[6-9]\d{9}$/.test(formData.primary_phone)) {
-            newErrors.primary_phone = 'Invalid phone number';
-        }
-
-        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-            newErrors.email = 'Invalid email format';
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    }, [formData]);
-
-    const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-
-        if (!validateForm()) {
-            toast.error('Please fix the errors before submitting');
-            return false;
-        }
-
-        setLoading(true);
-        try {
-            let response;
-            if (customer?.customer_id) {
-                response = await customersApi.update(customer.customer_id, formData);
-            } else {
-                response = await customersApi.create(formData);
-            }
-
-            if (response.data?.success || response.status === 200) {
-                toast.success(customer ? 'Customer updated successfully' : 'Customer created successfully');
-                onSave();
-                onClose();
-                return true;
-            } else {
-                toast.error(response.data?.error?.message || 'Failed to save customer');
-                return false;
-            }
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to save customer');
-            return false;
-        } finally {
-            setLoading(false);
-        }
-    }, [formData, customer, validateForm, onSave, onClose, toast]);
-
-    const resetForm = useCallback(() => {
-        setFormData(getInitialFormData());
-        setErrors({});
-    }, []);
-
-    // ============================================
-    // Return Value
-    // ============================================
+    const { entityTypes, ...rest } = usePartyEdit<CustomerFormData>({
+        partyType: 'customer',
+        partyLabel: 'Customer',
+        idField: 'customer_id',
+        nameField: 'customer_name',
+        api: customersApi,
+        defaultPaymentTerms: ['Immediate', 'Net 7', 'Net 15', 'Net 30', 'Net 45', 'COD'],
+        defaultEntityTypes: ['Retail', 'Wholesale', 'B2B', 'B2C'],
+        getInitialFormData,
+        populateFormData: (c: any) => ({
+            customer_name: c.customer_name || '',
+            customer_code: c.customer_code || '',
+            customer_type: c.customer_type || 'Retail',
+            gst_number: c.gst_number || '',
+            pan_number: c.pan_number || '',
+            drug_license_number: c.drug_license_number || '',
+            fssai_number: c.fssai_number || '',
+            primary_phone: c.primary_phone || '',
+            secondary_phone: c.secondary_phone || '',
+            email: c.email || '',
+            address_line1: c.address_line1 || '',
+            address_line2: c.address_line2 || '',
+            city: c.city || '',
+            state: c.state || '',
+            pincode: c.pincode || '',
+            country: c.country || 'India',
+            shipping_address: c.shipping_address || '',
+            payment_terms: c.payment_terms || 'Immediate',
+            credit_limit: c.credit_limit || 0,
+            credit_days: c.credit_days || 0,
+            discount_percentage: c.discount_percentage || 0,
+            is_active: c.is_active !== false,
+            notes: c.notes || ''
+        }),
+    }, customer, onSave, onClose);
 
     return {
-        formData,
-        errors,
-        loading,
-        states,
-        paymentTerms,
-        customerTypes,
-        handleInputChange,
-        handleSubmit,
-        validateForm,
-        resetForm,
-        isEditing: !!customer
+        ...rest,
+        customerTypes: entityTypes,
     };
 }
 

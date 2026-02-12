@@ -108,7 +108,7 @@ export interface ReturnReviewPanelProps {
     selectedInvoice?: any;
     customerDues: number;
     onSave: () => void;
-    onPrint: () => void;
+    onPrint?: () => void;
     onBack: () => void;
     saving: boolean;
 }

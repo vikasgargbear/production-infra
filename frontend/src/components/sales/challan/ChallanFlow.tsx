@@ -68,10 +68,8 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                         }
                         break;
                     case 'p':
+                        // Print only available after generation (in success modal)
                         e.preventDefault();
-                        if (logic.currentStep === 2) {
-                            logic.printChallan();
-                        }
                         break;
                     case 'n':
                         e.preventDefault();

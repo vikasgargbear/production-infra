@@ -26,6 +26,7 @@ interface ProductSearchProps {
     showBatchSelection?: boolean;
     placeholder?: string;
     className?: string;
+    tabIndex?: number;
 }
 
 export interface ProductSearchRef {
@@ -35,7 +36,7 @@ export interface ProductSearchRef {
 // ==================== COMPONENT ====================
 
 const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
-    ({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
+    ({ onAddItem, onCreateProduct, showBatchSelection = true, tabIndex }, ref) => {
         const [searchQuery, setSearchQuery] = useState<string>('');
         const [searchResults, setSearchResults] = useState<Product[]>([]);
         const [loading, setLoading] = useState<boolean>(false);
@@ -161,9 +162,15 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                     handleProductSelect(searchResults[highlightedIndex]);
                 }
             } else if (e.key === 'Tab') {
-                setShowDropdown(false);
-                setHighlightedIndex(-1);
-                setSearchQuery('');
+                // If dropdown is open with a highlighted item, select it before tabbing
+                if (showDropdown && highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+                    e.preventDefault();
+                    handleProductSelect(searchResults[highlightedIndex]);
+                } else {
+                    setShowDropdown(false);
+                    setHighlightedIndex(-1);
+                    setSearchQuery('');
+                }
             }
         };
 
@@ -184,6 +191,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                     setShowDropdown(true);
                                 }}
                                 onFocus={() => setShowDropdown(true)}
+                                tabIndex={tabIndex}
                                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>

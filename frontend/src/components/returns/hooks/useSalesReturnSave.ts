@@ -1,18 +1,15 @@
 /**
  * useSalesReturnSave Hook
  *
- * Handles sales return save logic with OPTIMISTIC UI:
- * - Instant feedback (< 100ms)
- * - Stock ADDITION via restockBatchesLocally (goods returned by customer)
- * - Background sync
+ * Thin wrapper around useDocumentSave for sales returns.
+ * Stock ADDITION (goods returned by customer).
  */
 
-import { useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
+import { useDocumentSave } from '../../global/hooks/useDocumentSave';
 import { returnsApi } from '../../../services/api';
-import documentNumberGenerator, { DOC_TYPES } from '../../../services/offline/documents/documentNumberGenerator';
+import { DOC_TYPES } from '../../../services/offline/documents/documentNumberGenerator';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
-import { generateTempId } from '../../sales/utils/offlineSaveHelpers';
 
 export interface UseSalesReturnSaveProps {
     returnData: any;
@@ -27,38 +24,26 @@ export interface UseSalesReturnSaveReturn {
 }
 
 export function useSalesReturnSave(props: UseSalesReturnSaveProps): UseSalesReturnSaveReturn {
-    const {
-        returnData,
+    const { returnData, isOnline, validateReturn, onClose } = props;
+
+    const { saving, handleSave } = useDocumentSave({
+        docTypeKey: DOC_TYPES.SALES_RETURN,
+        idbStoreName: 'sales_returns',
+        entityType: 'sales_returns',
+        serverIdField: 'return_id',
+        docNumberField: 'return_number',
         isOnline,
-        validateReturn,
-        onClose
-    } = props;
 
-    const [saving, setSaving] = useState(false);
+        validate: () => {
+            if (!validateReturn()) return 'Please fix validation errors';
+            return null;
+        },
 
-    const handleSaveReturn = useCallback(async () => {
-        if (!validateReturn()) return;
+        preparePayload: () => returnData,
 
-        setSaving(true);
-        try {
-            // Generate temp ID
-            const tempId = generateTempId();
-            const localReturnNo = await documentNumberGenerator.generateNumber(DOC_TYPES.SALES_RETURN, false);
+        apiCall: (data: any) => returnsApi.createSaleReturn(data),
 
-            // Save locally first (instant)
-            const localReturn = {
-                ...returnData,
-                return_number: localReturnNo,
-                temp_id: tempId,
-                _localId: tempId,
-                sync_status: 'pending',
-                created_at: new Date().toISOString(),
-                created_offline: !isOnline
-            };
-
-            await offlineDB.add('sales_returns', localReturn);
-
-            // SALES RETURN = GOODS RETURNED BY CUSTOMER → Add stock back locally
+        stockOperation: async () => {
             const items = returnData.items || [];
             const stockAdditions = items
                 .filter((item: any) => item.batch_id && item.return_quantity > 0)
@@ -72,46 +57,15 @@ export function useSalesReturnSave(props: UseSalesReturnSaveProps): UseSalesRetu
                 await offlineDB.addStockLocally(stockAdditions);
                 console.log(`[SalesReturn] ✅ Restocked ${stockAdditions.length} items locally`);
             }
+        },
 
+        onSuccess: () => {
             toast.success('Sales return saved successfully');
-
-            console.log('[SalesReturn] ✅ Local save complete');
-
-            // BACKGROUND SYNC
-            if (isOnline) {
-                (async () => {
-                    try {
-                        console.log('[SalesReturn] 📡 Background sync to backend...');
-                        const response = await returnsApi.createSaleReturn(returnData);
-
-                        if (response.data?.return_id) {
-                            await offlineDB.updateLocalId('sales_returns', tempId, response.data.return_id);
-                            console.log('[SalesReturn] ✅ Background sync complete - ID:', response.data.return_id);
-                        }
-                    } catch (syncError) {
-                        console.warn('[SalesReturn] ⚠️ Background sync failed, will retry later:', syncError);
-                        await offlineDB.addToSyncQueue('sales_returns', tempId, 'create', localReturn);
-                    }
-                })();
-            } else {
-                await offlineDB.addToSyncQueue('sales_returns', tempId, 'create', localReturn);
-            }
-
             setTimeout(() => onClose(), 2500);
-        } catch (error: any) {
-            const errorMessage = Array.isArray(error.message)
-                ? error.message[0]?.msg || 'Failed to create return'
-                : error.message || 'Failed to create return';
-            toast.error(errorMessage);
-        } finally {
-            setSaving(false);
-        }
-    }, [returnData, isOnline, validateReturn, onClose]);
+        },
+    });
 
-    return {
-        saving,
-        handleSaveReturn
-    };
+    return { saving, handleSaveReturn: handleSave };
 }
 
 export default useSalesReturnSave;

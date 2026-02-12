@@ -13,6 +13,9 @@ interface HSNSummaryReportProps {
     dateRange: DateRange;
     refreshTrigger: number;
     onRefresh?: () => void;
+    showTaxBreakdown?: boolean;
+    onDataReady?: (data: any) => void;
+    onExport?: () => void;
 }
 
 interface HSNItem {
@@ -24,7 +27,7 @@ interface HSNItem {
     tax_amount: number;
 }
 
-const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshTrigger }) => {
+const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshTrigger, onDataReady }) => {
     const [data, setData] = useState<HSNItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
 
                     if (responseData?.hsn_summary) {
                         setData(responseData.hsn_summary);
+                        onDataReady?.(responseData.hsn_summary);
                         return;
                     }
                 } catch {
@@ -92,6 +96,7 @@ const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshT
 
                 const hsnArray = Object.values(hsnGroups).sort((a, b) => b.taxable_value - a.taxable_value);
                 setData(hsnArray);
+                onDataReady?.(hsnArray);
 
                 const totalQty = hsnArray.reduce((s, h) => s + h.quantity, 0);
                 const totalTaxable = hsnArray.reduce((s, h) => s + h.taxable_value, 0);

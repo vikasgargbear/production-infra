@@ -68,6 +68,10 @@ export interface EntitySearchProps<T> {
     disabled?: boolean;
     autoFocus?: boolean;
     className?: string;
+    tabIndex?: number;
+
+    // Focus management
+    nextFocusRef?: React.RefObject<{ focus: () => void } | HTMLElement | null>;
 }
 
 // ==================== COMPONENT ====================
@@ -107,7 +111,9 @@ function EntitySearchInner<T>(
         clearable = true,
         disabled = false,
         autoFocus = false,
-        className = ''
+        className = '',
+        tabIndex,
+        nextFocusRef
     } = props;
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -199,6 +205,12 @@ function EntitySearchInner<T>(
         setShowDropdown(false);
         setSearchResults([]);
         setHighlightedIndex(-1);
+        // Focus next element after selection (e.g., ProductSearch after CustomerSearch)
+        if (nextFocusRef?.current) {
+            setTimeout(() => {
+                nextFocusRef.current?.focus();
+            }, 50);
+        }
     };
 
     // Handle clear
@@ -238,8 +250,14 @@ function EntitySearchInner<T>(
                 setSearchQuery('');
                 break;
             case 'Tab':
-                setShowDropdown(false);
-                setHighlightedIndex(-1);
+                // If dropdown is open with a highlighted item, select it before tabbing
+                if (showDropdown && highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+                    e.preventDefault();
+                    handleSelect(searchResults[highlightedIndex]);
+                } else {
+                    setShowDropdown(false);
+                    setHighlightedIndex(-1);
+                }
                 break;
         }
     };
@@ -357,6 +375,7 @@ function EntitySearchInner<T>(
                 onKeyDown={handleKeyDown}
                 disabled={disabled}
                 autoFocus={autoFocus}
+                tabIndex={tabIndex}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
         </div>

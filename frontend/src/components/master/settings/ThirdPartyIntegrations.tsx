@@ -27,6 +27,18 @@ interface ThirdPartyIntegrationsProps {
     onClose?: () => void;
 }
 
+// Static class map to avoid dynamic Tailwind classes (which get purged at build time)
+const INTEGRATION_STYLES: Record<string, { bg: string; text: string }> = {
+    green:  { bg: 'bg-green-100',  text: 'text-green-600' },
+    blue:   { bg: 'bg-blue-100',   text: 'text-blue-600' },
+    purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
+    red:    { bg: 'bg-red-100',    text: 'text-red-600' },
+    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
+    orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+    cyan:   { bg: 'bg-cyan-100',   text: 'text-cyan-600' },
+    gray:   { bg: 'bg-gray-100',   text: 'text-gray-600' },
+};
+
 const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, onClose }) => {
     const [activeIntegration, setActiveIntegration] = useState<Integration | null>(null);
     const [configuring, setConfiguring] = useState<string | null>(null);
@@ -248,8 +260,8 @@ const ThirdPartyIntegrations: React.FC<ThirdPartyIntegrationsProps> = ({ open, o
                             return (
                                 <div key={integration.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
                                     <div className="flex items-start justify-between mb-4">
-                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center bg-${integration.color}-100`}>
-                                            <IconComponent className={`h-6 w-6 text-${integration.color}-600`} />
+                                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${INTEGRATION_STYLES[integration.color]?.bg || INTEGRATION_STYLES.gray.bg}`}>
+                                            <IconComponent className={`h-6 w-6 ${INTEGRATION_STYLES[integration.color]?.text || INTEGRATION_STYLES.gray.text}`} />
                                         </div>
                                         <div className="flex items-center space-x-2">
                                             <button

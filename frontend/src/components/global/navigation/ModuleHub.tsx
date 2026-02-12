@@ -12,6 +12,7 @@ export interface Module {
   color: string;
   component?: React.ComponentType<{ open?: boolean; onClose?: () => void }>;
   badge?: string;
+  group?: string; // Optional section header for sidebar grouping
 }
 
 interface ModuleHubProps {
@@ -110,9 +111,9 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     }
   };
 
-  // Keyboard navigation
+  // Keyboard navigation (Ctrl+1-9 for module switching only — ESC is handled by child modules via EscapeKeyContext)
   useEffect(() => {
-    const handleKeyPress = (e) => {
+    const handleKeyPress = (e: KeyboardEvent) => {
       // Number keys for module selection - require Ctrl/Cmd modifier
       if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
@@ -121,19 +122,13 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           setActiveModule(modules[index].id);
         }
       }
-
-      // ESC to close
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (onClose) onClose();
-      }
     };
 
     if (open) {
       window.addEventListener('keydown', handleKeyPress);
       return () => window.removeEventListener('keydown', handleKeyPress);
     }
-  }, [open, modules, onClose]);
+  }, [open, modules]);
 
   if (!open) return null;
 
@@ -232,20 +227,20 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
     );
   }
 
-  // Sidebar layout - Clean minimal design
+  // Sidebar layout - Clean minimal design (no internal horizontal borders — alignment comes from border-r only)
   return (
-    <div className="fixed inset-0 bg-gray-50 z-50 flex">
-      {/* Clean Minimal Collapsible Sidebar */}
+    <div className="fixed inset-0 bg-gray-100 z-50 flex">
+      {/* Sidebar — continuous strip, no header/footer borders (like Figma/Linear) */}
       <div
-        className={`${isExpanded ? 'w-52' : 'w-16'} h-full bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out`}
+        className={`${isExpanded ? 'w-52' : 'w-14'} h-full bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0`}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        {/* Header - Logo */}
-        <div className={`h-14 border-b border-gray-100 flex items-center ${isExpanded ? 'px-4 justify-between' : 'justify-center'}`}>
+        {/* Hub Icon + Title */}
+        <div className={`flex items-center pt-5 pb-6 ${isExpanded ? 'px-4 justify-between' : 'px-3 justify-center'}`}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
-              {HubIcon ? <HubIcon className="w-6 h-6 text-gray-900" /> : (
+            <div className="w-10 h-10 flex items-center justify-center flex-shrink-0 bg-blue-50 rounded-xl">
+              {HubIcon ? <HubIcon className="w-5 h-5 text-blue-600" /> : (
                 <div className="flex items-center gap-0.5">
                   <div className="w-1.5 h-5 bg-gray-900 rounded-full"></div>
                   <div className="w-1.5 h-5 bg-gray-900 rounded-full"></div>
@@ -266,68 +261,70 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           )}
         </div>
 
-        {/* Platform Label - Only when expanded */}
-        {isExpanded && (
-          <div className="px-4 pt-4 pb-2">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Platform</span>
-          </div>
-        )}
-
         {/* Module Navigation */}
-        <nav className={`flex-1 overflow-y-auto ${isExpanded ? 'px-2' : 'px-2'} ${isExpanded ? '' : 'pt-4'}`}>
-          {modules.map((module) => {
+        <nav className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
+          {modules.map((module, index) => {
             const Icon = module.icon;
             const isActive = activeModule === module.id;
+            const prevGroup = index > 0 ? modules[index - 1].group : null;
+            const showGroupHeader = module.group && module.group !== prevGroup;
 
             return (
-              <button
-                key={module.id}
-                onClick={() => setActiveModule(module.id)}
-                className={`
-                  w-full mb-1 rounded-lg flex items-center transition-all duration-150
-                  ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}
-                  ${isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }
-                `}
-                title={!isExpanded ? (module.label || module.fullLabel) : undefined}
-              >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : ''}`} />
-                {isExpanded && (
-                  <span className={`text-sm font-medium truncate ${isActive ? 'text-blue-700' : ''}`}>
-                    {module.label || module.fullLabel}
-                  </span>
+              <React.Fragment key={module.id}>
+                {showGroupHeader && isExpanded && (
+                  <div className={`px-3 ${index > 0 ? 'pt-4' : 'pt-1'} pb-1.5`}>
+                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{module.group}</span>
+                  </div>
                 )}
-                {isExpanded && module.badge && (
-                  <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                    {module.badge}
-                  </span>
+                {showGroupHeader && !isExpanded && index > 0 && (
+                  <div className="mx-2 my-2 border-t border-gray-100" />
                 )}
-              </button>
+                <button
+                  onClick={() => setActiveModule(module.id)}
+                  className={`
+                    w-full mb-1 rounded-lg flex items-center transition-all duration-150
+                    ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}
+                    ${isActive
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    }
+                  `}
+                  title={!isExpanded ? (module.label || module.fullLabel) : undefined}
+                >
+                  <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-blue-600' : ''}`} />
+                  {isExpanded && (
+                    <span className={`text-sm font-medium truncate ${isActive ? 'text-blue-700' : ''}`}>
+                      {module.label || module.fullLabel}
+                    </span>
+                  )}
+                  {isExpanded && module.badge && (
+                    <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                      {module.badge}
+                    </span>
+                  )}
+                </button>
+              </React.Fragment>
             );
           })}
         </nav>
 
-        {/* Footer */}
-        <div className={`border-t border-gray-100 ${isExpanded ? 'px-2 py-3' : 'py-3'}`}>
-          <button className={`w-full rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2 gap-3' : 'p-3 justify-center'}`}>
+        {/* Bottom Actions */}
+        <div className={`pb-4 pt-2 ${isExpanded ? 'px-3' : 'px-1.5'}`}>
+          <button className={`w-full rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}>
             <Settings className="w-5 h-5" />
             {isExpanded && <span className="text-sm">Settings</span>}
           </button>
-          <button className={`w-full rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2 gap-3' : 'p-3 justify-center'}`}>
+          <button className={`w-full rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}>
             <HelpCircle className="w-5 h-5" />
             {isExpanded && <span className="text-sm">Help</span>}
           </button>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 h-full bg-white">
-        <div className="h-full overflow-hidden">
-          {renderModule()}
-        </div>
+      {/* Main Content Area — scaled to 90% for compact, information-dense UI */}
+      <div className="flex-1 h-full overflow-hidden" style={{ zoom: 0.9 }}>
+        {renderModule()}
       </div>
     </div>
   );

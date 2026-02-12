@@ -1,12 +1,12 @@
 /**
  * Products API Module
  * Handles product CRUD and related operations
- * 
+ *
  * ENDPOINTS: /products (backend: app/api/routes/master/products.py)
  */
 
 import { apiHelpers } from '../../apiClient';
-import { cleanData } from '../../utils/dataUtils';
+import { createCrudApi } from '../../utils/createCrudApi';
 
 // ============================================================================
 // TYPES
@@ -36,53 +36,14 @@ export interface ProductSyncParams {
 // API
 // ============================================================================
 
-const ENDPOINTS = {
-  BASE: '/products',
-  DETAILS: (id: number | string) => `/products/${id}`,
-  CATEGORIES: '/products/categories',
-  BATCH_UPLOAD: '/products/batch-upload',
-  STOCK_UPDATE: '/products/stock-update'
-} as const;
+const crud = createCrudApi({ basePath: '/products' });
 
 export const productsApi = {
-  // =========================================================================
-  // CRUD OPERATIONS
-  // =========================================================================
-
-  // Get all products
-  getAll: (params: ProductParams = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, { params });
-  },
-
-  // Get product by ID
-  getById: (id: number | string) => {
-    return apiHelpers.get(ENDPOINTS.DETAILS(id));
-  },
-
-  // Create new product
-  create: (data: any) => {
-    const cleanedData = cleanData(data);
-    return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
-  },
-
-  // Update product
-  update: (id: number | string, data: any) => {
-    const cleanedData = cleanData(data);
-    return apiHelpers.put(ENDPOINTS.DETAILS(id), cleanedData);
-  },
-
-  // Delete product
-  delete: (id: number | string) => {
-    return apiHelpers.delete(ENDPOINTS.DETAILS(id));
-  },
-
-  // =========================================================================
-  // SEARCH
-  // =========================================================================
+  ...crud,
 
   // Search products
   search: (query: string, params: ProductParams = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, {
+    return apiHelpers.get('/products', {
       params: { search: query, ...params }
     });
   },
@@ -95,7 +56,6 @@ export const productsApi = {
   },
 
   // Bulk fetch ALL products with batches for offline sync
-  // Usage: getAllWithBatches({ page: 1, pageSize: 100, since: '2026-01-01T00:00:00Z' })
   getAllWithBatches: (params: ProductSyncParams = {}) => {
     return apiHelpers.get('/products/all-with-batches', {
       params: {
@@ -107,31 +67,23 @@ export const productsApi = {
     });
   },
 
-  // =========================================================================
-  // CATEGORIES & TYPES
-  // =========================================================================
-
-  // Get product categories
+  // Categories & Types
   getCategories: () => {
-    return apiHelpers.get(ENDPOINTS.CATEGORIES);
+    return apiHelpers.get('/products/categories');
   },
 
-  // Get master categories (alias)
   getMasterCategories: () => {
     return apiHelpers.get('/products/master/categories');
   },
 
-  // Get product types
   getProductTypes: () => {
     return apiHelpers.get('/products/master/types');
   },
 
-  // Create new category
   createCategory: (categoryName: string) => {
     return apiHelpers.post('/products/master/categories', { category_name: categoryName });
   },
 
-  // Create new product type
   createProductType: (typeName: string, defaultBaseUom: string = 'Unit') => {
     return apiHelpers.post('/products/master/types', {
       type_name: typeName,
@@ -139,48 +91,37 @@ export const productsApi = {
     });
   },
 
-  // =========================================================================
-  // STOCK
-  // =========================================================================
-
-  // Update stock levels
+  // Stock
   updateStock: (productId: number | string, data: any) => {
-    return apiHelpers.post(ENDPOINTS.STOCK_UPDATE, {
+    return apiHelpers.post('/products/stock-update', {
       product_id: productId,
       ...data
     });
   },
 
-  // Get low stock products
   getLowStock: (threshold: number = 10) => {
-    return apiHelpers.get(ENDPOINTS.BASE, {
+    return apiHelpers.get('/products', {
       params: { low_stock: true, threshold }
     });
   },
 
-  // Get expired products
   getExpired: () => {
-    return apiHelpers.get(ENDPOINTS.BASE, {
+    return apiHelpers.get('/products', {
       params: { expired: true }
     });
   },
 
-  // Get expiring soon products
   getExpiringSoon: (days: number = 30) => {
-    return apiHelpers.get(ENDPOINTS.BASE, {
+    return apiHelpers.get('/products', {
       params: { expiring_soon: true, days }
     });
   },
 
-  // =========================================================================
-  // BATCH UPLOAD
-  // =========================================================================
-
-  // Batch upload products
+  // Batch Upload
   batchUpload: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiHelpers.post(ENDPOINTS.BATCH_UPLOAD, formData, {
+    return apiHelpers.post('/products/batch-upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   }

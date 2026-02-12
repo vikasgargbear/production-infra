@@ -12,5 +12,3 @@ export { default as GSTR2BReport } from './GSTR2BReport';
 export { default as GSTR3BReport } from './GSTR3BReport';
 export { default as HSNSummaryReport } from './HSNSummaryReport';
 export { default as PartyWiseReport } from './PartyWiseReport';
-export { default as GSTPayableReport } from './GSTPayableReport';
-export { default as InputCreditReport } from './InputCreditReport';

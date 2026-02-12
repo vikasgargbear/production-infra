@@ -72,7 +72,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
 
     return (
         <div className={`bg-white border-b border-gray-200 ${className}`}>
-            <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center justify-between px-6 py-3">
                 {/* Left side - Back button, Title and info */}
                 <div className="flex items-center gap-3 min-h-[36px]">
                     {onClose && (

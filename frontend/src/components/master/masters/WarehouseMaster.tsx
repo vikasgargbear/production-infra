@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Warehouse, Search, Plus, Edit2, Trash2,
     MapPin, Phone, Mail, Package, User,
-    Download, Upload, Loader2, AlertCircle, Check,
+    Loader2, AlertCircle, Check,
     ChevronRight, BarChart3, Clock, Settings, X,
     QrCode, Wifi, Thermometer, Lock, Activity, RefreshCw
 } from 'lucide-react';
@@ -260,27 +260,12 @@ const WarehouseMaster: React.FC<WarehouseMasterProps> = ({ open, onClose }) => {
         });
     };
 
-    const handleExport = () => {
-        // TODO: Implement export functionality
-        setError('Export functionality coming soon!');
-        setTimeout(() => setError(null), 3000);
-    };
-
-    const handleImport = () => {
-        // TODO: Implement import functionality
-        setError('Import functionality coming soon!');
-        setTimeout(() => setError(null), 3000);
-    };
-
-    const getWarehouseTypeColor = (type: string) => {
-        const colors: { [key: string]: string } = {
-            'warehouse': 'blue',
-            'coldStorage': 'cyan',
-            'store': 'green',
-            'primary': 'purple',
-            'specialized': 'orange'
-        };
-        return colors[type] || 'gray';
+    const WAREHOUSE_TYPE_STYLES: Record<string, string> = {
+        warehouse: 'bg-blue-100 text-blue-800',
+        coldStorage: 'bg-cyan-100 text-cyan-800',
+        store: 'bg-green-100 text-green-800',
+        primary: 'bg-purple-100 text-purple-800',
+        specialized: 'bg-orange-100 text-orange-800',
     };
 
     const getWarehouseTypeIcon = (type: string) => {
@@ -321,20 +306,6 @@ const WarehouseMaster: React.FC<WarehouseMasterProps> = ({ open, onClose }) => {
                         >
                             {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                        </button>
-                        <button
-                            onClick={handleImport}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
-                        >
-                            <Upload className="w-4 h-4" />
-                            <span>Import</span>
-                        </button>
-                        <button
-                            onClick={handleExport}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            <span>Export</span>
                         </button>
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -473,7 +444,7 @@ const WarehouseMaster: React.FC<WarehouseMasterProps> = ({ open, onClose }) => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 text-xs rounded-full bg-${getWarehouseTypeColor(warehouse.type)}-100 text-${getWarehouseTypeColor(warehouse.type)}-800`}>
+                                                    <span className={`px-2 py-1 text-xs rounded-full ${WAREHOUSE_TYPE_STYLES[warehouse.type] || 'bg-gray-100 text-gray-800'}`}>
                                                         {warehouse.type}
                                                     </span>
                                                 </td>

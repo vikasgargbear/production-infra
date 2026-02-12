@@ -16,28 +16,38 @@ import type { GSTSummary, B2BInvoice, B2CData, InputTaxCredit } from '../types';
 export type GstType = 'IGST' | 'CGST/SGST';
 
 /**
- * Determine GST Type based on company state vs customer/supplier state.
- * 
+ * Determine GST Type based on GSTIN state codes or company/customer state names.
+ *
  * Indian GST Rules:
  * - IGST (Integrated GST) = Inter-state transactions (different states)
  * - CGST/SGST (Central + State GST) = Intra-state transactions (same state)
- * 
- * @param companyState - The seller's/company's state
- * @param partyState - The buyer's/customer's/supplier's state  
+ *
+ * Priority:
+ * 1. GSTIN state codes (first 2 digits) — most reliable
+ * 2. State name comparison — fallback when GSTIN unavailable
+ *
+ * @param companyState - The seller's/company's state name
+ * @param partyState - The buyer's/customer's/supplier's state name
+ * @param companyGstin - The seller's GSTIN (optional, preferred)
+ * @param partyGstin - The buyer's GSTIN (optional, preferred)
  * @returns 'IGST' for inter-state, 'CGST/SGST' for intra-state
- * 
- * @example
- * // Inter-state: Rajasthan → Haryana
- * determineGstType('Rajasthan', 'Haryana') // Returns 'IGST'
- * 
- * // Intra-state: Rajasthan → Rajasthan  
- * determineGstType('Rajasthan', 'Rajasthan') // Returns 'CGST/SGST'
  */
 export function determineGstType(
     companyState: string | undefined | null,
-    partyState: string | undefined | null
+    partyState: string | undefined | null,
+    companyGstin?: string | null,
+    partyGstin?: string | null
 ): GstType {
-    // Normalize states for comparison (lowercase, trimmed)
+    // Priority 1: GSTIN-based comparison (most reliable — first 2 digits = state code)
+    if (companyGstin && partyGstin && companyGstin.length >= 2 && partyGstin.length >= 2) {
+        const companyStateCode = companyGstin.substring(0, 2);
+        const partyStateCode = partyGstin.substring(0, 2);
+        if (/^\d{2}$/.test(companyStateCode) && /^\d{2}$/.test(partyStateCode)) {
+            return companyStateCode !== partyStateCode ? 'IGST' : 'CGST/SGST';
+        }
+    }
+
+    // Priority 2: State name comparison (fallback)
     const normalizedCompanyState = companyState?.toLowerCase().trim();
     const normalizedPartyState = partyState?.toLowerCase().trim();
 

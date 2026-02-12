@@ -485,32 +485,63 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             <div className="space-y-3">
               {/* Tax Breakup - FIRST (always at top) */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-700 mb-2">Tax Breakup</h3>
+                <h3 className="text-xs font-semibold text-gray-700 mb-2">
+                  Tax Breakup
+                  <span className="ml-2 text-[10px] font-normal text-gray-500">
+                    ({invoice.gst_type === 'IGST' ? 'Inter-State · IGST' : 'Intra-State · CGST/SGST'})
+                  </span>
+                </h3>
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b border-gray-200">
                         <th className="text-left pb-1 text-gray-600 font-medium">Rate</th>
                         <th className="text-right pb-1 text-gray-600 font-medium">Taxable</th>
-                        <th className="text-right pb-1 text-gray-600 font-medium">CGST</th>
-                        <th className="text-right pb-1 text-gray-600 font-medium">SGST</th>
-                        <th className="text-right pb-1 text-gray-600 font-medium">IGST</th>
+                        {invoice.gst_type === 'IGST' ? (
+                          <th className="text-right pb-1 text-gray-600 font-medium">IGST</th>
+                        ) : (
+                          <>
+                            <th className="text-right pb-1 text-gray-600 font-medium">CGST</th>
+                            <th className="text-right pb-1 text-gray-600 font-medium">SGST</th>
+                          </>
+                        )}
+                        <th className="text-right pb-1 text-gray-600 font-medium">Total Tax</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td className="pt-1 text-gray-700">12%</td>
-                        <td className="pt-1 text-right text-gray-700">{formatCurrency(totals.taxable_amount)}</td>
-                        <td className="pt-1 text-right text-gray-700">
-                          {formatCurrency(totals.cgst_amount)}
-                        </td>
-                        <td className="pt-1 text-right text-gray-700">
-                          {formatCurrency(totals.sgst_amount)}
-                        </td>
-                        <td className="pt-1 text-right text-gray-700">
-                          {invoice.gst_type === 'IGST' ? formatCurrency(totals.igst_amount) : '-'}
-                        </td>
-                      </tr>
+                      {(() => {
+                        // Group items by GST rate for proper breakup
+                        const rateGroups: Record<number, { taxable: number; tax: number }> = {};
+                        (invoice.items || []).forEach((item: InvoiceItem) => {
+                          const rate = parseFloat(String(item.gst_percent || item.tax_percent || 0));
+                          const qty = parseFloat(String(item.quantity || 0));
+                          const price = parseFloat(String(item.unit_price || 0));
+                          const disc = parseFloat(String(item.discount_percent || 0));
+                          const subtotal = qty * price;
+                          const taxable = subtotal - (subtotal * disc / 100);
+                          const tax = taxable * rate / 100;
+                          if (!rateGroups[rate]) rateGroups[rate] = { taxable: 0, tax: 0 };
+                          rateGroups[rate].taxable += taxable;
+                          rateGroups[rate].tax += tax;
+                        });
+                        const rates = Object.keys(rateGroups).map(Number).sort((a, b) => a - b);
+                        if (rates.length === 0) rates.push(0);
+                        return rates.map(rate => (
+                          <tr key={rate}>
+                            <td className="pt-1 text-gray-700">{rate}%</td>
+                            <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.taxable || 0)}</td>
+                            {invoice.gst_type === 'IGST' ? (
+                              <td className="pt-1 text-right text-gray-700">{formatCurrency(rateGroups[rate]?.tax || 0)}</td>
+                            ) : (
+                              <>
+                                <td className="pt-1 text-right text-gray-700">{formatCurrency((rateGroups[rate]?.tax || 0) / 2)}</td>
+                                <td className="pt-1 text-right text-gray-700">{formatCurrency((rateGroups[rate]?.tax || 0) / 2)}</td>
+                              </>
+                            )}
+                            <td className="pt-1 text-right text-gray-700 font-medium">{formatCurrency(rateGroups[rate]?.tax || 0)}</td>
+                          </tr>
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>

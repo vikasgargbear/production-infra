@@ -20,8 +20,8 @@ const cx = (...classNames: (string | boolean | undefined | null)[]) =>
 // Modal styles derived from theme components
 const styles = {
     modalOverlay: 'fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4',
-    modalHeader: 'bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-5 border-b border-gray-100',
-    modalBody: 'p-6 overflow-y-auto max-h-[calc(90vh-120px)]',
+    modalHeader: 'bg-white px-6 py-4 border-b border-gray-200',
+    modalBody: 'p-6 overflow-y-auto max-h-[calc(90vh-100px)]',
     iconButton: 'p-2 hover:bg-gray-100 rounded-lg transition-colors group',
 };
 
@@ -117,8 +117,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showCostInfo, setShowCostInfo] = useState<boolean>(false);
+    const [focusedIndex, setFocusedIndex] = useState<number>(-1);
     const hasLoadedRef = useRef<number | string | false>(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const batchRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     useEffect(() => {
         if (show && product && mode === 'modal') {
@@ -128,11 +130,14 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 loadBatches();
                 hasLoadedRef.current = productId || false;
             }
+            // Auto-focus modal for keyboard navigation
+            setTimeout(() => containerRef.current?.focus(), 50);
         } else if (!show && mode === 'modal') {
             hasLoadedRef.current = false;
             setSelectedBatch(null);
             setBatches([]);
             setError(null);
+            setFocusedIndex(-1);
         }
     }, [show, product?.product_id, product?.id, mode]);
 
@@ -306,9 +311,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         });
 
         setBatches(processedBatches);
+        batchRefs.current = processedBatches.map(() => null);
 
-        // If no batches available, show a clear message instead of creating a fake default
-        if (processedBatches.length === 0) {
+        // Auto-focus first batch for keyboard navigation (FEFO priority)
+        if (processedBatches.length > 0) {
+            setFocusedIndex(0);
+        } else {
+            setFocusedIndex(-1);
             setError('No batches available for this product (may be expired or out of stock)');
         }
     };
@@ -380,19 +389,23 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         } as ExpiryInfo;
     };
 
-    const defaultRenderBatchInfo = (batch: Batch): ReactNode => {
+    const defaultRenderBatchInfo = (batch: Batch, index?: number): ReactNode => {
         const expiryInfo = showExpiryStatus ? getExpiryInfo(batch.expiry_date) : null;
         const isSelected = selectedBatch?.batch_id === batch.batch_id;
+        const isFocused = typeof index === 'number' && index === focusedIndex;
 
         return (
             <div
                 key={String(batch.batch_id)}
+                ref={(el) => { if (typeof index === 'number') batchRefs.current[index] = el; }}
                 onClick={() => handleBatchSelect(batch)}
                 className={cx(
                     'relative group cursor-pointer rounded-lg border-2 transition-all duration-200 bg-white hover:shadow-md mb-2',
                     isSelected
                         ? 'border-blue-500 shadow-lg bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
+                        : isFocused
+                            ? 'border-blue-400 ring-2 ring-blue-300 bg-blue-50/50'
+                            : 'border-gray-200 hover:border-blue-300'
                 )}
             >
                 {isSelected && (
@@ -401,12 +414,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     </div>
                 )}
 
-                <div className="grid grid-cols-12 gap-3 p-3 items-center">
-                    <div className="col-span-2">
-                        <div className="flex items-center gap-1">
+                <div className="grid gap-4 p-3 items-center"
+                    style={{ gridTemplateColumns: '2fr 1.3fr 1.3fr 0.7fr 0.8fr 0.8fr 0.6fr' }}>
+                    <div>
+                        <div className="flex items-center gap-1.5">
                             <Package size={14} className="text-gray-400 flex-shrink-0" />
                             <span className={cx(
-                                "font-semibold text-sm truncate",
+                                "font-semibold text-sm",
                                 isSelected ? "text-blue-700" : "text-gray-900"
                             )}>
                                 {batch.batch_number}
@@ -414,7 +428,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         </div>
                     </div>
 
-                    <div className="col-span-3">
+                    <div>
                         <div className="flex flex-col gap-0.5">
                             <span className="text-sm text-gray-700">
                                 {DateFormatter.formatDate(batch.expiry_date, 'short')}
@@ -433,7 +447,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         </div>
                     </div>
 
-                    <div className="col-span-2">
+                    <div>
                         <span className="text-sm text-gray-600">
                             {batch.manufacturing_date
                                 ? DateFormatter.formatDate(batch.manufacturing_date, 'short')
@@ -441,25 +455,29 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         </span>
                     </div>
 
-                    <div className="col-span-2">
-                        <div className="flex flex-col items-center">
-                            <span className={cx(
-                                "text-base font-bold",
-                                (batch.quantity_available || 0) > 10 ? "text-emerald-600" :
-                                    (batch.quantity_available || 0) > 0 ? "text-amber-600" : "text-red-600"
-                            )}>
-                                {batch.quantity_available || 0}
-                            </span>
-                        </div>
+                    <div className="text-center">
+                        <span className={cx(
+                            "text-sm font-bold",
+                            (batch.quantity_available || 0) > 10 ? "text-emerald-600" :
+                                (batch.quantity_available || 0) > 0 ? "text-amber-600" : "text-red-600"
+                        )}>
+                            {batch.quantity_available || 0}
+                        </span>
                     </div>
 
-                    <div className="col-span-2 text-right">
-                        <span className="text-sm font-semibold text-gray-900">
+                    <div className="text-right">
+                        <span className="text-sm font-medium text-blue-700">
+                            ₹{parseFloat(String(batch.sale_price_per_unit || 0)).toFixed(2)}
+                        </span>
+                    </div>
+
+                    <div className="text-right">
+                        <span className="text-sm text-gray-500">
                             ₹{parseFloat(String(batch.mrp_per_unit || 0)).toFixed(2)}
                         </span>
                     </div>
 
-                    <div className="col-span-1 flex justify-end">
+                    <div className="flex justify-end">
                         <div className={cx(
                             'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
                             isSelected
@@ -521,18 +539,20 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 </div>
             ) : (
                 <>
-                    <div className="grid grid-cols-12 gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 mb-3 rounded-t-lg sticky top-0 z-10">
-                        <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase">Batch #</div>
-                        <div className="col-span-3 text-xs font-semibold text-gray-700 uppercase">Expiry Date</div>
-                        <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase">Mfg Date</div>
-                        <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase text-center">Stock</div>
-                        <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase text-right">MRP</div>
-                        <div className="col-span-1 text-xs font-semibold text-gray-700 uppercase text-right">Action</div>
+                    <div className="grid gap-4 px-3 py-2 bg-gray-50 border-b border-gray-200 mb-3 rounded-t-lg sticky top-0 z-10"
+                        style={{ gridTemplateColumns: '2fr 1.3fr 1.3fr 0.7fr 0.8fr 0.8fr 0.6fr' }}>
+                        <div className="text-xs font-semibold text-gray-700 uppercase">Batch #</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase">Expiry</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase">Mfg Date</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase text-center">Stock</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase text-right">Rate</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase text-right">MRP</div>
+                        <div className="text-xs font-semibold text-gray-700 uppercase text-right">Action</div>
                     </div>
 
                     <div className="space-y-0 max-w-full">
-                        {batches.map((batch) =>
-                            renderBatchInfo ? renderBatchInfo(batch) : defaultRenderBatchInfo(batch)
+                        {batches.map((batch, index) =>
+                            renderBatchInfo ? renderBatchInfo(batch) : defaultRenderBatchInfo(batch, index)
                         )}
                     </div>
                 </>
@@ -575,6 +595,40 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             setShowCostInfo(prev => !prev);
             return;
         }
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            onClose();
+            return;
+        }
+
+        if (batches.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setFocusedIndex(prev => {
+                const next = (prev + 1) % batches.length;
+                batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+                return next;
+            });
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setFocusedIndex(prev => {
+                const next = (prev - 1 + batches.length) % batches.length;
+                batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+                return next;
+            });
+            return;
+        }
+
+        if (e.key === 'Enter' && focusedIndex >= 0 && focusedIndex < batches.length) {
+            e.preventDefault();
+            handleBatchSelect(batches[focusedIndex]);
+            return;
+        }
     };
 
     if (!show) return null;
@@ -582,29 +636,28 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     return (
         <div className={styles.modalOverlay}>
             <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden"
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden outline-none"
                 tabIndex={-1}
                 onKeyDown={handleKeyDown}
                 ref={containerRef}
             >
                 <div className={styles.modalHeader}>
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                                <Box className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-900">Select Batch</h3>
-                                <p className="text-sm text-gray-600 mt-0.5">{product?.product_name}</p>
-                            </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900">Select Batch</h3>
+                            <p className="text-sm text-gray-500 mt-0.5">{product?.product_name}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">
-                                Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300 text-gray-600 font-mono">Shift + `</kbd> for cost info
+                            <span className="text-xs text-gray-400 hidden sm:inline">
+                                <kbd className="px-1 py-0.5 bg-gray-100 rounded border border-gray-200 text-gray-500 font-mono text-[10px]">↑↓</kbd> Navigate
+                                <span className="mx-1">·</span>
+                                <kbd className="px-1 py-0.5 bg-gray-100 rounded border border-gray-200 text-gray-500 font-mono text-[10px]">Enter</kbd> Select
+                                <span className="mx-1">·</span>
+                                <kbd className="px-1 py-0.5 bg-gray-100 rounded border border-gray-200 text-gray-500 font-mono text-[10px]">Esc</kbd> Close
                             </span>
                             <button
                                 onClick={onClose}
-                                className={cx(styles.iconButton, 'hover:bg-white/80 rounded-xl')}
+                                className={cx(styles.iconButton, 'rounded-xl')}
                             >
                                 <X className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
                             </button>

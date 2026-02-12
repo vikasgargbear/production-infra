@@ -74,7 +74,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const enableKeyboardNav = enableKeyboardNavProp !== undefined ? enableKeyboardNavProp : mode === 'entry';
 
     const fieldRefs = useRef<Record<string, EditableCellRef | null>>({});
-    const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free', 'tax'];
+    const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free'];
 
     useImperativeHandle(ref, () => ({
         focusField: (rowIndex: number, fieldName: string) => {

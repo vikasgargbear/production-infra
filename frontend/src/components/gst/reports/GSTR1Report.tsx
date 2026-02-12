@@ -19,9 +19,12 @@ interface GSTR1ReportProps {
     dateRange: DateRange;
     refreshTrigger: number;
     onRefresh?: () => void;
+    showTaxBreakdown?: boolean;
+    onDataReady?: (data: any) => void;
+    onExport?: () => void;
 }
 
-const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) => {
+const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady }) => {
     const [data, setData] = useState<GSTR1Data | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -67,15 +70,15 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
 
                 setCreditDebitNotes(notes);
 
-                // Invoices already contain customer_gst_number and customer_name
-                // from the backend join - no separate customer API calls needed
                 const baseData = transformInvoicesToGSTR1(invoices);
                 const adjustedSummary = applyNoteAdjustments(baseData.summary, notes);
 
-                setData({
+                const result = {
                     ...baseData,
                     summary: adjustedSummary
-                });
+                };
+                setData(result);
+                onDataReady?.(result);
             } catch (err) {
                 setError('Failed to load GSTR1 data');
             } finally {
@@ -103,6 +106,20 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
             </div>
         );
     }
+
+    // Build columns based on tax breakdown toggle
+    const b2bColumns = [
+        { key: 'gst_number', header: 'GSTIN' },
+        { key: 'name', header: 'Party Name' },
+        { key: 'invoices', header: 'Invoices' },
+        { key: 'taxableValue', header: 'Taxable Value', render: (v: number) => formatCurrency(v) },
+        ...(showTaxBreakdown ? [
+            { key: 'cgst', header: 'CGST', render: (v: number) => formatCurrency(v) },
+            { key: 'sgst', header: 'SGST', render: (v: number) => formatCurrency(v) },
+            { key: 'igst', header: 'IGST', render: (v: number) => formatCurrency(v) }
+        ] : []),
+        { key: 'totalTax', header: 'Total Tax', render: (_v: number, row: any) => formatCurrency((row.cgst || 0) + (row.sgst || 0) + (row.igst || 0)) }
+    ];
 
     return (
         <div className="space-y-6">
@@ -135,15 +152,7 @@ const GSTR1Report: React.FC<GSTR1ReportProps> = ({ dateRange, refreshTrigger }) 
                 <DataTable
                     data={data?.b2b || []}
                     keyField="gst_number"
-                    columns={[
-                        { key: 'gst_number', header: 'GSTIN' },
-                        { key: 'name', header: 'Party Name' },
-                        { key: 'invoices', header: 'Invoices' },
-                        { key: 'taxableValue', header: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'cgst', header: 'CGST', render: (v) => formatCurrency(v) },
-                        { key: 'sgst', header: 'SGST', render: (v) => formatCurrency(v) },
-                        { key: 'igst', header: 'IGST', render: (v) => formatCurrency(v) }
-                    ]}
+                    columns={b2bColumns}
                 />
             </div>
 

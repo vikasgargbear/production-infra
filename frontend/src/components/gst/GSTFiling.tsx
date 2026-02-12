@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import {
-  FileText, ExternalLink, Calendar, AlertCircle,
-  Download, Eye, CheckCircle, Clock, Info
+  FileText, ExternalLink,
+  Eye, CheckCircle, Clock, AlertCircle, Download, Info
 } from 'lucide-react';
+import ModuleHeader from '../global/ui/ModuleHeader';
 
 interface GSTFilingProps {
   onClose?: () => void;
 }
 
 const GSTFiling: React.FC<GSTFilingProps> = () => {
-  const [selectedReturn, setSelectedReturn] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'preview' | 'file'; returnName: string } | null>(null);
 
   const gstReturns = [
@@ -71,23 +71,23 @@ const GSTFiling: React.FC<GSTFilingProps> = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">GST Filing</h2>
-        <p className="text-sm text-gray-600 mt-1">File your GST returns with calculated data from your transactions</p>
+    <div>
+      <ModuleHeader
+        title="GST Filing"
+        icon={FileText}
+        iconColor="text-green-600"
+      />
+
+      <div className="px-6 py-3 bg-white border-b border-gray-200">
+        <p className="text-sm text-gray-500">
+          Data from your invoices and purchases. For actual filing, visit{' '}
+          <a href="https://gst.gov.in" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+            gst.gov.in
+          </a>
+        </p>
       </div>
 
-      {/* Important Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <div className="flex items-center">
-          <AlertCircle className="h-5 w-5 text-blue-600 mr-2" />
-          <div className="text-sm text-blue-800">
-            <p className="font-medium">Honest Filing Process</p>
-            <p>All calculations are based on your real invoice and purchase data. For actual filing, you will be redirected to the official GST portal.</p>
-          </div>
-        </div>
-      </div>
-
+      <div className="p-6">
       {/* Action Message */}
       {actionMessage && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -139,7 +139,7 @@ const GSTFiling: React.FC<GSTFilingProps> = () => {
               </div>
 
               <p className="text-sm text-gray-600 mb-4">{gstReturn.description}</p>
-              
+
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Due Date:</span>
@@ -174,58 +174,6 @@ const GSTFiling: React.FC<GSTFilingProps> = () => {
           </div>
         ))}
       </div>
-
-      {/* Filing Calendar */}
-      <div className="mt-8 bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <Calendar className="h-5 w-5 mr-2 text-blue-600" />
-          Filing Calendar
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="p-4 bg-yellow-50 rounded-lg">
-            <h4 className="font-medium text-yellow-800">GSTR-1</h4>
-            <p className="text-sm text-yellow-600 mt-1">Due: 11th of every month</p>
-            <p className="text-xs text-yellow-600 mt-2">Quarterly filers: 13th after quarter end</p>
-          </div>
-          
-          <div className="p-4 bg-red-50 rounded-lg">
-            <h4 className="font-medium text-red-800">GSTR-3B</h4>
-            <p className="text-sm text-red-600 mt-1">Due: 20th of every month</p>
-            <p className="text-xs text-red-600 mt-2">Late fee applies after due date</p>
-          </div>
-          
-          <div className="p-4 bg-blue-50 rounded-lg">
-            <h4 className="font-medium text-blue-800">GSTR-2B</h4>
-            <p className="text-sm text-blue-600 mt-1">Available: 12th of every month</p>
-            <p className="text-xs text-blue-600 mt-2">Auto-populated by government</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filing Tips */}
-      <div className="mt-6 bg-gray-50 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Filing Tips</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-          <div>
-            <h4 className="font-medium text-gray-900 mb-2">Before Filing:</h4>
-            <ul className="space-y-1">
-              <li>• Verify all invoice data is accurate</li>
-              <li>• Reconcile with purchase register</li>
-              <li>• Check HSN codes and tax rates</li>
-              <li>• Ensure customer/vendor details are correct</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-gray-900 mb-2">After Filing:</h4>
-            <ul className="space-y-1">
-              <li>• Download acknowledgment receipt</li>
-              <li>• Pay any pending tax liability</li>
-              <li>• Update your records</li>
-              <li>• Set reminders for next filing</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   );

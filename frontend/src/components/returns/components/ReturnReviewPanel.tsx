@@ -485,12 +485,11 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                 grandTotal={returnData.total_amount}
                 subtotalAmount={returnData.subtotal_amount}
                 taxAmount={returnData.tax_amount}
-                onPrint={onPrint}
                 onSave={handleSave}
                 isSaving={saving}
                 saveLabel="Confirm Return"
                 showActionButtons={true}
-                showPrintOptions={false}  // Print only available after generation in success modal
+                showPrintOptions={false}
                 showSaveOption={true}
             />
         </div>

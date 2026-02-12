@@ -64,6 +64,16 @@ import { branchesApi } from './modules/org/branches.api';
 import { departmentsApi } from './modules/org/departments.api';
 
 // =========================================================================
+// PAYROLL
+// =========================================================================
+import { salaryStructureApi } from './modules/payroll/salaryStructure.api';
+import { leavePolicyApi } from './modules/payroll/leavePolicy.api';
+import { attendanceApi } from './modules/payroll/attendance.api';
+import { leaveApi } from './modules/payroll/leave.api';
+import { payrollRunApi } from './modules/payroll/payrollRun.api';
+import { salarySlipsApi } from './modules/payroll/salarySlips.api';
+
+// =========================================================================
 // PURCHASE
 // =========================================================================
 import { purchasesApi } from './modules/purchase/purchases.api';
@@ -147,6 +157,14 @@ export {
   employeesApi,
   bankAccountsApi,
 
+  // Payroll
+  salaryStructureApi,
+  leavePolicyApi,
+  attendanceApi,
+  leaveApi,
+  payrollRunApi,
+  salarySlipsApi,
+
   // Org
   companyApi,
   organizationsApi,
@@ -217,6 +235,9 @@ const apiModules = {
 
   // Org
   org: { company: companyApi, organizations: organizationsApi, branches: branchesApi, departments: departmentsApi },
+
+  // Payroll
+  payroll: { salaryStructure: salaryStructureApi, leavePolicy: leavePolicyApi, attendance: attendanceApi, leave: leaveApi, payrollRun: payrollRunApi, salarySlips: salarySlipsApi },
 
   // Purchase
   purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },

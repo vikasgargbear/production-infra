@@ -677,7 +677,6 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
             purchase.items.length > 0;
         }}
         onSave={handleSavePurchase}
-        onPrint={handlePrint}
         isSaving={saving}
         saveLabel="Save Purchase"
 

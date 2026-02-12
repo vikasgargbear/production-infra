@@ -1,22 +1,19 @@
 /**
  * ProductMaster Component
- * 
+ *
  * Refactored to use useEntityMaster hook for shared CRUD logic.
  * Unique features preserved: API search debounce, dynamic categories from data.
- * Reduced from 465 lines to ~280 lines.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Package, Search, Plus, Edit2, Trash2,
-  Download, Upload, AlertCircle, Check,
-  AlertTriangle
+  AlertCircle, Check, AlertTriangle
 } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import { ProductEditModal } from '../../global/edit';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
-import Input from '../../global/ui/forms/Input';
 import { useEntityMaster } from '../hooks';
 import type { BaseProduct } from '../types/masterSharedTypes';
 
@@ -24,6 +21,8 @@ import type { BaseProduct } from '../types/masterSharedTypes';
 interface Product extends BaseProduct {
   id?: string;
   total_quantity_available?: number;
+  reorder_level?: number;
+  selling_price?: number;
   [key: string]: unknown;
 }
 
@@ -40,9 +39,9 @@ const getColumns = (
       header: 'Product',
       render: (_, product) => product ? (
         <div>
-          <div className="font-medium text-app-800">{product.product_name || 'N/A'}</div>
+          <div className="font-medium text-gray-900">{product.product_name || 'N/A'}</div>
           {product.generic_name && (
-            <div className="text-sm text-app-500">{product.generic_name}</div>
+            <div className="text-sm text-gray-500">{product.generic_name}</div>
           )}
         </div>
       ) : <div>N/A</div>
@@ -52,8 +51,8 @@ const getColumns = (
       header: 'Code/HSN',
       render: (_, product) => product ? (
         <div>
-          <div className="text-app-800">{product.product_code || 'N/A'}</div>
-          <div className="text-sm text-app-500">HSN: {product.hsn_code || 'N/A'}</div>
+          <div className="text-gray-900">{product.product_code || 'N/A'}</div>
+          <div className="text-sm text-gray-500">HSN: {product.hsn_code || 'N/A'}</div>
         </div>
       ) : <div>N/A</div>
     },
@@ -72,17 +71,33 @@ const getColumns = (
       render: (value) => value ? `₹${Number(value).toFixed(2)}` : '-',
     },
     {
+      key: 'selling_price',
+      header: 'Rate',
+      align: 'right' as const,
+      render: (value) => value ? `₹${Number(value).toFixed(2)}` : '-',
+    },
+    {
       key: 'cost_per_unit',
       header: 'Cost',
       align: 'right' as const,
       render: (value) => value ? `₹${Number(value).toFixed(2)}` : '-',
     },
     {
+      key: 'total_quantity_available',
+      header: 'Stock',
+      align: 'right' as const,
+      render: (value) => {
+        const qty = parseInt(value || 0);
+        if (!qty) return <span className="text-red-500 font-medium">0</span>;
+        return <span className={`font-medium ${qty <= 10 ? 'text-amber-600' : 'text-gray-900'}`}>{qty}</span>;
+      }
+    },
+    {
       key: 'is_active',
       header: 'Status',
       align: 'center' as const,
       render: (value) => (
-        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${value ? 'bg-success-100 text-success-800' : 'bg-danger-100 text-danger-800'
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${value ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
           }`}>
           {value ? 'Active' : 'Inactive'}
         </span>
@@ -97,7 +112,7 @@ const getColumns = (
         <div className="flex items-center justify-center space-x-2">
           <button
             onClick={() => handleEdit(product)}
-            className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
+            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
             disabled={!product}
           >
             <Edit2 className="w-4 h-4" />
@@ -105,8 +120,8 @@ const getColumns = (
           <button
             onClick={() => handleDelete(product?.product_id)}
             className={`${product?.is_active !== false
-              ? 'text-warning-600 hover:text-warning-700'
-              : 'text-success-600 hover:text-success-700'
+              ? 'text-amber-600 hover:text-amber-700'
+              : 'text-green-600 hover:text-green-700'
               } p-1 rounded transition-colors`}
             disabled={!product?.product_id}
             title={product?.is_active !== false ? 'Deactivate Product' : 'Reactivate Product'}
@@ -146,7 +161,8 @@ const ProductMaster: React.FC = () => {
     handleEdit,
     handleDelete,
     handleSaved,
-    handleBulkDelete
+    handleBulkDelete,
+    searchInputRef
   } = useEntityMaster<Product>({
     entityName: 'product',
     idField: 'product_id',
@@ -170,20 +186,23 @@ const ProductMaster: React.FC = () => {
     }
   }, [products]);
 
+  // Summary stats
+  const stats = useMemo(() => {
+    const total = products.length;
+    const active = products.filter(p => p.is_active !== false).length;
+    const inactive = total - active;
+    const lowStock = products.filter(p =>
+      (p.total_quantity_available || 0) <= (p.reorder_level || 10) && p.is_active !== false
+    ).length;
+    return { total, active, inactive, lowStock };
+  }, [products]);
+
   const columns = getColumns(handleEdit, handleDelete);
 
   const headerActions = (
-    <>
-      <Button variant="secondary" size="sm" onClick={() => {/* Import logic */ }}>
-        <Upload className="w-4 h-4 mr-2" />Import
-      </Button>
-      <Button variant="secondary" size="sm" onClick={() => {/* Export logic */ }}>
-        <Download className="w-4 h-4 mr-2" />Export
-      </Button>
-      <Button variant="primary" onClick={() => setShowAddModal(true)}>
-        <Plus className="w-4 h-4 mr-2" />Add Product
-      </Button>
-    </>
+    <Button variant="primary" onClick={() => setShowAddModal(true)}>
+      <Plus className="w-4 h-4 mr-2" />Add Product
+    </Button>
   );
 
   return (
@@ -193,32 +212,35 @@ const ProductMaster: React.FC = () => {
       icon={Package}
       headerActions={headerActions}
     >
-      {/* Filters and Search */}
-      <ContentCard
-        title="Search & Filter"
-        subtitle={undefined}
-        actions={selectedIds.length > 0 ? (
-          <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-            <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
-          </Button>
-        ) : null}
-        icon={Search}
-      >
-        <div className="flex items-center space-x-6">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <Input
+      {/* Stats Bar with Inline Search */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-5 text-sm">
+          <span className="text-gray-600">Total: <strong className="text-gray-900">{stats.total}</strong></span>
+          <span className="text-green-600">Active: <strong>{stats.active}</strong></span>
+          <span className="text-red-600">Inactive: <strong>{stats.inactive}</strong></span>
+          {stats.lowStock > 0 && <span className="text-amber-600">Low Stock: <strong>{stats.lowStock}</strong></span>}
+          {selectedIds.length > 0 && (
+            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" />Deactivate ({selectedIds.length})
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search products..."
+              placeholder="Search products... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12"
+              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
             />
           </div>
           <select
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {categories.map(category => (
               <option key={category} value={category === 'All' ? 'all' : category}>
@@ -227,23 +249,21 @@ const ProductMaster: React.FC = () => {
             ))}
           </select>
         </div>
-      </ContentCard>
+      </div>
 
       {/* Error Message */}
       {error && (
-        <ContentCard title="" subtitle={undefined} actions={undefined} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-800">{error}</span>
-          </div>
-        </ContentCard>
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
 
       {/* Product List */}
       <ContentCard title="Product List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Package}>
         {products.length === 0 && !isLoading ? (
           <div className="text-center py-12">
-            <Package className="w-12 h-12 text-app-400 mx-auto mb-4" />
+            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
             <p className="text-sm text-gray-500 mb-4">Get started by adding your first product</p>
             <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -257,7 +277,7 @@ const ProductMaster: React.FC = () => {
             keyField="product_id"
             loading={isLoading}
             emptyMessage="No products found"
-            emptyIcon={<Package className="w-12 h-12 text-app-400" />}
+            emptyIcon={<Package className="w-12 h-12 text-gray-400" />}
             selectable={true}
             selectedRows={filteredEntities.filter(p => selectedIds.includes(String(p.product_id)))}
             onSelectionChange={(selected) => setSelectedIds(selected.map(p => String(p.product_id)))}

@@ -262,14 +262,11 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                     subtotalAmount={challan.total_amount || 0}
                     taxAmount={0}
                     grandTotal={challan.total_amount || 0}
-                    onPrint={printChallan}
-                    onThermalPrint={thermalPrintChallan}
                     onSave={saveChallan}
                     saveLabel="Generate Challan"
-                    onWhatsApp={shareOnWhatsApp}
                     isSaving={saving}
-                    customerPhone={challan.customer_details?.phone || selectedCustomer?.phone}
                     showActionButtons={true}
+                    showPrintOptions={false}
                 />
 
             </div>

@@ -155,10 +155,8 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             }
             break;
           case 'p':
+            // Print only available after generation (in success modal)
             e.preventDefault();
-            if (ui.currentStep === 2) {
-              handlePrint();
-            }
             break;
         }
       }
@@ -1039,7 +1037,6 @@ ${companyInfo?.name || 'Your Company'}`;
             selectedInvoice={selectedInvoice}
             customerDues={customerDues}
             onSave={handleSaveReturn}
-            onPrint={handlePrint}
             onBack={() => dispatch({ type: 'SET_STEP', step: 1 })}
             saving={saving}
           />

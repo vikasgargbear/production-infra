@@ -80,10 +80,8 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         }
                         break;
                     case 'p':
+                        // Print only available after generation (in success modal)
                         e.preventDefault();
-                        if (currentStep === 2) {
-                            printOrder();
-                        }
                         break;
                     case 'n':
                         e.preventDefault();
@@ -162,9 +160,6 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             onCancel={onClose}
                             onContinue={() => setCurrentStep(2)}
                             onSave={() => { }}
-                            onPrint={() => { }}
-                            onThermalPrint={() => { }}
-                            onWhatsApp={() => { }}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
                             continueDisabled={!order.customer_id || order.items.length === 0}
@@ -230,7 +225,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         />
 
                         <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-                            Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
+                            Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Esc</strong> - Back
                         </div>
 
                         <div className="flex-1 overflow-y-auto bg-blue-50">
@@ -255,13 +250,11 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             taxAmount={order.tax_amount}
                             roundOffAmount={order.round_off}
                             grandTotal={order.total_amount}
-                            onPrint={printOrder}
                             onSave={saveOrder}
                             saveLabel="Generate Order"
-                            onWhatsApp={shareOnWhatsApp}
                             isSaving={saving}
-                            customerPhone={selectedCustomer?.phone || order.customer_details?.phone}
                             showActionButtons={true}
+                            showPrintOptions={false}
                         />
                     </div>
                 </div>

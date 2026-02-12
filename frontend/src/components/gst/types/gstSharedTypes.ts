@@ -127,11 +127,10 @@ export interface CreditDebitSummary {
 
 export type GSTReportType =
     | 'gstr-1'      // Outward Supplies
-    | 'gstr-2b'     // Input Tax Credit
-    | 'gstr-3b'     // Summary Return
+    | 'gstr-2b'     // Input Tax Credit (absorbs Input Credit Report)
+    | 'gstr-3b'     // Summary Return (absorbs GST Payable Report)
     | 'hsn-summary' // Product-wise GST
-    | 'party-wise'  // Customer GST details
-    | 'payable';    // Tax liability
+    | 'party-wise'; // Customer GST details
 
 export interface ReportTypeConfig {
     id: GSTReportType;

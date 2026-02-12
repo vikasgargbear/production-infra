@@ -5,18 +5,14 @@ import {
     CheckCircle,
     XCircle,
     Download,
-    Filter,
     Search,
     Loader2,
     AlertCircle,
     ArrowRight,
+    ArrowLeft,
     FileText,
-    Clock,
-    TrendingUp,
-    TrendingDown,
-    Info,
-    ChevronDown,
-    ChevronUp
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import { apiClient } from '../../../services/api';
 
@@ -37,6 +33,7 @@ interface MismatchItem {
     mismatch_type: 'value' | 'tax' | 'both' | 'missing_in_books' | 'missing_in_2b';
     status: 'pending' | 'resolved' | 'accepted' | 'rejected';
     resolution_notes?: string;
+    resolution?: 'accept_2b' | 'keep_books' | 'skipped';
 }
 
 interface ReconciliationSummary {
@@ -61,8 +58,7 @@ interface ReconciliationDashboardProps {
     uploadComplete?: boolean;
 }
 
-type MismatchFilter = 'all' | 'value' | 'tax' | 'both' | 'missing_in_books' | 'missing_in_2b';
-type StatusFilter = 'all' | 'pending' | 'resolved' | 'accepted' | 'rejected';
+type ReviewPhase = 'pre-review' | 'reviewing' | 'completed';
 
 // ==================== COMPONENT ====================
 
@@ -75,12 +71,9 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [summary, setSummary] = useState<ReconciliationSummary | null>(null);
     const [mismatches, setMismatches] = useState<MismatchItem[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [mismatchFilter, setMismatchFilter] = useState<MismatchFilter>('all');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [expandedRow, setExpandedRow] = useState<string | null>(null);
-    const [sortField, setSortField] = useState<'value_diff' | 'tax_diff' | 'invoice_date'>('value_diff');
-    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+    const [reviewPhase, setReviewPhase] = useState<ReviewPhase>('pre-review');
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [autoResolveThreshold] = useState(10);
 
     // Load reconciliation data
     const loadData = useCallback(async () => {
@@ -94,8 +87,12 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
             ]);
 
             setSummary(statusResponse.data?.summary || null);
-            setMismatches(statusResponse.data?.mismatches || mismatchResponse.data?.mismatches || []);
-
+            setMismatches(
+                (statusResponse.data?.mismatches || mismatchResponse.data?.mismatches || []).map((m: any) => ({
+                    ...m,
+                    resolution: m.resolution || undefined
+                }))
+            );
         } catch (err) {
             setSummary(null);
             setMismatches([]);
@@ -122,62 +119,72 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
 
     // Export mismatches
     const handleExport = () => {
-        const csvHeader = 'Invoice No,Date,Supplier,GSTIN,2B Value,Books Value,Diff,2B Tax,Books Tax,Tax Diff,Type,Status\n';
-        const csvRows = filteredMismatches.map(item =>
-            `"${item.invoice_number}","${item.invoice_date}","${item.supplier_name}","${item.supplier_gstin}",${item.gstr2b_value},${item.books_value},${item.value_diff},${item.gstr2b_tax},${item.books_tax},${item.tax_diff},"${item.mismatch_type}","${item.status}"`
+        const csvHeader = 'Invoice No,Date,Supplier,GSTIN,2B Value,Books Value,Diff,2B Tax,Books Tax,Tax Diff,Type,Status,Resolution\n';
+        const csvRows = mismatches.map(item =>
+            `"${item.invoice_number}","${item.invoice_date}","${item.supplier_name}","${item.supplier_gstin}",${item.gstr2b_value},${item.books_value},${item.value_diff},${item.gstr2b_tax},${item.books_tax},${item.tax_diff},"${item.mismatch_type}","${item.status}","${item.resolution || ''}"`
         ).join('\n');
 
         const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `gstr2b_mismatches_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `gstr2b_reconciliation_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         URL.revokeObjectURL(url);
     };
 
-    // Filter and sort mismatches
-    const filteredMismatches = useMemo(() => {
-        let items = [...mismatches];
+    // Pending mismatches (not yet reviewed)
+    const pendingMismatches = useMemo(() =>
+        mismatches.filter(m => !m.resolution),
+        [mismatches]
+    );
 
-        // Search filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            items = items.filter(item =>
-                item.invoice_number.toLowerCase().includes(term) ||
-                item.supplier_name.toLowerCase().includes(term) ||
-                item.supplier_gstin.toLowerCase().includes(term)
-            );
-        }
+    // Minor difference count (< threshold)
+    const minorDiffCount = useMemo(() =>
+        pendingMismatches.filter(m => Math.abs(m.value_diff) < autoResolveThreshold && Math.abs(m.tax_diff) < autoResolveThreshold).length,
+        [pendingMismatches, autoResolveThreshold]
+    );
 
-        // Mismatch type filter
-        if (mismatchFilter !== 'all') {
-            items = items.filter(item => item.mismatch_type === mismatchFilter);
-        }
-
-        // Status filter
-        if (statusFilter !== 'all') {
-            items = items.filter(item => item.status === statusFilter);
-        }
-
-        // Sort
-        items.sort((a, b) => {
-            const aVal = a[sortField];
-            const bVal = b[sortField];
-            if (typeof aVal === 'number' && typeof bVal === 'number') {
-                return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    // Auto-resolve minor differences
+    const handleAutoResolve = () => {
+        setMismatches(prev => prev.map(m => {
+            if (!m.resolution && Math.abs(m.value_diff) < autoResolveThreshold && Math.abs(m.tax_diff) < autoResolveThreshold) {
+                return { ...m, resolution: 'accept_2b', status: 'accepted' as const };
             }
-            return sortDir === 'asc'
-                ? String(aVal).localeCompare(String(bVal))
-                : String(bVal).localeCompare(String(aVal));
-        });
+            return m;
+        }));
+    };
 
-        return items;
-    }, [mismatches, searchTerm, mismatchFilter, statusFilter, sortField, sortDir]);
+    // Start card-by-card review
+    const handleStartReview = () => {
+        setCurrentIndex(0);
+        setReviewPhase('reviewing');
+    };
 
-    useEffect(() => {
-        loadData();
-    }, [loadData]);
+    // Resolve current mismatch
+    const resolveItem = (resolution: 'accept_2b' | 'keep_books' | 'skipped') => {
+        const currentItem = pendingMismatches[currentIndex];
+        if (!currentItem) return;
+
+        setMismatches(prev => prev.map(m => {
+            if (m.id === currentItem.id) {
+                return {
+                    ...m,
+                    resolution,
+                    status: resolution === 'accept_2b' ? 'accepted' as const :
+                        resolution === 'keep_books' ? 'rejected' as const : 'pending' as const
+                };
+            }
+            return m;
+        }));
+
+        // Move to next or complete
+        if (currentIndex >= pendingMismatches.length - 1) {
+            setReviewPhase('completed');
+        } else {
+            setCurrentIndex(prev => prev + 1);
+        }
+    };
 
     // Format currency
     const formatCurrency = (amount: number): string => {
@@ -188,40 +195,33 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
         }).format(amount);
     };
 
-    // Get mismatch type badge
-    const getMismatchBadge = (type: MismatchItem['mismatch_type']) => {
-        const config = {
-            value: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Value Diff' },
-            tax: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Tax Diff' },
-            both: { bg: 'bg-red-100', text: 'text-red-800', label: 'Both Diff' },
-            missing_in_books: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Missing in Books' },
-            missing_in_2b: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Missing in 2B' }
-        };
-        const c = config[type];
-        return (
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
-                {c.label}
-            </span>
-        );
-    };
+    // Resolution counts
+    const resolutionCounts = useMemo(() => ({
+        accepted: mismatches.filter(m => m.resolution === 'accept_2b').length,
+        kept: mismatches.filter(m => m.resolution === 'keep_books').length,
+        skipped: mismatches.filter(m => m.resolution === 'skipped').length,
+        pending: mismatches.filter(m => !m.resolution).length,
+    }), [mismatches]);
 
-    // Get status badge
-    const getStatusBadge = (status: MismatchItem['status']) => {
-        const config = {
-            pending: { bg: 'bg-gray-100', text: 'text-gray-800', icon: Clock },
-            resolved: { bg: 'bg-green-100', text: 'text-green-800', icon: CheckCircle },
-            accepted: { bg: 'bg-blue-100', text: 'text-blue-800', icon: CheckCircle },
-            rejected: { bg: 'bg-red-100', text: 'text-red-800', icon: XCircle }
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    // Keyboard navigation
+    useEffect(() => {
+        if (reviewPhase !== 'reviewing') return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft' && currentIndex > 0) {
+                setCurrentIndex(prev => prev - 1);
+            } else if (e.key === 'ArrowRight' && currentIndex < pendingMismatches.length - 1) {
+                setCurrentIndex(prev => prev + 1);
+            }
         };
-        const c = config[status];
-        const Icon = c.icon;
-        return (
-            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
-                <Icon className="h-3 w-3 mr-1" />
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-            </span>
-        );
-    };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [reviewPhase, currentIndex, pendingMismatches.length]);
 
     if (isLoading) {
         return (
@@ -302,262 +302,232 @@ const ReconciliationDashboard: React.FC<ReconciliationDashboardProps> = ({
                 </div>
             )}
 
-            {/* Summary Cards */}
+            {/* Summary Strip (light-themed) */}
             {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-slate-800 rounded-xl p-5">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-slate-400">Matched</p>
-                            <CheckCircle className="h-5 w-5 text-emerald-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-white mt-2">{summary.matched}</p>
-                        <p className="text-xs text-emerald-400 mt-1">
-                            {summary.total_2b_invoices > 0
-                                ? `${Math.round((summary.matched / summary.total_2b_invoices) * 100)}% match rate`
-                                : '0%'}
-                        </p>
+                <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border-l-4 border-amber-400 rounded">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="text-sm font-medium text-amber-800">{summary.mismatched} need review</span>
                     </div>
-
-                    <div className="bg-slate-800 rounded-xl p-5">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-slate-400">Mismatched</p>
-                            <AlertTriangle className="h-5 w-5 text-amber-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-amber-400 mt-2">{summary.mismatched}</p>
-                        <p className="text-xs text-slate-400 mt-1">Require review</p>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border-l-4 border-green-400 rounded">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-800">{summary.matched} matched</span>
                     </div>
-
-                    <div className="bg-slate-800 rounded-xl p-5">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-slate-400">Value Difference</p>
-                            {summary.value_difference >= 0 ? (
-                                <TrendingUp className="h-5 w-5 text-red-400" />
-                            ) : (
-                                <TrendingDown className="h-5 w-5 text-green-400" />
-                            )}
+                    {Math.abs(summary.tax_difference) > 0 && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border-l-4 border-red-400 rounded">
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                            <span className="text-sm font-medium text-red-800">ITC at risk: {formatCurrency(Math.abs(summary.tax_difference))}</span>
                         </div>
-                        <p className={`text-2xl font-bold mt-2 ${summary.value_difference >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                            {formatCurrency(Math.abs(summary.value_difference))}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">
-                            {summary.value_difference >= 0 ? 'Higher in 2B' : 'Lower in 2B'}
-                        </p>
-                    </div>
-
-                    <div className="bg-slate-800 rounded-xl p-5">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-slate-400">ITC at Risk</p>
-                            <AlertCircle className="h-5 w-5 text-red-400" />
-                        </div>
-                        <p className="text-2xl font-bold text-red-400 mt-2">
-                            {formatCurrency(Math.abs(summary.tax_difference))}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">Review mismatches</p>
+                    )}
+                    <div className="ml-auto">
+                        <button
+                            onClick={handleExport}
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm text-gray-600"
+                        >
+                            <Download className="h-4 w-4 mr-1" />
+                            Export
+                        </button>
                     </div>
                 </div>
             )}
 
-            {/* Mismatch Details Section */}
-            {mismatches.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    {/* Filters */}
-                    <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                            <div className="flex-1 max-w-md">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search invoices..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    />
+            {/* Review Section */}
+            {mismatches.length > 0 && reviewPhase === 'pre-review' && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Review Mismatches</h3>
+
+                    {/* Bulk action */}
+                    {minorDiffCount > 0 && (
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                            <span className="text-sm text-blue-800">
+                                {minorDiffCount} invoice{minorDiffCount > 1 ? 's' : ''} have differences under ₹{autoResolveThreshold}
+                            </span>
+                            <button
+                                onClick={handleAutoResolve}
+                                className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200"
+                            >
+                                Auto-accept minor differences
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handleStartReview}
+                            disabled={pendingMismatches.length === 0}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            Start Review ({pendingMismatches.length} items)
+                            <ArrowRight className="h-4 w-4 ml-2" />
+                        </button>
+
+                        {resolutionCounts.accepted + resolutionCounts.kept > 0 && (
+                            <span className="text-sm text-gray-500">
+                                {resolutionCounts.accepted} accepted, {resolutionCounts.kept} kept, {resolutionCounts.skipped} skipped
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Card-by-Card Review Mode */}
+            {reviewPhase === 'reviewing' && pendingMismatches.length > 0 && (
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    {/* Progress bar */}
+                    <div className="px-6 py-3 bg-gray-50 border-b">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-700">
+                                Reviewing {currentIndex + 1} of {pendingMismatches.length} mismatches
+                            </span>
+                            <button
+                                onClick={() => setReviewPhase('pre-review')}
+                                className="text-sm text-gray-500 hover:text-gray-700"
+                            >
+                                Exit Review
+                            </button>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                                className="h-2 rounded-full bg-blue-600 transition-all"
+                                style={{ width: `${((currentIndex + 1) / pendingMismatches.length) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Mismatch Card */}
+                    {(() => {
+                        const item = pendingMismatches[currentIndex];
+                        if (!item) return null;
+
+                        const valueDiffSign = item.value_diff > 0 ? '+' : '';
+                        const taxDiffSign = item.tax_diff > 0 ? '+' : '';
+
+                        return (
+                            <div className="p-6 space-y-6">
+                                {/* Supplier Info */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900">{item.supplier_name}</h3>
+                                        <p className="text-sm text-gray-500 font-mono">{item.supplier_gstin}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-medium text-gray-900">{item.invoice_number}</p>
+                                        <p className="text-sm text-gray-500">{item.invoice_date}</p>
+                                    </div>
+                                </div>
+
+                                {/* Side-by-side comparison */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                        <div className="text-xs font-medium text-purple-600 uppercase mb-2">GSTR-2B Says</div>
+                                        <div className="text-2xl font-bold text-gray-900">{formatCurrency(item.gstr2b_value)}</div>
+                                        <div className="text-sm text-gray-600 mt-1">Tax: {formatCurrency(item.gstr2b_tax)}</div>
+                                    </div>
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="text-xs font-medium text-blue-600 uppercase mb-2">Your Books Say</div>
+                                        <div className="text-2xl font-bold text-gray-900">{formatCurrency(item.books_value)}</div>
+                                        <div className="text-sm text-gray-600 mt-1">Tax: {formatCurrency(item.books_tax)}</div>
+                                    </div>
+                                </div>
+
+                                {/* Difference explanation */}
+                                <div className={`p-4 rounded-lg border-l-4 ${item.value_diff > 0 ? 'bg-amber-50 border-amber-400' : 'bg-green-50 border-green-400'}`}>
+                                    <p className="text-sm font-medium text-gray-900">
+                                        {formatCurrency(Math.abs(item.value_diff))} {item.value_diff > 0 ? 'more' : 'less'} in 2B
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {item.value_diff > 0
+                                            ? `Supplier reported higher value. If correct, your ITC increases by ${formatCurrency(Math.abs(item.tax_diff))}.`
+                                            : `Supplier reported lower value. Your ITC may decrease by ${formatCurrency(Math.abs(item.tax_diff))}.`
+                                        }
+                                    </p>
+                                </div>
+
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => resolveItem('accept_2b')}
+                                        className="flex-1 px-4 py-3 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+                                    >
+                                        Accept 2B Value
+                                    </button>
+                                    <button
+                                        onClick={() => resolveItem('keep_books')}
+                                        className="flex-1 px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        Keep My Value
+                                    </button>
+                                    <button
+                                        onClick={() => resolveItem('skipped')}
+                                        className="flex-1 px-4 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                    >
+                                        Skip for Now
+                                    </button>
+                                </div>
+
+                                {/* Navigation */}
+                                <div className="flex items-center justify-between pt-4 border-t">
+                                    <button
+                                        onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+                                        disabled={currentIndex === 0}
+                                        className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 disabled:opacity-30"
+                                    >
+                                        <ChevronLeft className="h-4 w-4 mr-1" />
+                                        Previous
+                                    </button>
+                                    <span className="text-xs text-gray-400">Use arrow keys to navigate</span>
+                                    <button
+                                        onClick={() => setCurrentIndex(prev => Math.min(pendingMismatches.length - 1, prev + 1))}
+                                        disabled={currentIndex >= pendingMismatches.length - 1}
+                                        className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 disabled:opacity-30"
+                                    >
+                                        Next
+                                        <ChevronRight className="h-4 w-4 ml-1" />
+                                    </button>
                                 </div>
                             </div>
+                        );
+                    })()}
+                </div>
+            )}
 
-                            <div className="flex items-center gap-3">
-                                <select
-                                    value={mismatchFilter}
-                                    onChange={(e) => setMismatchFilter(e.target.value as MismatchFilter)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                >
-                                    <option value="all">All Types</option>
-                                    <option value="value">Value Diff</option>
-                                    <option value="tax">Tax Diff</option>
-                                    <option value="both">Both Diff</option>
-                                    <option value="missing_in_books">Missing in Books</option>
-                                    <option value="missing_in_2b">Missing in 2B</option>
-                                </select>
+            {/* Completion Screen */}
+            {reviewPhase === 'completed' && (
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">All Done!</h3>
+                    <p className="text-gray-600 mb-6">
+                        {resolutionCounts.accepted} accepted 2B values, {resolutionCounts.kept} kept your values, {resolutionCounts.skipped} skipped.
+                    </p>
 
-                                <select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                >
-                                    <option value="all">All Status</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="resolved">Resolved</option>
-                                    <option value="accepted">Accepted</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
-
-                                <button
-                                    onClick={handleExport}
-                                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm"
-                                >
-                                    <Download className="h-4 w-4 mr-1" />
-                                    Export
-                                </button>
-                            </div>
-                        </div>
+                    <div className="flex items-center justify-center gap-4">
+                        <button
+                            onClick={handleExport}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export Reconciliation Report
+                        </button>
+                        {resolutionCounts.skipped > 0 && (
+                            <button
+                                onClick={() => {
+                                    setCurrentIndex(0);
+                                    setReviewPhase('reviewing');
+                                }}
+                                className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100"
+                            >
+                                Review Skipped ({resolutionCounts.skipped})
+                                <ArrowRight className="h-4 w-4 ml-2" />
+                            </button>
+                        )}
                     </div>
 
-                    {/* Table */}
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                        Invoice Details
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                        Supplier
-                                    </th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
-                                        onClick={() => {
-                                            if (sortField === 'value_diff') setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-                                            else { setSortField('value_diff'); setSortDir('desc'); }
-                                        }}
-                                    >
-                                        <span className="inline-flex items-center">
-                                            Value Diff
-                                            {sortField === 'value_diff' && (
-                                                sortDir === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />
-                                            )}
-                                        </span>
-                                    </th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
-                                        onClick={() => {
-                                            if (sortField === 'tax_diff') setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-                                            else { setSortField('tax_diff'); setSortDir('desc'); }
-                                        }}
-                                    >
-                                        <span className="inline-flex items-center">
-                                            Tax Diff
-                                            {sortField === 'tax_diff' && (
-                                                sortDir === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />
-                                            )}
-                                        </span>
-                                    </th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                                        Type
-                                    </th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                                        Status
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredMismatches.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                                            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                                            <p>No mismatches found matching your filters</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredMismatches.map((item) => (
-                                        <React.Fragment key={item.id}>
-                                            <tr
-                                                className="hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => setExpandedRow(expandedRow === item.id ? null : item.id)}
-                                            >
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{item.invoice_number}</div>
-                                                    <div className="text-sm text-gray-500">{item.invoice_date}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{item.supplier_name}</div>
-                                                    <div className="text-xs text-gray-500 font-mono">{item.supplier_gstin}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                    <div className={`text-sm font-medium ${item.value_diff > 0 ? 'text-red-600' : item.value_diff < 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                                                        {item.value_diff > 0 ? '+' : ''}{formatCurrency(item.value_diff)}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                    <div className={`text-sm font-medium ${item.tax_diff > 0 ? 'text-red-600' : item.tax_diff < 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                                                        {item.tax_diff > 0 ? '+' : ''}{formatCurrency(item.tax_diff)}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                    {getMismatchBadge(item.mismatch_type)}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                    {getStatusBadge(item.status)}
-                                                </td>
-                                            </tr>
-                                            {/* Expanded Row Detail */}
-                                            {expandedRow === item.id && (
-                                                <tr className="bg-gray-50">
-                                                    <td colSpan={6} className="px-6 py-4">
-                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                            <div>
-                                                                <p className="text-xs text-gray-500">GSTR-2B Value</p>
-                                                                <p className="text-sm font-medium text-gray-900">{formatCurrency(item.gstr2b_value)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-500">Books Value</p>
-                                                                <p className="text-sm font-medium text-gray-900">{formatCurrency(item.books_value)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-500">GSTR-2B Tax</p>
-                                                                <p className="text-sm font-medium text-gray-900">{formatCurrency(item.gstr2b_tax)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-gray-500">Books Tax</p>
-                                                                <p className="text-sm font-medium text-gray-900">{formatCurrency(item.books_tax)}</p>
-                                                            </div>
-                                                        </div>
-                                                        {item.resolution_notes && (
-                                                            <div className="mt-3 p-3 bg-amber-50 rounded-lg">
-                                                                <p className="text-xs text-amber-700">
-                                                                    <strong>Notes:</strong> {item.resolution_notes}
-                                                                </p>
-                                                            </div>
-                                                        )}
-                                                        <div className="mt-4 flex gap-2">
-                                                            <button className="px-3 py-1.5 text-xs text-white bg-green-600 rounded hover:bg-green-700">
-                                                                Accept 2B Value
-                                                            </button>
-                                                            <button className="px-3 py-1.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700">
-                                                                Accept Books Value
-                                                            </button>
-                                                            <button className="px-3 py-1.5 text-xs text-gray-700 bg-gray-200 rounded hover:bg-gray-300">
-                                                                Add Note
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </React.Fragment>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-                        <p className="text-sm text-gray-500">
-                            Showing {filteredMismatches.length} of {mismatches.length} mismatches
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Info className="h-4 w-4 text-gray-400" />
-                            <span className="text-xs text-gray-500">Click a row to expand details</span>
-                        </div>
-                    </div>
+                    <button
+                        onClick={() => setReviewPhase('pre-review')}
+                        className="mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
+                    >
+                        Back to overview
+                    </button>
                 </div>
             )}
         </div>

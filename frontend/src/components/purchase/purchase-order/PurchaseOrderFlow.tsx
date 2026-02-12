@@ -617,7 +617,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             purchaseOrder.items.length > 0;
         }}
         onSave={handleSavePurchaseOrder}
-        onPrint={handlePrint}
         isSaving={saving}
 
         // Footer totals

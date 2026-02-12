@@ -22,6 +22,8 @@ export interface CustomerSearchProps {
   autoFocus?: boolean;
   clearable?: boolean;
   minSearchLength?: number;
+  tabIndex?: number;
+  nextFocusRef?: React.RefObject<{ focus: () => void } | HTMLElement | null>;
 }
 
 export interface CustomerSearchRef extends EntitySearchRef { }
@@ -50,7 +52,9 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     renderCustomerInfo,
     autoFocus = false,
     clearable = true,
-    minSearchLength = 2
+    minSearchLength = 2,
+    tabIndex,
+    nextFocusRef
   },
   ref
 ) => {
@@ -236,6 +240,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       disabled={disabled}
       autoFocus={autoFocus}
       className={className}
+      tabIndex={tabIndex}
+      nextFocusRef={nextFocusRef}
     />
   );
 });

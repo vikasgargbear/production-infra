@@ -23,6 +23,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { extractDataArray, filterBySearch, filterByType } from './masterUtils';
 
 // ============================================================================
 // Types
@@ -97,50 +98,6 @@ export interface UseSettingsEntityReturn<T, F> {
     handleCloseModal: () => void;
     clearError: () => void;
     clearSuccess: () => void;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-function extractDataArray<T>(response: { data?: T[] | { data?: T[] } | { [key: string]: T[] } }, entityName: string): T[] {
-    const data = response?.data;
-    if (!data) return [];
-
-    if (Array.isArray(data)) return data;
-
-    const plural = entityName + 's';
-    const result = (data as Record<string, unknown>)[plural] ||
-        (data as { data?: T[] }).data ||
-        data;
-
-    return Array.isArray(result) ? result : [];
-}
-
-function filterBySearch<T>(
-    entities: T[],
-    searchTerm: string,
-    fields: (keyof T)[]
-): T[] {
-    if (!searchTerm) return entities;
-    const term = searchTerm.toLowerCase();
-
-    return entities.filter(entity => {
-        if (!entity) return false;
-        return fields.some(field => {
-            const value = entity[field];
-            return value != null && String(value).toLowerCase().includes(term);
-        });
-    });
-}
-
-function filterByType<T>(
-    entities: T[],
-    filterField: keyof T | undefined,
-    filterValue: string
-): T[] {
-    if (filterValue === 'all' || !filterField) return entities;
-    return entities.filter(e => e && e[filterField] === filterValue);
 }
 
 // ============================================================================

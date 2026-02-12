@@ -7,11 +7,13 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    BarChart3, Calendar, RefreshCw
+    BarChart3, Calendar, RefreshCw, Columns3, Download
 } from 'lucide-react';
-import { Button, DatePicker } from '../../global';
+import { DatePicker } from '../../global';
+import ModuleHeader from '../../global/ui/ModuleHeader';
 import type { DateRange, GSTReportType, ReportTypeConfig } from '../types';
 import { getFinancialYearRange } from '../utils';
+import { useGSTExport } from '../hooks/useGSTExport';
 
 // Import individual reports
 import GSTR1Report from './GSTR1Report';
@@ -19,7 +21,6 @@ import GSTR2BReport from './GSTR2BReport';
 import GSTR3BReport from './GSTR3BReport';
 import HSNSummaryReport from './HSNSummaryReport';
 import PartyWiseReport from './PartyWiseReport';
-import GSTPayableReport from './GSTPayableReport';
 
 interface GSTReportsContainerProps {
     onClose?: () => void;
@@ -36,6 +37,9 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         };
     });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
+    const [reportData, setReportData] = useState<any>(null);
+    const { exportToCSV } = useGSTExport();
 
     // Static Tailwind class maps (dynamic classes like `bg-${color}-100` are purged by Tailwind)
     const activeStyles: Record<string, string> = {
@@ -47,7 +51,7 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         red: 'bg-red-100 text-red-700 border-red-500',
     };
 
-    // Report type configurations
+    // Report type configurations (GSTR-3B absorbs Payable, GSTR-2B absorbs Input Credit)
     const reportTypes: ReportTypeConfig[] = [
         {
             id: 'gstr-1',
@@ -59,7 +63,7 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         {
             id: 'gstr-3b',
             name: 'GSTR-3B',
-            description: 'Summary Return',
+            description: 'Summary & Payable',
             icon: BarChart3,
             color: 'blue'
         },
@@ -83,13 +87,6 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
             description: 'Customer GST details',
             icon: BarChart3,
             color: 'teal'
-        },
-        {
-            id: 'payable',
-            name: 'GST Payable',
-            description: 'Tax liability',
-            icon: BarChart3,
-            color: 'red'
         }
     ];
 
@@ -143,12 +140,22 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
         setRefreshTrigger(prev => prev + 1);
     };
 
+    // Handle export
+    const handleExport = () => {
+        if (reportData) {
+            exportToCSV(reportData, { filename: `gst_${selectedReport}`, reportType: selectedReport });
+        }
+    };
+
     // Render current report
     const renderReport = () => {
         const commonProps = {
             dateRange,
             refreshTrigger,
-            onRefresh: handleRefresh
+            onRefresh: handleRefresh,
+            showTaxBreakdown,
+            onDataReady: setReportData,
+            onExport: handleExport
         };
 
         switch (selectedReport) {
@@ -162,33 +169,29 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                 return <HSNSummaryReport {...commonProps} />;
             case 'party-wise':
                 return <PartyWiseReport {...commonProps} />;
-            case 'payable':
-                return <GSTPayableReport {...commonProps} />;
             default:
                 return <GSTR1Report {...commonProps} />;
         }
     };
 
     return (
-        <div className="p-6 space-y-6">
+        <div>
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">GST Reports</h1>
-                    <p className="text-gray-600">Tax reports and analysis</p>
-                </div>
-                <div className="flex items-center space-x-3">
-                    <Button
-                        onClick={handleRefresh}
-                        variant="outline"
-                        size="sm"
-                    >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Refresh
-                    </Button>
-                </div>
-            </div>
+            <ModuleHeader
+                title="GST Reports"
+                icon={BarChart3}
+                iconColor="text-purple-600"
+                additionalActions={[
+                    {
+                        label: 'Refresh',
+                        icon: RefreshCw,
+                        onClick: handleRefresh,
+                        variant: 'secondary',
+                    },
+                ]}
+            />
 
+            <div className="p-6 space-y-6">
             {/* Report Type Selector */}
             <div className="flex space-x-2 overflow-x-auto pb-2">
                 {reportTypes.map((report) => {
@@ -213,49 +216,74 @@ const GSTReportsContainer: React.FC<GSTReportsContainerProps> = ({ onClose }) =>
                 })}
             </div>
 
-            {/* Period Selector */}
-            <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border border-gray-200">
-                <div className="flex items-center space-x-2">
-                    <Calendar className="h-5 w-5 text-gray-400" />
-                    <span className="text-sm font-medium text-gray-700">Period:</span>
-                </div>
-                <div className="flex space-x-2">
-                    {['current', 'previous', 'quarter', 'year', 'custom'].map((period) => (
-                        <button
-                            key={period}
-                            onClick={() => setSelectedPeriod(period)}
-                            className={`
-                px-3 py-1.5 rounded-md text-sm font-medium transition-colors
-                ${selectedPeriod === period
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }
-              `}
-                        >
-                            {period.charAt(0).toUpperCase() + period.slice(1)}
-                        </button>
-                    ))}
-                </div>
-                {selectedPeriod === 'custom' && (
+            {/* Period Selector + Tax Breakdown Toggle */}
+            <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
+                <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
-                        <DatePicker
-                            value={new Date(dateRange.from)}
-                            onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, from: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
-                            placeholder="From"
-                        />
-                        <span className="text-gray-400">to</span>
-                        <DatePicker
-                            value={new Date(dateRange.to)}
-                            onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, to: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
-                            placeholder="To"
-                        />
+                        <Calendar className="h-5 w-5 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-700">Period:</span>
                     </div>
-                )}
+                    <div className="flex space-x-2">
+                        {['current', 'previous', 'quarter', 'year', 'custom'].map((period) => (
+                            <button
+                                key={period}
+                                onClick={() => setSelectedPeriod(period)}
+                                className={`
+                    px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+                    ${selectedPeriod === period
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }
+                  `}
+                            >
+                                {period.charAt(0).toUpperCase() + period.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                    {selectedPeriod === 'custom' && (
+                        <div className="flex items-center space-x-2">
+                            <DatePicker
+                                value={new Date(dateRange.from)}
+                                onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, from: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
+                                placeholder="From"
+                            />
+                            <span className="text-gray-400">to</span>
+                            <DatePicker
+                                value={new Date(dateRange.to)}
+                                onChange={(value: Date | string) => setDateRange(prev => ({ ...prev, to: typeof value === 'string' ? value : value.toISOString().split('T')[0] }))}
+                                placeholder="To"
+                            />
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center space-x-2">
+                    <button
+                        onClick={() => setShowTaxBreakdown(!showTaxBreakdown)}
+                        className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                            showTaxBreakdown
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                        }`}
+                    >
+                        <Columns3 className="h-4 w-4 mr-1.5" />
+                        {showTaxBreakdown ? 'Hide' : 'Show'} CGST/SGST/IGST
+                    </button>
+                    {reportData && (
+                        <button
+                            onClick={handleExport}
+                            className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 transition-colors"
+                        >
+                            <Download className="h-4 w-4 mr-1.5" />
+                            Export CSV
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Report Content */}
             <div>
                 {renderReport()}
+            </div>
             </div>
         </div>
     );

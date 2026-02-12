@@ -296,6 +296,10 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                 <DocumentFooter
                     totalItems={(invoice.items || []).length}
                     totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0}
+                    subtotalAmount={parseFloat(String(invoice.totals?.taxable_amount || 0))}
+                    taxAmount={parseFloat(String(invoice.totals?.total_tax_amount || 0))}
+                    discountAmount={parseFloat(String(invoice.totals?.total_discount || 0)) + parseFloat(String(invoice.totals?.scheme_discount || 0))}
+                    grandTotal={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0))}
                     onCancel={() => onBack(2)}
                     onSave={onSave}
                     onGenerate={onSave}

@@ -13,6 +13,9 @@ interface PartyWiseReportProps {
     dateRange: DateRange;
     refreshTrigger: number;
     onRefresh?: () => void;
+    showTaxBreakdown?: boolean;
+    onDataReady?: (data: any) => void;
+    onExport?: () => void;
 }
 
 interface PartyData {
@@ -26,7 +29,7 @@ interface PartyData {
     total_tax: number;
 }
 
-const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTrigger }) => {
+const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady }) => {
     const [data, setData] = useState<PartyData[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -75,6 +78,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
 
                 const partyArray = Object.values(partyGroups).sort((a, b) => b.total_taxable_value - a.total_taxable_value);
                 setData(partyArray);
+                onDataReady?.(partyArray);
 
                 setTotals({
                     parties: partyArray.length,
@@ -111,6 +115,19 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
         );
     }
 
+    const columns = [
+        { key: 'party_name', header: 'Party Name' },
+        { key: 'gst_number', header: 'GSTIN', render: (v: string) => v || '-' },
+        { key: 'invoice_count', header: 'Invoices' },
+        { key: 'total_taxable_value', header: 'Taxable Value', render: (v: number) => formatCurrency(v) },
+        ...(showTaxBreakdown ? [
+            { key: 'total_cgst', header: 'CGST', render: (v: number) => formatCurrency(v) },
+            { key: 'total_sgst', header: 'SGST', render: (v: number) => formatCurrency(v) },
+            { key: 'total_igst', header: 'IGST', render: (v: number) => formatCurrency(v) }
+        ] : []),
+        { key: 'total_tax', header: 'Total Tax', render: (v: number) => formatCurrency(v) }
+    ];
+
     return (
         <div className="space-y-6">
             {/* Summary */}
@@ -142,16 +159,7 @@ const PartyWiseReport: React.FC<PartyWiseReportProps> = ({ dateRange, refreshTri
                 <DataTable
                     data={data}
                     keyField="party_name"
-                    columns={[
-                        { key: 'party_name', header: 'Party Name' },
-                        { key: 'gst_number', header: 'GSTIN', render: (v) => v || '-' },
-                        { key: 'invoice_count', header: 'Invoices' },
-                        { key: 'total_taxable_value', header: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'total_cgst', header: 'CGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_sgst', header: 'SGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_igst', header: 'IGST', render: (v) => formatCurrency(v) },
-                        { key: 'total_tax', header: 'Total Tax', render: (v) => formatCurrency(v) }
-                    ]}
+                    columns={columns}
                 />
             </div>
         </div>

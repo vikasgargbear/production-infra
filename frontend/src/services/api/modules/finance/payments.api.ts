@@ -4,6 +4,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { createCrudApi } from '../../utils/createCrudApi';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -36,91 +37,56 @@ export interface PaymentData {
 export interface PaymentAllocation {
     invoice_id: number;
     amount: number;
-    allocated_amount?: number;  // Alias for amount for backward compatibility
+    allocated_amount?: number;
 }
-
-// ============================================
-// Endpoints
-// ============================================
-
-const ENDPOINTS = {
-    BASE: '/payments',
-    RECEIPTS: '/payments/receipts',
-    PAYMENTS: '/payments/payments',
-    MODES: '/payments/modes',
-    PENDING: '/payments/pending',
-    ALLOCATE: '/payments/allocate'
-} as const;
 
 // ============================================
 // API Module
 // ============================================
 
+const crud = createCrudApi({ basePath: '/payments', useCleanData: false });
+
 export const paymentsApi = {
-    // Get all payments
-    getAll: (params: PaymentParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
-    },
-
-    // Get payment by ID
-    getById: (paymentId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${paymentId}`);
-    },
-
-    // Create payment
-    create: (data: PaymentData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
-
-    // Update payment
-    update: (paymentId: number, data: Partial<PaymentData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${paymentId}`, data);
-    },
-
-    // Delete payment
-    delete: (paymentId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${paymentId}`);
-    },
+    ...crud,
 
     // Get receipts (customer payments)
     getReceipts: (params: PaymentParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.RECEIPTS, { params });
+        return apiHelpers.get('/payments/receipts', { params });
     },
 
     // Get payments (supplier payments)
     getPayments: (params: PaymentParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.PAYMENTS, { params });
+        return apiHelpers.get('/payments/payments', { params });
     },
 
     // Get payment modes
     getModes: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.MODES);
+        return apiHelpers.get('/payments/modes');
     },
 
     // Get pending payments
     getPending: (params: PaymentParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.PENDING, { params });
+        return apiHelpers.get('/payments/pending', { params });
     },
 
     // Allocate payment to invoices
     allocate: (paymentId: number, allocations: PaymentAllocation[]): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.ALLOCATE}/${paymentId}`, { allocations });
+        return apiHelpers.post(`/payments/allocate/${paymentId}`, { allocations });
     },
 
     // Print receipt
     printReceipt: (paymentId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${paymentId}/print`, { responseType: 'blob' });
+        return apiHelpers.get(`/payments/${paymentId}/print`, { responseType: 'blob' });
     },
 
     // Get outstanding invoices for a party
     getOutstandingInvoices: (partyId: number, partyType: 'customer' | 'supplier' = 'customer'): Promise<AxiosResponse> => {
-        // Backend endpoint is at /payments/outstanding and expects customer_id
         return apiHelpers.get('/payments/outstanding', { params: { customer_id: partyId } });
     },
 
     // Get unreconciled transactions for bank reconciliation
     getUnreconciledTransactions: (params: { date?: string; bank_account?: string } = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/unreconciled`, { params });
+        return apiHelpers.get('/payments/unreconciled', { params });
     },
 
     // Start bank reconciliation
@@ -130,6 +96,6 @@ export const paymentsApi = {
         bank_statement_balance: number;
         book_balance: number;
     }): Promise<AxiosResponse> => {
-        return apiHelpers.post(`${ENDPOINTS.BASE}/reconcile`, data);
+        return apiHelpers.post('/payments/reconcile', data);
     }
 };

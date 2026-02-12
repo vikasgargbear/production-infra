@@ -451,13 +451,18 @@ export const useInvoiceLogic = (
 
         setSelectedCustomer(customer);
 
-        // Determine GST type based on customer's state vs company's state
+        // Determine GST type based on GSTIN state codes (primary) or state names (fallback)
         // CRITICAL: This affects tax calculation (IGST for inter-state, CGST/SGST for intra-state)
         const customerState = (customer as any).state ||
             customer.billing_address?.state ||
             customer.address_info?.billing_state ||
             (customer as any).address_line1?.split(',').pop()?.trim(); // Fallback
-        const gstType = determineGstType(companyInfo?.state, customerState);
+        const gstType = determineGstType(
+            companyInfo?.state,
+            customerState,
+            (companyInfo as any)?.gst_number,
+            customer.gst_number
+        );
 
         const billingAddress =
             (customer.address_info?.billing_address ||

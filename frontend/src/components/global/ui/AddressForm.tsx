@@ -114,6 +114,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
     const customerIdRef = useRef<string | number | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const editFormRef = useRef<HTMLDivElement>(null);
 
     // Click outside to close dropdown
     useEffect(() => {
@@ -128,6 +129,30 @@ const AddressForm: React.FC<AddressFormProps> = ({
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
     }, [showDropdown]);
+
+    // Click outside or Escape to close edit form
+    useEffect(() => {
+        if (!isEditing && !isAddingNew) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (editFormRef.current && !editFormRef.current.contains(event.target as Node)) {
+                handleCancel();
+            }
+        };
+
+        const handleEscapeKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                handleCancel();
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscapeKey);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscapeKey);
+        };
+    }, [isEditing, isAddingNew]);
 
     // Handle external trigger to enter add mode
     useEffect(() => {
@@ -372,7 +397,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
 
                 // Try to sync to API (non-blocking)
                 try {
-                    const response = await apiClient.post(`/customers/${customerId}/addresses`, addressPayload);
+                    const response = await apiClient.post(`/customers/${customerId}/addresses/`, addressPayload);
                     if (response.data?.success) {
                         await offlineDB.markAddressSynced(tempId, response.data.address_id);
                         console.log('[AddressForm] New address synced:', response.data.address_id);
@@ -628,7 +653,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
             }
 
             {(isEditing || isAddingNew) ? (
-                <div className="space-y-4">
+                <div ref={editFormRef} className="space-y-4">
 
                     <div className="grid grid-cols-2 gap-3">
                         {/* Row 1: Address Line 1 */}

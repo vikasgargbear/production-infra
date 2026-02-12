@@ -99,10 +99,10 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
     };
 
     return (
-        <div className={`border-t border-blue-200 bg-white px-6 py-4 ${className}`}>
+        <div className={`border-t border-gray-200 bg-white px-6 py-3 ${className}`}>
             {showActionButtons ? (
                 // Review page layout - single line like step 1
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center min-h-[36px]">
                     <div className="flex items-center gap-6 text-sm">
                         {totalItems > 0 && (
                             <span className="text-gray-600">
@@ -147,7 +147,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <div className="relative">
                                 <button
                                     onClick={() => setShowThermalOptions(!showThermalOptions)}
-                                    className="px-4 py-2.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <Receipt className="w-4 h-4" />
                                     Thermal Print
@@ -181,7 +181,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onPrint && (
                             <button
                                 onClick={onPrint}
-                                className="px-6 py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <Printer className="w-4 h-4" />
                                 Print
@@ -194,7 +194,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                                 ref={saveButtonRef}
                                 onClick={onSave}
                                 disabled={isSaving}
-                                className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                                className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
                             >
                                 <Save className="w-5 h-5" />
                                 {isSaving ? 'Generating...' : saveLabel}
@@ -204,7 +204,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                 </div>
             ) : (
                 // Standard layout for create/edit pages - optimized for speed
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center min-h-[36px]">
                     <div className="flex items-center gap-4 text-sm">
                         {totalItems > 0 && (
                             <span className="text-gray-600">
@@ -222,7 +222,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onCancel && (
                             <button
                                 onClick={onCancel}
-                                className="px-6 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                                className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                             >
                                 {cancelLabel}
                             </button>
@@ -231,7 +231,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 onClick={onContinue}
                                 disabled={continueDisabled}
-                                className={`px-6 py-2.5 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
+                                className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
                             >
                                 {continueLabel}
                                 <ArrowRight className="w-4 h-4" />

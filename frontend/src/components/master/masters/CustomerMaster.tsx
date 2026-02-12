@@ -1,20 +1,18 @@
 /**
  * CustomerMaster Component
- * 
+ *
  * Refactored to use useEntityMaster hook for shared CRUD logic.
- * Reduced from 484 lines to ~200 lines.
+ * Compact stats bar with inline search, standard Tailwind classes.
  */
 import React from 'react';
 import {
   Users, Search, Plus, Edit2, Trash2,
-  Download, Upload, AlertCircle, Check,
-  Phone, CreditCard, Award
+  AlertCircle, Check, Phone
 } from 'lucide-react';
 import { customersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
-import Input from '../../global/ui/forms/Input';
 import CustomerEditModal from '../modals/CustomerEditModal';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
@@ -35,8 +33,6 @@ type Customer = BaseCustomer & {
   business_type?: string;
   last_transaction_date?: string;
   total_business_amount?: number;
-  loyalty_tier?: string;
-  loyalty_points?: number;
   address_line_1?: string;
 };
 
@@ -62,28 +58,12 @@ const getCreditStatus = (customer: Customer) => {
   const utilization = (customer.current_outstanding || 0) / customer.credit_limit * 100;
 
   if (utilization >= 100) {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-danger-100 text-danger-800">Over Limit</span>;
+    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Over Limit</span>;
   } else if (utilization >= 80) {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-warning-100 text-warning-800">Near Limit</span>;
+    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">Near Limit</span>;
   } else {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-success-100 text-success-800">Good</span>;
+    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Good</span>;
   }
-};
-
-const getLoyaltyBadge = (tier?: string) => {
-  const colors: Record<string, string> = {
-    'platinum': 'bg-purple-100 text-purple-800',
-    'gold': 'bg-yellow-100 text-yellow-800',
-    'silver': 'bg-gray-100 text-gray-800',
-    'bronze': 'bg-orange-100 text-orange-800'
-  };
-
-  if (!tier) return null;
-  return (
-    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${colors[tier.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
-      {tier}
-    </span>
-  );
 };
 
 // ============================================================================
@@ -99,8 +79,8 @@ const getColumns = (
       header: 'Customer',
       render: (_, customer) => customer ? (
         <div>
-          <div className="font-medium text-app-800">{customer.customer_name || 'N/A'}</div>
-          <div className="text-sm text-app-500">{customer.customer_code || `ID: ${customer.customer_id}`}</div>
+          <div className="font-medium text-gray-900">{customer.customer_name || 'N/A'}</div>
+          <div className="text-sm text-gray-500">{customer.customer_code || `ID: ${customer.customer_id}`}</div>
         </div>
       ) : <div>N/A</div>
     },
@@ -109,12 +89,12 @@ const getColumns = (
       header: 'Contact',
       render: (_, customer) => customer ? (
         <div>
-          <div className="flex items-center text-app-800">
+          <div className="flex items-center text-gray-900">
             <Phone className="w-3 h-3 mr-1" />
             {customer.primary_phone || 'N/A'}
           </div>
           {customer.primary_email && (
-            <div className="text-sm text-app-500 truncate">{customer.primary_email}</div>
+            <div className="text-sm text-gray-500 truncate">{customer.primary_email}</div>
           )}
         </div>
       ) : <div>N/A</div>
@@ -123,7 +103,7 @@ const getColumns = (
       key: 'customer_type',
       header: 'Type',
       render: (value) => (
-        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-primary-100 text-primary-800">
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
           {value || 'N/A'}
         </span>
       )
@@ -137,12 +117,12 @@ const getColumns = (
         return (
           <div className="text-sm">
             {gstNumber ? (
-              <div className="text-app-800">{String(gstNumber)}</div>
+              <div className="text-gray-900">{String(gstNumber)}</div>
             ) : (
-              <div className="text-app-400">No GST</div>
+              <div className="text-gray-400">No GST</div>
             )}
             {customer.drug_license_number && (
-              <div className="text-app-500">DL: {customer.drug_license_number}</div>
+              <div className="text-gray-500">DL: {customer.drug_license_number}</div>
             )}
           </div>
         );
@@ -153,33 +133,37 @@ const getColumns = (
       header: 'Credit',
       align: 'right' as const,
       render: (_, customer) => {
-        if (!customer) return <div className="text-app-400">No Credit</div>;
+        if (!customer) return <div className="text-gray-400">No Credit</div>;
         const creditLimit = customer.credit_limit || 0;
         const creditDays = customer.credit_days || 0;
 
-        if (!creditLimit) return <div className="text-app-400">No Credit</div>;
+        if (!creditLimit) return <div className="text-gray-400">No Credit</div>;
 
         return (
           <div>
             <div className="font-medium">₹{creditLimit.toLocaleString()}</div>
-            <div className="text-sm text-app-500">{creditDays} days</div>
+            <div className="text-sm text-gray-500">{creditDays} days</div>
             {getCreditStatus({ ...customer, credit_limit: creditLimit })}
           </div>
         );
       }
     },
     {
-      key: 'loyalty_tier',
-      header: 'Loyalty',
-      align: 'center' as const,
-      render: (value) => getLoyaltyBadge(value)
+      key: 'current_outstanding',
+      header: 'Outstanding',
+      align: 'right' as const,
+      render: (value) => {
+        const amount = parseFloat(value || 0);
+        if (!amount) return <span className="text-gray-400">-</span>;
+        return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>₹{amount.toLocaleString()}</span>;
+      }
     },
     {
       key: 'is_active',
       header: 'Status',
       align: 'center' as const,
       render: (value) => (
-        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${value !== false ? 'bg-success-100 text-success-800' : 'bg-danger-100 text-danger-800'
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${value !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
           }`}>
           {value !== false ? 'Active' : 'Inactive'}
         </span>
@@ -194,7 +178,7 @@ const getColumns = (
         <div className="flex items-center justify-center space-x-2">
           <button
             onClick={() => handleEdit(customer)}
-            className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
+            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
             disabled={!customer}
           >
             <Edit2 className="w-4 h-4" />
@@ -202,8 +186,8 @@ const getColumns = (
           <button
             onClick={() => handleDelete(customer?.customer_id)}
             className={`${customer?.is_active !== false
-              ? 'text-warning-600 hover:text-warning-700'
-              : 'text-success-600 hover:text-success-700'
+              ? 'text-amber-600 hover:text-amber-700'
+              : 'text-green-600 hover:text-green-700'
               } p-1 rounded transition-colors`}
             disabled={!customer?.customer_id}
             title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
@@ -239,7 +223,8 @@ const CustomerMaster: React.FC = () => {
     handleEdit,
     handleDelete,
     handleSaved,
-    handleBulkDelete
+    handleBulkDelete,
+    searchInputRef
   } = useEntityMaster<Customer>({
     entityName: 'customer',
     idField: 'customer_id',
@@ -255,18 +240,16 @@ const CustomerMaster: React.FC = () => {
 
   const columns = getColumns(handleEdit, handleDelete);
 
+  // Summary stats
+  const total = customers.length;
+  const active = customers.filter(c => c.is_active !== false).length;
+  const inactive = total - active;
+  const totalOutstanding = customers.reduce((sum, c) => sum + (c.current_outstanding || 0), 0);
+
   const headerActions = (
-    <>
-      <Button variant="secondary" size="sm" onClick={() => {/* Import logic */ }}>
-        <Upload className="w-4 h-4 mr-2" />Import
-      </Button>
-      <Button variant="secondary" size="sm" onClick={() => {/* Export logic */ }}>
-        <Download className="w-4 h-4 mr-2" />Export
-      </Button>
-      <Button variant="primary" onClick={() => setShowAddModal(true)}>
-        <Plus className="w-4 h-4 mr-2" />Add Customer
-      </Button>
-    </>
+    <Button variant="primary" onClick={() => setShowAddModal(true)}>
+      <Plus className="w-4 h-4 mr-2" />Add Customer
+    </Button>
   );
 
   return (
@@ -276,55 +259,56 @@ const CustomerMaster: React.FC = () => {
       icon={Users}
       headerActions={headerActions}
     >
-      {/* Filters and Search */}
-      <ContentCard
-        title="Search & Filter"
-        subtitle={undefined}
-        actions={selectedIds.length > 0 ? (
-          <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-            <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
-          </Button>
-        ) : null}
-        icon={Search}
-      >
-        <div className="flex items-center space-x-6">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <Input
+      {/* Stats Bar with Inline Search */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-5 text-sm">
+          <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
+          <span className="text-green-600">Active: <strong>{active}</strong></span>
+          <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
+          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">₹{totalOutstanding.toLocaleString()}</strong></span>
+          {selectedIds.length > 0 && (
+            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search customers..."
+              placeholder="Search customers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12"
+              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
             />
           </div>
           <select
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {CUSTOMER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
         </div>
-      </ContentCard>
+      </div>
 
       {/* Error Message */}
       {error && (
-        <ContentCard title="" subtitle={undefined} actions={undefined} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-800">{error}</span>
-          </div>
-        </ContentCard>
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4" />
+          {error}
+        </div>
       )}
 
       {/* Customer List */}
       <ContentCard title="Customer List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Users}>
         {customers.length === 0 && !isLoading ? (
           <div className="text-center py-12">
-            <Users className="w-12 h-12 text-app-400 mx-auto mb-4" />
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
             <p className="text-sm text-gray-500 mb-4">Get started by adding your first customer</p>
             <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -338,7 +322,7 @@ const CustomerMaster: React.FC = () => {
             keyField="customer_id"
             loading={isLoading}
             emptyMessage="No customers found"
-            emptyIcon={<Users className="w-12 h-12 text-app-400" />}
+            emptyIcon={<Users className="w-12 h-12 text-gray-400" />}
             selectable={true}
             selectedRows={filteredEntities.filter(c => selectedIds.includes(String(c.customer_id)))}
             onSelectionChange={(selected) => setSelectedIds(selected.map(c => String(c.customer_id)))}

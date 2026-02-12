@@ -25,8 +25,9 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '../../global/ui/feedback/Toast';
+import { extractDataArray, filterBySearch, filterByType } from './masterUtils';
 
 // ============================================================================
 // Types
@@ -80,6 +81,7 @@ export interface UseEntityMasterReturn<T> {
     setSearchTerm: (term: string) => void;
     filterValue: string;
     setFilterValue: (value: string) => void;
+    searchInputRef: React.RefObject<HTMLInputElement>;
 
     // Modal state
     showAddModal: boolean;
@@ -97,60 +99,6 @@ export interface UseEntityMasterReturn<T> {
     handleDelete: (id: string | number) => Promise<void>;
     handleSaved: () => void;
     handleBulkDelete: () => Promise<void>;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Extract array data from various API response formats
- */
-function extractDataArray<T>(response: ApiResponse<T[]>, entityName: string): T[] {
-    const data = response?.data;
-    if (!data) return [];
-
-    // Try common patterns: { customers: [] }, { data: [] }, directly []
-    if (Array.isArray(data)) return data;
-
-    const plural = entityName + 's';
-    const result = (data as Record<string, unknown>)[plural] ||
-        (data as { data?: T[] }).data ||
-        data;
-
-    return Array.isArray(result) ? result : [];
-}
-
-/**
- * Filter entities by search term across multiple fields
- */
-function filterBySearch<T>(
-    entities: T[],
-    searchTerm: string,
-    fields: (keyof T)[]
-): T[] {
-    if (!searchTerm) return entities;
-    const term = searchTerm.toLowerCase();
-
-    return entities.filter(entity => {
-        if (!entity) return false;
-        return fields.some(field => {
-            const value = entity[field];
-            return value != null && String(value).toLowerCase().includes(term);
-        });
-    });
-}
-
-/**
- * Filter entities by type/category field
- */
-function filterByType<T>(
-    entities: T[],
-    filterField: keyof T | undefined,
-    filterValue: string
-): T[] {
-    if (filterValue === 'all' || !filterField) return entities;
-    return entities.filter(e => e && e[filterField] === filterValue);
 }
 
 // ============================================================================
@@ -188,8 +136,36 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     // Selection state
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+    // Search input ref for keyboard focus
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
     // Capitalize first letter for messages
     const entityLabel = entityName.charAt(0).toUpperCase() + entityName.slice(1);
+
+    // Keyboard shortcuts: Ctrl+N = Add New, / = Focus Search
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if user is typing in an input/textarea/select
+            const tag = (e.target as HTMLElement)?.tagName;
+            const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+            // Ctrl/Cmd + N → open Add modal
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                setShowAddModal(true);
+                return;
+            }
+
+            // "/" → focus search (only if not already in an input)
+            if (e.key === '/' && !isInput) {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     // ========================================
     // Load Data
@@ -332,6 +308,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         setSearchTerm,
         filterValue,
         setFilterValue,
+        searchInputRef,
 
         // Modal state
         showAddModal,

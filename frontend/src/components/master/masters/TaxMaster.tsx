@@ -13,7 +13,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Receipt, Search, Plus, Edit2, Trash2,
-    Download, Upload, Loader2, AlertCircle, Check,
+    Loader2, AlertCircle, Check,
     X, RefreshCw, Building, Calculator, Info
 } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
@@ -110,13 +110,10 @@ const calculateRateFromComponents = (cgst: number, sgst: number): { unit_price: 
     igst: cgst + sgst
 });
 
-const getTaxTypeColor = (type: string): string => {
-    const colors: Record<string, string> = {
-        'GST': 'blue',
-        'VAT': 'green',
-        'Custom': 'purple'
-    };
-    return colors[type] || 'gray';
+const TAX_TYPE_STYLES: Record<string, string> = {
+    'GST': 'bg-blue-100 text-blue-800',
+    'VAT': 'bg-green-100 text-green-800',
+    'Custom': 'bg-purple-100 text-purple-800',
 };
 
 // ============================================================================
@@ -314,12 +311,6 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                 {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                                 <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
                             </button>
-                            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2">
-                                <Upload className="w-4 h-4" /><span>Import</span>
-                            </button>
-                            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2">
-                                <Download className="w-4 h-4" /><span>Export</span>
-                            </button>
                             <button
                                 onClick={() => setShowModal(true)}
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
@@ -414,7 +405,7 @@ const TaxMaster: React.FC<TaxMasterProps> = ({ open, onClose }) => {
                                                         {tax.description && <p className="text-xs text-gray-500">{tax.description}</p>}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 text-xs rounded-full bg-${getTaxTypeColor(tax.type)}-100 text-${getTaxTypeColor(tax.type)}-800`}>
+                                                        <span className={`px-2 py-1 text-xs rounded-full ${TAX_TYPE_STYLES[tax.type] || 'bg-gray-100 text-gray-800'}`}>
                                                             {tax.type}
                                                         </span>
                                                     </td>
