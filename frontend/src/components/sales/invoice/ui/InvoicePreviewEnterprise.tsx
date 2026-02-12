@@ -223,16 +223,20 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
               <div className="font-bold text-gray-900 text-sm leading-tight">{invoice.customer_name}</div>
               {/* Compact address */}
               {(() => {
+                // Build address line — prefer structured data (has state) over plain string
+                const addrData = (invoice as any).shipping_address_data || (invoice as any).billing_address_data;
                 let addressLine = '';
-                if (typeof invoice.billing_address === 'string' && invoice.billing_address) {
+                if (addrData && (addrData.address_line1 || addrData.city)) {
+                  addressLine = [addrData.address_line1, addrData.address_line2, addrData.city, addrData.state || addrData.state_name, addrData.pincode].filter(Boolean).join(', ');
+                } else if (typeof invoice.billing_address === 'string' && invoice.billing_address) {
                   addressLine = invoice.billing_address;
                 } else if (invoice.billing_address && typeof invoice.billing_address === 'object') {
                   const addr = invoice.billing_address as any;
-                  addressLine = [addr.address_line1, addr.city, addr.pincode].filter(Boolean).join(', ');
+                  addressLine = [addr.address_line1, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ');
                 } else if (invoice.customer_details?.address) {
                   addressLine = typeof invoice.customer_details.address === 'string'
                     ? invoice.customer_details.address
-                    : [(invoice.customer_details.address as any).address_line1, (invoice.customer_details.address as any).city].filter(Boolean).join(', ');
+                    : [(invoice.customer_details.address as any).address_line1, (invoice.customer_details.address as any).city, (invoice.customer_details.address as any).state].filter(Boolean).join(', ');
                 }
                 return addressLine ? <p className="text-[11px] text-gray-600 mt-2 leading-relaxed">{addressLine}</p> : null;
               })()}
@@ -244,6 +248,18 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   <span><span className="font-semibold text-gray-700">GST:</span> {invoice.customer_details.gst_number}</span>
                 )}
               </div>
+              {/* Place of Supply — GST compliance requirement */}
+              {(() => {
+                const addrData = (invoice as any).shipping_address_data || (invoice as any).billing_address_data;
+                const posState = addrData?.state || addrData?.state_name;
+                if (!posState) return null;
+                return (
+                  <div className="text-[11px] text-gray-600 mt-1">
+                    <span className="font-semibold text-gray-700">Place of Supply:</span> {posState}
+                    <span className="ml-2 text-[10px] text-gray-500">({invoice.gst_type === 'IGST' ? 'Inter-State' : 'Intra-State'})</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

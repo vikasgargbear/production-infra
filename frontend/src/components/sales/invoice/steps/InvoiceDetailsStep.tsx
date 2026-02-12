@@ -105,9 +105,13 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         }}
                                         onSave={(addressData: unknown) => {
                                             setAddAddressMode(false);
-                                            // Re-determine GST type based on delivery address state (place of supply)
-                                            const addrState = (addressData as any)?.state;
-                                            const gstType = determineGstType(companyInfo?.state, addrState, companyInfo?.gst_number, selectedCustomer?.gst_number);
+                                            // CRITICAL GST FIX: For goods, Place of Supply = delivery address state (IGST Act Section 10)
+                                            // Do NOT use GSTIN comparison here — GSTIN tells registration state, not delivery location
+                                            // Example: Customer registered in MH (27) but delivery to RJ (08) = Intra-state with RJ seller
+                                            const addrState = (addressData as any)?.state || (addressData as any)?.state_name;
+                                            const gstType = addrState
+                                                ? determineGstType(companyInfo?.state, addrState)  // Delivery address = place of supply
+                                                : determineGstType(companyInfo?.state, null, companyInfo?.gst_number, selectedCustomer?.gst_number);  // Fallback to GSTIN when no delivery state
                                             setInvoice(prev => ({
                                                 ...prev,
                                                 shipping_address_data: addressData,
