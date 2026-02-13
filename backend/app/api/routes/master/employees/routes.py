@@ -78,7 +78,7 @@ async def get_employee(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/", response_model=Dict[str, Any])
+@router.post("", response_model=Dict[str, Any])
 @with_tenant_context
 async def create_employee(
     employee_data: Dict[str, Any], 
