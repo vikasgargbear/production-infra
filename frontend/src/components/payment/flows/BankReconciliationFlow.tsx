@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
 import { ModuleHeader } from '../../global';
-import { paymentsApi, ledgerApi } from '../../../services/api';
+import { paymentsApi, bankAccountsApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
@@ -50,12 +50,13 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
     try {
       // Load bank accounts and unreconciled transactions
       const [accountsResponse, transactionsResponse] = await Promise.all([
-        ledgerApi.getBankAccounts(),
+        bankAccountsApi.getAll(),
         paymentsApi.getUnreconciledTransactions({ date: reconciliationDate })
       ]);
 
-      if (accountsResponse?.data && Array.isArray(accountsResponse.data)) {
-        setBankAccounts(accountsResponse.data);
+      const accountsData = accountsResponse?.data?.accounts || accountsResponse?.data || [];
+      if (Array.isArray(accountsData)) {
+        setBankAccounts(accountsData);
       } else {
         setBankAccounts([]);
       }
@@ -68,7 +69,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
 
       // Store data offline for future use
       await offlineStorage.storeOffline('bank_reconciliation_data', {
-        accounts: accountsResponse?.data || [],
+        accounts: accountsData,
         transactions: transactionsResponse?.data || [],
         date: reconciliationDate
       }, {
@@ -139,12 +140,17 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
       // Call the actual reconciliation API
       const response = await paymentsApi.startBankReconciliation({
         bank_account: selectedBank,
-        reconciliation_date: reconciliationDate,
-        bank_statement_balance: bankStatementBalance,
-        book_balance: bookBalance
+        statement_date: reconciliationDate,
+        opening_balance: bookBalance,
+        closing_balance: bankStatementBalance,
+        transactions: unreconciledTransactions.map((transaction) => ({
+          date: transaction.date,
+          description: transaction.description,
+          amount: transaction.amount
+        }))
       });
 
-      if (response?.data?.success) {
+      if (response?.data?.reconciliation_id || response?.data?.status === 'completed') {
         const bankAccount = bankAccounts.find((account) => account.code === selectedBank);
         showFinancialEntryNotification({
           title: 'Bank Reconciliation Saved',

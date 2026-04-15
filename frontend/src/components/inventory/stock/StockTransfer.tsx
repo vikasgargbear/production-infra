@@ -7,7 +7,7 @@ import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
   NumberInput, NotesSection, useToast, ModuleHeader
 } from '../../global';
-import { stockApi, settingsApi } from '../../../services/api';
+import { stockApi, branchesApi, settingsApi } from '../../../services/api';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import syncEngine from '../../../services/offline/sync/syncEngine';
@@ -39,7 +39,7 @@ const StockTransfer = ({ open = true, onClose }) => {
     const loadLocations = async () => {
       setLoadingLocations(true);
       try {
-        const response = await settingsApi.branches.getAll();
+        const response = await branchesApi.getAll({ is_active: true });
         const branches = response?.data?.branches || response?.data || [];
         const locs = Array.isArray(branches) ? branches.filter((b: any) => b.is_active !== false) : [];
         setLocations(locs);

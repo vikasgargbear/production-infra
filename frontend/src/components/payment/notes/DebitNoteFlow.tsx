@@ -248,7 +248,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
     setSaving(true);
     try {
       const totals = calculateTotals();
-      await notesApi.createCreditDebitNote({
+      await notesApi.create({
         note_type: 'debit',
         party_id: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
         party_type: 'customer',

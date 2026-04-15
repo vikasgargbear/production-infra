@@ -332,8 +332,9 @@ async def cancel_invoice(
         
         # Get invoice with date for deadline calculation
         invoice_result = db.execute(text("""
-            SELECT invoice_id, invoice_status, invoice_date, paid_amount, final_amount, gstr1_reported_date
-            FROM sales.invoices
+            SELECT i.invoice_id, i.invoice_status, i.invoice_date, i.paid_amount, i.final_amount,
+                   to_jsonb(i) AS invoice_json
+            FROM sales.invoices i
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
         
@@ -345,7 +346,8 @@ async def cancel_invoice(
         invoice_status = invoice.invoice_status
         invoice_date = invoice.invoice_date
         paid_amount = float(invoice.paid_amount or 0)
-        gstr1_reported = invoice.gstr1_reported_date is not None
+        invoice_json = invoice.invoice_json or {}
+        gstr1_reported = bool(invoice_json.get("gstr1_reported_date"))
         
         # Rule 1: Already cancelled
         if invoice_status == InvoiceStatus.CANCELLED.value:

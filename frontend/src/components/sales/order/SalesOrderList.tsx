@@ -3,7 +3,7 @@ import {
     FileText, Truck, Search,
     Eye, Download, Printer, Calendar, ChevronDown, MessageCircle, XCircle
 } from 'lucide-react';
-import { salesOrdersApi } from '../../../services/api';
+import { ordersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
 import CancelDocumentModal from '../../global/modals/CancelDocumentModal';
 import jsPDF from 'jspdf';
@@ -68,7 +68,7 @@ const OrderList: React.FC = () => {
                 params.order_status = filterStatus;
             }
 
-            const response = await salesOrdersApi.getAll(params);
+            const response = await ordersApi.getAll(params);
             setOrders(response.data || []);
         } catch {
             // Silent error handling

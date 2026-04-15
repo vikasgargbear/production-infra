@@ -3,7 +3,6 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { createCrudApi } from '../../utils/createCrudApi';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -34,21 +33,29 @@ export interface ExpenseData {
 // API Module
 // ============================================
 
-const crud = createCrudApi({ basePath: '/expenses', useCleanData: false });
-
 export const expensesApi = {
-    ...crud,
+    getAll: (params: ExpenseParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get('/expense-claims', { params });
+    },
+
+    getById: (claimId: number | string): Promise<AxiosResponse> => {
+        return apiHelpers.get(`/expense-claims/${claimId}`);
+    },
+
+    create: (data: any): Promise<AxiosResponse> => {
+        return apiHelpers.post('/expense-claims', data);
+    },
+
+    generateClaimNumber: (): Promise<AxiosResponse> => {
+        return apiHelpers.get('/expense-claims/generate-claim-number');
+    },
 
     getCategories: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/expenses/categories');
+        return apiHelpers.get('/expense-claims/expense-types');
     },
 
     getSummary: (params: ExpenseParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get('/expenses/summary', { params });
+        return apiHelpers.get('/expense-claims', { params });
     },
 
-    // Alias for getCategories
-    getExpenseTypes: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/expenses/categories');
-    }
 };

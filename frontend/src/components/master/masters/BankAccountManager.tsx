@@ -99,7 +99,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         try {
             setIsLoading(true);
             setError(null);
-            const response = await bankAccountsApi.getBankAccounts();
+            const response = await bankAccountsApi.getAll();
             const accountsData = response?.data?.accounts || response?.data || [];
             setAccounts(Array.isArray(accountsData) ? accountsData : []);
         } catch (error: any) {
@@ -206,7 +206,7 @@ const BankAccountManager: React.FC<BankAccountManagerProps> = ({ companyData, on
         }
 
         try {
-            await bankAccountsApi.deleteBankAccount(id);
+            await bankAccountsApi.delete(id);
             await fetchAccounts();
             setError(null);
         } catch (error) {

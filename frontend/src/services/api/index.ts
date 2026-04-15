@@ -110,11 +110,6 @@ import { syncApi } from './modules/system/sync.api';
 import { documentsApi } from './modules/system/documents.api';
 
 // =========================================================================
-// ALIASES (for backward compatibility)
-// =========================================================================
-const salesOrdersApi = ordersApi;
-
-// =========================================================================
 // EXPORTS
 // =========================================================================
 
@@ -187,7 +182,6 @@ export {
   // Sales
   invoicesApi,
   ordersApi,
-  salesOrdersApi,
   challansApi,
   returnsApi,
   loyaltyPointsApi,
@@ -212,14 +206,6 @@ export {
 // All callers have been migrated to use canonical exports (customersApi, productsApi, etc.)
 // See docs/API_METHOD_NAMING_DICTIONARY.md for naming conventions
 // =========================================================================
-
-// Utility functions for backward compatibility
-export const clearGSTCache = (): void => {
-  // Cache handling moved to service layer - this is a no-op for compatibility
-  console.debug('GST cache cleared (no-op in new architecture)');
-};
-
-// Singular name aliases removed - use purchasesApi and invoicesApi
 
 // API object with all modules grouped by domain
 const apiModules = {
@@ -254,7 +240,7 @@ const apiModules = {
   purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },
 
   // Sales
-  sales: { invoices: invoicesApi, orders: ordersApi, salesOrders: salesOrdersApi, challans: challansApi, returns: returnsApi, loyaltyPoints: loyaltyPointsApi, schemesDiscounts: schemesDiscountsApi },
+  sales: { invoices: invoicesApi, orders: ordersApi, challans: challansApi, returns: returnsApi, loyaltyPoints: loyaltyPointsApi, schemesDiscounts: schemesDiscountsApi },
 
   // Settings
   settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },

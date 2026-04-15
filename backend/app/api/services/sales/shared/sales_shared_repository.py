@@ -274,11 +274,12 @@ class SalesSharedRepository:
         
         Args:
             operation: "add" (new invoice) or "subtract" (payment/credit note)
-            document_type: 'invoice', 'credit_note', 'payment', 'debit_note'
+            document_type: 'INVOICE', 'credit_note', 'payment', 'debit_note'
         """
         from datetime import date as date_type
         
         doc_date = document_date if document_date else date_type.today()
+        normalized_document_type = "INVOICE" if document_type.lower() == "invoice" else document_type
         
         if operation == "add":
             # Insert new outstanding entry
@@ -295,7 +296,7 @@ class SalesSharedRepository:
             """), {
                 "org_id": org_id,
                 "customer_id": customer_id,
-                "document_type": document_type,
+                "document_type": normalized_document_type,
                 "document_id": document_id,
                 "document_number": document_number,
                 "document_date": doc_date,
@@ -304,7 +305,7 @@ class SalesSharedRepository:
         elif operation == "subtract":
             # For subtract operation on invoice (payment applied), update existing entry
             # For credit notes, insert negative entry
-            if document_type == "credit_note":
+            if normalized_document_type == "credit_note":
                 db.execute(text("""
                     INSERT INTO financial.customer_outstanding (
                         org_id, customer_id, document_type, document_id, document_number,
@@ -332,7 +333,7 @@ class SalesSharedRepository:
                         paid_amount = paid_amount + :amount,
                         status = CASE WHEN outstanding_amount - :amount <= 0 THEN 'paid' ELSE 'partial' END,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE document_id = :document_id AND document_type = 'invoice'
+                    WHERE document_id = :document_id AND document_type = 'INVOICE'
                 """), {
                     "amount": amount,
                     "document_id": document_id
@@ -341,4 +342,3 @@ class SalesSharedRepository:
             raise ValueError(f"Invalid operation: {operation}")
         
         logger.info(f"✅ Updated customer {customer_id} outstanding: {operation} ₹{amount}")
-

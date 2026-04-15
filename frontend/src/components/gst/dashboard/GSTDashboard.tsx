@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import SummaryCard from '../../global/ui/display/SummaryCard';
 import ModuleHeader from '../../global/ui/ModuleHeader';
-import { gstApi, clearGSTCache } from '../../../services/api';
+import { gstApi } from '../../../services/api';
 
 interface GSTDashboardProps {
   onNavigateToReports?: () => void;
@@ -33,6 +33,29 @@ interface DashboardState {
     gstr3b: { status: string; dueDate: string };
     gstr2b: { status: string; lastUpdated: string };
   };
+}
+
+interface GSTDashboardSummaryPayload {
+  outputTax?: number;
+  inputCredit?: number;
+  netPayable?: number;
+  summary?: {
+    total_invoices?: number;
+    total_suppliers?: number;
+    total_supplier_invoices?: number;
+    cgst_amount?: number;
+    sgst_amount?: number;
+    igst_amount?: number;
+    purchase_cgst_amount?: number;
+    purchase_sgst_amount?: number;
+    purchase_igst_amount?: number;
+  };
+}
+
+interface GSTReturnsStatusPayload {
+  gstr1?: { status?: string; dueDate?: string };
+  gstr3b?: { status?: string; dueDate?: string };
+  gstr2b?: { status?: string; lastUpdated?: string };
 }
 
 const EMPTY_STATE: DashboardState = {
@@ -70,8 +93,14 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports, onNavi
         gstApi.returns.getStatus(selectedPeriod),
       ]);
 
-      const gstData = dashboardRes.status === 'fulfilled' ? dashboardRes.value : null;
-      const returnsData = returnsRes.status === 'fulfilled' ? returnsRes.value : null;
+      const gstData: GSTDashboardSummaryPayload | null =
+        dashboardRes.status === 'fulfilled'
+          ? (dashboardRes.value?.data || dashboardRes.value)
+          : null;
+      const returnsData: GSTReturnsStatusPayload | null =
+        returnsRes.status === 'fulfilled'
+          ? (returnsRes.value?.data || returnsRes.value)
+          : null;
       const summary = gstData?.summary || {};
 
       setData({
@@ -123,7 +152,6 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports, onNavi
     setRefreshing(true);
     setError(null);
     try {
-      clearGSTCache();
       await loadDashboardData();
     } catch {
       setError('Failed to refresh data.');

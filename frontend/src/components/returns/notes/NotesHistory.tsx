@@ -58,56 +58,23 @@ const NotesHistory: React.FC<NotesHistoryProps> = ({ onClose, onSelectNote }) =>
   const fetchNotes = async () => {
     setLoading(true);
     try {
-      const notesList: NoteItem[] = [];
-
-      // Fetch credit notes
-      if (noteType === 'all' || noteType === 'credit') {
-        try {
-          const creditRes = await notesApi.getCreditNotes({
-            limit: 100
-          });
-          const creditData = (creditRes as any).data || creditRes;
-          const creditNotes: NoteItem[] = (creditData.credit_notes || creditData.data || creditData || []).map((note: any) => ({
-            ...note,
-            note_type: 'credit',
-            note_number: note.credit_note_number || note.note_number,
-            note_date: note.credit_note_date || note.note_date,
-            party_name: note.customer_name || note.party_name,
-            amount: note.total_amount || note.amount,
-            status: note.status || 'active',
-            reason: note.return_reason || note.reason,
-            icon: FileMinus,
-            color: 'green'
-          }));
-          notesList.push(...creditNotes);
-        } catch (err) {
-        }
-      }
-
-      // Fetch debit notes  
-      if (noteType === 'all' || noteType === 'debit') {
-        try {
-          const debitRes = await notesApi.getDebitNotes({
-            limit: 100
-          });
-
-          const debitData = (debitRes as any).data || debitRes;
-          const debitNotes: NoteItem[] = (debitData.debit_notes || debitData.data || debitData || []).map((note: any) => ({
-            ...note,
-            note_type: 'debit',
-            note_number: note.debit_note_number || note.note_number,
-            note_date: note.debit_note_date || note.note_date,
-            party_name: note.supplier_name || note.party_name,
-            amount: note.total_amount || note.amount,
-            status: note.status || 'active',
-            reason: note.return_reason || note.reason,
-            icon: FilePlus,
-            color: 'red'
-          }));
-          notesList.push(...debitNotes);
-        } catch (err) {
-        }
-      }
+      const response = await notesApi.getAll({
+        limit: 100,
+        note_type: noteType === 'all' ? undefined : noteType as 'credit' | 'debit'
+      });
+      const responseData = (response as any).data || response;
+      const notesList: NoteItem[] = (responseData.notes || responseData.data || responseData || []).map((note: any) => ({
+        ...note,
+        note_type: note.note_type,
+        note_number: note.credit_note_number || note.debit_note_number || note.note_number,
+        note_date: note.credit_note_date || note.debit_note_date || note.note_date,
+        party_name: note.customer_name || note.supplier_name || note.party_name,
+        amount: note.total_amount || note.amount,
+        status: note.status || 'active',
+        reason: note.return_reason || note.reason,
+        icon: note.note_type === 'credit' ? FileMinus : FilePlus,
+        color: note.note_type === 'credit' ? 'green' : 'red'
+      }));
 
       // Sort by date (newest first)
       notesList.sort((a, b) => {

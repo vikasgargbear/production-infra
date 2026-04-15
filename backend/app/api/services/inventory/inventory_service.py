@@ -204,7 +204,7 @@ class InventoryService:
         batch_dict["quantity_sold"] = batch_dict.get("quantity_sold", 0)
         batch_dict["stock_value"] = (
             Decimal(str(batch_dict["quantity_available"])) *
-            Decimal(str(batch_dict.get("cost_per_unit", 0)))
+            Decimal(str(batch_dict.get("cost_price", 0)))
         )
         
         if batch_dict["expiry_date"]:

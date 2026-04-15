@@ -82,7 +82,7 @@ const BankAccountSelector: React.FC<BankAccountSelectorProps> = ({
     const fetchBankAccounts = async (): Promise<void> => {
         try {
             setLoading(true);
-            const response = await bankAccountsApi.getBankAccounts();
+            const response = await bankAccountsApi.getAll();
             const responseData = response?.data || response;
 
             // Filter based on transaction type if needed

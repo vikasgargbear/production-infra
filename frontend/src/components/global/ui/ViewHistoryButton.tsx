@@ -5,7 +5,7 @@ import {
     Share2, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
 import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
-import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, salesOrdersApi, returnsApi, stockApi } from '../../../services/api';
+import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, returnsApi, stockApi } from '../../../services/api';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -229,7 +229,7 @@ const ViewHistoryButton = forwardRef<ViewHistoryButtonRef, ViewHistoryButtonProp
                 case 'order':
                 case 'sales-order':
                     try {
-                        response = await (salesOrdersApi as any).getAll({ limit: 10 });
+                        response = await (ordersApi as any).getAll({ limit: 10 });
                     } catch {
                         try {
                             response = await (ordersApi as any).search({ limit: 10 });

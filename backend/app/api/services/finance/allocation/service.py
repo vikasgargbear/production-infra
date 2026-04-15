@@ -117,7 +117,7 @@ class AllocationService:
         result = db.execute(text("""
             SELECT allocation_id, reference_id as invoice_id, reference_number as invoice_number,
                    allocated_amount, created_at as allocation_date
-            FROM financial.payment_allocations
+            FROM financial.allocations
             WHERE payment_id = :payment_id AND reference_type = 'INVOICE' AND allocation_status = 'active'
             ORDER BY created_at DESC
         """), {"payment_id": payment_id})
@@ -129,7 +129,7 @@ class AllocationService:
         result = db.execute(text("""
             SELECT pa.allocation_id, pa.payment_id, p.payment_number, p.payment_date,
                    p.payment_amount, pa.allocated_amount, pa.created_at as allocation_date
-            FROM financial.payment_allocations pa
+            FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
             WHERE pa.reference_type = 'INVOICE' AND pa.reference_id = :invoice_id
             AND pa.allocation_status = 'active' ORDER BY pa.created_at DESC
@@ -150,7 +150,7 @@ class AllocationService:
     def get_allocation_with_org(db: Session, org_id: str, allocation_id: int) -> Optional[Dict[str, Any]]:
         """Get allocation with org verification."""
         result = db.execute(text("""
-            SELECT pa.*, p.org_id FROM financial.payment_allocations pa
+            SELECT pa.*, p.org_id FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
             WHERE pa.allocation_id = :allocation_id AND p.org_id = :org_id
         """), {"allocation_id": allocation_id, "org_id": org_id})

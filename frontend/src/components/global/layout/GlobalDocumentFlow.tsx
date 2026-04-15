@@ -16,7 +16,8 @@ type DocumentType =
     | 'grn'
     | 'sales-return'
     | 'purchase-return'
-    | 'stock-adjustment';
+    | 'stock-adjustment'
+    | 'stock-transfer';
 
 interface DocumentConfig {
     title: string;
@@ -244,6 +245,15 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
             serviceMethod: 'generateAdjustmentNumber',
             saveLabel: 'Generate Adjustment',
             historyType: 'stock-adjustment'
+        },
+        'stock-transfer': {
+            title: 'Stock Transfer',
+            icon: 'Package',
+            color: 'indigo',
+            prefix: 'TRF',
+            serviceMethod: 'generateTransferNumber',
+            saveLabel: 'Save Transfer',
+            historyType: 'stock-transfer'
         }
     };
 

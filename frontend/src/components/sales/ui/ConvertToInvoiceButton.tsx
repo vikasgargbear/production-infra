@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Loader } from 'lucide-react';
-import { salesOrdersApi } from '../../../services/api';
+import { ordersApi } from '../../../services/api';
 import { toast } from 'react-toastify';
 
 interface ConvertToInvoiceButtonProps {
@@ -29,7 +29,7 @@ const ConvertToInvoiceButton: React.FC<ConvertToInvoiceButtonProps> = ({
 
     setConverting(true);
     try {
-      const response = await salesOrdersApi.convertToInvoice(orderId);
+      const response = await ordersApi.convertToInvoice(orderId);
 
       if (response.data) {
         toast.success(`Invoice ${response.data.invoice_number} created successfully!`);

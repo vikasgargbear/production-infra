@@ -11,7 +11,8 @@ Complete sales and purchase returns management with hook-based architecture.
 ```
 returns/
 ├── hooks/                      # Logic hooks
-│   ├── useSalesReturn.ts      # Sales return workflow
+│   ├── useSalesReturnState.ts  # Sales return state reducer
+│   ├── usePurchaseReturnSave.ts
 │   ├── useReturnCalculations.ts
 │   ├── useReturnReasons.ts
 │   └── index.ts
@@ -41,7 +42,9 @@ returns/
 ## ✅ Hooks Available
 
 ```typescript
-import { useSalesReturn, useReturnCalculations, useReturnReasons } from './hooks';
+import { useReturnCalculations, useReturnReasons } from './hooks';
+import { useSalesReturnState } from './hooks/useSalesReturnState';
+import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
 ```
 
 ## 🚀 Usage

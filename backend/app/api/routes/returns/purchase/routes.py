@@ -225,6 +225,17 @@ async def create_purchase_return(
                 "tax_amount": round(float(item_tax_amount), 2), "item_return_reason": item_return_reason, "disposition": disposition
             })
 
+            if invoice_item_id:
+                db.execute(text("""
+                    UPDATE procurement.supplier_invoice_items
+                    SET quantity_returned = COALESCE(quantity_returned, 0) + :return_qty,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE invoice_item_id = :invoice_item_id
+                """), {
+                    "return_qty": round(float(return_qty), 2),
+                    "invoice_item_id": invoice_item_id,
+                })
+
             # Record inventory movement (handles quantity_available via batch update internally)
             # NOTE: Do NOT also call update_batch_stock_for_return -- that would double-deduct
             if batch_id or item["product_id"]:

@@ -13,10 +13,8 @@ It is designed for the Supabase-backed Railway deployment and focuses on two thi
   - source of truth for ERP actions, impacted tables, and invariants
 - `conftest.py`
   - live API + live Supabase fixtures
-- `test_action_matrix.py`
-  - validates matrix completeness and table existence in the live database
-- `test_live_read_contracts.py`
-  - high-risk production read-path checks for GRN and inventory
+- `test_live_business_journeys.py`
+  - cross-module live journeys that reconcile inventory and ledger side effects
 - `test_live_write_contracts.py`
   - contract tests for stock receive, transfer, adjustment, and writeoff
   - contract tests for purchase order creation, direct purchase entry, purchase receipt, and purchase return create/cancel
@@ -40,8 +38,11 @@ export PHARMA_LIVE_TEST_EMAIL="aasopharmaceuticals@gmail.com"
 ## Run
 
 ```bash
-cd apps/pharma-erp/backend
+cd backend
 ./venv/bin/pytest tests/live_erp -q
+
+# or, if you are using a non-venv Python with pytest installed
+python3 -m pytest tests/live_erp -q
 ```
 
 ## Why This Exists

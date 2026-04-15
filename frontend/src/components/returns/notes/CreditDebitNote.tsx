@@ -290,7 +290,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         }))
       };
 
-      const response = await notesApi.createCreditDebitNote(payload as any);
+      const response = await notesApi.create(payload as any);
 
       if (response.data?.success || response.data || response.status === 200) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);

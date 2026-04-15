@@ -4,9 +4,9 @@ import {
   X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
-import { customersApi, invoicesApi, apiClient } from '../../../services/api';
-// Payment API not yet implemented - will use direct apiClient when ready
-// import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
+import { customersApi, invoicesApi } from '../../../services/api';
+import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
+import { submitCustomerPayment } from '../../../services/api/modules/finance/payments.api';
 import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
 import PaymentSummary from '../shared/PaymentSummary';
@@ -227,12 +227,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         };
 
         const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
-        const response = await apiClient.post(`/customers/${customerId}/payment`, customerPaymentData);
+        const paymentResult = await submitCustomerPayment(customerId, customerPaymentData);
 
-        if (response.data) {
-          // Backend returns payment details
-          const paymentId = response.data.payment_id;
-          const paymentNumber = response.data.payment_reference || response.data.reference_number || payment.reference_number;
+        if (paymentResult.raw) {
+          const paymentNumber = paymentResult.paymentReference || payment.reference_number;
 
           setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
 
@@ -446,8 +444,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           invoices.map(async (inv: any) => {
             try {
               // Fetch existing payment allocations for this invoice
-              const allocResponse = await apiClient.get(`/payment-allocation/invoice/${inv.invoice_id}/payments`);
-              const existingAllocations = allocResponse.data?.allocations || [];
+              const allocResponse = await paymentAllocationApi.getInvoicePayments(inv.invoice_id);
+              const existingAllocations = allocResponse.data?.payments || [];
               const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
                 sum + (alloc.allocated_amount || 0), 0);
 

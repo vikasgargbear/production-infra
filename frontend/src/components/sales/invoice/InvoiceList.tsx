@@ -12,7 +12,7 @@
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import { FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
-import { invoicesApi, challansApi, salesOrdersApi } from '../../../services/api';
+import { invoicesApi, challansApi, ordersApi } from '../../../services/api';
 import CancelInvoiceModal from '../modals/CancelInvoiceModal';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { toast } from 'react-toastify';
@@ -207,7 +207,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
 
       } else if (docType === 'sales_order') {
         // Sales Orders API returns { orders: [], total, page, per_page }
-        response = await salesOrdersApi.getAll({
+        response = await ordersApi.getAll({
           skip: searchParams.skip,
           limit: searchParams.limit,
           from_date: searchFilters.date_from,

@@ -74,7 +74,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
 
     try {
       const [reasonsResponse, settlementsResponse] = await Promise.all([
-        notesApi.getCreditNoteReasons(),
+        notesApi.getReasons('credit'),
         notesApi.getSettlementTypes()
       ]);
 
@@ -359,7 +359,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         }))
       };
 
-      await notesApi.createCreditDebitNote(payload);
+      await notesApi.create(payload);
       showFinancialEntryNotification({
         title: 'Credit Note Posted',
         reference: noteData.note_number,

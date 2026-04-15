@@ -14,7 +14,7 @@ For each ERP action, it defines:
 
 The source of truth is:
 
-- `apps/pharma-erp/backend/tests/live_erp/action_matrix.json`
+- `backend/tests/live_erp/action_matrix.json`
 
 ## Automation Layers
 
@@ -22,7 +22,7 @@ The source of truth is:
 
 Location:
 
-- `apps/pharma-erp/backend/tests/live_erp/`
+- `backend/tests/live_erp/`
 
 Coverage:
 
@@ -46,7 +46,7 @@ Coverage:
 Run:
 
 ```bash
-cd apps/pharma-erp/backend
+cd backend
 ./venv/bin/pytest tests/live_erp -q
 ```
 
@@ -69,7 +69,7 @@ export PHARMA_LIVE_TEST_EMAIL="aasopharmaceuticals@gmail.com"
 
 Location:
 
-- `apps/pharma-erp/frontend/e2e/live-production-smoke.spec.ts`
+- `frontend/e2e/live-production-smoke.spec.ts`
 
 Purpose:
 
@@ -80,7 +80,7 @@ Purpose:
 Run:
 
 ```bash
-cd apps/pharma-erp/frontend
+cd frontend
 PHARMA_LIVE_API_BASE_URL="http://127.0.0.1:8000" \
 PHARMA_LIVE_JWT="..." \
 npm run test:e2e:live:headed
@@ -91,7 +91,7 @@ npm run test:e2e:live:headed
 Run:
 
 ```bash
-cd apps/pharma-erp/backend
+cd backend
 DATABASE_URL="postgresql://..." \
 JWT_SECRET_KEY="..." \
 TEST_MODE=true \
@@ -158,7 +158,7 @@ Root cause:
 
 Fix:
 
-- `apps/pharma-erp/backend/app/api/services/returns/return_service.py`
+- `backend/app/api/services/returns/return_service.py`
 
 Verification:
 
@@ -210,7 +210,7 @@ Verification:
 
 Invoice trigger details:
 
-- `apps/pharma-erp/docs/backend/api/sales/invoice-trigger-contracts.md`
+- `docs/backend/api/sales/invoice-trigger-contracts.md`
 
 ### Purchase return create/cancel was leaving supplier-side state inconsistent
 

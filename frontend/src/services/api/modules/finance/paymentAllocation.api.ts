@@ -30,10 +30,11 @@ export interface AllocationData {
 
 const ENDPOINTS = {
     BASE: '/payment-allocation',
-    UNALLOCATED: '/payment-allocation/unallocated',
-    OUTSTANDING: '/payment-allocation/outstanding-invoices',
+    UNALLOCATED_PAYMENTS: '/payment-allocation/unallocated-payments',
+    UNPAID_INVOICES: '/payment-allocation/unpaid-invoices',
     ALLOCATE: '/payment-allocation/allocate',
-    AUTO: '/payment-allocation/auto'
+    ALLOCATE_BULK: '/payment-allocation/allocate-bulk',
+    AUTO_ALLOCATE: '/payment-allocation/auto-allocate'
 } as const;
 
 // ============================================
@@ -41,30 +42,40 @@ const ENDPOINTS = {
 // ============================================
 
 export const paymentAllocationApi = {
-    // Get unallocated payments
-    getUnallocated: (params: AllocationParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.UNALLOCATED, { params });
+    getUnallocatedPayments: (params: AllocationParams = {}): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.UNALLOCATED_PAYMENTS, { params });
     },
 
-    // Get outstanding invoices for a party
-    getOutstandingInvoices: (partyId: number, partyType: 'customer' | 'supplier'): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.OUTSTANDING, {
-            params: { party_id: partyId, party_type: partyType }
+    getUnpaidInvoices: (customerId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.UNPAID_INVOICES, {
+            params: { customer_id: customerId }
         });
     },
 
-    // Allocate payment to invoices
     allocate: (data: AllocationData): Promise<AxiosResponse> => {
         return apiHelpers.post(ENDPOINTS.ALLOCATE, data);
     },
 
-    // Auto-allocate payments
-    autoAllocate: (params: AllocationParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.AUTO, params);
+    allocateBulk: (data: AllocationData): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.ALLOCATE_BULK, data);
     },
 
-    // Deallocate
+    autoAllocate: (paymentId: number, method: 'fifo' | 'lifo' | 'proportional' = 'fifo'): Promise<AxiosResponse> => {
+        return apiHelpers.post(ENDPOINTS.AUTO_ALLOCATE, {
+            payment_id: paymentId,
+            method
+        });
+    },
+
+    getPaymentAllocations: (paymentId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/allocations`);
+    },
+
+    getInvoicePayments: (invoiceId: number): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/invoice/${invoiceId}/payments`);
+    },
+
     deallocate: (allocationId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${allocationId}`);
+        return apiHelpers.delete(`${ENDPOINTS.BASE}/allocation/${allocationId}`);
     }
 };

@@ -245,6 +245,13 @@ async def create_purchase_entry(
         
         # OPTIMIZATION: Get default category ONCE before loop using repository
         default_category_id = PurchaseOrderRepository.get_default_category(db, str(context.org_id))
+
+        subtotal_total = Decimal("0")
+        discount_total = Decimal("0")
+        taxable_total = Decimal("0")
+        cgst_total = Decimal("0")
+        sgst_total = Decimal("0")
+        igst_total = Decimal("0")
         
         for idx, item in enumerate(items):
             logger.info(f"Item {idx + 1}: {item}")
@@ -299,6 +306,13 @@ async def create_purchase_entry(
             cgst_amount = gst["cgst_amount"]
             sgst_amount = gst["sgst_amount"]
             igst_amount = gst["igst_amount"]
+
+            subtotal_total += subtotal
+            discount_total += discount_amount
+            taxable_total += taxable_amount
+            cgst_total += Decimal(str(cgst_amount))
+            sgst_total += Decimal(str(sgst_amount))
+            igst_total += Decimal(str(igst_amount))
 
             # Generate batch number if not provided
             batch_number = item.get("batch_number")
@@ -482,6 +496,39 @@ async def create_purchase_entry(
             # Compute and update PO status
             po_status = PurchaseOrderRepository.compute_and_update_po_status(db, purchase_order_id)
 
+        tax_total = cgst_total + sgst_total + igst_total
+        amount_before_round = taxable_total + tax_total + invoice_data["freight"] + invoice_data["insurance"] + invoice_data["other"]
+        invoice_total = Decimal(str(round(float(amount_before_round))))
+        round_off_amount = invoice_total - amount_before_round
+
+        db.execute(text("""
+            UPDATE procurement.supplier_invoices
+            SET subtotal_amount = :subtotal_amount,
+                discount_amount = :discount_amount,
+                taxable_amount = :taxable_amount,
+                cgst_amount = :cgst_amount,
+                sgst_amount = :sgst_amount,
+                igst_amount = :igst_amount,
+                tax_amount = :tax_amount,
+                round_off_amount = :round_off_amount,
+                invoice_total = :invoice_total,
+                gst_type = :gst_type,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE supplier_invoice_id = :supplier_invoice_id
+        """), {
+            "supplier_invoice_id": supplier_invoice_id,
+            "subtotal_amount": subtotal_total,
+            "discount_amount": discount_total,
+            "taxable_amount": taxable_total,
+            "cgst_amount": cgst_total,
+            "sgst_amount": sgst_total,
+            "igst_amount": igst_total,
+            "tax_amount": tax_total,
+            "round_off_amount": round_off_amount,
+            "invoice_total": invoice_total,
+            "gst_type": gst_type,
+        })
+
         db.commit()
 
         result = {
@@ -495,6 +542,7 @@ async def create_purchase_entry(
         if purchase_order_id:
             result["purchase_order_id"] = purchase_order_id
             result["po_status"] = po_status
+
         return result
 
     except Exception as e:

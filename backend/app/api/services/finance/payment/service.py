@@ -53,7 +53,8 @@ class PaymentService:
         """
         # Get invoice details (TenantAwareSession auto-adds org_id filter)
         invoice = db.execute(text("""
-            SELECT invoice_id, invoice_number, final_amount as total_amount,
+            SELECT invoice_id, invoice_number, customer_id, due_date,
+                   final_amount as total_amount,
                    COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
@@ -177,18 +178,70 @@ class PaymentService:
 
         # Update customer_outstanding (no trigger handles this)
         outstanding_status = "paid" if new_payment_status == PaymentStatus.PAID.value else "partial"
-        db.execute(text("""
-            UPDATE financial.customer_outstanding
-            SET paid_amount = :paid_amount,
-                outstanding_amount = :outstanding_amount,
-                status = :status
-            WHERE document_id = :invoice_id AND document_type = 'invoice'
-        """), {
+        update_params = {
+            "org_id": effective_org_id,
             "invoice_id": invoice_id,
             "paid_amount": new_paid_amount,
             "outstanding_amount": new_credit_amount,
-            "status": outstanding_status
-        })
+            "status": outstanding_status,
+        }
+        uppercase_result = db.execute(text("""
+            UPDATE financial.customer_outstanding
+            SET paid_amount = :paid_amount,
+                outstanding_amount = :outstanding_amount,
+                status = :status,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE org_id = :org_id
+              AND document_id = :invoice_id
+              AND document_type = 'INVOICE'
+        """), update_params)
+
+        if uppercase_result.rowcount == 0:
+            lowercase_result = db.execute(text("""
+                UPDATE financial.customer_outstanding
+                SET document_type = 'INVOICE',
+                    paid_amount = :paid_amount,
+                    outstanding_amount = :outstanding_amount,
+                    status = :status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE org_id = :org_id
+                  AND document_id = :invoice_id
+                  AND document_type = 'invoice'
+            """), update_params)
+
+            if lowercase_result.rowcount == 0:
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount, paid_amount,
+                        due_date, status
+                    ) VALUES (
+                        :org_id, :customer_id, 'INVOICE', :invoice_id, :invoice_number,
+                        :document_date, :original_amount, :outstanding_amount, :paid_amount,
+                        :due_date, :status
+                    )
+                """), {
+                    "org_id": effective_org_id,
+                    "customer_id": invoice.customer_id,
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice.invoice_number,
+                    "document_date": payment_data.get("payment_date", date.today()),
+                    "original_amount": total_amount,
+                    "outstanding_amount": new_credit_amount,
+                    "paid_amount": new_paid_amount,
+                    "due_date": invoice.due_date or payment_data.get("payment_date", date.today()),
+                    "status": outstanding_status,
+                })
+        else:
+            db.execute(text("""
+                DELETE FROM financial.customer_outstanding
+                WHERE org_id = :org_id
+                  AND document_id = :invoice_id
+                  AND document_type = 'invoice'
+            """), {
+                "org_id": effective_org_id,
+                "invoice_id": invoice_id,
+            })
 
         # Update order payment status if fully paid
         if new_payment_status == PaymentStatus.PAID.value:

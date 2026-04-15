@@ -47,6 +47,26 @@ DEBIT_NOTE_REASONS = [
     {"value": "other", "label": "Other"}
 ]
 
+CREDIT_REASON_CODE_MAP = {
+    "discount": "DISCOUNT_ADJUSTMENT",
+    "price_adjustment": "RATE_DIFFERENCE",
+    "overcharge": "WRONG_BILLING",
+    "quality_issue": "QUALITY_ISSUE",
+    "sales_return": "SALES_RETURN",
+    "goodwill": "OTHER",
+    "promotional": "OTHER",
+    "other": "OTHER",
+}
+
+DEBIT_REASON_CODE_MAP = {
+    "undercharge": "RATE_CORRECTION",
+    "late_payment": "INTEREST_CHARGES",
+    "service_charge": "SERVICE_CHARGES",
+    "price_increase": "RATE_CORRECTION",
+    "penalty": "PENALTY_CHARGES",
+    "other": "OTHER",
+}
+
 
 class CreditNoteService:
     """
@@ -68,6 +88,46 @@ class CreditNoteService:
         """
         result = db.execute(text(query), {"org_id": org_id}).first()
         return dict(result._mapping) if result else None
+
+    @staticmethod
+    def _resolve_branch_id(db: Session, org_id: str, note_data: Dict[str, Any]) -> int:
+        branch_id = note_data.get("branch_id")
+        if branch_id:
+            return int(branch_id)
+
+        result = db.execute(text("""
+            SELECT branch_id
+            FROM master.org_branches
+            WHERE org_id = :org_id AND COALESCE(is_active, TRUE) = TRUE
+            ORDER BY COALESCE(is_main, FALSE) DESC, branch_id
+            LIMIT 1
+        """), {"org_id": org_id}).first()
+
+        if not result:
+            raise ValueError("No active branch found for organization")
+
+        return int(result.branch_id)
+
+    @staticmethod
+    def _format_note_identifier(note_type: str, note_id: Any) -> str:
+        return f"{note_type}:{note_id}"
+
+    @staticmethod
+    def _parse_note_identifier(note_identifier: str) -> tuple[Optional[str], str]:
+        if ":" in str(note_identifier):
+            note_type, raw_id = str(note_identifier).split(":", 1)
+            return note_type, raw_id
+        return None, str(note_identifier)
+
+    @staticmethod
+    def _map_reason_code(note_type: str, raw_reason: Optional[str], explicit_reason_code: Optional[str] = None) -> str:
+        if explicit_reason_code:
+            return explicit_reason_code.upper()
+
+        normalized = (raw_reason or "").strip().lower().replace(" ", "_")
+        if note_type == "credit":
+            return CREDIT_REASON_CODE_MAP.get(normalized, "OTHER")
+        return DEBIT_REASON_CODE_MAP.get(normalized, "OTHER")
     
     @staticmethod
     def invoice_exists(db: Session, invoice_id: str) -> bool:
@@ -95,44 +155,55 @@ class CreditNoteService:
         Get list of credit/debit notes with filters.
         TenantAwareSession auto-filters by org_id.
         """
-        # Build union query for both credit and debit notes from returns
-        # TenantAwareSession auto-adds org_id filter
+        # Canonical note source is the financial schema.
         base_query = """
             SELECT 
+                'credit:' || cn.credit_note_id::text as note_id,
                 'credit' as note_type,
-                sr.return_id as note_id,
-                sr.credit_note_number as note_number,
-                sr.credit_note_date as note_date,
-                sr.customer_id as party_id,
+                cn.credit_note_id as raw_note_id,
+                cn.credit_note_number as note_number,
+                cn.credit_note_date as note_date,
+                cn.customer_id as party_id,
                 'customer' as party_type,
                 c.customer_name as party_name,
                 c.gst_number as party_gst,
-                sr.total_amount,
-                sr.return_reason as reason,
-                sr.credit_note_status as status,
-                sr.created_at
-            FROM sales.sales_returns sr
-            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.credit_note_number IS NOT NULL
+                cn.total_amount,
+                cn.reason,
+                cn.reason_code,
+                cn.status,
+                cn.created_at,
+                cn.reference_type,
+                cn.reference_id,
+                cn.reference_number
+            FROM financial.credit_notes cn
+            LEFT JOIN parties.customers c ON cn.customer_id = c.customer_id
             
             UNION ALL
             
             SELECT 
+                'debit:' || dn.debit_note_id::text as note_id,
                 'debit' as note_type,
-                pr.return_id as note_id,
-                pr.debit_note_number as note_number,
-                pr.debit_note_date as note_date,
-                pr.supplier_id as party_id,
-                'supplier' as party_type,
-                s.supplier_name as party_name,
-                s.gst_number as party_gst,
-                pr.total_amount,
-                pr.return_reason as reason,
-                pr.debit_note_status as status,
-                pr.created_at
-            FROM procurement.purchase_returns pr
-            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.debit_note_number IS NOT NULL
+                dn.debit_note_id as raw_note_id,
+                dn.debit_note_number as note_number,
+                dn.debit_note_date as note_date,
+                COALESCE(dn.supplier_id, dn.customer_id) as party_id,
+                CASE
+                    WHEN dn.supplier_id IS NOT NULL THEN 'supplier'
+                    ELSE 'customer'
+                END as party_type,
+                COALESCE(s.supplier_name, c.customer_name) as party_name,
+                COALESCE(s.gst_number, c.gst_number) as party_gst,
+                dn.total_amount,
+                dn.reason,
+                dn.reason_code,
+                dn.status,
+                dn.created_at,
+                dn.reference_type,
+                dn.reference_id,
+                dn.reference_number
+            FROM financial.debit_notes dn
+            LEFT JOIN parties.suppliers s ON dn.supplier_id = s.supplier_id
+            LEFT JOIN parties.customers c ON dn.customer_id = c.customer_id
         """
         
         params = {"skip": skip, "limit": limit}
@@ -187,51 +258,62 @@ class CreditNoteService:
         Create a credit note (reduces customer liability).
         org_id parameter used for INSERT (creating new record).
         """
-        note_id = str(uuid.uuid4())
+        branch_id = CreditNoteService._resolve_branch_id(db, org_id, note_data)
         note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
-        
-        # Calculate amounts
         subtotal = Decimal(str(note_data["amount"]))
         tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
         tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
         total_amount = subtotal + tax_amount
-        
-        # Create note record
-        db.execute(text("""
-            INSERT INTO financial.credit_debit_notes (
-                note_id, org_id, note_number, note_type,
-                note_date, party_id, party_type, linked_invoice_id,
-                reason, subtotal_amount, tax_percent,
-                tax_amount, amount, notes, status,
-                created_by, created_at, updated_at
+        reason_code = CreditNoteService._map_reason_code(
+            "credit",
+            note_data.get("reason"),
+            note_data.get("reason_code")
+        )
+
+        result = db.execute(text("""
+            INSERT INTO financial.credit_notes (
+                org_id, branch_id, credit_note_number, credit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                credit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by, created_at, updated_at
             ) VALUES (
-                :note_id, :org_id, :note_number, 'credit',
-                :note_date, :party_id, :party_type, :linked_invoice,
-                :reason, :subtotal, :tax_percent,
-                :tax_amount, :total_amount, :notes, 'approved',
-                :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                :org_id, :branch_id, :note_number, :note_date,
+                :party_id, :reference_type, :reference_id, :reference_number,
+                :subtotal, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'approved', :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
+            RETURNING credit_note_id
         """), {
-            "note_id": note_id,
             "org_id": org_id,
+            "branch_id": branch_id,
             "note_number": note_number,
             "note_date": note_data["note_date"],
             "party_id": note_data["party_id"],
-            "party_type": PartyType.CUSTOMER.value,
-            "linked_invoice": note_data.get("linked_invoice_id"),
+            "reference_type": "INVOICE" if note_data.get("reference_invoice_id") else "OTHER",
+            "reference_id": note_data.get("reference_invoice_id"),
+            "reference_number": note_data.get("reference_number"),
             "reason": note_data["reason"],
+            "reason_code": reason_code,
             "subtotal": subtotal,
-            "tax_percent": tax_percent,
             "tax_amount": tax_amount,
             "total_amount": total_amount,
             "notes": note_data.get("notes", ""),
+            "is_gst_applicable": note_data.get("is_gst_applicable", True),
+            "cgst_amount": note_data.get("cgst_amount", 0),
+            "sgst_amount": note_data.get("sgst_amount", 0),
+            "igst_amount": note_data.get("igst_amount", 0),
             "created_by": user_id
         })
-        
+        note_id = result.scalar()
+
         logger.info(f"Created credit note {note_number} for amount {total_amount}")
         
         return {
-            "note_id": note_id,
+            "note_id": CreditNoteService._format_note_identifier("credit", note_id),
             "note_number": note_number,
             "total_amount": float(total_amount),
             "message": f"Credit note {note_number} created successfully"
@@ -249,52 +331,63 @@ class CreditNoteService:
         org_id parameter used for INSERT (creating new record).
         """
         party_type = note_data.get("party_type", PartyType.CUSTOMER.value)
-        
-        note_id = str(uuid.uuid4())
+        branch_id = CreditNoteService._resolve_branch_id(db, org_id, note_data)
         note_number = DocumentNumberService.generate_number(db, "debit_note", org_id)
-        
-        # Calculate amounts
         subtotal = Decimal(str(note_data["amount"]))
         tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
         tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
         total_amount = subtotal + tax_amount
-        
-        # Create note record
-        db.execute(text("""
-            INSERT INTO financial.credit_debit_notes (
-                note_id, org_id, note_number, note_type,
-                note_date, party_id, party_type, linked_invoice_id,
-                reason, subtotal_amount, tax_percent,
-                tax_amount, amount, notes, status,
-                created_by, created_at, updated_at
+        reason_code = CreditNoteService._map_reason_code(
+            "debit",
+            note_data.get("reason"),
+            note_data.get("reason_code")
+        )
+
+        result = db.execute(text("""
+            INSERT INTO financial.debit_notes (
+                org_id, branch_id, debit_note_number, debit_note_date,
+                customer_id, supplier_id, reference_type, reference_id, reference_number,
+                debit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by, created_at, updated_at
             ) VALUES (
-                :note_id, :org_id, :note_number, 'debit',
-                :note_date, :party_id, :party_type, :linked_invoice,
-                :reason, :subtotal, :tax_percent,
-                :tax_amount, :total_amount, :notes, 'approved',
-                :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                :org_id, :branch_id, :note_number, :note_date,
+                :customer_id, :supplier_id, :reference_type, :reference_id, :reference_number,
+                :subtotal, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'approved', :created_by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
+            RETURNING debit_note_id
         """), {
-            "note_id": note_id,
             "org_id": org_id,
+            "branch_id": branch_id,
             "note_number": note_number,
             "note_date": note_data["note_date"],
-            "party_id": note_data["party_id"],
-            "party_type": party_type,
-            "linked_invoice": note_data.get("linked_invoice_id"),
+            "customer_id": note_data["party_id"] if party_type == PartyType.CUSTOMER.value else None,
+            "supplier_id": note_data["party_id"] if party_type == PartyType.SUPPLIER.value else None,
+            "reference_type": "INVOICE" if note_data.get("reference_invoice_id") else "OTHER",
+            "reference_id": note_data.get("reference_invoice_id"),
+            "reference_number": note_data.get("reference_number"),
             "reason": note_data["reason"],
+            "reason_code": reason_code,
             "subtotal": subtotal,
-            "tax_percent": tax_percent,
             "tax_amount": tax_amount,
             "total_amount": total_amount,
             "notes": note_data.get("notes", ""),
+            "is_gst_applicable": note_data.get("is_gst_applicable", True),
+            "cgst_amount": note_data.get("cgst_amount", 0),
+            "sgst_amount": note_data.get("sgst_amount", 0),
+            "igst_amount": note_data.get("igst_amount", 0),
             "created_by": user_id
         })
-        
+        note_id = result.scalar()
+
         logger.info(f"Created debit note {note_number} for amount {total_amount}")
         
         return {
-            "note_id": note_id,
+            "note_id": CreditNoteService._format_note_identifier("debit", note_id),
             "note_number": note_number,
             "total_amount": float(total_amount),
             "message": f"Debit note {note_number} created successfully"
@@ -310,27 +403,78 @@ class CreditNoteService:
         Get detailed info about a specific note.
         TenantAwareSession auto-filters by org_id.
         """
-        note = db.execute(text("""
-            SELECT 
-                n.*,
-                CASE 
-                    WHEN n.party_type = 'customer' THEN c.customer_name
-                    ELSE s.supplier_name
-                END as party_name,
-                CASE 
-                    WHEN n.party_type = 'customer' THEN c.gst_number
-                    ELSE s.gst_number
-                END as party_gst
-            FROM financial.credit_debit_notes n
-            LEFT JOIN parties.customers c ON n.party_id = c.customer_id AND n.party_type = 'customer'
-            LEFT JOIN parties.suppliers s ON n.party_id = s.supplier_id AND n.party_type = 'supplier'
-            WHERE n.note_id = :note_id
-        """), {"note_id": note_id}).fetchone()
-        
-        if not note:
-            return None
-            
-        return dict(note._mapping)
+        note_type, raw_note_id = CreditNoteService._parse_note_identifier(note_id)
+
+        credit_note = None
+        debit_note = None
+
+        if note_type in (None, "credit"):
+            credit_note = db.execute(text("""
+                SELECT
+                    'credit' as note_type,
+                    'credit:' || cn.credit_note_id::text as note_id,
+                    cn.credit_note_id as raw_note_id,
+                    cn.credit_note_number as note_number,
+                    cn.credit_note_date as note_date,
+                    cn.customer_id as party_id,
+                    'customer' as party_type,
+                    c.customer_name as party_name,
+                    c.gst_number as party_gst,
+                    cn.reference_type,
+                    cn.reference_id,
+                    cn.reference_number,
+                    cn.credit_amount as base_amount,
+                    cn.tax_amount,
+                    cn.total_amount,
+                    cn.reason_code,
+                    cn.reason,
+                    cn.notes,
+                    cn.status,
+                    cn.cgst_amount,
+                    cn.sgst_amount,
+                    cn.igst_amount,
+                    cn.created_at,
+                    cn.updated_at
+                FROM financial.credit_notes cn
+                LEFT JOIN parties.customers c ON cn.customer_id = c.customer_id
+                WHERE cn.credit_note_id = :note_id
+            """), {"note_id": raw_note_id}).fetchone()
+
+        if note_type in (None, "debit") and not credit_note:
+            debit_note = db.execute(text("""
+                SELECT
+                    'debit' as note_type,
+                    'debit:' || dn.debit_note_id::text as note_id,
+                    dn.debit_note_id as raw_note_id,
+                    dn.debit_note_number as note_number,
+                    dn.debit_note_date as note_date,
+                    COALESCE(dn.supplier_id, dn.customer_id) as party_id,
+                    CASE WHEN dn.supplier_id IS NOT NULL THEN 'supplier' ELSE 'customer' END as party_type,
+                    COALESCE(s.supplier_name, c.customer_name) as party_name,
+                    COALESCE(s.gst_number, c.gst_number) as party_gst,
+                    dn.reference_type,
+                    dn.reference_id,
+                    dn.reference_number,
+                    dn.debit_amount as base_amount,
+                    dn.tax_amount,
+                    dn.total_amount,
+                    dn.reason_code,
+                    dn.reason,
+                    dn.notes,
+                    dn.status,
+                    dn.cgst_amount,
+                    dn.sgst_amount,
+                    dn.igst_amount,
+                    dn.created_at,
+                    dn.updated_at
+                FROM financial.debit_notes dn
+                LEFT JOIN parties.suppliers s ON dn.supplier_id = s.supplier_id
+                LEFT JOIN parties.customers c ON dn.customer_id = c.customer_id
+                WHERE dn.debit_note_id = :note_id
+            """), {"note_id": raw_note_id}).fetchone()
+
+        note = credit_note or debit_note
+        return dict(note._mapping) if note else None
     
     @staticmethod
     def cancel_note(
@@ -344,40 +488,37 @@ class CreditNoteService:
         Cancel a credit/debit note.
         TenantAwareSession auto-filters by org_id.
         """
-        # Get note details
-        note = db.execute(text("""
-            SELECT * FROM financial.credit_debit_notes
-            WHERE note_id = :note_id
-        """), {"note_id": note_id}).fetchone()
-        
+        note = CreditNoteService.get_note_detail(db, org_id, note_id)
         if not note:
             raise ValueError("Note not found")
-            
-        if note.status == "cancelled":
+
+        if note["status"] == "cancelled":
             raise ValueError("Note already cancelled")
-        
-        # Update note status
-        db.execute(text("""
-            UPDATE financial.credit_debit_notes 
+
+        target_table = "financial.credit_notes" if note["note_type"] == "credit" else "financial.debit_notes"
+        target_id_column = "credit_note_id" if note["note_type"] == "credit" else "debit_note_id"
+
+        db.execute(text(f"""
+            UPDATE {target_table}
             SET status = 'cancelled',
-                cancellation_reason = :reason,
-                cancelled_by = :user_id,
-                cancelled_at = CURRENT_TIMESTAMP,
+                notes = CASE
+                    WHEN COALESCE(notes, '') = '' THEN :reason_note
+                    ELSE notes || E'\\n\\n' || :reason_note
+                END,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE note_id = :note_id
+            WHERE {target_id_column} = :note_id
         """), {
-            "note_id": note_id,
-            "reason": reason,
-            "user_id": user_id
+            "note_id": note["raw_note_id"],
+            "reason_note": f"Cancellation reason: {reason}"
         })
-        
-        logger.info(f"Cancelled note {note.note_number} by user {user_id}. Reason: {reason}")
-        
+
+        logger.info(f"Cancelled note {note['note_number']} by user {user_id}. Reason: {reason}")
+
         return {
-            "note_id": note_id,
-            "note_number": note.note_number,
+            "note_id": note["note_id"],
+            "note_number": note["note_number"],
             "status": "cancelled",
-            "message": f"{note.note_type.title()} note {note.note_number} cancelled successfully"
+            "message": f"{note['note_type'].title()} note {note['note_number']} cancelled successfully"
         }
     
     @staticmethod
@@ -697,8 +838,9 @@ class CreditNoteService:
         # Generate credit note number
         credit_note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
         
-        # Calculate total amount
-        total_amount = float(credit_amount) + float(tax_amount)
+        # Sales returns follow the same whole-rupee rounding convention as invoices.
+        # The credit note ledger impact must match the return header and invoice final amount.
+        total_amount = round(float(credit_amount) + float(tax_amount))
         
         # Use provided date or current date
         credit_note_date = return_date if return_date else date_type.today()

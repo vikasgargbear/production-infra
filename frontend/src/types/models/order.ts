@@ -60,6 +60,7 @@ export interface Address {
     address_line2?: string;
     city?: string;
     state?: string;
+    state_name?: string;
     pincode?: string;
     country?: string;
 }

@@ -46,7 +46,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       setError(null);
 
       // Load expense types from API
-      const expenseTypesResponse = await expensesApi.getExpenseTypes();
+      const expenseTypesResponse = await expensesApi.getCategories();
       setExpenseTypes(expenseTypesResponse?.data?.expense_types || expenseTypesResponse?.data || []);
 
       // Set default employee name (in real app, get from auth context)
@@ -142,10 +142,11 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
 
       // Call the actual API to save the expense claim
       const response = await expensesApi.create(claimData as any);
+      const claimResult = response.data?.data || response.data;
 
       showFinancialEntryNotification({
         title: 'Expense Claim Posted',
-        reference: response.data?.claim_number,
+        reference: claimResult?.claim_number,
         amount: expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0),
         status: 'confirmed',
         impacts: [

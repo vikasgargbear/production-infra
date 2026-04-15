@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, IndianRupee, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import apiClient from '../../../services/api/apiClient';
+import { paymentAllocationApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 import { format } from 'date-fns';
 
@@ -62,10 +62,11 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
   const { data: paymentsData, isLoading: loadingPayments } = useQuery({
     queryKey: ['unallocated-payments', customerId],
     queryFn: async () => {
-      const response = await apiClient.get('/payment-allocation/unallocated-payments', {
-        params: { party_id: customerId }
-      });
-      return response.data.payments || [];
+      const response = await paymentAllocationApi.getUnallocatedPayments({ party_id: customerId });
+      return (response.data.payments || []).map((payment: any) => ({
+        ...payment,
+        payment_amount: payment.payment_amount ?? payment.total_amount ?? 0
+      }));
     },
     enabled: isOpen
   });
@@ -86,9 +87,7 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
         }));
       }
 
-      const response = await apiClient.get('/payment-allocation/unpaid-invoices', {
-        params: { customer_id: customerId }
-      });
+      const response = await paymentAllocationApi.getUnpaidInvoices(customerId);
       return response.data.invoices || [];
     },
     enabled: isOpen
@@ -99,7 +98,7 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
     mutationFn: async (allocations: Array<{ invoice_id: number; amount: number }>) => {
       if (!selectedPayment) throw new Error('No payment selected');
 
-      const response = await apiClient.post('/payment-allocation/allocate-bulk', {
+      const response = await paymentAllocationApi.allocateBulk({
         payment_id: selectedPayment.payment_id,
         allocations
       });

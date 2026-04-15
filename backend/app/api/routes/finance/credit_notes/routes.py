@@ -212,7 +212,14 @@ async def get_note_print_data(
         organization = CreditNoteService.get_organization_details(db, str(context.org_id))
         
         # Get note with all details
-        note_data = await get_note_detail(note_id, db)
+        note_data = CreditNoteService.get_note_detail(
+            db=db,
+            org_id=str(context.org_id),
+            note_id=note_id
+        )
+
+        if not note_data:
+            raise HTTPException(status_code=404, detail="Note not found")
         
         # Format for printing
         print_data = {
@@ -248,7 +255,8 @@ async def cancel_note(
             db=db,
             org_id=str(context.org_id),
             note_id=note_id,
-            cancellation_reason=cancellation_reason
+            reason=cancellation_reason,
+            user_id=context.user_id
         )
         
         return {

@@ -347,6 +347,19 @@ class InvoiceService:
                     paid_amount=float(paid_amount)
                 )
 
+                db.execute(text("""
+                    UPDATE sales.orders
+                    SET order_status = 'invoiced',
+                        payment_status = :payment_status,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE org_id = :org_id
+                      AND order_id = :order_id
+                """), {
+                    "org_id": org_id,
+                    "order_id": order_id,
+                    "payment_status": payment_status,
+                })
+
             # 10. Commit transaction
             db.commit()
             
@@ -884,39 +897,83 @@ class InvoiceService:
         db.execute(text("""
             UPDATE sales.invoices
             SET invoice_status = :cancelled_status,
-                cancelled_at = CURRENT_TIMESTAMP,
-                cancelled_by = :cancelled_by,
-                cancellation_reason = :reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {
             "invoice_id": invoice_id,
             "org_id": org_id,
             "cancelled_status": InvoiceStatus.CANCELLED.value,
-            "cancelled_by": cancelled_by,
-            "reason": reason or "Cancelled by user"
         })
         
         # Reverse inventory if needed
         if reverse_inventory:
-            items_result = db.execute(text("""
-                SELECT product_id, batch_id, quantity
-                FROM sales.invoice_items
-                WHERE invoice_id = :invoice_id
-            """), {"invoice_id": invoice_id})
+            movement_rows = db.execute(text("""
+                SELECT product_id, batch_id, location_id, COALESCE(SUM(quantity), 0) AS quantity
+                FROM inventory.inventory_movements
+                WHERE reference_id = :invoice_id
+                  AND reference_type = 'invoice'
+                  AND movement_direction = 'out'
+                  AND org_id = :org_id
+                GROUP BY product_id, batch_id, location_id
+            """), {"invoice_id": invoice_id, "org_id": org_id}).fetchall()
 
-            for item in items_result:
-                if item[1]:  # Has batch_id
+            for movement in movement_rows:
+                if movement.batch_id:
                     db.execute(text("""
                         UPDATE inventory.batches
                         SET quantity_available = quantity_available + :quantity,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE batch_id = :batch_id AND org_id = :org_id
                     """), {
-                        "batch_id": item[1],
-                        "quantity": item[2],
+                        "batch_id": movement.batch_id,
+                        "quantity": movement.quantity,
                         "org_id": org_id
                     })
+
+                if movement.batch_id and movement.location_id and movement.product_id:
+                    update_result = db.execute(text("""
+                        UPDATE inventory.location_wise_stock
+                        SET quantity_available = quantity_available + :quantity,
+                            last_movement_date = CURRENT_DATE,
+                            last_updated = CURRENT_TIMESTAMP
+                        WHERE org_id = :org_id
+                          AND product_id = :product_id
+                          AND batch_id = :batch_id
+                          AND location_id = :location_id
+                    """), {
+                        "org_id": org_id,
+                        "product_id": movement.product_id,
+                        "batch_id": movement.batch_id,
+                        "location_id": movement.location_id,
+                        "quantity": movement.quantity,
+                    })
+
+                    if update_result.rowcount == 0:
+                        db.execute(text("""
+                            INSERT INTO inventory.location_wise_stock (
+                                org_id,
+                                location_id,
+                                product_id,
+                                batch_id,
+                                quantity_available,
+                                quantity_reserved,
+                                last_movement_date
+                            ) VALUES (
+                                :org_id,
+                                :location_id,
+                                :product_id,
+                                :batch_id,
+                                :quantity,
+                                0,
+                                CURRENT_DATE
+                            )
+                        """), {
+                            "org_id": org_id,
+                            "location_id": movement.location_id,
+                            "product_id": movement.product_id,
+                            "batch_id": movement.batch_id,
+                            "quantity": movement.quantity,
+                        })
 
             # Remove inventory movements for this invoice (batch qty already restored above)
             db.execute(text("""
@@ -932,7 +989,7 @@ class InvoiceService:
             SET status = 'cancelled', outstanding_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
             WHERE document_id = :invoice_id
-              AND document_type = 'invoice'
+              AND document_type IN ('INVOICE', 'invoice')
               AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
 
@@ -1014,19 +1071,25 @@ class InvoiceService:
             else:
                 status = 'open'
 
-            db.execute(text("""
-                INSERT INTO financial.customer_outstanding (
-                    org_id, customer_id, document_type, document_id, document_number,
-                    document_date, original_amount, outstanding_amount, paid_amount,
-                    due_date, status
-                ) VALUES (
-                    :org_id, :customer_id, 'invoice', :invoice_id, :invoice_number,
-                    :invoice_date, :amount, :outstanding, :paid_amount,
-                    :due_date, :status
-                )
+            canonical_document_type = "INVOICE"
+            update_result = db.execute(text("""
+                UPDATE financial.customer_outstanding
+                SET customer_id = :customer_id,
+                    document_number = :invoice_number,
+                    document_date = :invoice_date,
+                    original_amount = :amount,
+                    outstanding_amount = :outstanding,
+                    paid_amount = :paid_amount,
+                    due_date = :due_date,
+                    status = :status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE org_id = :org_id
+                  AND document_type = :document_type
+                  AND document_id = :invoice_id
             """), {
                 "org_id": org_id,
                 "customer_id": customer_id,
+                "document_type": canonical_document_type,
                 "invoice_id": invoice_id,
                 "invoice_number": invoice_number,
                 "invoice_date": doc_date,
@@ -1035,6 +1098,41 @@ class InvoiceService:
                 "paid_amount": paid_amount,
                 "due_date": payment_due,
                 "status": status
+            })
+
+            if update_result.rowcount == 0:
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount, paid_amount,
+                        due_date, status
+                    ) VALUES (
+                        :org_id, :customer_id, :document_type, :invoice_id, :invoice_number,
+                        :invoice_date, :amount, :outstanding, :paid_amount,
+                        :due_date, :status
+                    )
+                """), {
+                    "org_id": org_id,
+                    "customer_id": customer_id,
+                    "document_type": canonical_document_type,
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice_number,
+                    "invoice_date": doc_date,
+                    "amount": amount,
+                    "outstanding": outstanding,
+                    "paid_amount": paid_amount,
+                    "due_date": payment_due,
+                    "status": status
+                })
+
+            db.execute(text("""
+                DELETE FROM financial.customer_outstanding
+                WHERE org_id = :org_id
+                  AND document_type = 'invoice'
+                  AND document_id = :invoice_id
+            """), {
+                "org_id": org_id,
+                "invoice_id": invoice_id,
             })
 
             logger.info(f"✅ Created outstanding entry for invoice {invoice_number}, customer {customer_id}, amount ₹{amount}, outstanding ₹{outstanding}")

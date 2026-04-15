@@ -178,11 +178,7 @@ export const API_CONFIG: APIConfig = {
       // Purchase returns (to suppliers)
       PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
       PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
-      // Legacy aliases for backward compatibility
-      CUSTOMER_RETURNS: '/sale-returns/',  // Alias for SALES
-      SUPPLIER_RETURNS: '/purchase-returns/',  // Alias for PURCHASE
       REASONS: '/metadata/return-reasons/',  // Use metadata endpoint
-      RETURNABLE_ITEMS: '/sale-returns/returnable-invoices/',  // Redirect to correct endpoint
     },
 
     // Party Ledger

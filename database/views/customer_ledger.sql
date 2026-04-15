@@ -94,12 +94,12 @@ ORDER BY t.customer_id, t.transaction_date DESC, t.sort_order DESC, t.created_at
 CREATE INDEX IF NOT EXISTS idx_invoices_customer_date 
 ON sales.invoices(customer_id, invoice_date DESC);
 
-CREATE INDEX IF NOT EXISTS idx_financial_credit_notes_customer_date 
-ON financial.credit_notes(customer_id, credit_note_date DESC) 
+CREATE INDEX IF NOT EXISTS idx_financial_credit_notes_customer_date
+ON financial.credit_notes(customer_id, credit_note_date DESC)
 WHERE status = 'approved';
 
-CREATE INDEX IF NOT EXISTS idx_financial_debit_notes_customer_date 
-ON financial.debit_notes(customer_id, debit_note_date DESC) 
+CREATE INDEX IF NOT EXISTS idx_financial_debit_notes_customer_date
+ON financial.debit_notes(customer_id, debit_note_date DESC)
 WHERE status = 'approved';
 
 -- Grant permissions
