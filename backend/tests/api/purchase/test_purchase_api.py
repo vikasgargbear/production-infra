@@ -10,7 +10,7 @@ import requests
 from datetime import datetime, timedelta
 
 # Configuration
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://aaso-api-production.up.railway.app")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 HEADERS = {"X-Test-Mode": "true"}
 TIMEOUT = 15
 

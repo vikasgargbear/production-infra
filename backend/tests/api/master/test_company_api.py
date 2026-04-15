@@ -235,7 +235,7 @@ def test_create_bank_account() -> bool:
         "account_type": "savings",
         "bank_name": "Test Bank",
         "branch_name": "Test Branch",
-        "ifsc_code": "TEST0000001",
+        "ifsc_code": "SBIN0001234",
         "is_active": True
     }
     
