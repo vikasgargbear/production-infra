@@ -385,7 +385,9 @@ async def create_sale_return(
         # creditable_qty (excluding free items). Header must match sum of items.
         subtotal = round(sum(item["return_value"] for item in prepared_items), 2)
         tax_amount = round(sum(item["tax_amount"] for item in prepared_items), 2)
-        total_amount = round(subtotal + tax_amount, 2)
+        pre_round_total = subtotal + tax_amount
+        round_off_amount = round(round(pre_round_total) - pre_round_total, 2)
+        total_amount = round(pre_round_total)
         cgst_amount = round(sum(item["cgst_amount"] for item in prepared_items), 2)
         sgst_amount = round(sum(item["sgst_amount"] for item in prepared_items), 2)
         igst_amount = round(sum(item["igst_amount"] for item in prepared_items), 2)
@@ -395,6 +397,7 @@ async def create_sale_return(
             "subtotal": subtotal,
             "tax_amount": tax_amount,
             "total_amount": total_amount,
+            "round_off_amount": round_off_amount,
             "cgst_amount": cgst_amount,
             "sgst_amount": sgst_amount,
             "igst_amount": igst_amount,
@@ -407,13 +410,13 @@ async def create_sale_return(
             SET return_amount = :subtotal, tax_amount = :tax_amount,
                 total_amount = :total_amount, pending_amount = :total_amount,
                 cgst_amount = :cgst_amount, sgst_amount = :sgst_amount,
-                igst_amount = :igst_amount, return_quantity = :return_quantity
+                igst_amount = :igst_amount
             WHERE return_id = :return_id
         """), {
             "subtotal": subtotal, "tax_amount": tax_amount,
             "total_amount": total_amount, "cgst_amount": cgst_amount,
             "sgst_amount": sgst_amount, "igst_amount": igst_amount,
-            "return_quantity": total_return_quantity, "return_id": return_id
+            "return_id": return_id
         })
 
         # Step 2: Execute bulk operations (3 DB queries instead of ~48)

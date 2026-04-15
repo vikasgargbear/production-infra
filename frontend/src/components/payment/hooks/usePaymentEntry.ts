@@ -7,6 +7,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { paymentsApi, ledgerApi, customersApi } from '../../../services/api';
 import { toast } from 'react-toastify';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 // ============================================
 // Type Definitions
@@ -314,6 +315,17 @@ export function usePaymentEntry() {
             const response = await paymentsApi.create(payload as any);
 
             if (response.data) {
+                showFinancialEntryNotification({
+                    title: 'Payment Receipt Posted',
+                    reference: response.data.payment_reference || receiptNumber,
+                    amount: paymentAmount,
+                    status: 'confirmed',
+                    impacts: [
+                        'This money is now marked as received.',
+                        'The customer now owes less by this amount.',
+                        'If you linked invoices, this payment is used against those bills.'
+                    ]
+                });
                 toast.success('Payment recorded successfully!');
                 setCurrentStep('success');
                 return true;

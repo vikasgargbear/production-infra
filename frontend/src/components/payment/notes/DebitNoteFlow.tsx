@@ -5,6 +5,7 @@ import {
 import { CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
 import { notesApi, invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface DebitNoteFlowProps {
   onClose?: () => void;
@@ -246,12 +247,13 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
 
     setSaving(true);
     try {
+      const totals = calculateTotals();
       await notesApi.createCreditDebitNote({
         note_type: 'debit',
         party_id: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
         party_type: 'customer',
         note_date: noteData.note_date,
-        amount: calculateTotals().grandTotal,
+        amount: totals.grandTotal,
         reason: noteData.reason,
         reference_invoice_id: noteData.selected_invoice?.id,
         notes: noteData.customer_remarks,
@@ -262,13 +264,24 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           line_total: item.total_amount
         }))
       });
+      showFinancialEntryNotification({
+        title: 'Debit Note Posted',
+        reference: noteData.note_number,
+        amount: totals.grandTotal,
+        status: 'confirmed',
+        impacts: [
+          'This customer now has an extra charge in the system.',
+          'The customer will need to pay more by this amount.',
+          'This extra amount is now included in the customer account record.'
+        ]
+      });
 
       // Success feedback
       setError(null);
       if (onClose) onClose();
 
     } catch (error) {
-      alert(`Error saving debit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Error saving debit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }

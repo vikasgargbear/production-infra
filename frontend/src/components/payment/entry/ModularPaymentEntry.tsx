@@ -16,6 +16,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 // Import global components
 import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface PaymentEntryContentProps {
@@ -241,6 +242,17 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           if (payment.allocations && payment.allocations.length > 0) {
           }
 
+          showFinancialEntryNotification({
+            title: 'Payment Receipt Posted',
+            reference: paymentNumber || payment.receipt_no,
+            amount: paymentData.amount,
+            status: 'confirmed',
+            impacts: [
+              'This money is now marked as received.',
+              'The customer now owes less by this amount.',
+              'If you linked invoices, this payment is used against those bills.'
+            ]
+          });
           setMessage('Payment saved successfully!', 'success');
           setCurrentStep(3);
         } else {
@@ -253,6 +265,17 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
           const simulatedReceiptNo = `RCT-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
           setPaymentField('receipt_no', simulatedReceiptNo);
+          showFinancialEntryNotification({
+            title: 'Payment Receipt Queued',
+            reference: simulatedReceiptNo,
+            amount: paymentData.amount,
+            status: 'queued',
+            impacts: [
+              'The payment is saved on this device for now.',
+              'It will be sent to the main system when the connection works again.',
+              'The customer balance will change in the main system after that sync.'
+            ]
+          });
           setMessage('Payment recorded locally (backend pending)', 'info');
           setCurrentStep(3);
 

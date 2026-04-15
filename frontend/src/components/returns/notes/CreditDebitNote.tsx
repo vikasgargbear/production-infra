@@ -15,6 +15,7 @@ import {
 } from '../../global';
 import { notesApi } from '../../../services/api';
 import { invoicesApi } from '../../../services/api';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface CreditDebitNoteSimpleProps {
   noteType?: 'credit' | 'debit';
@@ -293,6 +294,17 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
       if (response.data?.success || response.data || response.status === 200) {
         toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
+        showFinancialEntryNotification({
+          title: `${isCredit ? 'Credit' : 'Debit'} Note Posted`,
+          reference: noteData.note_number,
+          amount: noteData.total_amount,
+          status: 'confirmed',
+          impacts: [
+            `${isCredit ? 'Credit' : 'Debit'} note is committed to the backend ledger.`,
+            'Party outstanding balances are adjusted against the selected document.',
+            'Tax-adjusted values are available for downstream reconciliation and reporting.'
+          ]
+        });
 
         // Reset form and close
         setTimeout(() => {

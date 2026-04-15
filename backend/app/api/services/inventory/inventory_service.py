@@ -150,29 +150,49 @@ class InventoryService:
             # Note: We do NOT commit here - caller controls transaction
 
             # Return created batch
-            return InventoryService.get_batch(db, batch_id)
+            return InventoryService.get_batch(db, batch_id, org_id)
 
         except Exception as e:
             logger.error(f"Error creating batch: {str(e)}")
             raise
     
     @staticmethod
-    def get_batch(db: Session, batch_id: int) -> BatchResponse:
+    def get_batch(db: Session, batch_id: int, org_id: Optional[str] = None) -> BatchResponse:
         """
         Get batch details with calculated fields.
         TenantAwareSession auto-filters by org_id.
         """
-        result = db.execute(text("""
-            SELECT b.*, p.product_name, p.product_code,
-                   b.initial_quantity as quantity_received,
-                   b.cost_per_unit as cost_price,
-                   b.mrp_per_unit as mrp,
-                   b.storage_location as location_code,
-                   b.initial_quantity - b.quantity_available - COALESCE(b.quantity_returned, 0) as quantity_sold
+        session = getattr(db, "session", db)
+        result = session.execute(text("""
+            SELECT
+                b.batch_id,
+                b.org_id,
+                b.product_id,
+                p.product_name,
+                p.product_code,
+                b.batch_number,
+                b.manufacturing_date,
+                b.expiry_date,
+                b.initial_quantity as quantity_received,
+                b.quantity_available,
+                COALESCE(b.quantity_reserved, 0) as quantity_reserved,
+                COALESCE(b.cost_per_unit, 0) as cost_price,
+                b.mrp_per_unit as mrp,
+                b.sale_price_per_unit as sale_price,
+                b.supplier_id,
+                NULL::TEXT as purchase_invoice_number,
+                NULL::INTEGER as grn_id,
+                sl.location_code as location_code,
+                NULL::TEXT as notes,
+                0 as quantity_sold,
+                b.created_at,
+                b.updated_at
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
+            LEFT JOIN inventory.storage_locations sl ON b.primary_location_id = sl.location_id
             WHERE b.batch_id = :batch_id
-        """), {"batch_id": batch_id})
+                AND (:org_id IS NULL OR b.org_id = :org_id)
+        """), {"batch_id": batch_id, "org_id": org_id})
         
         batch = result.fetchone()
         if not batch:
@@ -524,10 +544,13 @@ class InventoryService:
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.quantity_available > 0
+            WHERE b.org_id = :org_id
+                AND p.org_id = :org_id
+                AND b.quantity_available > 0
                 AND b.expiry_date <= :cutoff_date
             ORDER BY b.expiry_date, p.product_name
         """), {
+            "org_id": str(org_id),
             "cutoff_date": cutoff_date
         })
         
@@ -589,10 +612,12 @@ class InventoryService:
                 COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as value
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.quantity_available > 0
+            WHERE b.org_id = :org_id
+                AND p.org_id = :org_id
+                AND b.quantity_available > 0
             GROUP BY p.category_id
             ORDER BY value DESC
-        """))
+        """), {"org_id": str(org_id)})
         
         valuation["category_wise"] = [
             dict(row._mapping) for row in category_result
@@ -636,7 +661,8 @@ class InventoryService:
                 FROM inventory.batches
                 GROUP BY product_id
             ) sq ON p.product_id = sq.product_id
-        """)).fetchone()
+            WHERE p.org_id = :org_id
+        """), {"org_id": str(org_id)}).fetchone()
         
         # Today's activity (all movement types, not just sales)
         activity = db.execute(text("""
@@ -663,10 +689,11 @@ class InventoryService:
                 AND im.movement_type = 'sale'
                 AND im.movement_direction = 'out'
                 AND im.movement_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE p.org_id = :org_id
             GROUP BY p.product_id, p.product_code, p.product_name
             ORDER BY movement_quantity DESC
             LIMIT 10
-        """))
+        """), {"org_id": str(org_id)})
         
         # Get expiry alerts
         expiry_alerts = InventoryService.get_expiry_alerts(db, org_id, days_ahead=90)
@@ -948,10 +975,10 @@ class InventoryService:
             query += " AND (im.location_id = :location_id OR im.from_location_id = :location_id OR im.to_location_id = :location_id)"
             params["location_id"] = location_id
         if from_date:
-            query += " AND im.movement_date >= :from_date::date"
+            query += " AND im.movement_date >= CAST(:from_date AS date)"
             params["from_date"] = from_date
         if to_date:
-            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            query += " AND im.movement_date < CAST(:to_date AS date) + INTERVAL '1 day'"
             params["to_date"] = to_date
         
         sort_field = "im.movement_date" if sort == "movement_date" else "im.movement_id"
@@ -981,12 +1008,12 @@ class InventoryService:
             query += " AND im.batch_id = :batch_id"
             params["batch_id"] = batch_id
         if from_date:
-            query += " AND im.movement_date >= :from_date::date"
+            query += " AND im.movement_date >= CAST(:from_date AS date)"
             params["from_date"] = from_date
         else:
             query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
         if to_date:
-            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            query += " AND im.movement_date < CAST(:to_date AS date) + INTERVAL '1 day'"
             params["to_date"] = to_date
         
         return db.execute(text(query), params).scalar() or 0
@@ -1188,8 +1215,19 @@ class InventoryService:
         params = {}
         
         if category:
-            query += " AND p.category_id = :category"
-            params["category"] = category
+            category_value = str(category).strip()
+            if category_value.isdigit():
+                query += " AND p.category_id = :category_id"
+                params["category_id"] = int(category_value)
+            else:
+                query += """
+                    AND (
+                        c.category_name ILIKE :category_name
+                        OR p.product_class ILIKE :category_name
+                        OR p.product_type ILIKE :category_name
+                    )
+                """
+                params["category_name"] = f"%{category_value}%"
         if low_stock_only:
             query += " AND COALESCE(b.total_quantity, 0) <= COALESCE(p.reorder_level, 0) AND p.reorder_level IS NOT NULL AND p.reorder_level > 0"
         

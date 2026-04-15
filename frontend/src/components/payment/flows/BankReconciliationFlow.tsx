@@ -3,6 +3,7 @@ import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from '
 import { ModuleHeader } from '../../global';
 import { paymentsApi, ledgerApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface BankReconciliationFlowProps {
@@ -144,6 +145,20 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
       });
 
       if (response?.data?.success) {
+        const bankAccount = bankAccounts.find((account) => account.code === selectedBank);
+        showFinancialEntryNotification({
+          title: 'Bank Reconciliation Saved',
+          reference: selectedBank,
+          amount: bankStatementBalance,
+          status: 'confirmed',
+          impacts: [
+            `${bankAccount?.name || 'This bank account'} is now checked against your books.`,
+            difference === 0
+              ? 'Your bank balance and system balance now match.'
+              : `There is still a difference of ₹${Math.abs(difference).toFixed(2)} to review.`,
+            'This helps you trust that bank money and system money are in sync.'
+          ]
+        });
         // Refresh data after successful reconciliation
         await loadReconciliationData();
         setError(null);

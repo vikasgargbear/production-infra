@@ -339,7 +339,8 @@ class ReturnService:
             "cgst_amount": round(cgst_amount, 2),
             "sgst_amount": round(sgst_amount, 2),
             "igst_amount": round(igst_amount, 2),
-            "total_amount": round(total_amount, 2),
+            "round_off_amount": round(round(total_amount) - total_amount, 2),
+            "total_amount": round(total_amount),
             "total_return_quantity": round(total_return_quantity, 2)
         }
     
@@ -1269,6 +1270,7 @@ class ReturnService:
         location_id = resolve_location_id(db, org_id, branch_id)
 
         values_list = []
+        location_updates = []
         params = {
             "org_id": org_id,
             "movement_date": date.today(),
@@ -1307,6 +1309,14 @@ class ReturnService:
             params[f"quantity_{idx}"] = item["return_quantity"]  # already rounded to 2 decimals
             params[f"reason_{idx}"] = item.get("item_return_reason", "Customer Return")
             params[f"notes_{idx}"] = f"Return #{return_number}"
+            if saleable_qty > 0:
+                location_updates.append({
+                    "org_id": org_id,
+                    "product_id": item["product_id"],
+                    "batch_id": item.get("batch_id"),
+                    "quantity": item["return_quantity"],
+                    "location_id": location_id,
+                })
         
         if not values_list:
             return
@@ -1321,4 +1331,9 @@ class ReturnService:
         
         db.execute(text(sql), params)
         logger.info(f"Bulk recorded {len(values_list)} stock movements for return_id={return_id}")
-
+        if location_updates:
+            InventoryService.bulk_update_location_wise_stock(
+                db,
+                location_updates,
+                direction="in",
+            )

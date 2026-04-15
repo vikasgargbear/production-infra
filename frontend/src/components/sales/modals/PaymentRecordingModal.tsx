@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, DollarSign, Calendar, CreditCard, Banknote, Smartphone, FileText } from 'lucide-react';
 import { invoicesApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface Invoice {
   invoice_id: number;
@@ -103,6 +104,17 @@ const PaymentRecordingModal: React.FC<PaymentRecordingModalProps> = ({
       };
       
       const response = await invoicesApi.recordPayment(invoice.invoice_id, paymentData);
+      showFinancialEntryNotification({
+        title: 'Invoice Payment Posted',
+        reference: response.data?.payment_reference || payment.transaction_id || invoice.invoice_number,
+        amount: paymentData.amount,
+        status: 'confirmed',
+        impacts: [
+          'This money is now added against the selected bill.',
+          'The customer now owes less on that invoice.',
+          'Your payment history is updated so staff can see this bill was paid.'
+        ]
+      });
       
       if (onPaymentRecorded) {
         onPaymentRecorded(response.data);

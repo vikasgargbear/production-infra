@@ -6,6 +6,7 @@ import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../.
 import { notesApi } from '../../../services/api';
 import CreditNoteFormPageCompact from './CreditNoteFormPageCompact';
 import CreditNoteReviewPage from './CreditNoteReviewPage';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface CreditNoteFlowProps {
   onClose?: () => void;
@@ -359,6 +360,19 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       };
 
       await notesApi.createCreditDebitNote(payload);
+      showFinancialEntryNotification({
+        title: 'Credit Note Posted',
+        reference: noteData.note_number,
+        amount: payload.amount,
+        status: 'confirmed',
+        impacts: [
+          'This customer now gets a credit in their account.',
+          'The customer will need to pay less, or you can adjust this in a future bill.',
+          includeGST
+            ? 'Tax values are also adjusted with this credit note.'
+            : 'This note changes the amount without changing tax.'
+        ]
+      });
 
       // Success feedback
       if (onClose) onClose();

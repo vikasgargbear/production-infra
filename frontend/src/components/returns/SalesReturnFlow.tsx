@@ -36,6 +36,7 @@ import type { Customer, Invoice } from '../../types/api.types';
 
 // Import offline-first helpers
 import { saveReturnOffline, type OfflineSalesReturnData } from './utils/offlineReturnSaveHelpers';
+import { showFinancialEntryNotification } from '../../utils/financialEntryNotifier';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -596,12 +597,35 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
       });
       setShowSuccessModal(true);
+      showFinancialEntryNotification({
+        title: 'Sales Return Saved Locally',
+        reference: offlineResult.credit_note_number || offlineResult.return_number,
+        amount: returnData.total_amount || 0,
+        status: 'queued',
+        impacts: [
+          'The return is stored locally and queued for backend posting.',
+          'Returned stock is updated on this device immediately.',
+          'Customer credit and GST reversal will confirm after sync succeeds.'
+        ]
+      });
 
       // STEP 3: Sync to server in background (non-blocking)
       returnsApi.createSaleReturn(returnData)
         .then(response => {
           if (response.data) {
             console.log('[SalesReturnFlow] ✅ Return synced to server:', response.data.return_no);
+            showFinancialEntryNotification({
+              title: 'Sales Return Posted',
+              reference: response.data.credit_note_no || response.data.return_no || offlineResult.credit_note_number || offlineResult.return_number,
+              amount: response.data.total_amount || returnData.total_amount || 0,
+              status: 'confirmed',
+              impacts: [
+                'The sales return is committed to the backend.',
+                'Inventory and batch balances are adjusted for the returned quantities.',
+                'Customer credit or outstanding balances are updated.',
+                'Sales GST reversal values are available for compliance reporting.'
+              ]
+            });
             // TODO: Update local record with server IDs
           }
         })
@@ -629,6 +653,18 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
           });
           setShowSuccessModal(true);
+          showFinancialEntryNotification({
+            title: 'Sales Return Posted',
+            reference: credit_note_no || return_no || returnData.return_no,
+            amount: response.data.total_amount || returnData.total_amount || 0,
+            status: 'confirmed',
+            impacts: [
+              'The sales return is committed to the backend.',
+              'Inventory and batch balances are adjusted for the returned quantities.',
+              'Customer credit or outstanding balances are updated.',
+              'Sales GST reversal values are available for compliance reporting.'
+            ]
+          });
         }
       } catch (serverError: any) {
         const errorMessage = Array.isArray(serverError.message)

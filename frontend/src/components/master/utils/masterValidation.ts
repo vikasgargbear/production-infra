@@ -5,13 +5,13 @@
  * Use Zod schemas for comprehensive validation with detailed error messages.
  */
 
+import type { BaseCustomer, BaseSupplier, BaseProduct } from '../types/masterSharedTypes';
+
 // Re-export all Zod schemas for master entities
 export * from '../schemas';
 
 // ==================== SIMPLE VALIDATION HELPERS ====================
 // These are quick helpers for common checks. For comprehensive validation, use Zod schemas.
-
-import type { BaseCustomer, BaseSupplier, BaseProduct } from '../types/masterSharedTypes';
 
 // Regex patterns (shared with Zod schemas)
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;

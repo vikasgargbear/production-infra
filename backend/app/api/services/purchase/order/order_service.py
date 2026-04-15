@@ -4,6 +4,7 @@ Business logic for purchase orders
 Uses PurchaseOrderRepository for data access
 """
 from typing import Optional, Dict, Any, List
+from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
@@ -27,6 +28,102 @@ class PurchaseOrderService:
     def generate_po_number(db: Session, org_id: str) -> str:
         """Generate PO number using DocumentNumberService."""
         return DocumentNumberService.generate_number(db, "purchase_order", org_id)
+
+    @staticmethod
+    def _sync_supplier_outstanding_for_invoice(
+        db: Session,
+        *,
+        org_id: str,
+        supplier_id: Optional[int],
+        supplier_invoice_id: int,
+        supplier_invoice_number: str,
+        invoice_date,
+        due_date,
+        invoice_total,
+        paid_amount=None,
+        invoice_status: Optional[str] = None,
+    ) -> None:
+        """
+        Ensure supplier invoices create exactly one positive payable row.
+
+        The legacy DB trigger only inserts this row when invoice_status moves to
+        ``approved`` on update, but the app creates supplier invoices directly on
+        insert for purchase-entry flows. That leaves supplier ledgers missing the
+        payable unless the invoice later transitions through that specific state.
+        """
+        if not supplier_id or not supplier_invoice_id:
+            return
+
+        normalized_status = (invoice_status or "").lower()
+        if normalized_status in {"draft", "cancelled"}:
+            return
+
+        total_amount = Decimal(str(invoice_total or 0))
+        paid_amount_decimal = Decimal(str(paid_amount or 0))
+        outstanding_amount = total_amount - paid_amount_decimal
+
+        if outstanding_amount <= 0:
+            row_status = "paid"
+            outstanding_amount = Decimal("0")
+        elif paid_amount_decimal > 0:
+            row_status = "partial"
+        else:
+            row_status = "open"
+
+        existing_row = db.execute(text("""
+            SELECT outstanding_id
+            FROM financial.supplier_outstanding
+            WHERE document_type = 'invoice'
+              AND document_id = :supplier_invoice_id
+            ORDER BY outstanding_id DESC
+            LIMIT 1
+        """), {
+            "supplier_invoice_id": supplier_invoice_id,
+        }).fetchone()
+
+        params = {
+            "org_id": org_id,
+            "supplier_id": supplier_id,
+            "supplier_invoice_id": supplier_invoice_id,
+            "supplier_invoice_number": supplier_invoice_number,
+            "invoice_date": invoice_date,
+            "due_date": due_date or invoice_date,
+            "original_amount": total_amount,
+            "outstanding_amount": outstanding_amount,
+            "paid_amount": paid_amount_decimal,
+            "status": row_status,
+        }
+
+        if existing_row:
+            db.execute(text("""
+                UPDATE financial.supplier_outstanding
+                SET supplier_id = :supplier_id,
+                    document_number = :supplier_invoice_number,
+                    document_date = :invoice_date,
+                    original_amount = :original_amount,
+                    outstanding_amount = :outstanding_amount,
+                    paid_amount = :paid_amount,
+                    due_date = :due_date,
+                    status = :status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE outstanding_id = :outstanding_id
+            """), {
+                **params,
+                "outstanding_id": existing_row.outstanding_id,
+            })
+            return
+
+        db.execute(text("""
+            INSERT INTO financial.supplier_outstanding (
+                org_id, supplier_id, document_type, document_id, document_number,
+                document_date, original_amount, outstanding_amount, paid_amount,
+                due_date, status
+            ) VALUES (
+                :org_id, :supplier_id, 'invoice', :supplier_invoice_id, :supplier_invoice_number,
+                :invoice_date, :original_amount, :outstanding_amount, :paid_amount,
+                :due_date, :status
+            )
+        """), params)
     
     @staticmethod
     def create_purchase_order(
@@ -393,8 +490,22 @@ class PurchaseOrderService:
             "invoice_status": invoice_data.get("invoice_status", "draft"),
             "created_by": created_by
         })
-        
-        return result.scalar()
+        invoice_id = result.scalar()
+
+        PurchaseOrderService._sync_supplier_outstanding_for_invoice(
+            db,
+            org_id=org_id,
+            supplier_id=invoice_data.get("supplier_id"),
+            supplier_invoice_id=invoice_id,
+            supplier_invoice_number=invoice_data.get("invoice_number"),
+            invoice_date=invoice_data.get("invoice_date"),
+            due_date=invoice_data.get("due_date"),
+            invoice_total=invoice_data.get("total", 0),
+            paid_amount=invoice_data.get("paid_amount", 0),
+            invoice_status=invoice_data.get("invoice_status"),
+        )
+
+        return invoice_id
     
     @staticmethod
     def get_or_create_product(
@@ -525,4 +636,3 @@ class PurchaseOrderService:
         """), {"purchase_id": purchase_id})
         
         return result.scalar() or 0
-

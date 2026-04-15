@@ -10,6 +10,7 @@ import { useDocumentSave } from '../../global/hooks/useDocumentSave';
 import { returnsApi } from '../../../services/api';
 import { DOC_TYPES } from '../../../services/offline/documents/documentNumberGenerator';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 export interface UseSalesReturnSaveProps {
     returnData: any;
@@ -62,6 +63,35 @@ export function useSalesReturnSave(props: UseSalesReturnSaveProps): UseSalesRetu
         onSuccess: () => {
             toast.success('Sales return saved successfully');
             setTimeout(() => onClose(), 2500);
+        },
+
+        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Sales Return Posted',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'confirmed',
+                impacts: [
+                    'The sales return is committed to the backend.',
+                    'Inventory and batch balances are adjusted for the returned quantities.',
+                    'Customer credit or outstanding balances are updated.',
+                    'Sales GST reversal values are available for compliance reporting.'
+                ]
+            });
+        },
+
+        onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Sales Return Saved Locally',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'queued',
+                impacts: [
+                    'The sales return is queued for backend posting.',
+                    'Returned stock is updated on this device immediately.',
+                    'Customer credit and GST reversal will confirm after sync succeeds.'
+                ]
+            });
         },
     });
 

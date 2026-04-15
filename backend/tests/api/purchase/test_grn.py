@@ -31,7 +31,7 @@ class TestGRNAPI:
     def grn_api(self, api_client, api_base_url):
         """GRN API test helper"""
         api = PurchaseTestBase(api_client, api_base_url)
-        api.BASE_PATH = "/api/purchase/grn"
+        api.BASE_PATH = "/api/grn"
         return api
     
     @pytest.fixture
