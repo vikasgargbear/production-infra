@@ -65,6 +65,7 @@ async def generate_sales_return_number(
         org_id = str(context.org_id)
         # Use unified document number service
         new_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
+        db.commit()
         return {"return_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate sales return number: {e}")

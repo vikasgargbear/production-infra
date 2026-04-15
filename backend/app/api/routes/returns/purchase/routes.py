@@ -99,9 +99,10 @@ async def get_returnable_items(
 ):
     """Get supplier invoice items with accurate returnable quantities"""
     try:
-        items = PurchaseReturnService.get_returnable_items_from_invoice(db, invoice_id)
+        org_id = str(context.org_id)
+        items = PurchaseReturnService.get_returnable_items_from_invoice(db, invoice_id, org_id)
         if not items:
-            items = PurchaseReturnService.get_returnable_items_from_grn(db, invoice_id)
+            items = PurchaseReturnService.get_returnable_items_from_grn(db, invoice_id, org_id)
         
         result = []
         for item in items:
@@ -155,7 +156,7 @@ async def create_purchase_return(
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
 
-        supplier = PurchaseReturnService.get_supplier(db, return_dict["supplier_id"])
+        supplier = PurchaseReturnService.get_supplier(db, return_dict["supplier_id"], org_id)
 
         # Determine GST type (intra-state vs inter-state) instead of hardcoding
         gst_type = GSTService.determine_gst_type(db, context.org_id, supplier_id=return_dict["supplier_id"])

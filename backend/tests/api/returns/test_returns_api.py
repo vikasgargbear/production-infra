@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 from typing import Optional, Dict, Any
 
@@ -131,11 +132,16 @@ def test_list_sales_returns(limit: int = 10) -> bool:
         return False
 
 
-def test_sales_return_detail(return_id: int) -> bool:
+def test_sales_return_detail(return_id: Optional[int] = None) -> bool:
     """
     Test GET /sale-returns/{return_id}
     Returns detailed sales return
     """
+    if return_id is None:
+        return_id = get_any_sales_return_id()
+    if return_id is None:
+        pytest.skip("No sales return available for detail test")
+
     print_info(f"Testing sales return detail for ID {return_id}...")
     
     success, data = make_request(
@@ -220,11 +226,16 @@ def test_list_purchase_returns(limit: int = 10) -> bool:
         return False
 
 
-def test_purchase_return_detail(return_id: int) -> bool:
+def test_purchase_return_detail(return_id: Optional[int] = None) -> bool:
     """
     Test GET /purchase-returns/{return_id}
     Returns detailed purchase return
     """
+    if return_id is None:
+        return_id = get_any_purchase_return_id()
+    if return_id is None:
+        pytest.skip("No purchase return available for detail test")
+
     print_info(f"Testing purchase return detail for ID {return_id}...")
     
     success, data = make_request(

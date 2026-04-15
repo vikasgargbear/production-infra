@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 import random
 import string
@@ -156,8 +157,29 @@ def test_list_products():
         return False
 
 
-def test_get_product(product_id):
+def get_any_product_id():
+    """Get any product ID for standalone pytest execution."""
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/products/?limit=1", headers=headers, timeout=30)
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        products = result if isinstance(result, list) else result.get("products") or result.get("data", [])
+        if products:
+            return products[0].get("product_id") or products[0].get("id")
+    except requests.RequestException:
+        return None
+    return None
+
+
+def test_get_product(product_id=None):
     """Test getting product details"""
+    if product_id is None:
+        product_id = get_any_product_id()
+    if product_id is None:
+        pytest.skip("No product available for product detail test")
+
     print("\n" + "=" * 70)
     print("TEST 2: GET PRODUCT DETAILS")
     print("=" * 70)
@@ -194,8 +216,13 @@ def test_get_product(product_id):
         return None
 
 
-def test_get_product_batches(product_id):
+def test_get_product_batches(product_id=None):
     """Test getting batches for a product"""
+    if product_id is None:
+        product_id = get_any_product_id()
+    if product_id is None:
+        pytest.skip("No product available for product batch test")
+
     print("\n" + "=" * 70)
     print("TEST 3: GET PRODUCT BATCHES")
     print("=" * 70)

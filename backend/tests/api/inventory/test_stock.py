@@ -28,22 +28,22 @@ class TestInventoryStockAPI:
     def inventory_api(self, api_client, api_base_url):
         """Inventory API test helper"""
         api = InventoryTestBase(api_client, api_base_url)
-        api.BASE_PATH = "/api/inventory/stock"
+        api.BASE_PATH = "/api/inventory"
         return api
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/overview
+    # ENDPOINT: GET /api/inventory/
     # =========================================================================
     
     def test_inventory_overview(self, inventory_api):
         """Test inventory overview endpoint"""
-        response = inventory_api.get("/overview")
+        response = inventory_api.get("/")
         
         # Should return summary stats
         assert isinstance(response, dict)
     
     # =========================================================================
-    # ENDPOINT: POST /api/inventory/stock/batches
+    # ENDPOINT: POST /api/inventory/batches
     # =========================================================================
     
     def test_create_batch(self, inventory_api):
@@ -94,7 +94,7 @@ class TestInventoryStockAPI:
         assert "expiry_date" not in batch_payload
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/batches/{batch_id}
+    # ENDPOINT: GET /api/inventory/batches/{batch_id}
     # =========================================================================
     
     def test_get_batch_not_found(self, inventory_api):
@@ -102,7 +102,7 @@ class TestInventoryStockAPI:
         inventory_api.get("/batches/999999", expected_status=404)
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/batches
+    # ENDPOINT: GET /api/inventory/batches
     # =========================================================================
     
     def test_list_batches(self, inventory_api):
@@ -148,7 +148,15 @@ class TestInventoryStockAPI:
     
     def test_get_current_stock(self, inventory_api):
         """Test getting current stock for product"""
-        response = inventory_api.get("/current/1")
+        stock_list = inventory_api.get("/stock/current")
+        stock_items = stock_list if isinstance(stock_list, list) else stock_list.get("data", [])
+        if not stock_items:
+            pytest.skip("No current stock available in test org")
+
+        product_id = stock_items[0].get("product_id")
+        assert product_id is not None, "Current stock item is missing product_id"
+
+        response = inventory_api.get(f"/stock/current/{product_id}")
         
         assert isinstance(response, dict)
     
@@ -158,13 +166,13 @@ class TestInventoryStockAPI:
     
     def test_list_current_stock(self, inventory_api):
         """Test listing current stock levels"""
-        response = inventory_api.get("/current")
+        response = inventory_api.get("/stock/current")
         
         assert isinstance(response, (dict, list))
     
     def test_list_current_stock_low_only(self, inventory_api):
         """Test listing only low stock items"""
-        response = inventory_api.get("/current", params={
+        response = inventory_api.get("/stock/current", params={
             "low_stock_only": True
         })
         
@@ -172,14 +180,14 @@ class TestInventoryStockAPI:
     
     def test_list_current_stock_by_category(self, inventory_api):
         """Test listing stock by category"""
-        response = inventory_api.get("/current", params={
+        response = inventory_api.get("/stock/current", params={
             "category": "tablets"
         })
         
         assert isinstance(response, (dict, list))
     
     # =========================================================================
-    # ENDPOINT: POST /api/inventory/stock/movements
+    # ENDPOINT: POST /api/inventory/movements
     # =========================================================================
     
     def test_record_stock_movement(self, inventory_api):
@@ -226,7 +234,7 @@ class TestInventoryStockAPI:
             assert direction in directions
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/movements
+    # ENDPOINT: GET /api/inventory/movements
     # =========================================================================
     
     def test_list_stock_movements(self, inventory_api):
@@ -261,7 +269,7 @@ class TestInventoryStockAPI:
         assert isinstance(response, (dict, list))
     
     # =========================================================================
-    # ENDPOINT: POST /api/inventory/stock/adjust
+    # ENDPOINT: POST /api/inventory/stock/adjustment
     # =========================================================================
     
     def test_adjust_stock(self, inventory_api):
@@ -280,18 +288,18 @@ class TestInventoryStockAPI:
             assert field in adjustment_payload
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/expiry-alerts
+    # ENDPOINT: GET /api/inventory/expiry/alerts
     # =========================================================================
     
     def test_get_expiry_alerts(self, inventory_api):
         """Test expiry alerts endpoint"""
-        response = inventory_api.get("/expiry-alerts")
+        response = inventory_api.get("/expiry/alerts")
         
         assert isinstance(response, (dict, list))
     
     def test_expiry_alerts_with_days(self, inventory_api):
         """Test expiry alerts with custom days"""
-        response = inventory_api.get("/expiry-alerts", params={
+        response = inventory_api.get("/expiry/alerts", params={
             "days_ahead": 180
         })
         
@@ -299,14 +307,14 @@ class TestInventoryStockAPI:
     
     def test_expiry_alerts_by_level(self, inventory_api):
         """Test expiry alerts filtered by level"""
-        response = inventory_api.get("/expiry-alerts", params={
+        response = inventory_api.get("/expiry/alerts", params={
             "alert_level": "critical"
         })
         
         assert isinstance(response, (dict, list))
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/valuation
+    # ENDPOINT: GET /api/inventory/valuation
     # =========================================================================
     
     def test_get_stock_valuation(self, inventory_api):
@@ -324,7 +332,7 @@ class TestInventoryStockAPI:
         assert isinstance(response, dict)
     
     # =========================================================================
-    # ENDPOINT: GET /api/inventory/stock/dashboard
+    # ENDPOINT: GET /api/inventory/dashboard
     # =========================================================================
     
     def test_inventory_dashboard(self, inventory_api):

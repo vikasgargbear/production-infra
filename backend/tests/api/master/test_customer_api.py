@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 import random
 import string
@@ -174,8 +175,29 @@ def test_create_customer():
         return None
 
 
-def test_create_address(customer_id):
+def get_any_customer_id():
+    """Get any customer ID for standalone pytest execution."""
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/customers/?limit=1", headers=headers, timeout=30)
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        customers = result if isinstance(result, list) else result.get("data", [])
+        if customers:
+            return customers[0].get("customer_id") or customers[0].get("id")
+    except requests.RequestException:
+        return None
+    return None
+
+
+def test_create_address(customer_id=None):
     """Test address creation for existing customer"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for address creation test")
+
     print("\n" + "=" * 70)
     print("TEST 2: CREATE CUSTOMER ADDRESS")
     print("=" * 70)
@@ -219,8 +241,13 @@ def test_create_address(customer_id):
         return None
 
 
-def test_list_addresses(customer_id):
+def test_list_addresses(customer_id=None):
     """Test listing addresses for a customer"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for address listing test")
+
     print("\n" + "=" * 70)
     print("TEST 3: LIST CUSTOMER ADDRESSES")
     print("=" * 70)
@@ -262,8 +289,13 @@ def test_list_addresses(customer_id):
         return False
 
 
-def test_get_customer(customer_id):
+def test_get_customer(customer_id=None):
     """Test getting customer details with addresses"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for customer detail test")
+
     print("\n" + "=" * 70)
     print("TEST 4: GET CUSTOMER DETAILS")
     print("=" * 70)

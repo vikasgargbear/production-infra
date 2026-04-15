@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 from typing import Optional, Dict, Any
 
@@ -139,11 +140,16 @@ def test_collection_aging_data() -> bool:
         return False
 
 
-def test_collection_customer_outstanding(customer_id: int) -> bool:
+def test_collection_customer_outstanding(customer_id: Optional[int] = None) -> bool:
     """
     Test GET /collection-center/collection/customer/{customer_id}/outstanding
     Returns detailed outstanding for a specific customer
     """
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for collection outstanding test")
+
     print_info(f"Testing customer outstanding for ID {customer_id}...")
     
     success, data = make_request("GET", f"/collection-center/collection/customer/{customer_id}/outstanding")

@@ -8,6 +8,7 @@ NOTE: Backend must have TEST_MODE=true env var set to bypass auth.
 import os
 import sys
 import requests
+import pytest
 from typing import Optional, Dict, Any
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -107,8 +108,13 @@ def test_sales_outstanding() -> bool:
         return False
 
 
-def test_customer_outstanding(customer_id: int) -> bool:
+def test_customer_outstanding(customer_id: Optional[int] = None) -> bool:
     """Test GET /sales/outstanding for specific customer"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for outstanding test")
+
     print_info(f"Testing sales outstanding for customer {customer_id}...")
     
     success, data = make_request("GET", "/sales/outstanding", params={"customer_id": customer_id})

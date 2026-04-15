@@ -14,6 +14,7 @@ from sqlalchemy.sql import Select
 from uuid import UUID
 import logging
 import re
+import inspect
 from functools import wraps
 from fastapi import Depends
 import contextvars
@@ -648,14 +649,19 @@ def with_tenant_context(func):
                 branch_ids=getattr(context, 'branch_ids', [])
             )
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                if inspect.isawaitable(result):
+                    result = await result
                 return result
             finally:
                 TenantContext.clear_context()
         else:
             # No context found - execute without tenant filtering (risky!)
             logger.warning("No tenant context found in function arguments")
-            return await func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+            return result
     
     return wrapper
 

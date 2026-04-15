@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 from typing import Optional, Dict, Any
 
@@ -98,11 +99,16 @@ def make_request(
         return False, None
 
 
-def test_ledger_balance(party_id: int, party_type: str = "customer") -> bool:
+def test_ledger_balance(party_id: Optional[int] = None, party_type: str = "customer") -> bool:
     """
     Test GET /ledger/balance/{party_id}
     Returns party balance summary
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger balance test")
+
     print_info(f"Testing ledger balance for {party_type} ID {party_id}...")
     
     success, data = make_request(
@@ -131,7 +137,7 @@ def test_ledger_balance(party_id: int, party_type: str = "customer") -> bool:
 
 
 def test_ledger_statement(
-    party_id: int, 
+    party_id: Optional[int] = None,
     party_type: str = "customer",
     date_from: Optional[str] = None,
     date_to: Optional[str] = None
@@ -140,6 +146,11 @@ def test_ledger_statement(
     Test GET /ledger/statement/{party_id}
     Returns party ledger statement with transactions
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger statement test")
+
     print_info(f"Testing ledger statement for {party_type} ID {party_id}...")
     
     params = {"party_type": party_type}
@@ -185,11 +196,16 @@ def test_ledger_statement(
         return False
 
 
-def test_ledger_outstanding(party_id: int, party_type: str = "customer") -> bool:
+def test_ledger_outstanding(party_id: Optional[int] = None, party_type: str = "customer") -> bool:
     """
     Test GET /ledger/outstanding/{party_id}
     Returns outstanding bills for a party
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger outstanding test")
+
     print_info(f"Testing outstanding bills for {party_type} ID {party_id}...")
     
     success, data = make_request(

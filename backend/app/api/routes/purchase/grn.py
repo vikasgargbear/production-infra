@@ -33,6 +33,7 @@ def generate_grn_number(
     try:
         # Use unified document number service
         new_number = DocumentNumberService.generate_number(db, "grn", str(context.org_id))
+        db.commit()
         return {"grn_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate GRN number: {e}")
@@ -54,6 +55,10 @@ async def create_grn(
     try:
         # Import service here to avoid circular imports
         from ...services.purchase import GRNService
+
+        items = grn_data.get("items") or []
+        if not items:
+            raise HTTPException(status_code=400, detail="At least one GRN item is required")
         
         # Get context values
         org_id = str(context.org_id)
@@ -84,6 +89,9 @@ async def create_grn(
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to create GRN: {e}")
@@ -91,6 +99,7 @@ async def create_grn(
 
 
 @router.get("")
+@with_tenant_context
 def get_grns(
     skip: int = Query(0, description="Number of records to skip"),
     limit: int = Query(50, description="Number of records to return"),
@@ -190,6 +199,7 @@ def get_grns(
         raise HTTPException(status_code=500, detail=f"Failed to fetch GRNs: {str(e)}")
 
 @router.get("/{grn_id}")
+@with_tenant_context
 def get_grn_details(
     grn_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -250,6 +260,7 @@ def get_grn_details(
         raise HTTPException(status_code=500, detail=f"Failed to fetch GRN details: {str(e)}")
 
 @router.put("/{grn_id}")
+@with_tenant_context
 def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
@@ -296,6 +307,7 @@ def update_grn(
         raise HTTPException(status_code=500, detail=f"Failed to update GRN: {str(e)}")
 
 @router.post("/{grn_id}/approve")
+@with_tenant_context
 def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],

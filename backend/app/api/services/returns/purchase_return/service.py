@@ -15,7 +15,7 @@ class PurchaseReturnService:
     """Service class for Purchase Return operations"""
     
     @staticmethod
-    def get_returnable_items_from_invoice(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
+    def get_returnable_items_from_invoice(db: Session, invoice_id: int, org_id: str) -> List[Dict[str, Any]]:
         """Get returnable items from supplier invoice."""
         result = db.execute(text("""
             SELECT sii.invoice_item_id, sii.product_id, p.product_name, sii.batch_id, sii.batch_number,
@@ -25,16 +25,16 @@ class PurchaseReturnService:
                    COALESCE(sii.cgst_percent, 0) + COALESCE(sii.sgst_percent, 0) + COALESCE(sii.igst_percent, 0) as tax_percent,
                    sii.total_amount, p.hsn_code, sii.unit, b.expiry_date, b.manufacturing_date
             FROM procurement.supplier_invoice_items sii
-            JOIN inventory.products p ON sii.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id
+            JOIN inventory.products p ON sii.product_id = p.product_id AND p.org_id = :org_id
+            LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id AND b.org_id = p.org_id
             WHERE sii.supplier_invoice_id = :invoice_id
             AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
             ORDER BY sii.invoice_item_id
-        """), {"invoice_id": invoice_id})
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
-    
+
     @staticmethod
-    def get_returnable_items_from_grn(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
+    def get_returnable_items_from_grn(db: Session, invoice_id: int, org_id: str) -> List[Dict[str, Any]]:
         """Get returnable items from GRN linked to invoice."""
         result = db.execute(text("""
             SELECT gi.grn_item_id as invoice_item_id, gi.product_id, p.product_name,
@@ -48,20 +48,20 @@ class PurchaseReturnService:
             FROM procurement.supplier_invoices si
             JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
             JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
-            JOIN inventory.products p ON gi.product_id = p.product_id
+            JOIN inventory.products p ON gi.product_id = p.product_id AND p.org_id = :org_id
             WHERE si.supplier_invoice_id = :invoice_id
             AND gi.received_quantity - COALESCE(gi.quantity_returned, 0) > 0
             ORDER BY gi.grn_item_id
-        """), {"invoice_id": invoice_id})
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
-    
+
     @staticmethod
-    def get_supplier(db: Session, supplier_id: int) -> Optional[Dict[str, Any]]:
+    def get_supplier(db: Session, supplier_id: int, org_id: str) -> Optional[Dict[str, Any]]:
         """Get supplier details."""
         result = db.execute(text("""
             SELECT supplier_id, supplier_name, gst_number
-            FROM parties.suppliers WHERE supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id})
+            FROM parties.suppliers WHERE supplier_id = :supplier_id AND org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
