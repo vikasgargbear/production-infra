@@ -499,3 +499,26 @@ async def get_aging_report(
     except Exception as e:
         logger.error(f"Error generating aging report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate aging report: {str(e)}")
+
+
+# NOTE: /{payment_id} MUST be the last GET route to avoid shadowing
+# static paths like /outstanding, /generate-receipt-number, /aging-report.
+@router.get("/{payment_id}")
+@with_tenant_context
+async def get_payment_by_id(
+    payment_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get single payment by ID"""
+    try:
+        payment = PaymentService.get_payment_by_id(db, payment_id, str(context.org_id))
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        return payment
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting payment {payment_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get payment")

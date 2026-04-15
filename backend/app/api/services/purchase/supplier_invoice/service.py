@@ -53,7 +53,7 @@ class SupplierInvoiceService:
             SELECT si.supplier_invoice_id, si.supplier_invoice_number, si.invoice_date, si.supplier_id,
                    s.supplier_name, s.gst_number as supplier_gst, si.invoice_total as invoice_amount,
                    si.grn_ids,
-                   COALESCE((SELECT COUNT(*) FROM procurement.supplier_invoice_items WHERE supplier_invoice_id = si.supplier_invoice_id),
+                   COALESCE((SELECT COUNT(*) FROM procurement.supplier_invoice_items sii WHERE sii.supplier_invoice_id = si.supplier_invoice_id),
                             (SELECT COUNT(*) FROM procurement.grn_items gi JOIN procurement.goods_receipt_notes grn ON gi.grn_id = grn.grn_id WHERE grn.grn_id = ANY(si.grn_ids))) as total_items,
                    EXISTS (SELECT 1 FROM procurement.purchase_returns pr WHERE pr.supplier_invoice_id = si.supplier_invoice_id) as has_returns,
                    true as can_return
