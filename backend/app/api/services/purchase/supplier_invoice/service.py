@@ -45,7 +45,7 @@ class SupplierInvoiceService:
     
     @staticmethod
     def list_returnable_invoices(
-        db: Session, supplier_id: int = None, from_date: str = None, to_date: str = None,
+        db: Session, org_id: str, supplier_id: int = None, from_date: str = None, to_date: str = None,
         limit: int = 50, skip: int = 0
     ) -> List[Dict[str, Any]]:
         """Get supplier invoices that have returnable items."""
@@ -58,9 +58,10 @@ class SupplierInvoiceService:
                    EXISTS (SELECT 1 FROM procurement.purchase_returns pr WHERE pr.supplier_invoice_id = si.supplier_invoice_id) as has_returns,
                    true as can_return
             FROM procurement.supplier_invoices si
-            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id WHERE 1=1
+            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id AND s.org_id = :org_id
+            WHERE si.org_id = :org_id
         """
-        params = {"skip": skip, "limit": limit}
+        params = {"org_id": org_id, "skip": skip, "limit": limit}
         if supplier_id:
             query += " AND si.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id

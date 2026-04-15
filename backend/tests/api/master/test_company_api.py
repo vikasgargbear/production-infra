@@ -16,6 +16,15 @@ from typing import Optional, Dict, Any, List
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 class Colors:
     """ANSI color codes for terminal output"""
     GREEN = '\033[92m'
@@ -130,10 +139,10 @@ def test_get_company_info() -> bool:
         for i, account in enumerate(bank_accounts[:3]):  # Show first 3
             print(f"      [{i+1}] {account.get('bank_name', 'N/A')} - {account.get('account_number', 'N/A')}")
         
-        return True
+        return finish_test(True)
     else:
         print_error(f"Company info endpoint failed (status: {status})")
-        return False
+        return finish_test(False)
 
 
 def test_update_company_info() -> bool:
@@ -159,10 +168,10 @@ def test_update_company_info() -> bool:
     
     if success:
         print_success("Company info update endpoint returned successfully")
-        return True
+        return finish_test(True)
     else:
         print_error(f"Company info update endpoint failed (status: {status})")
-        return False
+        return finish_test(False)
 
 
 # ============================================================
@@ -185,10 +194,10 @@ def test_get_bank_accounts() -> bool:
             print(f"       Account: {account.get('account_number', 'N/A')}")
             print(f"       IFSC: {account.get('ifsc_code', 'N/A')}")
             print(f"       Default: {account.get('is_default_account', False)}")
-        return True
+        return finish_test(True)
     else:
         print_error(f"Bank accounts endpoint failed (status: {status})")
-        return False
+        return finish_test(False)
 
 
 def test_get_bank_accounts_with_trailing_slash() -> bool:
@@ -204,13 +213,13 @@ def test_get_bank_accounts_with_trailing_slash() -> bool:
         response = requests.get(url, headers={"Content-Type": "application/json"}, timeout=30)
         if response.status_code == 200:
             print_success("Bank accounts with trailing slash works")
-            return True
+            return finish_test(True)
         else:
             print_error(f"Bank accounts with trailing slash failed (status: {response.status_code})")
-            return False
+            return finish_test(False)
     except Exception as e:
         print_error(f"Request failed: {str(e)}")
-        return False
+        return finish_test(False)
 
 
 def test_create_bank_account() -> bool:
@@ -230,17 +239,17 @@ def test_create_bank_account() -> bool:
         "is_active": True
     }
     
-    success, data, status = make_request("POST", "/bank-accounts", data=test_account)
+    success, data, status = make_request("POST", "/bank-accounts/", data=test_account)
     
     if success:
         print_success("Bank account creation endpoint works")
         if isinstance(data, dict) and data.get("id"):
             print(f"   Created Account ID: {data.get('id')}")
-            return data.get("id")  # Return ID for cleanup
-        return True
+            return finish_test(data.get("id"))
+        return finish_test(True)
     else:
         print_error(f"Bank account creation failed (status: {status})")
-        return False
+        return finish_test(False)
 
 
 # ============================================================
@@ -262,13 +271,13 @@ def test_get_logo() -> bool:
             print_success(f"Logo endpoint returned successfully (data: {logo_preview}...)")
         else:
             print_success("Logo endpoint works (no logo set)")
-        return True
+        return finish_test(True)
     else:
         if status == 404:
             print_warning("Logo endpoint returned 404 (no logo set - this may be expected)")
-            return True
+            return finish_test(True)
         print_error(f"Logo endpoint failed (status: {status})")
-        return False
+        return finish_test(False)
 
 
 # ============================================================
@@ -316,7 +325,7 @@ def test_route_accessibility() -> dict:
             print_error(f"{method} {route} -> ERROR: {str(e)}")
             results[route] = "ERROR"
     
-    return results
+    return finish_test(results, predicate=lambda v: all(status != "404" for status in v.values()))
 
 
 # ============================================================

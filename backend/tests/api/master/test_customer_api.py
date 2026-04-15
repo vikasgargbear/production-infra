@@ -19,6 +19,15 @@ import string
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 def generate_random_phone():
     """Generate random 10-digit phone number"""
     return f"9{''.join(random.choices(string.digits, k=9))}"
@@ -168,11 +177,11 @@ def test_create_customer():
         print(f"   Customer Code: {result.get('customer_code')}")
         print(f"   Name: {result.get('customer_name')}")
         
-        return customer_id
+        return finish_test(customer_id)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return None
+        return finish_test(None)
 
 
 def get_any_customer_id():
@@ -234,11 +243,11 @@ def test_create_address(customer_id=None):
         print(f"   Address ID: {result.get('address_id')}")
         print(f"   Customer ID: {result.get('customer_id')}")
         
-        return result.get('address_id')
+        return finish_test(result.get('address_id'))
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return None
+        return finish_test(None)
 
 
 def test_list_addresses(customer_id=None):
@@ -282,11 +291,11 @@ def test_list_addresses(customer_id=None):
             print(f"     Pincode: {addr.get('pincode')}")
             print(f"     Is Default: {addr.get('is_default')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def test_get_customer(customer_id=None):
@@ -326,11 +335,11 @@ def test_get_customer(customer_id=None):
         print(f"   Credit Limit: ₹{result.get('credit_limit')}")
         print(f"   Addresses: {len(result.get('addresses', []))} found")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def print_verification_queries(customer_id, address_id):

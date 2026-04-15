@@ -134,6 +134,36 @@ async def get_payment_methods(
         ]}
 
 
+@router.get("/outstanding")
+@with_tenant_context
+async def get_outstanding_invoices(
+    customer_id: Optional[int] = None,
+    overdue_only: bool = False,
+    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Get list of outstanding invoices
+    
+    - Filter by customer
+    - Option to show only overdue invoices
+    - Includes aging analysis
+    """
+    try:
+        # Use service method for all outstanding invoice logic
+        return PaymentService.get_outstanding_invoices(
+            db=db,
+            org_id=str(context.org_id),
+            customer_id=customer_id,
+            overdue_only=overdue_only
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting outstanding invoices: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
+
+
 @router.get("/{payment_id}")
 @with_tenant_context
 async def get_payment_by_id(
@@ -378,34 +408,6 @@ async def create_customer_receipt(
         db.rollback()
         logger.error(f"Error creating customer receipt: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create receipt: {str(e)}")
-
-@router.get("/outstanding")
-@with_tenant_context
-async def get_outstanding_invoices(
-    customer_id: Optional[int] = None,
-    overdue_only: bool = False,
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """
-    Get list of outstanding invoices
-    
-    - Filter by customer
-    - Option to show only overdue invoices
-    - Includes aging analysis
-    """
-    try:
-        # Use service method for all outstanding invoice logic
-        return PaymentService.get_outstanding_invoices(
-            db=db,
-            customer_id=customer_id,
-            overdue_only=overdue_only
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting outstanding invoices: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
 
 @router.post("/bank-reconciliation")
 @with_tenant_context

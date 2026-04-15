@@ -14,6 +14,15 @@ API_BASE_URL = os.environ.get("API_BASE_URL", "https://aaso-api-production.up.ra
 HEADERS = {"X-Test-Mode": "true"}
 TIMEOUT = 15
 
+
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
 def log_result(name: str, passed: bool, response=None):
     """Helper to log test results consistently"""
     status = "✅ PASS" if passed else "❌ FAIL"
@@ -48,14 +57,14 @@ def test_purchases_list():
     response = request_get("/purchases/", {"limit": 10})
     passed = response and response.status_code == 200
     log_result("GET /api/purchases/ (list POs)", passed, response)
-    return passed
+    return finish_test(passed)
 
 def test_purchases_pending_receipts():
     """Test GET /api/purchases/pending-receipts - purchases awaiting receipt"""
     response = request_get("/purchases/pending-receipts")
     passed = response and response.status_code in [200, 404]  # 404 if no pending
     log_result("GET /api/purchases/pending-receipts", passed, response)
-    return passed
+    return finish_test(passed)
 
 def test_purchases_search_products():
     """Test POST /api/purchases/search-products"""
@@ -68,10 +77,10 @@ def test_purchases_search_products():
         )
         passed = response.status_code in [200, 401, 403]  # Auth required
         log_result("POST /api/purchases/search-products", passed, response)
-        return passed
+        return finish_test(passed)
     except Exception as e:
         log_result("POST /api/purchases/search-products", False)
-        return False
+        return finish_test(False)
 
 # ============================================
 # SUPPLIER INVOICES
@@ -89,14 +98,14 @@ def test_supplier_invoices_list():
             print(f"   Found {count} invoices")
         except:
             pass
-    return passed
+    return finish_test(passed)
 
 def test_supplier_invoices_returnable():
     """Test GET /api/supplier-invoices/returnable/ - invoices with returnable items"""
     response = request_get("/supplier-invoices/returnable/")
     passed = response and response.status_code == 200
     log_result("GET /api/supplier-invoices/returnable/", passed, response)
-    return passed
+    return finish_test(passed)
 
 def test_supplier_invoice_by_id():
     """Test GET /api/supplier-invoices/{id} - get invoice details"""
@@ -112,11 +121,11 @@ def test_supplier_invoice_by_id():
                     response = request_get(f"/supplier-invoices/{invoice_id}")
                     passed = response and response.status_code == 200
                     log_result(f"GET /api/supplier-invoices/{invoice_id}", passed, response)
-                    return passed
+                    return finish_test(passed)
         except:
             pass
     log_result("GET /api/supplier-invoices/{id} (no data to test)", True)
-    return True
+    return finish_test(True)
 
 # ============================================
 # GRN (Goods Receipt Notes)
@@ -135,14 +144,14 @@ def test_grn_list():
             print(f"   Found {count} GRNs")
         except:
             pass
-    return passed
+    return finish_test(passed)
 
 def test_grn_generate_number():
     """Test GET /api/grn/generate-number - get next GRN number"""
     response = request_get("/grn/generate-number")
     passed = response and response.status_code in [200, 401, 403]  # Auth may be required
     log_result("GET /api/grn/generate-number", passed, response)
-    return passed
+    return finish_test(passed)
 
 def test_grn_by_id():
     """Test GET /api/grn/{id} - get GRN details"""
@@ -157,11 +166,11 @@ def test_grn_by_id():
                     response = request_get(f"/grn/{grn_id}")
                     passed = response and response.status_code == 200
                     log_result(f"GET /api/grn/{grn_id}", passed, response)
-                    return passed
+                    return finish_test(passed)
         except:
             pass
     log_result("GET /api/grn/{id} (no data to test)", True)
-    return True
+    return finish_test(True)
 
 # ============================================
 # PURCHASE RETURNS
@@ -169,18 +178,17 @@ def test_grn_by_id():
 
 def test_purchase_returns_list():
     """Test GET /api/purchase-returns - list purchase returns"""
-    response = request_get("/purchase-returns", {"limit": 10})
+    response = request_get("/purchase-returns/", {"limit": 10})
     passed = response and response.status_code == 200
     log_result("GET /api/purchase-returns (list)", passed, response)
-    return passed
+    return finish_test(passed)
 
 def test_purchase_returns_by_supplier():
     """Test GET /api/purchase-returns/supplier/{id}"""
-    # Just test the endpoint exists
-    response = request_get("/purchase-returns/supplier/1")
-    passed = response and response.status_code in [200, 404]  # 404 if supplier not found
-    log_result("GET /api/purchase-returns/supplier/1", passed, response)
-    return passed
+    response = request_get("/purchase-returns/", {"supplier_id": 1, "limit": 10})
+    passed = response and response.status_code == 200
+    log_result("GET /api/purchase-returns/?supplier_id=1", passed, response)
+    return finish_test(passed)
 
 # ============================================
 # PURCHASE UPLOAD
@@ -191,17 +199,17 @@ def test_purchase_upload_parse():
     # This would require an actual file, just test endpoint exists
     try:
         response = requests.post(
-            f"{API_BASE_URL}/api/purchase-upload/parse",
+            f"{API_BASE_URL}/api/purchase-upload/parse-invoice-safe",
             headers=HEADERS,
             timeout=TIMEOUT
         )
         # Should fail with 422 (no file) or 401 (no auth), not 404
         passed = response.status_code in [200, 401, 403, 422, 400]
-        log_result("POST /api/purchase-upload/parse (endpoint exists)", passed, response)
-        return passed
+        log_result("POST /api/purchase-upload/parse-invoice-safe (endpoint exists)", passed, response)
+        return finish_test(passed)
     except Exception as e:
-        log_result("POST /api/purchase-upload/parse", False)
-        return False
+        log_result("POST /api/purchase-upload/parse-invoice-safe", False)
+        return finish_test(False)
 
 # ============================================
 # MAIN

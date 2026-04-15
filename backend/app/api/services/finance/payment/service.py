@@ -1017,6 +1017,7 @@ class PaymentService:
     @staticmethod
     def get_outstanding_invoices(
         db: Session,
+        org_id: Optional[str] = None,
         customer_id: Optional[int] = None,
         overdue_only: bool = False
     ) -> Dict[str, Any]:
@@ -1037,11 +1038,11 @@ class PaymentService:
                     ELSE 0 
                 END as days_overdue
             FROM sales.invoices i
-            JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.payment_status IN ('unpaid', 'partial')
+            JOIN parties.customers c ON i.customer_id = c.customer_id AND c.org_id = i.org_id
+            WHERE i.org_id = :org_id AND i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {}
+        params = {"org_id": org_id}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"

@@ -18,6 +18,15 @@ from typing import Optional, Dict, Any
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 class Colors:
     """ANSI color codes for terminal output"""
     GREEN = '\033[92m'
@@ -126,10 +135,10 @@ def test_list_sales_returns(limit: int = 10) -> bool:
             print_info("First 3 sales returns:")
             for ret in returns[:3]:
                 print(f"      - {ret.get('return_number')}: {ret.get('party_name')} | ₹{ret.get('total_amount', 0):.2f} | Items: {ret.get('item_count', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Sales returns list endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_sales_return_detail(return_id: Optional[int] = None) -> bool:
@@ -155,10 +164,10 @@ def test_sales_return_detail(return_id: Optional[int] = None) -> bool:
         print(f"   Party: {data.get('party_name')}")
         print(f"   Total: ₹{data.get('total_amount', 0):.2f}")
         print(f"   Items: {len(data.get('items', []))}")
-        return True
+        return finish_test(True)
     else:
         print_error("Sales return detail endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_returnable_invoices(customer_id: Optional[int] = None) -> bool:
@@ -187,10 +196,10 @@ def test_returnable_invoices(customer_id: Optional[int] = None) -> bool:
             print_info("First 3 returnable invoices:")
             for inv in invoices[:3]:
                 print(f"      - {inv.get('invoice_number')}: {inv.get('party_name')} | ₹{inv.get('grand_total', 0):.2f}")
-        return True
+        return finish_test(True)
     else:
         print_error("Returnable invoices endpoint failed")
-        return False
+        return finish_test(False)
 
 
 # =============================================================================
@@ -220,10 +229,10 @@ def test_list_purchase_returns(limit: int = 10) -> bool:
             print_info("First 3 purchase returns:")
             for ret in returns[:3]:
                 print(f"      - {ret.get('return_number')}: {ret.get('party_name')} | ₹{ret.get('total_amount', 0):.2f} | Items: {ret.get('item_count', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Purchase returns list endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_purchase_return_detail(return_id: Optional[int] = None) -> bool:
@@ -249,10 +258,10 @@ def test_purchase_return_detail(return_id: Optional[int] = None) -> bool:
         print(f"   Supplier: {data.get('party_name')}")
         print(f"   Total: ₹{data.get('total_amount', 0):.2f}")
         print(f"   Items: {len(data.get('items', []))}")
-        return True
+        return finish_test(True)
     else:
         print_error("Purchase return detail endpoint failed")
-        return False
+        return finish_test(False)
 
 
 # =============================================================================

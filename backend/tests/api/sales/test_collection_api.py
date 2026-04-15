@@ -18,6 +18,15 @@ from typing import Optional, Dict, Any
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 class Colors:
     """ANSI color codes for terminal output"""
     GREEN = '\033[92m'
@@ -134,10 +143,10 @@ def test_collection_aging_data() -> bool:
             for party in parties[:3]:
                 print(f"      - {party.get('name', 'Unknown')}: ₹{party.get('outstandingAmount', 0):,.2f} ({party.get('daysOverdue', 0)} days overdue)")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Aging-data endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_collection_customer_outstanding(customer_id: Optional[int] = None) -> bool:
@@ -167,10 +176,10 @@ def test_collection_customer_outstanding(customer_id: Optional[int] = None) -> b
             for inv in invoices[:3]:
                 print(f"      - {inv.get('number')}: ₹{inv.get('outstanding', 0):,.2f} (due: {inv.get('dueDate')}, {inv.get('daysOverdue', 0)} days overdue)")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Customer outstanding endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_collection_performance() -> bool:
@@ -199,10 +208,10 @@ def test_collection_performance() -> bool:
         daily = data.get("daily_collections", [])
         print(f"   Days with Collections: {len(daily)}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Performance analytics endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_collection_campaigns() -> bool:
@@ -225,10 +234,10 @@ def test_collection_campaigns() -> bool:
             for campaign in campaigns[:3]:
                 print(f"      - {campaign.get('name')}: {campaign.get('status')} ({campaign.get('stats', {}).get('total_sent', 0)} sent)")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Campaigns endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_hub_statistics() -> bool:
@@ -249,10 +258,10 @@ def test_hub_statistics() -> bool:
         print(f"   High Risk Customers: {data.get('high_risk_customers', 0)}")
         print(f"   Field Agents: {data.get('field_agents', 0)}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Hub statistics endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def get_any_customer_id() -> Optional[int]:

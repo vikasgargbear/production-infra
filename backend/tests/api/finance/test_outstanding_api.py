@@ -14,6 +14,15 @@ from typing import Optional, Dict, Any
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 class Colors:
     GREEN = '\033[92m'
     RED = '\033[91m'
@@ -81,7 +90,7 @@ def test_sales_outstanding() -> bool:
     """Test GET /sales/outstanding - Main outstanding endpoint"""
     print_info("Testing sales outstanding endpoint...")
     
-    success, data = make_request("GET", "/sales/outstanding")
+    success, data = make_request("GET", "/payments/outstanding")
     
     if success and data:
         print_success("Outstanding endpoint returned successfully")
@@ -90,7 +99,7 @@ def test_sales_outstanding() -> bool:
         print(f"   Outstanding Invoices: {len(invoices)}")
         
         # Calculate totals
-        total_outstanding = sum(float(inv.get("pending_amount", 0)) for inv in invoices)
+        total_outstanding = sum(float(inv.get("pending_amount", inv.get("balance_amount", 0))) for inv in invoices)
         print(f"   Total Outstanding: ₹{total_outstanding:,.2f}")
         
         # Count unique customers
@@ -100,12 +109,13 @@ def test_sales_outstanding() -> bool:
         if invoices:
             print_info("First 3 invoices:")
             for inv in invoices[:3]:
-                print(f"      - {inv.get('invoice_number')}: ₹{float(inv.get('pending_amount', 0)):,.2f} ({inv.get('customer_name', 'Unknown')})")
+                amount = float(inv.get("pending_amount", inv.get("balance_amount", 0)))
+                print(f"      - {inv.get('invoice_number')}: ₹{amount:,.2f} ({inv.get('customer_name', 'Unknown')})")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Outstanding endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_customer_outstanding(customer_id: Optional[int] = None) -> bool:
@@ -128,10 +138,10 @@ def test_customer_outstanding(customer_id: Optional[int] = None) -> bool:
         total = sum(float(inv.get("pending_amount", 0)) for inv in invoices)
         print(f"   Total Outstanding: ₹{total:,.2f}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Customer outstanding endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_ledger_aging() -> bool:
@@ -149,10 +159,10 @@ def test_ledger_aging() -> bool:
         print(f"   Overdue: ₹{summary.get('overdue', 0):,.2f}")
         print(f"   Parties: {summary.get('party_count', 0)}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Ledger aging endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_ledger_summary() -> bool:
@@ -169,10 +179,10 @@ def test_ledger_summary() -> bool:
         print(f"   Total Receivable: ₹{data.get('total_receivable', 0):,.2f}")
         print(f"   Total Overdue: ₹{data.get('total_overdue', 0):,.2f}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Ledger summary endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def get_any_customer_id() -> Optional[int]:

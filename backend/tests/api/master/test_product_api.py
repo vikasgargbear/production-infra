@@ -19,6 +19,15 @@ import string
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 def generate_random_sku():
     """Generate random SKU code"""
     return f"TST-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
@@ -150,11 +159,11 @@ def test_list_products():
             print(f"     SKU: {p.get('sku')}")
             print(f"     MRP: ₹{p.get('mrp')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def get_any_product_id():
@@ -209,11 +218,11 @@ def test_get_product(product_id=None):
         print(f"   GST: {result.get('gst_percent')}%")
         print(f"   Category: {result.get('category_name')}")
         
-        return result
+        return finish_test(result)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return None
+        return finish_test(None)
 
 
 def test_get_product_batches(product_id=None):
@@ -255,11 +264,11 @@ def test_get_product_batches(product_id=None):
             print(f"     Expiry: {b.get('expiry_date')}")
             print(f"     MRP: ₹{b.get('mrp_per_unit')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def test_search_products_with_batches():
@@ -296,11 +305,11 @@ def test_search_products_with_batches():
             for b in batches[:2]:
                 print(f"       - {b.get('batch_number')}: Qty {b.get('quantity_available')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def print_verification_queries(product_id):
