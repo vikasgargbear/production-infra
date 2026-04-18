@@ -5,6 +5,7 @@ import {
 import { CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
 import { notesApi, invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface DebitNoteFlowProps {
@@ -19,6 +20,7 @@ interface NoteItem {
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  tax_percent?: number;
   total_amount: number;
 }
 
@@ -180,6 +182,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
         quantity: parseFloat(item.quantity || 0),
         unit_price: parseFloat(item.unit_price || item.unit_price || 0),
         discount_percent: parseFloat(item.discount_percent || 0),
+        tax_percent: parseFloat(item.gst_percent || item.tax_percent || ((item.cgst_rate || item.cgst_percent || 0) + (item.sgst_rate || item.sgst_percent || 0) + (item.igst_rate || item.igst_percent || 0)) || 0),
         total_amount: parseFloat(item.line_total || item.total_amount || 0)
       })) || [];
 
@@ -223,14 +226,17 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
   };
 
   const calculateTotals = () => {
-    const subtotal = noteItems.reduce((sum, item) => sum + item.total_amount, 0);
-    const taxAmount = subtotal * 0.18; // Assuming 18% GST
-    const grandTotal = subtotal + taxAmount;
+    const calculation = EnterpriseCalculator.calculateNoteTotals(noteItems, {
+      selected_only: false,
+      quantity_field: 'quantity',
+      round_final_amount: false
+    });
+    const totals = calculation.totals;
 
     return {
-      subtotal,
-      taxAmount,
-      grandTotal
+      subtotal: totals.subtotal_amount || totals.subtotal || 0,
+      taxAmount: totals.tax_amount || totals.total_tax_amount || 0,
+      grandTotal: totals.total_amount || totals.final_amount || 0
     };
   };
 

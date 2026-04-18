@@ -225,69 +225,34 @@ ${companyInfo?.name || 'Your Company'}`;
             return;
         }
 
-        console.log('🔄 [STEP 1→2] Forcing calculation before continuing...');
-        console.log('🔄 [STEP 1→2] Current items:', invoice.items.map(i => ({ name: i.product_name, qty: i.quantity })));
-
-        // CRITICAL FIX: Force synchronous calculation BEFORE moving to next step
         try {
-            const result = await new Promise<{ totals: { gross_amount: number; final_amount: number }; items: unknown[] }>((resolve, reject) => {
-                EnterpriseCalculator.calculateDebounced(invoice, (error: Error | null, calcResult: unknown) => {
-                    if (error) reject(error);
-                    else resolve(calcResult as { totals: { gross_amount: number; final_amount: number }; items: unknown[] });
-                }, 0, 'invoice');
-            });
-
-            console.log('✅ [STEP 1→2] Calculation complete:', {
-                gross_amount: result.totals.gross_amount,
-                final_amount: result.totals.final_amount
-            });
+            const result = EnterpriseCalculator.calculateInvoice(invoice as any);
 
             // Update invoice with calculated totals
             setInvoice(prev => ({
                 ...prev,
                 totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount
+                final_amount: result.totals.final_amount || 0
             }));
-
-            // Small delay to ensure state updates
-            await new Promise(resolve => setTimeout(resolve, 100));
-
             setCurrentStep(2);
         } catch (calcError) {
-            console.error('❌ [STEP 1→2] Calculation failed:', calcError);
             toast.error('Calculation error. Please try again.');
         }
     }, [selectedCustomer, invoice, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
-        console.log('🔄 [STEP 2→3] Forcing calculation before preview...');
-
         try {
-            const result = await new Promise<{ totals: { gross_amount: number; final_amount: number }; items: Invoice['items'] }>((resolve, reject) => {
-                EnterpriseCalculator.calculateDebounced(invoice, (error: Error | null, calcResult: unknown) => {
-                    if (error) reject(error);
-                    else resolve(calcResult as { totals: { gross_amount: number; final_amount: number }; items: Invoice['items'] });
-                }, 0, 'invoice');
-            });
-
-            console.log('✅ [STEP 2→3] Calculation complete:', {
-                gross_amount: result.totals.gross_amount,
-                final_amount: result.totals.final_amount
-            });
+            const result = EnterpriseCalculator.calculateInvoice(invoice as any);
 
             // Update invoice with latest totals
             setInvoice(prev => ({
                 ...prev,
                 totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount,
-                items: result.items
+                final_amount: result.totals.final_amount || 0,
+                items: result.items as unknown as Invoice['items']
             }));
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-
             setCurrentStep(3);
         } catch (calcError) {
-            console.error('❌ [STEP 2→3] Calculation failed:', calcError);
             toast.error('Calculation error. Please try again.');
         }
     }, [invoice, setInvoice]);

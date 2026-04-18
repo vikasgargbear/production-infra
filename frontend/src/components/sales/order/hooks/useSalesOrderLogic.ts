@@ -237,42 +237,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [companyInfo]);
 
-    // Calculate fallback totals
-    const calculateFallbackTotals = useCallback((items: OrderItem[]): Partial<Order> => {
-        let subtotal = 0;
-        let totalDiscount = 0;
-        let totalTax = 0;
-
-        items.forEach(item => {
-            const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price)) || 0;
-            const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-            const gstPercent = parseFloat(String(item.gst_percent)) || 0;
-
-            const lineSubtotal = quantity * unitPrice;
-            const itemDiscount = (lineSubtotal * discountPercent) / 100;
-            const taxableAmount = lineSubtotal - itemDiscount;
-            const taxAmount = (taxableAmount * gstPercent) / 100;
-
-            subtotal += lineSubtotal;
-            totalDiscount += itemDiscount;
-            totalTax += taxAmount;
-        });
-
-        const taxableTotal = subtotal - totalDiscount;
-        const finalTotal = taxableTotal + totalTax;
-
-        return {
-            subtotal_amount: taxableTotal,
-            discount_amount: totalDiscount,
-            tax_amount: totalTax,
-            total_amount: finalTotal,
-            final_amount: finalTotal,
-            cgst_amount: totalTax / 2,
-            sgst_amount: totalTax / 2
-        };
-    }, []);
-
     // Recalculate totals
     const recalculateTotals = useCallback(async (items: OrderItem[]): Promise<void> => {
         if (!items || items.length === 0) {
@@ -289,8 +253,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
         try {
             const orderData = { ...order, items, customer_id: selectedCustomer?.customer_id };
-            // FIX: EnterpriseCalculator.calculateSalesOrder returns CalculatedTotals
-            // Removing 'await' as it is synchronous and removing invalid 'as CalculationResult' cast
             const result = EnterpriseCalculator.calculateSalesOrder(orderData);
 
             if (result && result.totals) {
@@ -315,9 +277,9 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     ...prev,
                     items: updatedItems,
                     total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
-                    subtotal_amount: formattedTotals.gross_amount || 0,
-                    discount_amount: formattedTotals.total_discount || 0,
-                    tax_amount: formattedTotals.total_gst || 0,
+                    subtotal_amount: formattedTotals.subtotal_amount || formattedTotals.gross_amount || 0,
+                    discount_amount: formattedTotals.discount_amount || formattedTotals.total_discount || 0,
+                    tax_amount: formattedTotals.total_tax_amount || formattedTotals.total_tax || 0,
                     total_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
                     final_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
                     cgst_amount: formattedTotals.cgst_amount || 0,
@@ -325,25 +287,12 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     igst_amount: formattedTotals.igst_amount || 0,
                     calculatedLineItems: result.items as any
                 }));
-            } else {
-                const fallbackTotals = calculateFallbackTotals(items);
-                setOrder(prev => ({
-                    ...prev,
-                    total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
-                    ...fallbackTotals
-                }));
             }
         } catch (error) {
             console.error('Calculation error:', error);
-            toast.warning('Using local calculation. Error in calculator.');
-            const fallbackTotals = calculateFallbackTotals(items);
-            setOrder(prev => ({
-                ...prev,
-                total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
-                ...fallbackTotals
-            }));
+            toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [order, selectedCustomer, calculateFallbackTotals]);
+    }, [order, selectedCustomer]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -462,12 +411,12 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             const unitPrice = product.sale_price || product.mrp || 0;
             const discountPercent = 0;
             const gstPercent = product.gst_percent || 0;
-
-            const subtotal = quantity * unitPrice;
-            const discountAmount = (subtotal * discountPercent) / 100;
-            const taxableAmount = subtotal - discountAmount;
-            const taxAmount = (taxableAmount * gstPercent) / 100;
-            const finalAmount = taxableAmount + taxAmount;
+            const calculated = EnterpriseCalculator.calculateItem({
+                quantity,
+                unit_price: unitPrice,
+                discount_percent: discountPercent,
+                gst_percent: gstPercent
+            });
 
             const newItem: OrderItem = {
                 id: Date.now(),
@@ -482,11 +431,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 mrp: product.mrp || 0,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
-                discount_amount: discountAmount,
+                discount_amount: calculated.discount_amount,
                 gst_percent: gstPercent,
-                tax_amount: taxAmount,
-                subtotal,
-                total: finalAmount,
+                tax_amount: calculated.gst_amount,
+                subtotal: calculated.subtotal,
+                total: calculated.total_amount,
                 manufacturer: product.manufacturer,
                 category: product.category
             };
@@ -547,20 +496,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 const updatedItem = { ...item, [field]: value };
 
                 if (field === 'quantity' || field === 'unit_price' || field === 'discount_percent' || field === 'gst_percent') {
-                    const quantity = parseFloat(String(updatedItem.quantity)) || 0;
-                    const unitPrice = parseFloat(String(updatedItem.unit_price)) || 0;
-                    const discountPercent = parseFloat(String(updatedItem.discount_percent)) || 0;
-                    const gstPercent = parseFloat(String(updatedItem.gst_percent)) || 0;
-
-                    const subtotal = quantity * unitPrice;
-                    const discountAmount = (subtotal * discountPercent) / 100;
-                    const taxableAmount = subtotal - discountAmount;
-                    const gstAmount = (taxableAmount * gstPercent) / 100;
-
-                    updatedItem.subtotal = subtotal;
-                    updatedItem.discount_amount = discountAmount;
-                    updatedItem.tax_amount = gstAmount;
-                    updatedItem.total = taxableAmount + gstAmount;
+                    const calculated = EnterpriseCalculator.calculateItem(updatedItem);
+                    updatedItem.subtotal = calculated.subtotal;
+                    updatedItem.discount_amount = calculated.discount_amount;
+                    updatedItem.tax_amount = calculated.gst_amount;
+                    updatedItem.total = calculated.total_amount;
                 }
 
                 return updatedItem;

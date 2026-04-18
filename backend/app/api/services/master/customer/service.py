@@ -417,15 +417,18 @@ class CustomerService:
     @staticmethod
     def validate_credit_limit(db: Session, customer_id: int, order_amount: Decimal, org_id: "UUID" = None) -> Dict[str, Any]:
         """Check if customer has sufficient credit limit"""
-        # Get customer details with outstanding
-        # For now, just get customer credit info without calculating outstanding
-        # TODO: Fix when we know the actual sales.orders column names
         if org_id:
             result = db.execute(text("""
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    0 as outstanding
+                    COALESCE((
+                        SELECT SUM(co.outstanding_amount)
+                        FROM financial.customer_outstanding co
+                        WHERE co.customer_id = c.customer_id
+                          AND co.org_id = c.org_id
+                          AND co.status IN ('open', 'partial')
+                    ), 0) as outstanding
                 FROM parties.customers c
                 WHERE c.customer_id = :customer_id AND c.org_id = :org_id
             """), {"customer_id": customer_id, "org_id": org_id})
@@ -434,7 +437,12 @@ class CustomerService:
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    0 as outstanding
+                    COALESCE((
+                        SELECT SUM(co.outstanding_amount)
+                        FROM financial.customer_outstanding co
+                        WHERE co.customer_id = c.customer_id
+                          AND co.status IN ('open', 'partial')
+                    ), 0) as outstanding
                 FROM parties.customers c
                 WHERE c.customer_id = :customer_id
             """), {"customer_id": customer_id})
@@ -443,8 +451,8 @@ class CustomerService:
         if not row:
             return {"valid": False, "message": "Customer not found"}
         
-        credit_limit = row.credit_limit
-        outstanding = row.outstanding
+        credit_limit = Decimal(str(row.credit_limit or 0))
+        outstanding = Decimal(str(row.outstanding or 0))
         available_credit = credit_limit - outstanding
         
         if order_amount > available_credit:

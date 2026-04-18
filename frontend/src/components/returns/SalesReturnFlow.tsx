@@ -20,6 +20,7 @@ import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../servic
 import { getApiBaseUrl } from '../../config/apiBase';
 import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import offlineStorage from '../../services/offlineStorage';
+import EnterpriseCalculator from '../../services/enterpriseCalculator';
 import { useCompany } from '../../contexts/CompanyContext';
 import html2pdf from 'html2pdf.js';
 import { toast } from 'react-toastify';
@@ -440,44 +441,18 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Calculate totals whenever items or GST setting changes
   useEffect(() => {
-    let subtotal = 0;
-    let taxAmount = 0;
-
-    returnData.items.forEach(item => {
-      if (item.selected && item.return_quantity > 0) {
-        const returnQty = parseFloat(String(item.return_quantity || 0));
-        const paidQty = Math.max(0, parseFloat(String(item.paid_quantity || 0)));
-        const paidReturnQty = Math.min(returnQty, paidQty);
-
-        if (paidReturnQty <= 0) return;
-
-        const unitPrice = parseFloat(String(item.unit_price || 0));
-        const discountPercent = parseFloat(String(item.discount_percent || 0));
-
-        const baseAmount = paidReturnQty * unitPrice;
-        const discountAmount = (baseAmount * discountPercent) / 100;
-        const afterDiscount = baseAmount - discountAmount;
-
-        // CRITICAL: If withhold_gst is true for B2B, do NOT add GST to credit amount
-        // GST stays with the company when goods are returned from GST customer
-        const shouldIncludeGst = !returnData.withhold_gst && selectedCustomer?.gst_number;
-        const taxPercent = shouldIncludeGst
-          ? parseFloat(String(item.tax_percent || 0))
-          : 0;
-        const itemTax = (afterDiscount * taxPercent) / 100;
-
-        subtotal += afterDiscount;
-        taxAmount += itemTax;
-      }
-    });
-
-    const total = subtotal + taxAmount;
+    const calculation = EnterpriseCalculator.calculateSalesReturn(returnData);
+    const totals = calculation.totals;
 
     dispatch({
       type: 'SET_RETURN_DATA',
-      data: { subtotal_amount: subtotal, tax_amount: taxAmount, total_amount: total }
+      data: {
+        subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+        tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+        total_amount: totals.total_amount || totals.final_amount || 0
+      }
     });
-  }, [returnData.items, selectedCustomer, returnData.withhold_gst, dispatch]);
+  }, [returnData.items, returnData.withhold_gst, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {

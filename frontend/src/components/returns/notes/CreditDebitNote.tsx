@@ -13,8 +13,12 @@ import {
   ProceedToReviewComponent,
   StandardDatePicker
 } from '../../global';
+import { useDocumentSave } from '../../global/hooks/useDocumentSave';
 import { notesApi } from '../../../services/api';
 import { invoicesApi } from '../../../services/api';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import { DOC_TYPES, documentNumberGenerator } from '../../../services/offline';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface CreditDebitNoteSimpleProps {
@@ -60,8 +64,8 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const { isOnline } = useNetworkStatus();
 
   const [noteData, setNoteData] = useState<NoteData>({
     note_date: new Date().toISOString().split('T')[0],
@@ -84,19 +88,24 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const themeColor = isCredit ? 'green' : 'orange';
 
   // Generate note number
-  const generateNoteNumber = () => {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '');
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `${isCredit ? 'CN' : 'DN'}-${dateStr}${randomNum}`;
+  const generateNoteNumber = async () => {
+    return documentNumberGenerator.generateNumber(
+      isCredit ? DOC_TYPES.CREDIT_NOTE : DOC_TYPES.DEBIT_NOTE,
+      false
+    );
   };
 
   useEffect(() => {
-    setNoteData(prev => ({
-      ...prev,
-      note_number: generateNoteNumber()
-    }));
-  }, []);
+    const loadNoteNumber = async () => {
+      const nextNumber = await generateNoteNumber();
+      setNoteData(prev => ({
+        ...prev,
+        note_number: nextNumber
+      }));
+    };
+
+    void loadNoteNumber();
+  }, [isCredit]);
 
   // Reason options
   const reasonOptions = isCredit ? [
@@ -162,17 +171,12 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
       if (fullInvoice?.data?.items) {
         const items = fullInvoice.data.items.map((item: any) => {
-          const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0) || item.tax_percent || 0;
           const quantity = parseFloat(item.quantity || 0);
           const unit_price = parseFloat(item.unit_price || item.unit_price || 0);
           const discount = parseFloat(item.discount_percent || 0);
-
-          // Calculate amount
-          const baseAmount = quantity * unit_price;
-          const discountAmount = baseAmount * (discount / 100);
-          const taxableAmount = baseAmount - discountAmount;
-          const taxAmount = taxableAmount * (gstPercent / 100);
-          const totalAmount = taxableAmount + taxAmount;
+          const calculatedItem = EnterpriseCalculator.calculateItem(item);
+          const gstPercent = calculatedItem.gst_percent || calculatedItem.tax_percent || 0;
+          const totalAmount = calculatedItem.total_amount || 0;
 
           return {
             id: item.id || item.invoice_item_id,
@@ -206,26 +210,18 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
 
   // Calculate totals
   const calculateTotals = (items: NoteItem[]) => {
-    let subtotal = 0;
-    let taxTotal = 0;
-
-    items.filter(item => item.selected).forEach(item => {
-      const baseAmount = item.quantity * item.unit_price;
-      const discountAmount = baseAmount * (item.discount_percent / 100);
-      const taxableAmount = baseAmount - discountAmount;
-      const taxAmount = taxableAmount * (item.tax_percent / 100);
-
-      subtotal += taxableAmount;
-      taxTotal += taxAmount;
+    const calculation = EnterpriseCalculator.calculateNoteTotals(items, {
+      selected_only: true,
+      quantity_field: 'quantity',
+      round_final_amount: false
     });
-
-    const total = subtotal + taxTotal;
+    const totals = calculation.totals;
 
     setNoteData(prev => ({
       ...prev,
-      subtotal: Math.round(subtotal * 100) / 100,
-      tax_amount: Math.round(taxTotal * 100) / 100,
-      total_amount: Math.round(total * 100) / 100
+      subtotal: totals.subtotal_amount || totals.subtotal || 0,
+      tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+      total_amount: totals.total_amount || totals.final_amount || 0
     }));
   };
 
@@ -239,11 +235,10 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     item.quantity = Math.min(Math.max(0, newQuantity), maxQty);
 
     // Recalculate amount for this item
-    const baseAmount = item.quantity * item.unit_price;
-    const discountAmount = baseAmount * (item.discount_percent / 100);
-    const taxableAmount = baseAmount - discountAmount;
-    const taxAmount = taxableAmount * (item.tax_percent / 100);
-    item.amount = taxableAmount + taxAmount;
+    item.amount = EnterpriseCalculator.calculateReturnLine(item, {
+      include_gst: true,
+      quantity_field: 'quantity'
+    }).total_amount;
 
     setNoteData(prev => ({ ...prev, items: updatedItems }));
     calculateTotals(updatedItems);
@@ -265,57 +260,83 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
       noteData.items.filter(item => item.selected).length > 0;
   };
 
-  // Handle submit
-  const handleSubmit = async () => {
-    if (!canProceedToReview()) {
-      toast.error('Please complete all required fields');
-      return;
-    }
+  const { saving, handleSave: handleSaveNote } = useDocumentSave({
+    docTypeKey: isCredit ? DOC_TYPES.CREDIT_NOTE : DOC_TYPES.DEBIT_NOTE,
+    idbStoreName: 'credit_debit_notes',
+    entityType: 'credit_debit_notes',
+    serverIdField: 'note_id',
+    docNumberField: 'note_number',
+    isOnline,
 
-    const selectedItems = noteData.items.filter(item => item.selected);
+    validate: () => {
+      if (!canProceedToReview()) return 'Please complete all required fields';
+      return null;
+    },
 
-    try {
-      setSaving(true);
+    getDocNumber: async () => noteData.note_number || generateNoteNumber(),
 
-      const payload = {
-        ...noteData,
-        note_type: noteType.toUpperCase(),
+    preparePayload: () => {
+      const selectedItems = noteData.items.filter(item => item.selected);
+      return {
+        note_type: noteType,
+        party_type: 'customer',
+        party_id: parseInt(String(noteData.customer_id)),
+        note_date: noteData.note_date,
+        amount: noteData.total_amount,
+        reason: noteData.reason,
+        reference_invoice_id: noteData.invoice_id ? parseInt(String(noteData.invoice_id)) : undefined,
+        notes: noteData.notes || '',
         items: selectedItems.map(item => ({
-          product_id: item.product_id,
+          product_id: item.product_id ? parseInt(String(item.product_id)) : undefined,
           quantity: item.quantity,
           unit_price: item.unit_price,
           discount_percent: item.discount_percent,
-          tax_percent: item.tax_percent,
-          amount: item.amount
+          gst_percent: item.tax_percent,
+          line_total: item.amount
         }))
       };
+    },
 
-      const response = await notesApi.create(payload as any);
+    apiCall: (data: any) => notesApi.create(data),
 
-      if (response.data?.success || response.data || response.status === 200) {
-        toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
-        showFinancialEntryNotification({
-          title: `${isCredit ? 'Credit' : 'Debit'} Note Posted`,
-          reference: noteData.note_number,
-          amount: noteData.total_amount,
-          status: 'confirmed',
-          impacts: [
-            `${isCredit ? 'Credit' : 'Debit'} note is committed to the backend ledger.`,
-            'Party outstanding balances are adjusted against the selected document.',
-            'Tax-adjusted values are available for downstream reconciliation and reporting.'
-          ]
-        });
+    onSuccess: (_tempId: string, docNo: string) => {
+      setNoteData(prev => ({ ...prev, note_number: docNo }));
+      toast.success(`${isCredit ? 'Credit' : 'Debit'} note saved${isOnline ? '' : ' offline'}`);
+      if (onClose) onClose();
+    },
 
-        // Reset form and close
-        setTimeout(() => {
-          if (onClose) onClose();
-        }, 1500);
-      }
-    } catch (error: any) {
-      toast.error(error.message || `Failed to create ${noteType} note`);
-    } finally {
-      setSaving(false);
+    onServerSuccess: (response: any, _tempId: string, docNo: string, payload: any) => {
+      showFinancialEntryNotification({
+        title: `${isCredit ? 'Credit' : 'Debit'} Note Posted`,
+        reference: response?.data?.note_number || docNo,
+        amount: payload.amount,
+        status: 'confirmed',
+        impacts: [
+          `${isCredit ? 'Credit' : 'Debit'} note is committed to the backend ledger.`,
+          'Party outstanding balances are adjusted against the selected document.',
+          'Tax-adjusted values are available for downstream reconciliation and reporting.'
+        ]
+      });
+    },
+
+    onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
+      showFinancialEntryNotification({
+        title: `${isCredit ? 'Credit' : 'Debit'} Note Saved Locally`,
+        reference: docNo,
+        amount: payload.amount,
+        status: 'queued',
+        impacts: [
+          'The note is stored locally and queued for backend posting.',
+          'Visible document history will fully reconcile after sync succeeds.',
+          'Final ledger and GST confirmation will appear after sync.'
+        ]
+      });
     }
+  });
+
+  // Handle submit
+  const handleSubmit = async () => {
+    await handleSaveNote();
   };
 
   // Step 1: Create Note
@@ -603,21 +624,23 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
           onBack={currentStep === 2 ? () => setCurrentStep(1) : undefined}
           onProceed={currentStep === 1 ? () => setCurrentStep(2) : handleSubmit}
           onReset={() => {
+            void generateNoteNumber().then((nextNumber) => {
+              setNoteData({
+                note_number: nextNumber,
+                note_date: new Date().toISOString().split('T')[0],
+                customer_id: '',
+                invoice_id: '',
+                reason: '',
+                items: [],
+                subtotal: 0,
+                tax_amount: 0,
+                total_amount: 0,
+                notes: '',
+                status: 'PENDING'
+              });
+            });
             setSelectedCustomer(null);
             setSelectedInvoice(null);
-            setNoteData({
-              note_number: generateNoteNumber(),
-              note_date: new Date().toISOString().split('T')[0],
-              customer_id: '',
-              invoice_id: '',
-              reason: '',
-              items: [],
-              subtotal: 0,
-              tax_amount: 0,
-              total_amount: 0,
-              notes: '',
-              status: 'PENDING'
-            });
           }}
           totalItems={noteData.items.filter(i => i.selected).length}
           totalAmount={noteData.total_amount}

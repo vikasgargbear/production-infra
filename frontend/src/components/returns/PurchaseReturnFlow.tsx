@@ -10,6 +10,7 @@ import {
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
+import EnterpriseCalculator from '../../services/enterpriseCalculator';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
@@ -350,28 +351,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Use effect to recalculate totals when items change
   React.useEffect(() => {
-    let subtotal = 0;
-    let taxAmount = 0;
-
-    returnData.items.forEach(item => {
-      if (item.selected && item.return_quantity > 0) {
-        const returnQty = typeof item.return_quantity === 'string' ? parseFloat(item.return_quantity) : item.return_quantity || 0;
-        const unit_price = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : item.unit_price || 0;
-        const taxPercent = typeof item.tax_percent === 'string' ? parseFloat(item.tax_percent) : item.tax_percent || parseFloat(item.gst_percent as any) || 0;
-
-        const itemTotal = returnQty * unit_price;
-        const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
-
-        subtotal += itemTotal;
-        taxAmount += itemTax;
-      }
-    });
+    const calculation = EnterpriseCalculator.calculatePurchaseReturn(returnData);
+    const totals = calculation.totals;
 
     setReturnData(prev => ({
       ...prev,
-      subtotal_amount: subtotal,
-      tax_amount: taxAmount,
-      total_amount: subtotal + taxAmount
+      subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+      tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+      total_amount: totals.total_amount || totals.final_amount || 0
     }));
   }, [returnData.items, returnData.include_gst]);
 
@@ -385,28 +372,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Calculate totals
   const calculateTotals = () => {
-    let subtotal = 0;
-    let taxAmount = 0;
-
-    returnData.items.forEach(item => {
-      if (item.selected && item.return_quantity > 0) {
-        const returnQty = typeof item.return_quantity === 'string' ? parseFloat(item.return_quantity) : item.return_quantity || 0;
-        const unit_price = typeof item.unit_price === 'string' ? parseFloat(item.unit_price) : item.unit_price || 0;
-        const taxPercent = typeof item.tax_percent === 'string' ? parseFloat(item.tax_percent) : item.tax_percent || parseFloat(item.gst_percent as any) || 0;
-
-        const itemTotal = returnQty * unit_price;
-        const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
-
-        subtotal += itemTotal;
-        taxAmount += itemTax;
-      }
-    });
+    const calculation = EnterpriseCalculator.calculatePurchaseReturn(returnData);
+    const totals = calculation.totals;
 
     setReturnData(prev => ({
       ...prev,
-      subtotal_amount: subtotal,
-      tax_amount: taxAmount,
-      total_amount: subtotal + taxAmount
+      subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+      tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+      total_amount: totals.total_amount || totals.final_amount || 0
     }));
   };
 

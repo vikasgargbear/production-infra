@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { purchasesApi } from '../../../../services/api';
 import { searchCache } from '../../../../utils/searchCache';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
+import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import { useToast } from '../../../global';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
@@ -178,33 +179,22 @@ export function usePurchaseOrderLogic({
             return;
         }
 
-        let grossTotal = 0;
-        let taxTotal = 0;
-
-        purchaseOrder.items.forEach(item => {
-            if (item.product_id) {
-                const quantity = parseFloat(String(item.quantity)) || 0;
-                const unitPrice = parseFloat(String(item.unit_price)) || 0;
-                const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-
-                const itemTotal = quantity * unitPrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-
-                grossTotal += itemTotal;
-                taxTotal += itemTax;
+        const calculation = EnterpriseCalculator.calculateTotals(
+            purchaseOrder.items.filter(item => item.product_id),
+            {
+                invoice_discount: Number(purchaseOrder.discount_amount) || 0,
+                freight_charges: Number(purchaseOrder.freight_charges) || 0,
+                round_final_amount: false
             }
-        });
-
-        const discountAmount = Number(purchaseOrder.discount_amount) || 0;
-        const freightCharges = Number(purchaseOrder.freight_charges) || 0;
-        const netAmount = grossTotal + taxTotal - discountAmount + freightCharges;
+        );
+        const totals = calculation.totals;
 
         setPurchaseOrder(prev => ({
             ...prev,
-            gross_amount: grossTotal,
-            tax_amount: taxTotal,
-            net_amount: netAmount,
-            total_amount: netAmount
+            gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
+            tax_amount: totals.total_tax_amount || totals.total_tax || 0,
+            net_amount: totals.net_amount || totals.total_amount || 0,
+            total_amount: totals.total_amount || totals.final_amount || 0
         }));
     }, [purchaseOrder.items, purchaseOrder.discount_amount, purchaseOrder.freight_charges]);
 
@@ -227,6 +217,12 @@ export function usePurchaseOrderLogic({
     }, []);
 
     const handleAddItem = useCallback((product: any) => {
+        const calculated = EnterpriseCalculator.calculateItem({
+            quantity: 1,
+            unit_price: product.unit_price || (product.mrp || 0) * 0.7,
+            tax_percent: product.tax_percent || 12,
+            discount_percent: 0
+        });
         const newItem: PurchaseOrderItem = {
             id: Date.now() + Math.random(),
             product_id: product.product_id,
@@ -247,7 +243,7 @@ export function usePurchaseOrderLogic({
             pack_size: 10,
             packages_per_box: 10,
             manufacturer: product.manufacturer || '',
-            total: product.unit_price || 0
+            total: calculated.total_amount
         };
 
         setPurchaseOrder(prev => ({

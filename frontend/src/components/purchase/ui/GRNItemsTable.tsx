@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Package, Trash2 } from 'lucide-react';
 import { NumberInput, MonthYearPicker } from '../../global';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 /**
  * Type definitions specific to GRN Items
@@ -56,12 +57,10 @@ const GRNItemsTable: React.FC<GRNItemsTableProps> = ({
 
     // Calculate total for a row
     const calculateRowTotal = (item: GRNItem) => {
-        const qty = parseFloat(String(item.received_qty || 0));
-        const price = parseFloat(String(item.unit_price || 0));
-        const taxPercent = parseFloat(String(item.tax_percent || 0));
-        const subtotal = qty * price;
-        const tax = subtotal * (taxPercent / 100);
-        return subtotal + tax;
+        return EnterpriseCalculator.calculateItem({
+            ...item,
+            quantity: parseFloat(String(item.received_qty || 0))
+        }).total_amount;
     };
 
     if (!items || items.length === 0) {

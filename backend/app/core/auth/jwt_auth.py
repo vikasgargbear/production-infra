@@ -11,10 +11,11 @@ from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 
 from .token_blacklist import is_token_blacklisted, blacklist_token
+from ..env import is_production
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-IS_PRODUCTION = os.getenv("ENV", "development").lower() in ("production", "prod")
+IS_PRODUCTION = is_production()
 
 if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     if IS_PRODUCTION:
@@ -26,8 +27,7 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
 
 ALGORITHM = "HS256"
-_is_prod = os.getenv("ENV", "development").lower() in ("production", "prod")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 if _is_prod else 1440  # 1h prod, 24h dev
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 if IS_PRODUCTION else 1440  # 1h prod, 24h dev
 
 # Password hashing
 # Configure bcrypt to avoid 72-byte initialization issues

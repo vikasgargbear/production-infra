@@ -7,6 +7,7 @@ import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
 import { customersApi, invoicesApi } from '../../../services/api';
 import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
 import { submitCustomerPayment } from '../../../services/api/modules/finance/payments.api';
+import { paymentsDataService } from '../../../services/offline/modules/payments/PaymentsDataService';
 import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
 import PaymentSummary from '../shared/PaymentSummary';
@@ -17,6 +18,7 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 
 
 interface PaymentEntryContentProps {
@@ -60,6 +62,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Manual invoice selection state
   const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
   const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
+  const { isOnline } = useNetworkStatus();
 
   // Generate receipt number on component mount (local-only, instant)
   React.useEffect(() => {
@@ -212,21 +215,19 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
       // Make the actual API call to create payment
       // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
-      try {
-        // Use the customer payment endpoint with all required fields
-        const customerPaymentData = {
-          customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-          customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
-          payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-          amount: parseFloat(payment.amount || '0'),
-          payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-          reference_number: payment.reference_number || `PMT-${Date.now()}`,
-          notes: payment.remarks || 'Direct payment received',
-          // Match backend schema field name
-          allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
-        };
+      const customerPaymentData = {
+        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
+        customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
+        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
+        amount: parseFloat(payment.amount || '0'),
+        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
+        reference_number: payment.reference_number || `PMT-${Date.now()}`,
+        notes: payment.remarks || 'Direct payment received',
+        allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
+      };
+      const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
 
-        const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
+      try {
         const paymentResult = await submitCustomerPayment(customerId, customerPaymentData);
 
         if (paymentResult.raw) {
@@ -257,15 +258,26 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           throw new Error('Failed to save payment');
         }
       } catch (apiError: any) {
+        if (!isOnline || apiError.code === 'ERR_NETWORK') {
+          const offlineId = await paymentsDataService.saveReceipt({
+            receipt_number: payment.receipt_no || `RCPT-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
+            receipt_date: customerPaymentData.payment_date,
+            customer_id: String(customerId),
+            customer_name: selectedCustomer?.customer_name || selectedCustomer?.name || '',
+            amount: customerPaymentData.amount,
+            payment_method: customerPaymentData.payment_mode as any,
+            notes: customerPaymentData.notes,
+            allocated_invoices: (payment.allocations || []).map((allocation: any) => ({
+              invoice_id: String(allocation.invoice_id),
+              invoice_number: String(allocation.invoice_number || allocation.invoice_id),
+              allocated_amount: Number(allocation.amount || allocation.allocated_amount || 0)
+            }))
+          });
 
-        // If backend returns 405, simulate success for now
-        // TODO: Fix backend payment endpoint
-        if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
-          const simulatedReceiptNo = `RCT-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-          setPaymentField('receipt_no', simulatedReceiptNo);
+          setPaymentField('receipt_no', payment.receipt_no || offlineId);
           showFinancialEntryNotification({
             title: 'Payment Receipt Queued',
-            reference: simulatedReceiptNo,
+            reference: payment.receipt_no || offlineId,
             amount: paymentData.amount,
             status: 'queued',
             impacts: [
@@ -274,10 +286,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               'The customer balance will change in the main system after that sync.'
             ]
           });
-          setMessage('Payment recorded locally (backend pending)', 'info');
+          setMessage('Payment saved offline and queued for sync.', 'info');
           setCurrentStep(3);
-
-          // Log for debugging
         } else {
           throw apiError;
         }

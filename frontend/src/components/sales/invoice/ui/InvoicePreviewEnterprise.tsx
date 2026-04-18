@@ -436,17 +436,14 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             </thead>
             <tbody>
               {(invoice.items || []).map((item, index) => {
-                const quantity = parseFloat(String(item.quantity || 0));
-                const unit_price = parseFloat(String(item.unit_price || 0));
-                const discount = parseFloat(String(item.discount_percent || 0));
-                const gstPercent = parseFloat(String(item.gst_percent || item.tax_percent || 0));
-                const freeQty = parseFloat(String(item.free_quantity || 0));
-
-                const subtotal = quantity * unit_price;
-                const discountAmount = (subtotal * discount) / 100;
-                const taxableAmount = subtotal - discountAmount;
-                const gstAmount = (taxableAmount * gstPercent) / 100;
-                const lineTotal = taxableAmount + gstAmount;
+                const calculatedItem = EnterpriseCalculator.calculateItem(item, {
+                  gst_type: invoice.gst_type
+                });
+                const discount = parseFloat(String(calculatedItem.discount_percent || 0));
+                const gstPercent = parseFloat(String(calculatedItem.gst_percent || calculatedItem.tax_percent || 0));
+                const freeQty = parseFloat(String(calculatedItem.free_quantity || 0));
+                const unitPrice = parseFloat(String(calculatedItem.unit_price || item.unit_price || 0));
+                const lineTotal = calculatedItem.total_amount || 0;
 
                 return (
                   <tr key={index} className="border-b border-gray-200" style={{ lineHeight: '1.2' }}>
@@ -469,7 +466,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       }) : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
-                      {formatCurrency(item.mrp || unit_price)}
+                      {formatCurrency(item.mrp || unitPrice)}
                     </td>
                     <td className="py-2 px-1 text-center font-medium" style={{ verticalAlign: 'middle' }}>
                       {item.quantity}
@@ -478,7 +475,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       {freeQty > 0 ? freeQty : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
-                      {formatCurrency(unit_price)}
+                      {formatCurrency(unitPrice)}
                     </td>
                     <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
                       {discount > 0 ? `${discount.toFixed(0)}%` : '-'}
@@ -529,13 +526,12 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                         // Group items by GST rate for proper breakup
                         const rateGroups: Record<number, { taxable: number; tax: number }> = {};
                         (invoice.items || []).forEach((item: InvoiceItem) => {
-                          const rate = parseFloat(String(item.gst_percent || item.tax_percent || 0));
-                          const qty = parseFloat(String(item.quantity || 0));
-                          const price = parseFloat(String(item.unit_price || 0));
-                          const disc = parseFloat(String(item.discount_percent || 0));
-                          const subtotal = qty * price;
-                          const taxable = subtotal - (subtotal * disc / 100);
-                          const tax = taxable * rate / 100;
+                          const calculatedItem = EnterpriseCalculator.calculateItem(item, {
+                            gst_type: invoice.gst_type
+                          });
+                          const rate = parseFloat(String(calculatedItem.gst_percent || calculatedItem.tax_percent || 0));
+                          const taxable = calculatedItem.taxable_amount || 0;
+                          const tax = calculatedItem.gst_amount || 0;
                           if (!rateGroups[rate]) rateGroups[rate] = { taxable: 0, tax: 0 };
                           rateGroups[rate].taxable += taxable;
                           rateGroups[rate].tax += tax;

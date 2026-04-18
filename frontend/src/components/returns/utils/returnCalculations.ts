@@ -11,6 +11,7 @@ import type {
     RefundBreakdown,
     RefundMethod
 } from '../types/returnsSharedTypes';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 /**
  * Calculate return totals for a list of items
@@ -23,73 +24,24 @@ export function calculateReturnTotals(
     items: BaseReturnItem[] = [],
     includeGst: boolean = true
 ): ReturnCalculation {
-    if (!items || items.length === 0) {
-        return {
-            subtotal: 0,
-            totalTax: 0,
-            total: 0,
-            itemCount: 0,
-            totalQuantity: 0,
-            breakdown: { cgst: 0, sgst: 0, igst: 0 }
-        };
-    }
-
-    let subtotal = 0;
-    let totalTax = 0;
-    let cgst = 0;
-    let sgst = 0;
-    let igst = 0;
-    let itemCount = 0;
-    let totalQuantity = 0;
-
-    items.forEach(item => {
-        if (!item.selected) return;
-
-        const returnQty = parseFloat(String(item.return_quantity)) || 0;
-        if (returnQty <= 0) return;
-
-        itemCount++;
-        totalQuantity += returnQty;
-
-        const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
-        const discount = parseFloat(String(item.discount_amount)) || 0;
-
-        // Calculate base amount
-        const baseAmount = returnQty * unit_price;
-        const discountAmount = (discount / 100) * baseAmount;
-        const taxableAmount = baseAmount - discountAmount;
-
-        subtotal += taxableAmount;
-
-        if (includeGst) {
-            const cgstRate = parseFloat(String(item.cgst_rate)) || 0;
-            const sgstRate = parseFloat(String(item.sgst_rate)) || 0;
-            const igstRate = parseFloat(String(item.igst_rate)) || 0;
-
-            if (igstRate > 0) {
-                const igstAmount = (taxableAmount * igstRate) / 100;
-                igst += igstAmount;
-                totalTax += igstAmount;
-            } else {
-                const cgstAmount = (taxableAmount * cgstRate) / 100;
-                const sgstAmount = (taxableAmount * sgstRate) / 100;
-                cgst += cgstAmount;
-                sgst += sgstAmount;
-                totalTax += (cgstAmount + sgstAmount);
-            }
-        }
+    const result = EnterpriseCalculator.calculateReturnTotals(items, {
+        include_gst: includeGst,
+        selected_only: true,
+        quantity_field: 'return_quantity',
+        round_final_amount: false
     });
+    const totals = result.totals;
 
     return {
-        subtotal: Math.round(subtotal * 100) / 100,
-        totalTax: Math.round(totalTax * 100) / 100,
-        total: Math.round((subtotal + totalTax) * 100) / 100,
-        itemCount,
-        totalQuantity,
+        subtotal: totals.subtotal_amount || totals.subtotal || 0,
+        totalTax: totals.tax_amount || totals.total_tax_amount || 0,
+        total: totals.total_amount || totals.final_amount || 0,
+        itemCount: result.items.length,
+        totalQuantity: totals.total_return_quantity || 0,
         breakdown: {
-            cgst: Math.round(cgst * 100) / 100,
-            sgst: Math.round(sgst * 100) / 100,
-            igst: Math.round(igst * 100) / 100
+            cgst: totals.cgst_amount || 0,
+            sgst: totals.sgst_amount || 0,
+            igst: totals.igst_amount || 0
         }
     };
 }
@@ -155,30 +107,11 @@ export function calculateItemReturnAmount(
     item: BaseReturnItem,
     includeGst: boolean = true
 ): number {
-    const returnQty = parseFloat(String(item.return_quantity)) || 0;
-    const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
-    const discount = parseFloat(String(item.discount_amount)) || 0;
-
-    const baseAmount = returnQty * unit_price;
-    const discountAmount = (discount / 100) * baseAmount;
-    const taxableAmount = baseAmount - discountAmount;
-
-    if (!includeGst) {
-        return Math.round(taxableAmount * 100) / 100;
-    }
-
-    const cgstRate = parseFloat(String(item.cgst_rate)) || 0;
-    const sgstRate = parseFloat(String(item.sgst_rate)) || 0;
-    const igstRate = parseFloat(String(item.igst_rate)) || 0;
-
-    let taxAmount = 0;
-    if (igstRate > 0) {
-        taxAmount = (taxableAmount * igstRate) / 100;
-    } else {
-        taxAmount = (taxableAmount * (cgstRate + sgstRate)) / 100;
-    }
-
-    return Math.round((taxableAmount + taxAmount) * 100) / 100;
+    const calculated = EnterpriseCalculator.calculateReturnLine(item, {
+        include_gst: includeGst,
+        quantity_field: 'return_quantity'
+    });
+    return calculated.total_amount;
 }
 
 /**

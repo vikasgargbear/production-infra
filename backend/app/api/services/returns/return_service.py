@@ -284,7 +284,10 @@ class ReturnService:
     @staticmethod
     def calculate_return_totals(
         items: list,
-        gst_type: str = "CGST/SGST"
+        gst_type: str = "CGST/SGST",
+        include_gst: bool = True,
+        cap_to_paid_quantity: bool = False,
+        exclude_free_quantity_from_taxable: bool = False
     ) -> Dict[str, Any]:
         """
         Calculate all return totals from items list.
@@ -309,9 +312,16 @@ class ReturnService:
         for item in items:
             # Handle both return_quantity and quantity field names
             qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
+            paid_qty = Decimal(str(item.get("paid_quantity", 0) or 0))
+            free_qty = Decimal(str(item.get("free_quantity", 0) or 0))
             rate = Decimal(str(item.get("unit_price") or item.get("rate", 0)))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
-            tax_percent = Decimal(str(item.get("tax_percent", 0)))
+            tax_percent = Decimal(str(item.get("tax_percent", 0))) if include_gst else Decimal("0")
+
+            if cap_to_paid_quantity and paid_qty > 0:
+                qty = min(qty, paid_qty)
+            elif exclude_free_quantity_from_taxable and free_qty > 0:
+                qty = max(Decimal("0"), qty - free_qty)
             
             # Calculate with discount
             base_amount = qty * rate

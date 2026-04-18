@@ -4,6 +4,7 @@
  * Follows Indian GST principles: CGST + SGST (intrastate) or IGST (interstate)
  */
 import { useMemo } from 'react';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 // ============================================================================
 // Types
@@ -53,78 +54,25 @@ export function useReturnCalculations(
     includeGst: boolean = true
 ): ReturnCalculations {
     const calculations = useMemo((): ReturnCalculations => {
-        const emptyResult: ReturnCalculations = {
-            subtotal: 0,
-            totalTax: 0,
-            total: 0,
-            itemCount: 0,
-            totalQuantity: 0,
-            breakdown: { cgst: 0, sgst: 0, igst: 0 }
-        };
-
-        if (!items || items.length === 0) {
-            return emptyResult;
-        }
-
-        let subtotal = 0;
-        let totalTax = 0;
-        let cgst = 0;
-        let sgst = 0;
-        let igst = 0;
-        let itemCount = 0;
-        let totalQuantity = 0;
-
-        items.forEach(item => {
-            if (!item.selected) return;
-
-            const returnQty = parseFloat(String(item.return_quantity)) || 0;
-            if (returnQty <= 0) return;
-
-            itemCount++;
-            totalQuantity += returnQty;
-
-            const unit_price = parseFloat(String(item.unit_price)) || 0;
-            const discount = parseFloat(String(item.discount_amount)) || 0;
-
-            // Calculate base amount
-            const baseAmount = returnQty * unit_price;
-            const discountAmount = (discount / 100) * baseAmount;
-            const taxableAmount = baseAmount - discountAmount;
-
-            subtotal += taxableAmount;
-
-            if (includeGst) {
-                // Calculate tax based on Indian GST rules
-                const cgstRate = parseFloat(String(item.cgst_rate)) || 0;
-                const sgstRate = parseFloat(String(item.sgst_rate)) || 0;
-                const igstRate = parseFloat(String(item.igst_rate)) || 0;
-
-                if (igstRate > 0) {
-                    // Interstate: Use IGST
-                    const igstAmount = (taxableAmount * igstRate) / 100;
-                    igst += igstAmount;
-                    totalTax += igstAmount;
-                } else {
-                    // Intrastate: Use CGST + SGST
-                    const cgstAmount = (taxableAmount * cgstRate) / 100;
-                    const sgstAmount = (taxableAmount * sgstRate) / 100;
-                    cgst += cgstAmount;
-                    sgst += sgstAmount;
-                    totalTax += (cgstAmount + sgstAmount);
-                }
-            }
+        const result = EnterpriseCalculator.calculateReturnTotals(items, {
+            include_gst: includeGst,
+            selected_only: true,
+            quantity_field: 'return_quantity',
+            round_final_amount: false
         });
 
+        const totals = result.totals;
+
         return {
-            subtotal: Math.round(subtotal * 100) / 100,
-            totalTax: Math.round(totalTax * 100) / 100,
-            total: Math.round((subtotal + totalTax) * 100) / 100,
-            itemCount,
-            totalQuantity,
+            subtotal: totals.subtotal_amount || totals.subtotal || 0,
+            totalTax: totals.tax_amount || totals.total_tax_amount || 0,
+            total: totals.total_amount || totals.final_amount || 0,
+            itemCount: result.items.length,
+            totalQuantity: totals.total_return_quantity || 0,
             breakdown: {
-                cgst: Math.round(cgst * 100) / 100,
-                sgst: Math.round(sgst * 100) / 100,
-                igst: Math.round(igst * 100) / 100
+                cgst: totals.cgst_amount || 0,
+                sgst: totals.sgst_amount || 0,
+                igst: totals.igst_amount || 0
             }
         };
     }, [items, includeGst]);

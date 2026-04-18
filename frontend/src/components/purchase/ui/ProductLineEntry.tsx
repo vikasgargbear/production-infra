@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Trash2, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { purchasesApi } from '../../../services/api';
 import { debounce } from 'lodash';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 // Type definitions
 interface ProductValidation {
@@ -57,7 +58,11 @@ const ProductLineEntry: React.FC<ProductLineEntryProps> = ({ item, index, onUpda
   const quantity = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity)) || 0;
   const costPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
   const taxPercent = typeof item.tax_percent === 'number' ? item.tax_percent : parseFloat(String(item.tax_percent)) || 0;
-  const lineTotal = quantity * costPrice * (1 + taxPercent / 100);
+  const lineTotal = EnterpriseCalculator.calculateItem({
+    quantity,
+    unit_price: costPrice,
+    tax_percent: taxPercent
+  }).total_amount;
 
   // Debounced search function
   const searchProducts = useCallback(

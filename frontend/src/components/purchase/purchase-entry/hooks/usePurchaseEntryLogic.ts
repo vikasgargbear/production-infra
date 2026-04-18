@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { purchasesApi } from '../../../../services/api';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
+import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import { useToast } from '../../../global';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
@@ -221,37 +222,23 @@ export function usePurchaseEntryLogic({
             return;
         }
 
-        let grossTotal = 0;
-        let taxTotal = 0;
-
-        purchase.items.forEach(item => {
-            if (item.product_id || item.product_name) {
-                const quantity = parseFloat(String(item.quantity)) || 0;
-                const purchasePrice = parseFloat(String(item.unit_price || item.unit_price || item.unit_price)) || 0;
-                const taxPercent = parseFloat(String(item.tax_percent || item.tax || item.gst_percent)) || 0;
-
-                const itemTotal = quantity * purchasePrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-
-                grossTotal += itemTotal;
-                taxTotal += itemTax;
+        const calculation = EnterpriseCalculator.calculateTotals(
+            purchase.items.filter(item => item.product_id || item.product_name),
+            {
+                invoice_discount: parseFloat(String(purchase.discount_amount)) || 0,
+                freight_charges: parseFloat(String(purchase.other_charges)) || 0,
+                round_final_amount: true
             }
-        });
-
-        const discountAmount = parseFloat(String(purchase.discount_amount)) || 0;
-        const otherCharges = parseFloat(String(purchase.other_charges)) || 0;
-
-        const netAmount = grossTotal + taxTotal - discountAmount + otherCharges;
-        const roundOff = Math.round(netAmount) - netAmount;
-        const finalAmount = Math.round(netAmount);
+        );
+        const totals = calculation.totals;
 
         setPurchase(prev => ({
             ...prev,
-            gross_amount: grossTotal,
-            tax_amount: taxTotal,
-            round_off: roundOff,
-            net_amount: netAmount,
-            total_amount: finalAmount
+            gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
+            tax_amount: totals.total_tax_amount || totals.total_tax || 0,
+            round_off: totals.round_off_amount || totals.round_off || 0,
+            net_amount: totals.net_amount || totals.total_amount || 0,
+            total_amount: totals.final_amount || totals.total_amount || 0
         }));
     }, [purchase.items, purchase.discount_amount, purchase.other_charges]);
 

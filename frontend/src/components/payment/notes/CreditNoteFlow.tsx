@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
 import { notesApi } from '../../../services/api';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import CreditNoteFormPageCompact from './CreditNoteFormPageCompact';
 import CreditNoteReviewPage from './CreditNoteReviewPage';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
@@ -20,6 +21,7 @@ interface NoteItem {
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  tax_percent?: number;
   line_total: number;
 }
 
@@ -252,6 +254,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           quantity: parseFloat(item.quantity || 0),
           unit_price: parseFloat(item.unit_price || item.unit_price || 0),
           discount_percent: parseFloat(item.discount_percent || 0),
+          tax_percent: parseFloat(item.gst_percent || item.tax_percent || ((item.cgst_rate || item.cgst_percent || 0) + (item.sgst_rate || item.sgst_percent || 0) + (item.igst_rate || item.igst_percent || 0)) || 0),
           line_total: parseFloat(item.line_total || item.total_amount || (item.quantity * item.unit_price) || 0)
         }));
 
@@ -266,6 +269,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
             quantity: parseFloat(item.quantity || 0),
             unit_price: parseFloat(item.unit_price || item.unit_price || 0),
             discount_percent: parseFloat(item.discount_percent || 0),
+            tax_percent: parseFloat(item.gst_percent || item.tax_percent || ((item.cgst_rate || item.cgst_percent || 0) + (item.sgst_rate || item.sgst_percent || 0) + (item.igst_rate || item.igst_percent || 0)) || 0),
             line_total: parseFloat(item.line_total || item.total_amount || 0)
           }));
           setNoteItems(transformedItems);
@@ -296,14 +300,18 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   };
 
   const calculateTotals = () => {
-    const subtotal = noteItems.reduce((sum, item) => sum + item.line_total, 0);
-    const taxAmount = subtotal * 0.18; // Assuming 18% GST
-    const grandTotal = subtotal + taxAmount;
+    const calculation = EnterpriseCalculator.calculateNoteTotals(noteItems, {
+      include_gst: includeGST,
+      selected_only: false,
+      quantity_field: 'quantity',
+      round_final_amount: false
+    });
+    const totals = calculation.totals;
 
     return {
-      subtotal,
-      taxAmount,
-      grandTotal
+      subtotal: totals.subtotal_amount || totals.subtotal || 0,
+      taxAmount: totals.tax_amount || totals.total_tax_amount || 0,
+      grandTotal: totals.total_amount || totals.final_amount || 0
     };
   };
 

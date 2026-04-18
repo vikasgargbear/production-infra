@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 13;  // Bumped for stock_adjustments, stock_transfers stores
+const DB_VERSION = 14;  // Bumped for credit_debit_notes offline store
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -130,6 +130,12 @@ export interface OfflineSchema extends DBSchema {
         key: string;  // temp_id or return_id
         value: any;
         indexes: { 'return_number': string; 'supplier_id': string; 'sync_status': string; 'created_at': string };
+    };
+    // Credit / Debit Notes store for offline-first finance adjustments
+    credit_debit_notes: {
+        key: string;  // temp_id or note_id
+        value: any;
+        indexes: { 'note_number': string; 'party_id': string; 'sync_status': string; 'created_at': string };
     };
     // Stock Adjustments store for offline-first stock adjustments
     stock_adjustments: {
@@ -358,6 +364,15 @@ class OfflineDatabase {
                     purchaseReturnStore.createIndex('supplier_id', 'supplier_id');
                     purchaseReturnStore.createIndex('sync_status', 'sync_status');
                     purchaseReturnStore.createIndex('created_at', 'created_at');
+                }
+
+                // Credit / Debit Notes store (for offline-first finance adjustments)
+                if (!db.objectStoreNames.contains('credit_debit_notes')) {
+                    const notesStore = db.createObjectStore('credit_debit_notes', { keyPath: 'temp_id' });
+                    notesStore.createIndex('note_number', 'note_number');
+                    notesStore.createIndex('party_id', 'party_id');
+                    notesStore.createIndex('sync_status', 'sync_status');
+                    notesStore.createIndex('created_at', 'created_at');
                 }
 
                 // Stock Adjustments store (for offline-first stock adjustments)
@@ -638,13 +653,14 @@ class OfflineDatabase {
                     storeName === 'products' ? 'product_id' :
                         storeName === 'sales_orders' ? 'order_id' :
                             storeName === 'delivery_challans' ? 'challan_id' :
-                                storeName === 'purchase_orders' ? 'order_id' :
-                                    storeName === 'purchase_entries' ? 'invoice_id' :
-                                        storeName === 'sales_returns' ? 'return_id' :
-                                            storeName === 'purchase_returns' ? 'return_id' :
-                                                storeName === 'stock_adjustments' ? 'adjustment_id' :
-                                                    storeName === 'stock_transfers' ? 'transfer_id' :
-                                                        storeName === 'suppliers' ? 'supplier_id' : 'id';
+                                    storeName === 'purchase_orders' ? 'order_id' :
+                                        storeName === 'purchase_entries' ? 'invoice_id' :
+                                            storeName === 'sales_returns' ? 'return_id' :
+                                                storeName === 'purchase_returns' ? 'return_id' :
+                                                    storeName === 'credit_debit_notes' ? 'note_id' :
+                                                        storeName === 'stock_adjustments' ? 'adjustment_id' :
+                                                            storeName === 'stock_transfers' ? 'transfer_id' :
+                                                                storeName === 'suppliers' ? 'supplier_id' : 'id';
 
             item[idField] = serverId;
             item.sync_status = SYNC_STATUS.SYNCED;

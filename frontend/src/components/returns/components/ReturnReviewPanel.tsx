@@ -7,6 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useCompany } from '../../../contexts/CompanyContext';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import { ModuleHeader, DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
@@ -94,36 +95,22 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     const taxBreakup = useMemo(() => {
         const rateMap: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> = {};
         selectedItems.forEach(item => {
-            const qty = parseFloat(String(item.return_quantity || 0));
-            const freeQty = parseFloat(String(item.return_free_qty || 0));
-            const paidQty = Math.max(0, qty - freeQty);
-            const rate = parseFloat(String(item.unit_price || 0));
-            const discPercent = parseFloat(String(item.discount_percent || 0));
-            const taxPercent = parseFloat(String(item.tax_percent || 0));
-            if (taxPercent <= 0 || paidQty <= 0) return;
+            const calculated = EnterpriseCalculator.calculateReturnLine(item, {
+                include_gst: !returnData.withhold_gst,
+                quantity_field: 'return_quantity',
+                paid_quantity_field: 'paid_quantity',
+                free_quantity_field: 'free_quantity',
+                cap_to_paid_quantity: true
+            });
+            if ((calculated.tax_percent || 0) <= 0 || calculated.base_quantity <= 0) return;
 
-            const baseAmount = paidQty * rate;
-            const discountAmount = (baseAmount * discPercent) / 100;
-            const taxable = baseAmount - discountAmount;
-
-            // Read original invoice rates to determine CGST/SGST vs IGST
-            const igstRate = parseFloat(String(item.igst_rate || 0));
-            const cgstRate = parseFloat(String(item.cgst_rate || 0));
-            const sgstRate = parseFloat(String(item.sgst_rate || 0));
-
-            if (!rateMap[taxPercent]) {
-                rateMap[taxPercent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
+            if (!rateMap[calculated.tax_percent]) {
+                rateMap[calculated.tax_percent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
             }
-            rateMap[taxPercent].taxable += taxable;
-
-            if (igstRate > 0) {
-                // Inter-state: full tax as IGST
-                rateMap[taxPercent].igst += (taxable * igstRate) / 100;
-            } else {
-                // Intra-state: split CGST/SGST
-                rateMap[taxPercent].cgst += (taxable * cgstRate) / 100;
-                rateMap[taxPercent].sgst += (taxable * sgstRate) / 100;
-            }
+            rateMap[calculated.tax_percent].taxable += calculated.taxable_amount;
+            rateMap[calculated.tax_percent].cgst += calculated.cgst_amount;
+            rateMap[calculated.tax_percent].sgst += calculated.sgst_amount;
+            rateMap[calculated.tax_percent].igst += calculated.igst_amount;
         });
         return Object.entries(rateMap)
             .sort(([a], [b]) => Number(a) - Number(b))
@@ -325,16 +312,18 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     </thead>
                                     <tbody>
                                         {selectedItems.map((item, index) => {
-                                            const qty = parseFloat(String(item.return_quantity || 0));
                                             const freeQty = parseFloat(String(item.return_free_qty || 0));
-                                            const paidQty = Math.max(0, qty - freeQty);
-                                            const rate = parseFloat(String(item.unit_price || 0));
-                                            const discPercent = parseFloat(String(item.discount_percent || 0));
-                                            const taxPercent = parseFloat(String(item.tax_percent || 0));
-                                            const baseAmount = paidQty * rate;
-                                            const discountAmount = (baseAmount * discPercent) / 100;
-                                            const taxableAmount = baseAmount - discountAmount;
-                                            const lineTotal = taxableAmount + (taxableAmount * taxPercent / 100);
+                                            const calculatedLine = EnterpriseCalculator.calculateReturnLine({
+                                                ...item,
+                                                free_quantity: item.return_free_qty ?? item.free_quantity
+                                            }, {
+                                                quantity_field: 'return_quantity',
+                                                free_quantity_field: 'free_quantity',
+                                                exclude_free_quantity_from_taxable: true
+                                            });
+                                            const rate = calculatedLine.unit_price || item.unit_price || 0;
+                                            const taxPercent = parseFloat(String(calculatedLine.tax_percent || 0));
+                                            const lineTotal = calculatedLine.total_amount || 0;
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .core.logging_config import setup_logging
+from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.request_logger import RequestLoggerMiddleware
@@ -103,7 +104,6 @@ from .api.routes import metadata
 from .api.routes.loyalty import router as loyalty_router
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
-from .api.routes import test_routes  # TEST MODE verification
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -121,11 +121,11 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
 
     # SECURITY: Block TEST_MODE in production at startup
-    env = os.getenv("ENV", "development").lower()
-    if env in ("production", "prod") and os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
+    env = get_app_env()
+    if is_production() and is_test_mode_enabled():
         raise RuntimeError(
             "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
-            "Remove TEST_MODE env var or set ENV=development."
+            "Remove TEST_MODE env var or set APP_ENV/ENV=development."
         )
 
     logger.info("Starting Pharma ERP Backend...")
@@ -287,7 +287,10 @@ api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 # api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])  # REMOVED: Moved to shared
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
-api.include_router(test_routes.router, tags=["Testing"])  # TEST MODE verification endpoint
+
+if not is_production():
+    from .api.routes import test_routes  # TEST MODE verification
+    api.include_router(test_routes.router, tags=["Testing"])
 # api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
 # api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Phone, Mail, MapPin, Building2, CreditCard, Truck, Shield } from 'lucide-react';
 import type { PurchaseOrder, PurchaseOrderItem, Supplier } from '../types/purchaseSharedTypes';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 // Use canonical types from purchaseSharedTypes - DO NOT define duplicates
 
@@ -26,15 +27,8 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
     const gstBreakup: { [key: number]: any } = {};
 
     purchaseOrder.items.forEach(item => {
-      const quantity = parseFloat(String(item.quantity)) || 0;
-      const unit_price = parseFloat(String(item.unit_price)) || 0;
-      const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-      const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-
-      const itemTotal = quantity * unit_price;
-      const discountAmount = (itemTotal * discountPercent) / 100;
-      const taxableAmount = itemTotal - discountAmount;
-      const taxAmount = (taxableAmount * taxPercent) / 100;
+      const calculated = EnterpriseCalculator.calculateItem(item);
+      const taxPercent = calculated.tax_percent || 0;
 
       if (!gstBreakup[taxPercent]) {
         gstBreakup[taxPercent] = {
@@ -46,10 +40,11 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
         };
       }
 
-      gstBreakup[taxPercent].taxableAmount += taxableAmount;
-      gstBreakup[taxPercent].cgst += taxAmount / 2;
-      gstBreakup[taxPercent].sgst += taxAmount / 2;
-      gstBreakup[taxPercent].totalTax += taxAmount;
+      gstBreakup[taxPercent].taxableAmount += calculated.taxable_amount;
+      gstBreakup[taxPercent].cgst += calculated.cgst_amount;
+      gstBreakup[taxPercent].sgst += calculated.sgst_amount;
+      gstBreakup[taxPercent].igst += calculated.igst_amount;
+      gstBreakup[taxPercent].totalTax += calculated.gst_amount;
     });
 
     return gstBreakup;
@@ -204,14 +199,11 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
               </thead>
               <tbody>
                 {purchaseOrder.items.map((item, index) => {
+                  const calculated = EnterpriseCalculator.calculateItem(item);
                   const quantity = parseFloat(String(item.quantity)) || 0;
                   const unit_price = parseFloat(String(item.unit_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                  const itemTotal = quantity * unit_price;
-                  const discountAmount = (itemTotal * discountPercent) / 100;
-                  const taxableAmount = itemTotal - discountAmount;
-                  const taxAmount = (taxableAmount * (parseFloat(String(item.tax_percent)) || 0)) / 100;
-                  const totalAmount = taxableAmount + taxAmount;
+                  const totalAmount = calculated.total_amount;
 
                   return (
                     <tr key={item.id} className="border-b border-gray-200">
@@ -224,7 +216,7 @@ const PurchaseOrderPreview: React.FC<PurchaseOrderPreviewProps> = ({ purchaseOrd
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(unit_price)}</td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.mrp || 0)}</td>
                       <td className="py-3 px-2 text-sm text-center">{discountPercent}%</td>
-                      <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>
+                      <td className="py-3 px-2 text-sm text-center">{calculated.tax_percent}%</td>
                       <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                     </tr>
                   );

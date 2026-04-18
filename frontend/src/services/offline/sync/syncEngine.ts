@@ -146,6 +146,7 @@ const SYNC_ENTITY_REGISTRY: Record<string, SyncEntityConfig> = {
     purchase_entries:  { idField: 'invoice_id',     tableName: 'purchase_entries',  getApi: async () => (await import('../../api')).purchasesApi, createMethod: 'createEntry', deltaSyncTables: ['batches', 'products'], deltaSyncReason: 'grn_approved' },
     sales_returns:     { idField: 'return_id',      tableName: 'sales_returns',     getApi: async () => (await import('../../api')).returnsApi,   createMethod: 'createSaleReturn', deltaSyncTables: ['batches', 'products'] },
     purchase_returns:  { idField: 'return_id',      tableName: 'purchase_returns',  getApi: async () => (await import('../../api')).returnsApi,   createMethod: 'createPurchaseReturn', deltaSyncTables: ['batches', 'products'] },
+    credit_debit_notes:{ idField: 'note_id',        tableName: 'credit_debit_notes', getApi: async () => (await import('../../api')).notesApi },
     stock_adjustments: { idField: 'adjustment_id',  tableName: 'stock_adjustments', getApi: () => stockApi,      createMethod: 'createAdjustment', deltaSyncTables: ['batches', 'products'], deltaSyncReason: 'stock_adjusted' },
 };
 

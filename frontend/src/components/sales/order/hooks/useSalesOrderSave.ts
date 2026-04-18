@@ -8,6 +8,7 @@
 import { useDocumentSave } from '../../../global/hooks/useDocumentSave';
 import { apiClient } from '../../../../services/api';
 import { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
+import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import type { Order, CreatedOrderData } from '../../../../types/models';
 
 export interface UseSalesOrderSaveProps {
@@ -61,12 +62,16 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                 const freeQuantity = parseInt(String(item.free_quantity)) || 0;
                 const unitPrice = parseFloat(String(item.unit_price)) || 0;
                 const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                const taxPercent = parseFloat(String(item.gst_percent)) || 0;
-
-                const subtotal = quantity * unitPrice;
-                const discountAmount = (subtotal * discountPercent) / 100;
-                const taxableAmount = subtotal - discountAmount;
-                const taxAmount = (taxableAmount * taxPercent) / 100;
+                const taxPercent = EnterpriseCalculator.getItemTaxPercent(item as any);
+                const calculated = EnterpriseCalculator.calculateItem({
+                    quantity,
+                    free_quantity: freeQuantity,
+                    unit_price: unitPrice,
+                    discount_percent: discountPercent,
+                    gst_percent: taxPercent
+                }, {
+                    gst_type: order.gst_type
+                });
 
                 return {
                     product_id: parseInt(String(item.product_id)),
@@ -78,9 +83,9 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                     unit_price: unitPrice,
                     mrp: parseFloat(String(item.mrp)) || unitPrice,
                     discount_percent: discountPercent,
-                    discount_amount: discountAmount,
+                    discount_amount: calculated.discount_amount,
                     tax_percent: taxPercent,
-                    tax_amount: taxAmount,
+                    tax_amount: calculated.gst_amount,
                     gst_type: order.gst_type || 'CGST/SGST',
                     uom: item.uom || null,
                     pack_type: item.pack_type || null

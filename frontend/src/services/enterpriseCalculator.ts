@@ -48,6 +48,14 @@ export interface CalculationOptions {
   gst_type?: GstType | string;
   freight_charges?: number;       // Was: delivery_charges
   invoice_discount?: number;      // Was: additional_discount
+  include_gst?: boolean;
+  quantity_field?: string;
+  round_final_amount?: boolean;
+  selected_only?: boolean;
+  paid_quantity_field?: string;
+  free_quantity_field?: string;
+  cap_to_paid_quantity?: boolean;
+  exclude_free_quantity_from_taxable?: boolean;
   [key: string]: any;
 }
 
@@ -73,6 +81,148 @@ export interface CalculatedTotals {
 }
 
 class EnterpriseCalculator {
+  static toNumber(value: unknown, fallback: number = 0): number {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  }
+
+  static getItemTaxPercent(item: any): number {
+    const directPercent = getNumericField(item, 'gst_percent', Number.NaN);
+    if (Number.isFinite(directPercent)) {
+      return directPercent;
+    }
+
+    const taxPercent = getNumericField(item, 'tax_percent', Number.NaN);
+    if (Number.isFinite(taxPercent)) {
+      return taxPercent;
+    }
+
+    const cgstRate = this.toNumber(item?.cgst_rate ?? item?.cgst_percent, 0);
+    const sgstRate = this.toNumber(item?.sgst_rate ?? item?.sgst_percent, 0);
+    const igstRate = this.toNumber(item?.igst_rate ?? item?.igst_percent, 0);
+    return cgstRate + sgstRate + igstRate;
+  }
+
+  static getItemGstType(item: any, defaultGstType: string = 'CGST/SGST'): string {
+    const igstRate = this.toNumber(item?.igst_rate ?? item?.igst_percent, 0);
+    const cgstRate = this.toNumber(item?.cgst_rate ?? item?.cgst_percent, 0);
+    const sgstRate = this.toNumber(item?.sgst_rate ?? item?.sgst_percent, 0);
+
+    if (igstRate > 0) return 'IGST';
+    if (cgstRate > 0 || sgstRate > 0) return 'CGST/SGST';
+    return defaultGstType;
+  }
+
+  static getBreakdownFromTax(taxAmount: number, gstType: string) {
+    return {
+      cgst_amount: gstType === 'CGST/SGST' ? taxAmount / 2 : 0,
+      sgst_amount: gstType === 'CGST/SGST' ? taxAmount / 2 : 0,
+      igst_amount: gstType === 'IGST' ? taxAmount : 0
+    };
+  }
+
+  static buildInvoiceTotals(params: {
+    grossAmount: number;
+    totalDiscount: number;
+    taxableBeforeScheme: number;
+    schemeDiscount: number;
+    totalGst: number;
+    cgstAmount: number;
+    sgstAmount: number;
+    igstAmount: number;
+    freightCharges: number;
+    roundOff: number;
+    finalAmount: number;
+    roundFinalAmount: boolean;
+  }): InvoiceTotals {
+    const netAmount = params.taxableBeforeScheme - params.schemeDiscount + params.totalGst + params.freightCharges;
+
+    return {
+      subtotal: this.round(params.grossAmount),
+      subtotal_amount: this.round(params.grossAmount),
+      gross_amount: this.round(params.grossAmount),
+      total_discount: this.round(params.totalDiscount),
+      discount_amount: this.round(params.totalDiscount),
+      taxable_before_scheme: this.round(params.taxableBeforeScheme),
+      scheme_discount: this.round(params.schemeDiscount),
+      additional_discount: this.round(params.schemeDiscount),
+      taxable_amount: this.round(params.taxableBeforeScheme - params.schemeDiscount),
+      tax_amount: this.round(params.totalGst),
+      total_tax: this.round(params.totalGst),
+      total_tax_amount: this.round(params.totalGst),
+      cgst_amount: this.round(params.cgstAmount),
+      sgst_amount: this.round(params.sgstAmount),
+      igst_amount: this.round(params.igstAmount),
+      cgst_total: this.round(params.cgstAmount),
+      sgst_total: this.round(params.sgstAmount),
+      igst_total: this.round(params.igstAmount),
+      freight_charges: this.round(params.freightCharges),
+      delivery_charges: this.round(params.freightCharges),
+      round_off: this.round(params.roundOff),
+      round_off_amount: this.round(params.roundOff),
+      net_amount: this.round(netAmount),
+      total_amount: params.roundFinalAmount ? params.finalAmount : this.round(netAmount),
+      final_amount: params.roundFinalAmount ? params.finalAmount : this.round(netAmount)
+    };
+  }
+
+  static calculateReturnLine(item: any, options: CalculationOptions = {}) {
+    const includeGst = options.include_gst !== false;
+    const quantityField = options.quantity_field || 'return_quantity';
+    const requestedQuantity = this.toNumber(item?.[quantityField] ?? item?.return_quantity ?? item?.quantity, 0);
+    const paidQuantityField = options.paid_quantity_field || 'paid_quantity';
+    const freeQuantityField = options.free_quantity_field || 'free_quantity';
+    const paidQuantity = this.toNumber(item?.[paidQuantityField], 0);
+    const freeQuantity = this.toNumber(item?.[freeQuantityField], 0);
+
+    let billableQuantity = requestedQuantity;
+    if (options.cap_to_paid_quantity && paidQuantity > 0) {
+      billableQuantity = Math.min(requestedQuantity, paidQuantity);
+    } else if (options.exclude_free_quantity_from_taxable && freeQuantity > 0) {
+      billableQuantity = Math.max(0, requestedQuantity - freeQuantity);
+    }
+
+    const unitPrice = getNumericField(item, 'unit_price', 0);
+    const discountPercent = getNumericField(item, 'discount_percent', 0);
+    const subtotal = billableQuantity * unitPrice;
+    const discountAmount = (subtotal * discountPercent) / 100;
+    const taxableAmount = subtotal - discountAmount;
+    const gstPercent = includeGst ? this.getItemTaxPercent(item) : 0;
+    const gstType = this.getItemGstType(item, String(options.gst_type || 'CGST/SGST'));
+    const gstAmount = (taxableAmount * gstPercent) / 100;
+    const breakdown = this.getBreakdownFromTax(gstAmount, gstType);
+
+    return {
+      requested_quantity: requestedQuantity,
+      base_quantity: billableQuantity,
+      free_quantity: freeQuantity,
+      unit_price: this.round(unitPrice),
+      discount_percent: discountPercent,
+      tax_percent: gstPercent,
+      gst_type: gstType,
+      subtotal: this.round(subtotal),
+      discount_amount: this.round(discountAmount),
+      taxable_amount: this.round(taxableAmount),
+      gst_amount: this.round(gstAmount),
+      cgst_amount: this.round(breakdown.cgst_amount),
+      sgst_amount: this.round(breakdown.sgst_amount),
+      igst_amount: this.round(breakdown.igst_amount),
+      total_amount: this.round(taxableAmount + gstAmount),
+      _raw: {
+        subtotal,
+        discount_amount: discountAmount,
+        taxable_amount: taxableAmount,
+        gst_amount: gstAmount,
+        cgst_amount: breakdown.cgst_amount,
+        sgst_amount: breakdown.sgst_amount,
+        igst_amount: breakdown.igst_amount,
+        total_amount: taxableAmount + gstAmount,
+        base_quantity: billableQuantity,
+        requested_quantity: requestedQuantity
+      }
+    };
+  }
+
   /**
    * Calculate single item - reusable across all modules
    * @param {any} item - Item with quantity, rate, discount, etc.
@@ -80,7 +230,7 @@ class EnterpriseCalculator {
    * @returns {CalculatedItem} Calculated item with all amounts
    */
   static calculateItem(item: any, options: CalculationOptions = {}): CalculatedItem {
-    const gstType = options.gst_type || 'CGST/SGST';
+    const gstType = String(options.gst_type || 'CGST/SGST');
 
     // Parse inputs using centralized field aliases
     // This ensures we always check canonical name first, then fallback to aliases
@@ -89,7 +239,7 @@ class EnterpriseCalculator {
     const baseQuantity = quantity; // base_quantity = billable quantity (always same as quantity)
     const freeQuantity = getNumericField(item, 'free_quantity', 0);
     const discountPercent = getNumericField(item, 'discount_percent', 0);
-    const gstPercent = getNumericField(item, 'gst_percent', 0);
+    const gstPercent = this.getItemTaxPercent(item);
 
     // PRODUCTION LOGIC: Use quantity for billing calculations
     // Free items are truly FREE and don't affect pricing
@@ -100,9 +250,8 @@ class EnterpriseCalculator {
     const totalAmount = taxableAmount + gstAmount;
 
     // GST breakdown
-    const cgstAmount = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
-    const sgstAmount = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
-    const igstAmount = gstType === 'IGST' ? gstAmount : 0;
+    const lineGstType = this.getItemGstType(item, gstType);
+    const breakdown = this.getBreakdownFromTax(gstAmount, lineGstType);
 
     // Return enriched item with all calculations
     // NOTE: We store BOTH raw values (for aggregation) and rounded values (for display)
@@ -121,9 +270,9 @@ class EnterpriseCalculator {
         discount_amount: discountAmount,
         taxable_amount: taxableAmount,
         gst_amount: gstAmount,
-        cgst_amount: cgstAmount,
-        sgst_amount: sgstAmount,
-        igst_amount: igstAmount,
+        cgst_amount: breakdown.cgst_amount,
+        sgst_amount: breakdown.sgst_amount,
+        igst_amount: breakdown.igst_amount,
         total_amount: totalAmount
       },
 
@@ -135,9 +284,10 @@ class EnterpriseCalculator {
       taxable_amount: this.round(taxableAmount),
       gst_percent: gstPercent,
       gst_amount: this.round(gstAmount),
-      cgst_amount: this.round(cgstAmount),
-      sgst_amount: this.round(sgstAmount),
-      igst_amount: this.round(igstAmount),
+      tax_percent: gstPercent,
+      cgst_amount: this.round(breakdown.cgst_amount),
+      sgst_amount: this.round(breakdown.sgst_amount),
+      igst_amount: this.round(breakdown.igst_amount),
       total_amount: this.round(totalAmount)
     };
   }
@@ -149,82 +299,106 @@ class EnterpriseCalculator {
    * @returns {CalculatedTotals} Aggregated totals
    */
   static calculateTotals(items: any[] = [], options: CalculationOptions = {}): CalculatedTotals {
-    // Initialize totals with FULL PRECISION (no rounding during aggregation)
     let grossAmount = 0;
     let totalDiscount = 0;
-    let taxableAmount = 0;
+    let taxableBeforeScheme = 0;
+
+    const calculatedItems = items.map(item => {
+      const calculated = this.calculateItem(item, options);
+      const raw = calculated._raw || calculated;
+      grossAmount += raw.subtotal;
+      totalDiscount += raw.discount_amount;
+      taxableBeforeScheme += raw.taxable_amount;
+      return calculated;
+    });
+
+    const freightCharges = this.toNumber(options.freight_charges ?? options.delivery_charges, 0);
+    const invoiceDiscount = this.toNumber(options.invoice_discount ?? options.additional_discount, 0);
+
+    let adjustedItems = calculatedItems;
     let totalGst = 0;
     let cgstTotal = 0;
     let sgstTotal = 0;
     let igstTotal = 0;
 
-    // Calculate each item and aggregate using RAW values (full precision)
-    const calculatedItems = items.map(item => {
-      const calculated = this.calculateItem(item, options);
+    if (invoiceDiscount > 0 && taxableBeforeScheme > 0) {
+      const taxableItems = calculatedItems.filter(item => (item._raw?.taxable_amount ?? item.taxable_amount ?? 0) > 0);
+      let allocatedSchemeDiscount = 0;
 
-      // Aggregate totals using RAW values to avoid cumulative rounding errors
-      const raw = calculated._raw || calculated;  // Fallback for backwards compatibility
-      grossAmount += raw.subtotal;
-      totalDiscount += raw.discount_amount;
-      taxableAmount += raw.taxable_amount;
-      totalGst += raw.gst_amount;
-      cgstTotal += raw.cgst_amount;
-      sgstTotal += raw.sgst_amount;
-      igstTotal += raw.igst_amount;
+      adjustedItems = calculatedItems.map(item => {
+        const raw = item._raw || item;
+        if (raw.taxable_amount <= 0) {
+          return item;
+        }
 
-      return calculated;
-    });
+        const isLastTaxableItem = taxableItems[taxableItems.length - 1] === item;
+        const proportionalDiscount = isLastTaxableItem
+          ? invoiceDiscount - allocatedSchemeDiscount
+          : this.round(invoiceDiscount * (raw.taxable_amount / taxableBeforeScheme));
+        allocatedSchemeDiscount += proportionalDiscount;
 
-    // Additional charges
-    const freightCharges = parseFloat(String(options.freight_charges || options.delivery_charges || 0));
-    const invoiceDiscount = parseFloat(String(options.invoice_discount || options.additional_discount || 0));
+        const adjustedTaxableAmount = Math.max(0, raw.taxable_amount - proportionalDiscount);
+        const itemTaxPercent = this.getItemTaxPercent(item);
+        const itemGstType = this.getItemGstType(item, String(options.gst_type || 'CGST/SGST'));
+        const adjustedTaxAmount = adjustedTaxableAmount * itemTaxPercent / 100;
+        const breakdown = this.getBreakdownFromTax(adjustedTaxAmount, itemGstType);
 
-    // CRITICAL: Apply scheme discount to taxable amount BEFORE GST calculation
-    // Per Indian GST: All discounts must be applied before calculating tax
-    const taxableAfterSchemeDiscount = taxableAmount - invoiceDiscount;
+        totalGst += adjustedTaxAmount;
+        cgstTotal += breakdown.cgst_amount;
+        sgstTotal += breakdown.sgst_amount;
+        igstTotal += breakdown.igst_amount;
 
-    // Recalculate GST on the fully discounted amount
-    // Note: This is a simplified recalculation. For exact per-item GST rates,
-    // you'd need to proportionally reduce each item's taxable amount.
-    const effectiveGstRate = taxableAmount > 0 ? (totalGst / taxableAmount) : 0;
-    const adjustedGst = taxableAfterSchemeDiscount * effectiveGstRate;
+        return {
+          ...item,
+          taxable_amount: this.round(adjustedTaxableAmount),
+          gst_amount: this.round(adjustedTaxAmount),
+          cgst_amount: this.round(breakdown.cgst_amount),
+          sgst_amount: this.round(breakdown.sgst_amount),
+          igst_amount: this.round(breakdown.igst_amount),
+          total_amount: this.round(adjustedTaxableAmount + adjustedTaxAmount),
+          _raw: {
+            ...raw,
+            taxable_amount: adjustedTaxableAmount,
+            gst_amount: adjustedTaxAmount,
+            cgst_amount: breakdown.cgst_amount,
+            sgst_amount: breakdown.sgst_amount,
+            igst_amount: breakdown.igst_amount,
+            total_amount: adjustedTaxableAmount + adjustedTaxAmount
+          }
+        };
+      });
+    } else {
+      adjustedItems.forEach(item => {
+        const raw = item._raw || item;
+        totalGst += raw.gst_amount;
+        cgstTotal += raw.cgst_amount;
+        sgstTotal += raw.sgst_amount;
+        igstTotal += raw.igst_amount;
+      });
+    }
 
-    // CRITICAL: Determine CGST/SGST vs IGST based on gst_type option
-    // IGST = Inter-state (full tax to IGST)
-    // CGST/SGST = Intra-state (split 50/50)
-    const gstType = options.gst_type || 'CGST/SGST';
-    const isIGST = gstType === 'IGST';
-
-    const adjustedCgst = isIGST ? 0 : adjustedGst / 2;
-    const adjustedSgst = isIGST ? 0 : adjustedGst / 2;
-    const adjustedIgst = isIGST ? adjustedGst : 0;
-
-    // Final calculations
-    const netAmount = taxableAfterSchemeDiscount + adjustedGst + freightCharges;
-    const finalAmount = Math.round(netAmount);
-    const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
+    const taxableAfterSchemeDiscount = Math.max(0, taxableBeforeScheme - invoiceDiscount);
+    const roundFinalAmount = options.round_final_amount !== false;
+    const netAmount = taxableAfterSchemeDiscount + totalGst + freightCharges;
+    const finalAmount = roundFinalAmount ? Math.round(netAmount) : this.round(netAmount);
+    const roundOff = roundFinalAmount ? this.round(finalAmount - netAmount) : 0;
 
     return {
-      items: calculatedItems,
-      totals: {
-        // Canonical field names (matching database schema: sales.invoices)
-        // NOTE: No rounding on intermediate values - only final_amount is rounded
-        subtotal_amount: grossAmount,                           // DB: subtotal_amount
-        discount_amount: totalDiscount,                         // DB: discount_amount (item-level)
-
-        // UI display: Show taxable BEFORE scheme discount for clear breakdown
-        taxable_before_scheme: taxableAmount,                   // UI only: for showing discount calculation
-        scheme_discount: invoiceDiscount,                       // DB: scheme_discount (invoice-level)
-
-        taxable_amount: taxableAfterSchemeDiscount,             // DB: taxable_amount (AFTER all discounts)
-        total_tax_amount: adjustedGst,                          // DB: total_tax_amount
-        cgst_amount: adjustedCgst,                              // DB: cgst_amount (0 if IGST)
-        sgst_amount: adjustedSgst,                              // DB: sgst_amount (0 if IGST)
-        igst_amount: adjustedIgst,                              // DB: igst_amount (full GST if IGST)
-        freight_charges: freightCharges,                        // DB: freight_charges
-        round_off_amount: this.round(roundOff),                 // DB: round_off_amount (keep 2 decimal precision)
-        final_amount: finalAmount                               // DB: final_amount (ONLY this is rounded)
-      }
+      items: adjustedItems,
+      totals: this.buildInvoiceTotals({
+        grossAmount,
+        totalDiscount,
+        taxableBeforeScheme,
+        schemeDiscount: invoiceDiscount,
+        totalGst,
+        cgstAmount: cgstTotal,
+        sgstAmount: sgstTotal,
+        igstAmount: igstTotal,
+        freightCharges,
+        roundOff,
+        finalAmount,
+        roundFinalAmount
+      })
     };
   }
 
@@ -273,6 +447,95 @@ class EnterpriseCalculator {
     return this.calculateTotals(orderData.items || [], {
       gst_type: orderData.gst_type,
       delivery_charges: orderData.delivery_charges
+    });
+  }
+
+  static calculateReturnTotals(items: any[] = [], options: CalculationOptions = {}) {
+    const selectedItems = options.selected_only === false
+      ? items
+      : items.filter(item => item?.selected !== false);
+
+    let subtotal = 0;
+    let taxAmount = 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
+    let totalReturnQuantity = 0;
+
+    const calculatedItems = selectedItems
+      .filter(item => this.toNumber(item?.[options.quantity_field || 'return_quantity'] ?? item?.return_quantity ?? item?.quantity, 0) > 0)
+      .map(item => {
+        const calculated = this.calculateReturnLine(item, options);
+        const raw = calculated._raw;
+
+        subtotal += raw.taxable_amount;
+        taxAmount += raw.gst_amount;
+        cgstAmount += raw.cgst_amount;
+        sgstAmount += raw.sgst_amount;
+        igstAmount += raw.igst_amount;
+        totalReturnQuantity += raw.requested_quantity;
+
+        return {
+          ...item,
+          ...calculated
+        };
+      });
+
+    const roundFinalAmount = options.round_final_amount !== false;
+    const preRoundTotal = subtotal + taxAmount;
+    const totalAmount = roundFinalAmount ? Math.round(preRoundTotal) : this.round(preRoundTotal);
+    const roundOffAmount = roundFinalAmount ? this.round(totalAmount - preRoundTotal) : 0;
+
+    return {
+      items: calculatedItems,
+      totals: {
+        subtotal: this.round(subtotal),
+        subtotal_amount: this.round(subtotal),
+        tax_amount: this.round(taxAmount),
+        total_tax: this.round(taxAmount),
+        total_tax_amount: this.round(taxAmount),
+        cgst_amount: this.round(cgstAmount),
+        sgst_amount: this.round(sgstAmount),
+        igst_amount: this.round(igstAmount),
+        round_off: this.round(roundOffAmount),
+        round_off_amount: this.round(roundOffAmount),
+        total_amount: totalAmount,
+        final_amount: totalAmount,
+        total_return_quantity: this.round(totalReturnQuantity)
+      }
+    };
+  }
+
+  static calculateSalesReturn(returnData: any) {
+    return this.calculateReturnTotals(returnData?.items || [], {
+      gst_type: returnData?.gst_type,
+      include_gst: !returnData?.withhold_gst,
+      selected_only: true,
+      quantity_field: 'return_quantity',
+      paid_quantity_field: 'paid_quantity',
+      free_quantity_field: 'free_quantity',
+      cap_to_paid_quantity: true,
+      round_final_amount: true
+    });
+  }
+
+  static calculatePurchaseReturn(returnData: any) {
+    return this.calculateReturnTotals(returnData?.items || [], {
+      gst_type: returnData?.gst_type,
+      include_gst: returnData?.include_gst !== false,
+      selected_only: true,
+      quantity_field: 'return_quantity',
+      round_final_amount: true
+    });
+  }
+
+  static calculateNoteTotals(items: any[] = [], options: CalculationOptions = {}) {
+    return this.calculateReturnTotals(items, {
+      ...options,
+      include_gst: options.include_gst !== false,
+      selected_only: options.selected_only ?? true,
+      quantity_field: options.quantity_field || 'quantity',
+      round_final_amount: false
     });
   }
 

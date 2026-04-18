@@ -318,12 +318,18 @@ async def create_sale_return(
             # Calculate item values
             return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
             free_qty = Decimal(str(item.get("free_quantity", 0)))
+            paid_qty = Decimal(str(item.get("paid_quantity", 0) or 0))
             unit_price = Decimal(str(item.get("unit_price", item.get("rate", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
 
-            # Calculate creditable quantity (only paid items get credit, not free items)
-            creditable_qty = max(Decimal("0"), return_qty - free_qty)
+            # Calculate creditable quantity (only paid items get credit, not free items).
+            # When the frontend sends paid_quantity, cap against that. Otherwise fall back
+            # to the legacy free-quantity subtraction.
+            if paid_qty > 0:
+                creditable_qty = min(return_qty, paid_qty)
+            else:
+                creditable_qty = max(Decimal("0"), return_qty - free_qty)
 
             # Calculate return value - check for manual override first
             if "return_value" in item and item["return_value"] is not None:

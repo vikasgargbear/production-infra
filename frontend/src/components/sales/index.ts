@@ -3,6 +3,8 @@
  * Central export for all sales-related components
  */
 
+import EnterpriseCalculator from '../../services/enterpriseCalculator';
+
 // Types
 export interface InvoiceItem {
     quantity: number;
@@ -94,21 +96,17 @@ export const calculateInvoiceTotal = (
     discountAmount: number = 0,
     otherCharges: number = 0
 ): InvoiceTotals => {
-    const subtotal = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
-        return sum + amount;
-    }, 0);
-
-    const taxAmount = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
-        const taxRate = parseFloat(String(item.tax_rate || item.tax_percent || 0));
-        return sum + (amount * taxRate / 100);
-    }, 0);
+    const result = EnterpriseCalculator.calculateTotals(items, {
+        invoice_discount: discountAmount,
+        freight_charges: otherCharges,
+        round_final_amount: false
+    });
+    const totals = result.totals;
 
     return {
-        subtotal,
-        taxAmount,
-        total: subtotal + taxAmount - discountAmount + otherCharges
+        subtotal: totals.subtotal_amount || totals.subtotal || 0,
+        taxAmount: totals.total_tax_amount || totals.total_tax || 0,
+        total: totals.total_amount || totals.final_amount || 0
     };
 };
 

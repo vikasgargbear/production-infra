@@ -18,6 +18,8 @@ import uuid
 from datetime import datetime, timezone
 from contextvars import ContextVar
 
+from .env import get_app_env, is_production
+
 # Context vars for request correlation
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 user_id_var: ContextVar[str] = ContextVar("user_id", default="")
@@ -76,13 +78,13 @@ def setup_logging():
         LOG_LEVEL: DEBUG, INFO, WARNING, ERROR (default: INFO)
         LOG_FORMAT: json or text (default: json in prod, text in dev)
     """
-    env = os.getenv("ENV", "development").lower()
-    is_production = env in ("production", "prod")
+    env = get_app_env()
+    production = is_production()
 
-    level_name = os.getenv("LOG_LEVEL", "INFO" if is_production else "DEBUG").upper()
+    level_name = os.getenv("LOG_LEVEL", "INFO" if production else "DEBUG").upper()
     level = getattr(logging, level_name, logging.INFO)
 
-    log_format = os.getenv("LOG_FORMAT", "json" if is_production else "text").lower()
+    log_format = os.getenv("LOG_FORMAT", "json" if production else "text").lower()
 
     # Remove existing handlers
     root = logging.getLogger()

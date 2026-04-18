@@ -15,6 +15,7 @@ import {
 } from '../../global';
 import { PURCHASE_CONFIG } from '../../../config/purchase.config';
 import { usePurchaseOrderLogic, PurchaseOrderData } from './hooks';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import { toast } from 'react-toastify';
 import { searchCache } from '../../../utils/searchCache';
 
@@ -306,12 +307,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                 label: 'Total',
                 align: 'right',
                 render: (item) => {
-                  const qty = parseFloat(item.quantity) || 0;
-                  const price = parseFloat(item.unit_price) || 0;
-                  const taxPercent = parseFloat(item.tax_percent) || 0;
-                  const subtotal = qty * price;
-                  const tax = subtotal * (taxPercent / 100);
-                  const total = subtotal + tax;
+                  const total = EnterpriseCalculator.calculateItem(item).total_amount;
                   return <span className="font-medium">₹{total.toFixed(2)}</span>;
                 }
               }
