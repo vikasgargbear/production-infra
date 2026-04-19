@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   FileText, CreditCard, Receipt, CheckCircle, User, Package, Plus
 } from 'lucide-react';
@@ -88,12 +88,12 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   const themeColor = isCredit ? 'green' : 'orange';
 
   // Generate note number
-  const generateNoteNumber = async () => {
+  const generateNoteNumber = useCallback(async () => {
     return documentNumberGenerator.generateNumber(
       isCredit ? DOC_TYPES.CREDIT_NOTE : DOC_TYPES.DEBIT_NOTE,
       false
     );
-  };
+  }, [isCredit]);
 
   useEffect(() => {
     const loadNoteNumber = async () => {
@@ -105,7 +105,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     };
 
     void loadNoteNumber();
-  }, [isCredit]);
+  }, [generateNoteNumber]);
 
   // Reason options
   const reasonOptions = isCredit ? [

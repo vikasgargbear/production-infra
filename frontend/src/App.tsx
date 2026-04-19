@@ -32,7 +32,6 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
-import CalculationSmokePage from './e2e/CalculationSmokePage';
 
 // NEW: Offline-first components for instant UX
 import { InitialSyncLoader, OfflineBanner } from './components/offline';
@@ -47,6 +46,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
+const CalculationSmokePage = lazy(() => import('./e2e/CalculationSmokePage'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
 // BatchesInventory removed - use StockHub instead
@@ -321,7 +321,11 @@ const AppContent = (): JSX.Element => {
     process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true' &&
     window.location.pathname === '/e2e/calculation-smoke'
   ) {
-    return <CalculationSmokePage />;
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <CalculationSmokePage />
+      </Suspense>
+    );
   }
 
   // Check if user wants to see auth diagnostic
