@@ -32,6 +32,7 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import ModularPaymentEntry from './components/payment/entry/ModularPaymentEntry';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
+import CalculationSmokePage from './e2e/CalculationSmokePage';
 
 // NEW: Offline-first components for instant UX
 import { InitialSyncLoader, OfflineBanner } from './components/offline';
@@ -314,6 +315,14 @@ const AppContent = (): JSX.Element => {
         return <Home key="home-default" setActiveTab={setActiveTabGuarded} />;
     }
   };
+
+  // Check if user wants to see auth diagnostic
+  if (
+    process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true' &&
+    window.location.pathname === '/e2e/calculation-smoke'
+  ) {
+    return <CalculationSmokePage />;
+  }
 
   // Check if user wants to see auth diagnostic
   if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {
