@@ -109,6 +109,7 @@ export interface AdjustmentItem {
 }
 
 export interface OfflineStockAdjustment {
+    temp_id?: string;
     adjustment_id: string;
     adjustment_number: string;
     adjustment_date: string;
@@ -124,6 +125,7 @@ export interface OfflineStockAdjustment {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }
@@ -142,6 +144,7 @@ export interface TransferItem {
 }
 
 export interface OfflineStockTransfer {
+    temp_id?: string;
     transfer_id: string;
     transfer_number: string;
     transfer_date: string;
@@ -165,6 +168,7 @@ export interface OfflineStockTransfer {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }

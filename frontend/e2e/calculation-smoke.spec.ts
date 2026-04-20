@@ -35,4 +35,27 @@ test.describe('ERP calculation smoke', () => {
     await page.getByTestId('seed-offline-note').click();
     await expect(page.getByTestId('offline-note-status')).toHaveText(/queued:[1-9]\d*/);
   });
+
+  test('can queue all critical offline document types for later replay', async ({ page }) => {
+    await page.getByTestId('seed-critical-offline-docs').click();
+
+    const expectedEntities = [
+      'invoices',
+      'sales_orders',
+      'delivery_challans',
+      'purchase_orders',
+      'purchase_entries',
+      'sales_returns',
+      'purchase_returns',
+      'payments',
+      'payment_receipts',
+      'credit_debit_notes',
+      'stock_adjustments',
+      'stock_transfers'
+    ];
+
+    for (const entity of expectedEntities) {
+      await expect(page.getByTestId('critical-offline-status')).toContainText(`"${entity}": 1`);
+    }
+  });
 });

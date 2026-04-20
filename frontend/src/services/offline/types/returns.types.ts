@@ -23,6 +23,7 @@ export interface SalesReturnItem {
 }
 
 export interface OfflineSalesReturn {
+    temp_id?: string;
     return_id: string;
     return_number: string;
     invoice_id?: string;
@@ -49,6 +50,7 @@ export interface OfflineSalesReturn {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }
@@ -70,6 +72,7 @@ export interface PurchaseReturnItem {
 }
 
 export interface OfflinePurchaseReturn {
+    temp_id?: string;
     return_id: string;
     return_number: string;
     purchase_id?: string;
@@ -92,6 +95,7 @@ export interface OfflinePurchaseReturn {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }

@@ -9,6 +9,7 @@ const format = (value: unknown): string => {
 
 const CalculationSmokePage: React.FC = () => {
   const [offlineStatus, setOfflineStatus] = useState('not-run');
+  const [criticalOfflineStatus, setCriticalOfflineStatus] = useState('not-run');
 
   const scenarios = useMemo(() => {
     const invoice = EnterpriseCalculator.calculateInvoice({
@@ -104,7 +105,6 @@ const CalculationSmokePage: React.FC = () => {
     const tempId = `E2E_NOTE_${Date.now()}`;
     const note = {
       temp_id: tempId,
-      _localId: tempId,
       note_number: `CN-E2E-${Date.now()}`,
       note_type: 'credit',
       party_type: 'customer',
@@ -123,6 +123,207 @@ const CalculationSmokePage: React.FC = () => {
     const queue = await offlineDB.getSyncQueue();
     const pendingNotes = queue.filter(item => item.entity_type === 'credit_debit_notes');
     setOfflineStatus(`queued:${pendingNotes.length}`);
+  };
+
+  const seedCriticalOfflineDocs = async () => {
+    const stamp = Date.now();
+    const docs = [
+      {
+        store: 'invoices',
+        entity: 'invoices',
+        temp_id: `E2E_INV_${stamp}`,
+        data: {
+          invoice_number: `INV-E2E-${stamp}`,
+          customer_id: 1,
+          invoice_date: new Date().toISOString().slice(0, 10),
+          total_amount: scenarios.invoice.totals.final_amount,
+          final_amount: scenarios.invoice.totals.final_amount,
+          items: scenarios.invoice.items
+        }
+      },
+      {
+        store: 'sales_orders',
+        entity: 'sales_orders',
+        temp_id: `E2E_SO_${stamp}`,
+        data: {
+          order_number: `SO-E2E-${stamp}`,
+          customer_id: 1,
+          order_date: new Date().toISOString().slice(0, 10),
+          total_amount: scenarios.invoice.totals.final_amount,
+          items: scenarios.invoice.items
+        }
+      },
+      {
+        store: 'delivery_challans',
+        entity: 'delivery_challans',
+        temp_id: `E2E_DC_${stamp}`,
+        data: {
+          challan_number: `DC-E2E-${stamp}`,
+          customer_id: 1,
+          challan_date: new Date().toISOString().slice(0, 10),
+          items: scenarios.invoice.items
+        }
+      },
+      {
+        store: 'purchase_orders',
+        entity: 'purchase_orders',
+        temp_id: `E2E_PO_${stamp}`,
+        data: {
+          po_number: `PO-E2E-${stamp}`,
+          supplier_id: 1,
+          order_date: new Date().toISOString().slice(0, 10),
+          total_amount: scenarios.purchase.totals.final_amount,
+          items: scenarios.purchase.items
+        }
+      },
+      {
+        store: 'purchase_entries',
+        entity: 'purchase_entries',
+        temp_id: `E2E_PUR_${stamp}`,
+        data: {
+          invoice_number: `PUR-E2E-${stamp}`,
+          supplier_id: 1,
+          invoice_date: new Date().toISOString().slice(0, 10),
+          invoice_total: scenarios.purchase.totals.final_amount,
+          items: scenarios.purchase.items
+        }
+      },
+      {
+        store: 'sales_returns',
+        entity: 'sales_returns',
+        temp_id: `E2E_SR_${stamp}`,
+        data: {
+          return_number: `SR-E2E-${stamp}`,
+          customer_id: 1,
+          return_date: new Date().toISOString().slice(0, 10),
+          total_amount: scenarios.salesReturn.totals.final_amount,
+          items: scenarios.salesReturn.items
+        }
+      },
+      {
+        store: 'purchase_returns',
+        entity: 'purchase_returns',
+        temp_id: `E2E_PR_${stamp}`,
+        data: {
+          return_number: `PR-E2E-${stamp}`,
+          supplier_id: 1,
+          return_date: new Date().toISOString().slice(0, 10),
+          total_amount: scenarios.purchaseReturn.totals.final_amount,
+          items: scenarios.purchaseReturn.items
+        }
+      },
+      {
+        store: 'payments',
+        entity: 'payments',
+        temp_id: `E2E_PAY_${stamp}`,
+        data: {
+          payment_id: `E2E_PAY_${stamp}`,
+          payment_number: `PAY-E2E-${stamp}`,
+          party_type: 'customer',
+          party_id: 1,
+          payment_type: 'receipt',
+          payment_date: new Date().toISOString().slice(0, 10),
+          amount: scenarios.payment.payment_amount,
+          payment_method: 'cash'
+        }
+      },
+      {
+        store: 'payment_receipts',
+        entity: 'payment_receipts',
+        temp_id: `E2E_RCPT_${stamp}`,
+        data: {
+          receipt_id: `E2E_RCPT_${stamp}`,
+          receipt_number: `RCPT-E2E-${stamp}`,
+          customer_id: 1,
+          receipt_date: new Date().toISOString().slice(0, 10),
+          amount: scenarios.payment.payment_amount,
+          payment_method: 'cash'
+        }
+      },
+      {
+        store: 'credit_debit_notes',
+        entity: 'credit_debit_notes',
+        temp_id: `E2E_CN_${stamp}`,
+        data: {
+          note_number: `CN-E2E-${stamp}`,
+          note_type: 'credit',
+          party_type: 'customer',
+          party_id: 1,
+          note_date: new Date().toISOString().slice(0, 10),
+          amount: scenarios.note.totals.total_amount,
+          reason: 'E2E_CRITICAL_OFFLINE',
+          items: scenarios.note.items
+        }
+      },
+      {
+        store: 'stock_adjustments',
+        entity: 'stock_adjustments',
+        temp_id: `E2E_ADJ_${stamp}`,
+        data: {
+          adjustment_id: `E2E_ADJ_${stamp}`,
+          adjustment_number: `ADJ-E2E-${stamp}`,
+          adjustment_date: new Date().toISOString().slice(0, 10),
+          adjustment_type: 'correction',
+          reason: 'E2E_CRITICAL_OFFLINE',
+          status: 'draft',
+          items: [
+            {
+              product_id: '1',
+              product_name: 'E2E stock item',
+              batch_id: '1',
+              batch_number: 'E2E-BATCH',
+              current_qty: 10,
+              adjusted_qty: 9,
+              difference: -1,
+              reason: 'E2E_CRITICAL_OFFLINE'
+            }
+          ]
+        }
+      },
+      {
+        store: 'stock_transfers',
+        entity: 'stock_transfers',
+        temp_id: `E2E_TRF_${stamp}`,
+        data: {
+          transfer_id: `E2E_TRF_${stamp}`,
+          transfer_number: `TRF-E2E-${stamp}`,
+          transfer_date: new Date().toISOString().slice(0, 10),
+          from_warehouse_id: '1',
+          from_warehouse_name: 'Main',
+          to_warehouse_id: '2',
+          to_warehouse_name: 'Secondary',
+          status: 'draft',
+          items: [
+            {
+              product_id: '1',
+              product_name: 'E2E transfer item',
+              batch_id: '1',
+              batch_number: 'E2E-BATCH',
+              quantity: 1
+            }
+          ]
+        }
+      }
+    ];
+
+    for (const doc of docs) {
+      const payload = {
+        ...doc.data,
+        temp_id: doc.temp_id,
+        sync_status: 'pending',
+        created_offline: true,
+        created_at: new Date().toISOString()
+      };
+      await offlineDB.add(doc.store, payload);
+      await offlineDB.addToSyncQueue(doc.entity, doc.temp_id, 'create', payload);
+    }
+
+    const queue = await offlineDB.getSyncQueue();
+    const entityCounts = docs.reduce<Record<string, number>>((counts, doc) => {
+      counts[doc.entity] = queue.filter(item => item.entity_type === doc.entity).length;
+      return counts;
+    }, {});
+    setCriticalOfflineStatus(JSON.stringify(entityCounts, null, 2));
   };
 
   return (
@@ -187,6 +388,19 @@ const CalculationSmokePage: React.FC = () => {
             Seed Offline Note
           </button>
           <p className="mt-3" data-testid="offline-note-status">{offlineStatus}</p>
+        </article>
+
+        <article className="rounded-xl bg-slate-900 border border-slate-700 p-4">
+          <h2 className="text-lg font-semibold">Critical Offline Queue</h2>
+          <button
+            type="button"
+            data-testid="seed-critical-offline-docs"
+            className="mt-3 rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-950"
+            onClick={() => { void seedCriticalOfflineDocs(); }}
+          >
+            Seed Critical Offline Docs
+          </button>
+          <pre className="mt-3 whitespace-pre-wrap" data-testid="critical-offline-status">{criticalOfflineStatus}</pre>
         </article>
       </section>
     </main>

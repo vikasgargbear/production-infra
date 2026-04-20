@@ -99,11 +99,12 @@ class PurchaseDataService {
         const tempId = `temp_supplier_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const supplier: OfflineSupplier = {
+            id: tempId,
+            temp_id: tempId,
             supplier_id: tempId,
             supplier_name: supplierData.supplier_name || '',
             is_active: true,
             sync_status: 'pending',
-            local_id: tempId,
             ...supplierData
         };
 
@@ -174,6 +175,7 @@ class PurchaseDataService {
         const tempId = `temp_po_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const po: OfflinePurchaseOrder = {
+            temp_id: tempId,
             purchase_order_id: tempId,
             po_number: `PO-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             supplier_id: poData.supplier_id || '',
@@ -186,7 +188,6 @@ class PurchaseDataService {
             tax_amount: 0,
             total_amount: 0,
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...poData
         };
@@ -238,6 +239,7 @@ class PurchaseDataService {
         const tempId = `temp_grn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const grn: OfflineGRN = {
+            temp_id: tempId,
             grn_id: tempId,
             grn_number: `GRN-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             supplier_id: grnData.supplier_id || '',
@@ -250,7 +252,6 @@ class PurchaseDataService {
             tax_amount: 0,
             total_amount: 0,
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...grnData
         };
@@ -260,8 +261,8 @@ class PurchaseDataService {
 
         // 2. Save to IndexedDB
         try {
-            await offlineDB.add('grn', grn);
-            await offlineDB.addToSyncQueue('grn', tempId, 'create', grn as unknown as null);
+            await offlineDB.add('purchase_entries', grn);
+            await offlineDB.addToSyncQueue('purchase_entries', tempId, 'create', grn as unknown as null);
 
             // 3. Update stock for each item (important for inventory)
             // This would update batch quantities

@@ -9,6 +9,7 @@
 
 import offlineDB from '../core/offlineDatabase';
 import { invoicesApi, customersApi, productsApi, paymentsApi, ordersApi, challansApi, stockApi, suppliersApi } from '../../api';
+import { submitCustomerPayment } from '../../api/modules/finance/payments.api';
 import { cleanData } from '../../api/utils/dataUtils';
 import { toast } from 'react-toastify';
 import { AxiosResponse } from 'axios';
@@ -29,6 +30,7 @@ interface InvoiceData {
     invoice_date?: string;
     customer_id?: number;
     items?: Array<Record<string, unknown>>;
+    temp_id?: string;
     _localId?: string;
     _syncStatus?: string;
     reserved_batches?: Array<{
@@ -56,8 +58,25 @@ interface ProductData {
 
 interface PaymentData {
     payment_id?: string;
+    temp_id?: string;
     _localId?: string;
     _syncStatus?: string;
+    [key: string]: unknown;
+}
+
+interface PaymentReceiptData {
+    receipt_id?: string;
+    temp_id?: string;
+    _localId?: string;
+    _syncStatus?: string;
+    customer_id?: string | number;
+    receipt_date?: string;
+    amount?: number;
+    payment_method?: string;
+    reference_number?: string;
+    bank_name?: string;
+    notes?: string;
+    allocated_invoices?: Array<{ invoice_id: string | number; invoice_number?: string; allocated_amount: number }>;
     [key: string]: unknown;
 }
 
@@ -403,6 +422,11 @@ class SyncEngine {
                         response = await this.syncPayment(item.data as PaymentData);
                         break;
 
+                    case 'payment_receipts':
+                    case 'payment_receipt':
+                        response = await this.syncPaymentReceipt(item.data as PaymentReceiptData);
+                        break;
+
                     case 'customer_address':
                     case 'customer_addresses':
                         response = await this.syncCustomerAddress(item.data as CustomerAddressData);
@@ -463,6 +487,7 @@ class SyncEngine {
      */
     async syncGenericEntity(config: SyncEntityConfig, data: Record<string, unknown>): Promise<AxiosResponse> {
         const { _localId, _syncStatus, sync_status, created_offline, temp_id, reserved_batches, ...entityData } = data;
+        const localId = String(_localId || temp_id || '');
         const cleaned = cleanData(entityData);
         const api = await config.getApi();
         const createFn = api[config.createMethod || 'create'] as Function;
@@ -474,8 +499,8 @@ class SyncEngine {
         } else {
             response = await createFn(cleaned);
 
-            if (response.data?.[config.idField] && _localId) {
-                await offlineDB.updateLocalId(config.tableName, _localId as string, response.data[config.idField]);
+            if (response.data?.[config.idField] && localId) {
+                await offlineDB.updateLocalId(config.tableName, localId, response.data[config.idField]);
             }
         }
 
@@ -516,7 +541,8 @@ class SyncEngine {
      * Sync invoice
      */
     async syncInvoice(invoiceData: InvoiceData): Promise<AxiosResponse> {
-        const { _localId, _syncStatus, reserved_batches, ...invoice } = invoiceData;
+        const { _localId, _syncStatus, temp_id, reserved_batches, ...invoice } = invoiceData;
+        const localId = String(_localId || temp_id || '');
 
         try {
             let response: AxiosResponse;
@@ -534,8 +560,8 @@ class SyncEngine {
                     console.log('[SyncEngine] Invoice sync response:', response.data);
                 }
 
-                if (response.data?.invoice_id && _localId) {
-                    await offlineDB.updateLocalId('invoices', _localId, response.data.invoice_id);
+                if (response.data?.invoice_id && localId) {
+                    await offlineDB.updateLocalId('invoices', localId, response.data.invoice_id);
                 }
             }
 
@@ -592,17 +618,75 @@ class SyncEngine {
     }
 
     /**
-     * Sync payment (custom: parseInt on ID, no updateLocalId)
+     * Sync payment. Offline-created payments use local/temp IDs, so they must
+     * create server records instead of attempting an update with NaN IDs.
      */
     async syncPayment(paymentData: PaymentData): Promise<AxiosResponse> {
-        const { _localId, _syncStatus, ...payment } = paymentData;
-        const cleanedPayment = cleanData(payment);
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, local_id, ...payment } = paymentData;
+        const paymentId = payment.payment_id;
+        const isServerPayment = paymentId && /^\d+$/.test(String(paymentId));
 
-        if (payment.payment_id && !payment.payment_id.startsWith('LOCAL_')) {
-            return await paymentsApi.update(parseInt(String(payment.payment_id)), cleanedPayment);
-        } else {
-            return await paymentsApi.create(cleanedPayment);
+        const cleanedPayment = cleanData({
+            ...payment,
+            party_id: payment.party_id ? Number(payment.party_id) : undefined,
+            party_type: payment.party_type || 'customer',
+            payment_type: payment.payment_type || 'receipt',
+            amount: payment.amount ?? payment.payment_amount ?? 0,
+            payment_mode: payment.payment_mode || payment.payment_method || 'cash',
+            payment_date: payment.payment_date,
+            reference_number: payment.reference_number,
+            notes: payment.notes
+        });
+
+        if (isServerPayment) {
+            return await paymentsApi.update(parseInt(String(paymentId), 10), cleanedPayment);
         }
+
+        const response = await paymentsApi.create(cleanedPayment);
+        const serverId = response.data?.payment_id || response.data?.data?.payment_id;
+        const localId = String(temp_id || _localId || local_id || paymentId || '');
+        if (serverId && localId) {
+            await offlineDB.updateLocalId('payments', localId, serverId);
+        }
+        return response;
+    }
+
+    async syncPaymentReceipt(receiptData: PaymentReceiptData): Promise<AxiosResponse> {
+        const { _localId, _syncStatus, sync_status, created_offline, temp_id, local_id, receipt_id, allocated_invoices, ...receipt } = receiptData;
+        const customerId = receipt.customer_id;
+        if (!customerId) {
+            throw new Error('Customer ID required for receipt sync');
+        }
+
+        const result = await submitCustomerPayment(customerId, {
+            customer_id: Number(customerId),
+            payment_date: String(receipt.receipt_date || receipt.payment_date || new Date().toISOString().slice(0, 10)),
+            amount: Number(receipt.amount || receipt.payment_amount || 0),
+            payment_mode: String(receipt.payment_mode || receipt.payment_method || 'cash'),
+            reference_number: receipt.reference_number ? String(receipt.reference_number) : undefined,
+            bank_name: receipt.bank_name ? String(receipt.bank_name) : undefined,
+            notes: receipt.notes ? String(receipt.notes) : undefined,
+            allocate_to_invoices: Array.isArray(allocated_invoices)
+                ? allocated_invoices.map(invoice => Number(invoice.invoice_id)).filter(Number.isFinite)
+                : undefined
+        });
+
+        const localId = String(temp_id || _localId || local_id || receipt_id || '');
+        if (result.paymentId && localId) {
+            await offlineDB.updateLocalId('payment_receipts', localId, result.paymentId);
+        }
+
+        return {
+            data: {
+                payment_id: result.paymentId,
+                payment_reference: result.paymentReference,
+                ...result.raw
+            },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: {}
+        } as AxiosResponse;
     }
 
     /**
@@ -629,6 +713,7 @@ class SyncEngine {
      */
     async syncStockTransfer(data: Record<string, unknown>): Promise<AxiosResponse> {
         const { _localId, _syncStatus, sync_status, created_offline, temp_id, items, ...transferMeta } = data;
+        const localId = String(temp_id || _localId || '');
         const transferItems = items as Array<Record<string, unknown>> || [];
 
         let lastResponse: AxiosResponse | null = null;
@@ -647,8 +732,8 @@ class SyncEngine {
             lastResponse = await stockApi.transfer(cleanData(transferPayload));
         }
 
-        if (lastResponse && _localId) {
-            await offlineDB.updateLocalId('stock_transfers', _localId as string, lastResponse.data?.transfer_id || Date.now());
+        if (lastResponse && localId) {
+            await offlineDB.updateLocalId('stock_transfers', localId, lastResponse.data?.transfer_id || Date.now());
         }
 
         // Trigger delta sync for batches/products

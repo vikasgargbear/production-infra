@@ -10,6 +10,8 @@
 // ============================================
 
 export interface OfflineSupplier {
+    id?: string;
+    temp_id?: string;
     supplier_id: string;
     supplier_code?: string;
     supplier_name: string;
@@ -36,6 +38,7 @@ export interface OfflineSupplier {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
 }
 
@@ -55,6 +58,7 @@ export interface PurchaseOrderItem {
 }
 
 export interface OfflinePurchaseOrder {
+    temp_id?: string;
     purchase_order_id: string;
     po_number: string;
     supplier_id: string;
@@ -72,6 +76,7 @@ export interface OfflinePurchaseOrder {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }
@@ -97,6 +102,7 @@ export interface GRNItem {
 }
 
 export interface OfflineGRN {
+    temp_id?: string;
     grn_id: string;
     grn_number: string;
     purchase_order_id?: string;
@@ -116,6 +122,7 @@ export interface OfflineGRN {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }
@@ -125,6 +132,7 @@ export interface OfflineGRN {
 // ============================================
 
 export interface OfflinePurchaseEntry {
+    temp_id?: string;
     purchase_id: string;
     purchase_number: string;
     supplier_id: string;
@@ -144,6 +152,7 @@ export interface OfflinePurchaseEntry {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }

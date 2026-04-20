@@ -24,6 +24,7 @@ class ReturnsDataService {
         const tempId = `temp_sret_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const salesReturn: OfflineSalesReturn = {
+            temp_id: tempId,
             return_id: tempId,
             return_number: `SRET-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             customer_id: '',
@@ -40,7 +41,6 @@ class ReturnsDataService {
             reason: '',
             status: 'draft',
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...returnData
         };
@@ -60,6 +60,7 @@ class ReturnsDataService {
         const tempId = `temp_pret_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const purchaseReturn: OfflinePurchaseReturn = {
+            temp_id: tempId,
             return_id: tempId,
             return_number: `PRET-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             supplier_id: '',
@@ -72,7 +73,6 @@ class ReturnsDataService {
             reason: '',
             status: 'draft',
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...returnData
         };

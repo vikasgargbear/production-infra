@@ -7,7 +7,7 @@ export { SYNC_STATUS };
 
 
 const DB_NAME = 'PharmaERPOffline';
-const DB_VERSION = 14;  // Bumped for credit_debit_notes offline store
+const DB_VERSION = 15;  // Bumped for payment_receipts offline store
 const LOG_PREFIX = '[OfflineDB]';
 
 export interface OfflineSchema extends DBSchema {
@@ -35,6 +35,11 @@ export interface OfflineSchema extends DBSchema {
         key: string | number;
         value: any;
         indexes: { 'invoice_id': string; 'customer_id': string; 'sync_status': string; 'payment_date': string };
+    };
+    payment_receipts: {
+        key: string | number;
+        value: any;
+        indexes: { 'receipt_number': string; 'customer_id': string; 'sync_status': string; 'receipt_date': string };
     };
     sync_queue: {
         key: number;
@@ -243,6 +248,17 @@ class OfflineDatabase {
                     paymentStore.createIndex('customer_id', 'customer_id');
                     paymentStore.createIndex('sync_status', 'sync_status');
                     paymentStore.createIndex('payment_date', 'payment_date');
+                }
+
+                // Payment Receipts store (for offline-first customer receipts)
+                if (!db.objectStoreNames.contains('payment_receipts')) {
+                    const receiptStore = db.createObjectStore('payment_receipts', {
+                        keyPath: 'temp_id'
+                    });
+                    receiptStore.createIndex('receipt_number', 'receipt_number');
+                    receiptStore.createIndex('customer_id', 'customer_id');
+                    receiptStore.createIndex('sync_status', 'sync_status');
+                    receiptStore.createIndex('receipt_date', 'receipt_date');
                 }
 
                 // Sync Queue store
@@ -641,10 +657,14 @@ class OfflineDatabase {
         const tx = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
 
-        // Find item by local ID - NOTE: This is inefficient, should iterate based on an index if possible
-        // But keeping as-is for parity during TS conversion
+        // temp_id is the canonical local key. _localId/local_id are legacy
+        // aliases still recognized so older queued records can sync.
         const items = await store.getAll();
-        const item = items.find((i: any) => i._localId === localId);
+        const item = items.find((i: any) =>
+            i.temp_id === localId ||
+            i._localId === localId ||
+            i.local_id === localId
+        );
 
         if (item) {
             // Update with server ID
@@ -658,14 +678,16 @@ class OfflineDatabase {
                                             storeName === 'sales_returns' ? 'return_id' :
                                                 storeName === 'purchase_returns' ? 'return_id' :
                                                     storeName === 'credit_debit_notes' ? 'note_id' :
-                                                        storeName === 'stock_adjustments' ? 'adjustment_id' :
-                                                            storeName === 'stock_transfers' ? 'transfer_id' :
-                                                                storeName === 'suppliers' ? 'supplier_id' : 'id';
+                                                        storeName === 'payment_receipts' ? 'payment_id' :
+                                                            storeName === 'stock_adjustments' ? 'adjustment_id' :
+                                                                storeName === 'stock_transfers' ? 'transfer_id' :
+                                                                    storeName === 'suppliers' ? 'supplier_id' : 'id';
 
             item[idField] = serverId;
             item.sync_status = SYNC_STATUS.SYNCED;
             item.synced_at = new Date().toISOString();
             delete item._localId;
+            delete item.local_id;
 
             await store.put(item);
         }

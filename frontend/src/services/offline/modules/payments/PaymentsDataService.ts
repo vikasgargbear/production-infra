@@ -23,6 +23,7 @@ class PaymentsDataService {
         const tempId = `temp_pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const payment: OfflinePayment = {
+            temp_id: tempId,
             payment_id: tempId,
             payment_number: `PAY-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             payment_date: new Date().toISOString().split('T')[0],
@@ -33,10 +34,9 @@ class PaymentsDataService {
             payment_method: 'cash',
             payment_status: 'pending',
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...paymentData
-        };
+        } as OfflinePayment;
 
         try {
             await offlineDB.add('payments', payment);
@@ -53,6 +53,7 @@ class PaymentsDataService {
         const tempId = `temp_rcpt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const receipt: OfflinePaymentReceipt = {
+            temp_id: tempId,
             receipt_id: tempId,
             receipt_number: `RCPT-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             receipt_date: new Date().toISOString().split('T')[0],
@@ -61,10 +62,9 @@ class PaymentsDataService {
             amount: 0,
             payment_method: 'cash',
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...receiptData
-        };
+        } as OfflinePaymentReceipt;
 
         try {
             await offlineDB.add('payment_receipts', receipt);
