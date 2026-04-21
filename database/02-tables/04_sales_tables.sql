@@ -215,6 +215,8 @@ CREATE TABLE sales.invoices (
     invoice_status TEXT DEFAULT 'draft', -- 'draft', 'posted', 'cancelled'
     cancellation_reason TEXT,
     cancelled_date DATE,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    cancelled_by INTEGER REFERENCES master.org_users(user_id),
     
     -- Notes
     notes TEXT,
