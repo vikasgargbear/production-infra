@@ -66,7 +66,7 @@ async def get_batch(
 ):
     """Get batch details"""
     try:
-        return InventoryService.get_batch(db, batch_id)
+        return InventoryService.get_batch(db, batch_id, str(context.org_id))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

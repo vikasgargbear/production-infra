@@ -53,7 +53,7 @@ def _env_required(name: str) -> str:
 @pytest.fixture(scope="session")
 def live_config() -> LiveERPConfig:
     return LiveERPConfig(
-        api_base_url=os.getenv("PHARMA_LIVE_API_BASE_URL", "https://pharma-backend-production-0c09.up.railway.app"),
+        api_base_url=_env_required("PHARMA_LIVE_API_BASE_URL"),
         database_url=_with_connection_overrides(_env_required("PHARMA_LIVE_DATABASE_URL")),
         jwt_secret_key=_env_required("PHARMA_LIVE_JWT_SECRET_KEY"),
         test_org_id=os.getenv("PHARMA_LIVE_TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a"),

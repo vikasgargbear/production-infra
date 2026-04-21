@@ -209,6 +209,7 @@ async def get_collection_metrics(
         from datetime import datetime, date, timedelta
         import uuid
 
+        org_id = str(context.org_id)
         today = date.today()
         month_start = date(today.year, today.month, 1)
         thirty_days_ago = today - timedelta(days=30)

@@ -73,11 +73,13 @@ class PurchaseOrderService:
         existing_row = db.execute(text("""
             SELECT outstanding_id
             FROM financial.supplier_outstanding
-            WHERE document_type = 'invoice'
+            WHERE org_id = :org_id
+              AND document_type = 'invoice'
               AND document_id = :supplier_invoice_id
             ORDER BY outstanding_id DESC
             LIMIT 1
         """), {
+            "org_id": org_id,
             "supplier_invoice_id": supplier_invoice_id,
         }).fetchone()
 

@@ -897,12 +897,17 @@ class InvoiceService:
         db.execute(text("""
             UPDATE sales.invoices
             SET invoice_status = :cancelled_status,
+                cancelled_at = CURRENT_TIMESTAMP,
+                cancelled_by = :cancelled_by,
+                cancellation_reason = :cancellation_reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {
             "invoice_id": invoice_id,
             "org_id": org_id,
             "cancelled_status": InvoiceStatus.CANCELLED.value,
+            "cancelled_by": cancelled_by,
+            "cancellation_reason": reason,
         })
         
         # Reverse inventory if needed

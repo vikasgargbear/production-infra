@@ -373,48 +373,101 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """
         Cancel a payment and adjust invoice.
-        TenantAwareSession auto-filters by org_id.
+        Reverses active invoice allocations and keeps customer_outstanding in sync.
         """
-        # Get payment details with linked invoice via allocations
+        if not org_id:
+            raise ValueError("org_id is required to cancel payment")
+
+        # Get payment details with every active invoice allocation.
         payment = db.execute(text("""
             SELECT p.payment_id, p.payment_amount, p.payment_status, p.party_type, p.party_id,
-                   a.reference_id as invoice_id
+                   p.payment_number
             FROM financial.payments p
-            LEFT JOIN financial.allocations a ON a.payment_id = p.payment_id
-                AND a.reference_type = 'INVOICE' AND a.allocation_status = 'active'
             WHERE p.payment_id = :payment_id
+                AND p.org_id = :org_id
                 AND p.payment_status NOT IN ('cancelled', 'failed')
-        """), {"payment_id": payment_id}).fetchone()
+        """), {"payment_id": payment_id, "org_id": org_id}).fetchone()
         
         if not payment:
             raise ValueError("Payment not found, already cancelled, or access denied")
+
+        allocations = db.execute(text("""
+            SELECT allocation_id, reference_id AS invoice_id, allocated_amount
+            FROM financial.allocations
+            WHERE payment_id = :payment_id
+              AND reference_type = 'INVOICE'
+              AND allocation_status = 'active'
+            ORDER BY allocation_id
+        """), {"payment_id": payment_id}).fetchall()
         
         # Update payment status
         db.execute(text("""
             UPDATE financial.payments
             SET payment_status = :status,
+                is_cancelled = true,
+                cancellation_reason = :reason,
+                cancelled_by = :cancelled_by,
+                cancelled_at = CURRENT_TIMESTAMP,
+                allocated_amount = 0,
+                unallocated_amount = 0,
+                allocation_status = 'cancelled',
                 narration = COALESCE(narration, '') || ' | Cancelled: ' || :reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE payment_id = :payment_id
+              AND org_id = :org_id
         """), {
             "payment_id": payment_id, 
+            "org_id": org_id,
             "reason": reason,
+            "cancelled_by": cancelled_by,
             "status": PaymentRecordStatus.CANCELLED.value
         })
-        
-        # Adjust invoice paid amount if linked
-        if payment.invoice_id:
+
+        if allocations:
+            db.execute(text("""
+                UPDATE financial.allocations
+                SET allocation_status = 'cancelled'
+                WHERE payment_id = :payment_id
+                  AND reference_type = 'INVOICE'
+                  AND allocation_status = 'active'
+            """), {"payment_id": payment_id})
+
+        for allocation in allocations:
+            amount = Decimal(str(allocation.allocated_amount or 0))
+            if amount <= 0:
+                continue
+
             db.execute(text("""
                 UPDATE sales.invoices
-                SET paid_amount = GREATEST(0, paid_amount - :amount),
+                SET paid_amount = GREATEST(0, COALESCE(paid_amount, 0) - :amount),
+                    credit_amount = GREATEST(0, final_amount - GREATEST(0, COALESCE(paid_amount, 0) - :amount)),
                     payment_status = CASE 
-                        WHEN GREATEST(0, paid_amount - :amount) = 0 THEN 'unpaid'
-                        WHEN GREATEST(0, paid_amount - :amount) < final_amount THEN 'partial'
-                        ELSE payment_status
+                        WHEN GREATEST(0, COALESCE(paid_amount, 0) - :amount) = 0 THEN 'pending'
+                        WHEN GREATEST(0, COALESCE(paid_amount, 0) - :amount) < final_amount THEN 'partial'
+                        ELSE 'paid'
                     END,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
-            """), {"invoice_id": payment.invoice_id, "amount": payment.payment_amount})
+                  AND org_id = :org_id
+            """), {"invoice_id": allocation.invoice_id, "amount": amount, "org_id": org_id})
+
+            db.execute(text("""
+                UPDATE financial.customer_outstanding co
+                SET paid_amount = COALESCE(i.paid_amount, 0),
+                    outstanding_amount = COALESCE(i.credit_amount, i.final_amount - COALESCE(i.paid_amount, 0)),
+                    status = CASE
+                        WHEN COALESCE(i.credit_amount, i.final_amount - COALESCE(i.paid_amount, 0)) <= 0 THEN 'paid'
+                        WHEN COALESCE(i.paid_amount, 0) > 0 THEN 'partial'
+                        ELSE 'open'
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                FROM sales.invoices i
+                WHERE co.org_id = :org_id
+                  AND co.document_type = 'INVOICE'
+                  AND co.document_id = :invoice_id
+                  AND i.org_id = co.org_id
+                  AND i.invoice_id = co.document_id
+            """), {"invoice_id": allocation.invoice_id, "org_id": org_id})
         
         logger.info(f"Payment {payment_id} cancelled by user {cancelled_by}. Reason: {reason}")
         

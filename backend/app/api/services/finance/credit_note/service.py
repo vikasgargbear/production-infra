@@ -497,6 +497,8 @@ class CreditNoteService:
 
         target_table = "financial.credit_notes" if note["note_type"] == "credit" else "financial.debit_notes"
         target_id_column = "credit_note_id" if note["note_type"] == "credit" else "debit_note_id"
+        if target_table not in {"financial.credit_notes", "financial.debit_notes"}:
+            raise ValueError("Invalid note table for cancellation")
 
         db.execute(text(f"""
             UPDATE {target_table}

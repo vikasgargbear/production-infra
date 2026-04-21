@@ -22,6 +22,10 @@ It is designed for the Supabase-backed Railway deployment and focuses on two thi
 
 ## Required Environment
 
+`PHARMA_LIVE_API_BASE_URL` is intentionally required. Do not add a default
+production URL in code; these tests write live data and must point at an
+explicitly selected deployment.
+
 ```bash
 export PHARMA_LIVE_API_BASE_URL="https://pharma-backend-production-0c09.up.railway.app"
 export PHARMA_LIVE_DATABASE_URL="postgresql://..."

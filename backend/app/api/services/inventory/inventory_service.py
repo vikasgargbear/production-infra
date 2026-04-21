@@ -160,10 +160,12 @@ class InventoryService:
     def get_batch(db: Session, batch_id: int, org_id: Optional[str] = None) -> BatchResponse:
         """
         Get batch details with calculated fields.
-        TenantAwareSession auto-filters by org_id.
+        Requires explicit org_id to avoid leaking batch data across tenants.
         """
-        session = getattr(db, "session", db)
-        result = session.execute(text("""
+        if not org_id:
+            raise ValueError("org_id is required to fetch batch details")
+
+        result = db.execute(text("""
             SELECT
                 b.batch_id,
                 b.org_id,
@@ -191,7 +193,7 @@ class InventoryService:
             JOIN inventory.products p ON b.product_id = p.product_id
             LEFT JOIN inventory.storage_locations sl ON b.primary_location_id = sl.location_id
             WHERE b.batch_id = :batch_id
-                AND (:org_id IS NULL OR b.org_id = :org_id)
+                AND b.org_id = :org_id
         """), {"batch_id": batch_id, "org_id": org_id})
         
         batch = result.fetchone()
