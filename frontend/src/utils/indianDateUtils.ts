@@ -380,7 +380,7 @@ export const toStandardDateString = (input: string | Date | null | undefined): s
 };
 
 // Export all functions
-export default {
+const indianDateUtils = {
     getTodayBusinessDate,
     getDaysFromToday,
     getMonthsFromToday,
@@ -400,3 +400,5 @@ export default {
     isValidDateString,
     toStandardDateString
 };
+
+export default indianDateUtils;

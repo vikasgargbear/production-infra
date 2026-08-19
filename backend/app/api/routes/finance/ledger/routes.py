@@ -40,7 +40,7 @@ class LedgerSummary(BaseModel):
 @with_tenant_context
 async def get_party_statement(
     party_id: int,
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     page: int = Query(1, ge=1),
@@ -98,7 +98,7 @@ async def get_party_statement(
 @with_tenant_context
 async def get_balance(
     party_id: int,
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -114,7 +114,7 @@ async def get_balance(
 @with_tenant_context
 async def get_outstanding_bills(
     party_id: int,
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -129,7 +129,7 @@ async def get_outstanding_bills(
 @router.get("/aging")
 @with_tenant_context
 async def get_aging_analysis(
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -146,7 +146,7 @@ async def get_aging_analysis(
 async def get_opening_balance(
     party_id: int,
     as_of_date: date = Query(..., description="Calculate opening balance as of this date"),
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -168,7 +168,7 @@ async def get_opening_balance(
 @with_tenant_context
 async def get_last_payment_info(
     party_id: int,
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -193,7 +193,7 @@ async def get_last_payment_info(
 async def calculate_interest_on_overdue(
     party_id: int,
     interest_rate: float = Query(18.0, ge=0, le=36, description="Annual interest rate %"),
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
@@ -208,7 +208,7 @@ async def calculate_interest_on_overdue(
 @router.get("/summary")
 @with_tenant_context
 async def get_ledger_summary(
-    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    party_type: str = Query("customer", pattern="^(customer|supplier)$"),
     _: dict = Depends(PermissionChecker("reports", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)

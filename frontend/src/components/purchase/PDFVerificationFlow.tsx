@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, CheckCircle, AlertCircle, ChevronRight,
-  ChevronLeft, Save, X, Building2, Package, Search,
-  Calendar, Hash, DollarSign, Info, Plus, Trash2
+  FileText, CheckCircle,
+  ChevronLeft, Save, X, Building2, Package,
+  Plus, Trash2
 } from 'lucide-react';
-import { suppliersApi } from '../../services/api';
-import { purchasesApi } from '../../services/api';
 import { useToast } from '../global';
 import SupplierVerificationModal from './modals/SupplierVerificationModal';
 import ProductVerificationModal from './modals/ProductVerificationModal';

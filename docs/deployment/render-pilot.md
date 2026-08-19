@@ -31,6 +31,7 @@ OAuth authorization server are implemented and tested.
 Set these public values in the Blueprint prompt or Render dashboard:
 
 - Backend `CORS_ORIGINS`: the exact static-site origin, with no wildcard
+- Backend `APP_URL`: the same exact static-site origin used in invitations
 - Frontend `REACT_APP_API_BASE_URL`: the exact backend origin, without `/api`
 - Frontend `REACT_APP_SUPABASE_URL`: the same project URL as backend `SUPABASE_URL`
 - Frontend `REACT_APP_SUPABASE_ANON_KEY`: the Supabase publishable/anon key

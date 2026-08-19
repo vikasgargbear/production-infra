@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle,
-  RotateCcw, FileText, Building2, ChevronRight, Save, Printer, History, Truck, Plus, Trash2
+  Package, X, AlertCircle, CheckCircle,
+  RotateCcw, FileText, Building2, Plus
 } from 'lucide-react';
 import {
-  SupplierSearch, ProductSearch, ModuleHeader,
-  DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
+  SupplierSearch, ModuleHeader,
+  Select, NotesSection, useToast,
   ProceedToReviewComponent, StandardDatePicker, ItemsTable
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
+import { returnsApi, purchasesApi, metadataApi } from '../../services/api';
 import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';

@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Home,
   Plus,
-  ShoppingCart,
   Package,
   Users,
-  CreditCard,
   FileText,
   BarChart3,
   Settings,
@@ -13,11 +10,7 @@ import {
   TrendingUp,
   Shield,
   MessageSquare,
-  User,
-  Clock,
-  DollarSign,
   AlertCircle,
-  CheckCircle2,
   // Medical/Pharma Icons
   Pill,
   Heart,
@@ -26,29 +19,20 @@ import {
   Zap,
   Bell,
   Search,
-  Calendar,
   FileCheck,
   AlertTriangle,
   UserCheck,
   Timer,
-  Target,
   Atom,
   Cross,
   ChevronRight,
   ChevronDown,
-  ChevronLeft,
   Star,
-  RotateCw,
   Globe,
-  MapPin,
-  Phone,
-  Mail,
   BadgeCheck,
   Lock,
   Unlock,
-  Thermometer,
-  PanelLeftClose,
-  PanelLeft
+  Thermometer
 } from 'lucide-react';
 import { useSidebar } from '../../../contexts/SidebarContext';
 

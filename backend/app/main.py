@@ -127,6 +127,14 @@ async def lifespan(app: FastAPI):
             "Remove TEST_MODE env var or set APP_ENV/ENV=development."
         )
 
+    if is_production():
+        required = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL")
+        missing = [name for name in required if not os.getenv(name, "").strip()]
+        if missing:
+            raise RuntimeError(
+                "Missing required production configuration: " + ", ".join(missing)
+            )
+
     logger.info("Starting Pharma ERP Backend...")
     yield
     logger.info("Shutting down...")
@@ -163,6 +171,9 @@ else:
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
     ]
+
+if "*" in _allowed_origins:
+    raise RuntimeError("CORS_ORIGINS cannot contain '*' when credentials are enabled")
 
 app.add_middleware(
     CORSMiddleware,

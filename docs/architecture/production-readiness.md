@@ -10,7 +10,7 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Implemented evidence
 
-- The complete hermetic backend unit suite passes 168 tests; frontend
+- The complete hermetic backend unit suite passes 175 tests; frontend
   type-checking and all 33 Jest tests pass. The frontend production build also
   completes, and the changed auth/API/calculation boundary passes a strict
   zero-warning lint gate.
@@ -44,9 +44,10 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Stop-ship gates
 
-1. `schema_readiness.py` reports an unbaselined database and 185 blockers,
-   including competing DDL/migration sources, broken deploy includes, and
-   missing RLS or `FORCE RLS` coverage.
+1. `schema_readiness.py` reports an unbaselined database and 149 blockers.
+   Competing DDL/migration sources and all 37 legacy deploy includes are now
+   classified; the deploy entrypoint fails closed until a live baseline exists.
+   Missing RLS or `FORCE RLS` coverage and authority conflicts remain.
 2. `audit_schema.py` finds 36 application/query mismatches across 15 files. The
    checked-in schema documentation describes only 40 sales/master tables;
    finance, inventory, parties, and procurement documentation is incomplete.
@@ -72,9 +73,13 @@ override the database, transaction, browser, or live-environment gates below.
 8. Playwright discovers the browser tests, but this managed workspace prevents
    Chrome/listener execution. A normal CI runner must execute them.
 9. The frontend production build completes but carries a large legacy
-   lint-warning debt and a main bundle above 1 MB gzip. The changed critical
-   boundary is linted with zero warnings; the remaining application warning and
-   performance debt still requires staged remediation.
+   lint-warning debt (529 warnings after this pass) and a 1.1 MB gzip main
+   bundle. The changed critical boundary is linted with zero warnings; the
+   remaining application warning and performance debt still requires staged
+   remediation.
+10. Create React App 5 declares a TypeScript 4 peer range while this application
+    is validated on TypeScript 5. Clean installs therefore use a repository
+    scoped `legacy-peer-deps` policy until the frontend is migrated off CRA.
 
 ## Required commands
 

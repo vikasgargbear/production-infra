@@ -496,6 +496,23 @@ def collect_issues() -> List[ConsistencyIssue]:
             + ", ".join(ad_hoc_generators),
         ))
 
+    retired_purchase_services = (
+        "backend/app/api/services/purchase/purchase_service.py",
+        "backend/app/api/services/purchase/grn_service.py",
+        "backend/app/api/services/purchase/supplier_invoice_service.py",
+        "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_service.py",
+        "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_repository.py",
+    )
+    reintroduced_purchase_services = [
+        path for path in retired_purchase_services if (REPOSITORY_ROOT / path).exists()
+    ]
+    if reintroduced_purchase_services:
+        issues.append(ConsistencyIssue(
+            "DUPLICATE_PURCHASE_SERVICE_SURFACES",
+            "retired purchase compatibility services duplicate the mounted domain boundary: "
+            + ", ".join(reintroduced_purchase_services),
+        ))
+
     number_routes = (
         ("backend/app/api/routes/documents.py", "generate_document_number"),
         ("backend/app/api/routes/sales/invoices/routes.py", "generate_invoice_number"),

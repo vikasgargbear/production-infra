@@ -10,9 +10,9 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, Download, AlertCircle, User } from 'lucide-react';
+import { RotateCcw, User } from 'lucide-react';
 import {
-  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch, CustomerCreation
+  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
 import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
@@ -32,7 +32,7 @@ import { ReturnReviewPanel } from './components/ReturnReviewPanel';
 
 // Import hooks and types
 import { useSalesReturnState } from './hooks/useSalesReturnState';
-import type { SalesReturnFlowProps, ReturnFormData, ReturnFormItem, ReturnReason } from './types/return.types';
+import type { SalesReturnFlowProps, ReturnFormItem, ReturnReason } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
 
 // Import offline-first helpers

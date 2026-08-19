@@ -780,9 +780,11 @@ export const getInvoicePDFBase64 = async (invoiceData: InvoiceData): Promise<str
 };
 
 // Default export for backward compatibility
-export default {
+const invoicePdfGenerator = {
     printInvoice,
     downloadInvoicePDF,
     generateInvoicePDF,
     getInvoicePDFBase64
 };
+
+export default invoicePdfGenerator;

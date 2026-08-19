@@ -318,25 +318,3 @@ class DocumentNumberService:
             return False
         
         return True
-
-
-_table_columns_cache: Dict[str, list] = {}
-
-def get_table_columns(db: Session, table_name: str) -> list:
-    """Helper to get columns of a table (cached - columns don't change at runtime)"""
-    if table_name in _table_columns_cache:
-        return _table_columns_cache[table_name]
-
-    try:
-        schema, table = table_name.split('.')
-        result = db.execute(text("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = :schema
-            AND table_name = :table
-        """), {"schema": schema, "table": table})
-        columns = [row[0] for row in result]
-        _table_columns_cache[table_name] = columns
-        return columns
-    except:
-        return []

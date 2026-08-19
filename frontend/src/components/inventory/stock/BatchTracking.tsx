@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Package, RefreshCw, AlertCircle, TrendingUp, TrendingDown,
-  Calendar, Filter, Search, Eye, Edit, Trash2, Plus, Download, Printer, MessageCircle,
-  CheckCircle, XCircle, Clock, AlertTriangle, Loader2, ChevronDown, ChevronRight
+  Package, RefreshCw, AlertCircle,
+  Search, Eye, Edit, Download, Printer, MessageCircle,
+  XCircle, Clock, AlertTriangle, Loader2, ChevronDown
 } from 'lucide-react';
-import { DataTable, StatusBadge, Button, ModuleHeader } from '../../global';
+import { DataTable, StatusBadge, ModuleHeader } from '../../global';
 import { stockApi, batchesApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 import offlineDB from '../../../services/offline/core/offlineDatabase';

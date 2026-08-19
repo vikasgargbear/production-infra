@@ -58,6 +58,7 @@ def test_render_blueprint_is_manual_free_and_health_checked():
     assert "healthCheckPath: /health" in backend
     assert 'autoDeployTrigger: "off"' in backend
     assert "key: PORT" not in backend
+    assert "key: APP_URL" in backend
 
     assert "name: aasopharma-erp-pilot" in frontend
     assert "runtime: static" in frontend
@@ -105,6 +106,15 @@ def test_production_database_configuration_fails_closed():
     assert "DATABASE_URL must be explicitly configured in production" in database
 
 
+def test_production_auth_and_origin_configuration_fails_closed():
+    main = _read("backend/app/main.py")
+
+    for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL"):
+        assert name in main
+    assert "Missing required production configuration" in main
+    assert "CORS_ORIGINS cannot contain '*'" in main
+
+
 def test_render_frontend_has_only_public_supabase_auth_configuration():
     blueprint = _read("render.yaml")
     frontend = blueprint.split("name: aasopharma-erp-pilot", 1)[1]
@@ -124,6 +134,31 @@ def test_render_frontend_has_only_public_supabase_auth_configuration():
         "REACT_APP_JWT_SECRET_KEY",
     ):
         assert forbidden not in frontend
+
+
+def test_frontend_has_one_backend_origin_variable():
+    sources = _read("frontend/src/config/apiBase.ts") + _read(
+        "frontend/src/setupProxy.js"
+    )
+
+    assert "REACT_APP_API_BASE_URL" in sources
+    for legacy in (
+        "REACT_APP_API_URL",
+        "REACT_APP_BACKEND_URL",
+        "REACT_APP_BACKEND_API_URL",
+        "RAILWAY_PUBLIC_DOMAIN",
+        "__BACKEND_URL",
+        "__PHARMA_API_BASE_URL",
+    ):
+        assert legacy not in sources
+
+
+def test_frontend_clean_install_has_an_explicit_cra_peer_policy():
+    npmrc = _read("frontend/.npmrc")
+    package = _read("frontend/package.json")
+
+    assert npmrc.strip() == "legacy-peer-deps=true"
+    assert '"jest-watch-typeahead"' not in package
 
 
 def test_render_runbook_separates_supabase_and_google_redirects():

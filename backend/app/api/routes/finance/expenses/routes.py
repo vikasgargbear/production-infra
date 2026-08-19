@@ -37,7 +37,7 @@ class ExpenseClaimCreate(BaseModel):
     employee_name: str
     claim_date: date = Field(default_factory=date.today)
     purpose: str
-    expenses: List[ExpenseLineCreate] = Field(..., min_items=1)
+    expenses: List[ExpenseLineCreate] = Field(..., min_length=1)
     created_by: Optional[int] = None
 
 @router.post(

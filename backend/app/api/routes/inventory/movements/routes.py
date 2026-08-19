@@ -5,14 +5,13 @@ REFACTORED: Uses InventoryService for database operations
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 import logging
-import uuid
 from ....services.document_number_service import DocumentNumberService
 from ....services.inventory.inventory_service import InventoryService
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
+from .....core.utils.branch_utils import resolve_location_id
 from .....core.utils.feature_flags import check_negative_stock_allowed
 from .....core.money import money_json
 
@@ -121,8 +120,6 @@ async def create_stock_receive(
     """Create a stock receive entry — creates inventory_movement + updates batches + location_wise_stock"""
     try:
         from ....schemas.inventory.inventory import StockMovementCreate
-        from datetime import date as date_type
-
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
         for field in required_fields:
             if field not in receive_data:

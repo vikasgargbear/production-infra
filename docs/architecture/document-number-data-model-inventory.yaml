@@ -89,9 +89,9 @@ canonicalization:
       - backend/app/api/services/purchase/purchase_service.py
       - backend/app/api/services/purchase/grn_service.py
       - backend/app/api/services/purchase/supplier_invoice_service.py
-    pending_review:
       - backend/app/api/services/purchase/supplier_invoice/supplier_invoice_service.py
-    evidence: Retired modules had no importers beyond compatibility barrels; pending file has concurrent uncommitted work and must be resolved without discarding it.
+      - backend/app/api/services/purchase/supplier_invoice/supplier_invoice_repository.py
+    evidence: Retired modules had no importers beyond compatibility barrels; mounted routes and all active barrels resolve to the retained services.
   - id: sales.promotional_discount_module
     decision: retire_dead_compatibility
     retired: backend/app/api/shared/discounts.py

@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import logging
 from ....services.document_number_service import (
     DocumentNumberService,
@@ -35,9 +35,10 @@ class JournalEntryCreate(BaseModel):
     journal_date: date = Field(default_factory=date.today)
     reference_number: Optional[str] = None
     narration: str
-    lines: List[JournalLineCreate] = Field(..., min_items=2)
+    lines: List[JournalLineCreate] = Field(..., min_length=2)
     
-    @validator('lines')
+    @field_validator('lines')
+    @classmethod
     def validate_balanced_entry(cls, v):
         total_debit = sum(line.debit_amount for line in v)
         total_credit = sum(line.credit_amount for line in v)

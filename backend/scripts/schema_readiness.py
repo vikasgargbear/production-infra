@@ -20,6 +20,7 @@ from typing import Iterable, Mapping, Sequence
 AUTHORITY_PATH = Path("database/schema-authority.json")
 READY_STATE = "production_ready"
 VALID_STATES = {"unbaselined", "migrating", READY_STATE}
+VALID_CLASSIFICATIONS = {"retain", "migrate", "retire", "pending-live-baseline"}
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,7 @@ def load_authority(repo_root: Path) -> dict:
         "canonical_migration_root",
         "rls_policy_file",
         "deployment_entrypoint",
+        "source_classification_file",
     }
     missing = sorted(required - authority.keys())
     if missing:
@@ -102,6 +104,29 @@ def load_authority(repo_root: Path) -> dict:
             + ", ".join(sorted(VALID_STATES))
         )
     return authority
+
+
+def load_source_classification(authority: Mapping, root: Path) -> dict:
+    relative_path = authority["source_classification_file"]
+    path = root / relative_path
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing schema source classification: {relative_path}")
+    classification = json.loads(path.read_text(encoding="utf-8"))
+    required = {
+        "readiness_state",
+        "canonical_sources",
+        "legacy_deployment_plan",
+        "competing_authorities",
+        "competing_authority_count",
+        "broken_deployment_include_groups",
+        "broken_deployment_include_count",
+    }
+    missing = sorted(required - classification.keys())
+    if missing:
+        raise ValueError(
+            "Schema source classification is missing keys: " + ", ".join(missing)
+        )
+    return classification
 
 
 def parse_table_definitions(paths: Iterable[Path]) -> list[TableDefinition]:
@@ -236,6 +261,178 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     return sorted(issues, key=lambda issue: (issue.code, issue.path, issue.line or 0))
 
 
+def check_source_classification(authority: Mapping, root: Path) -> list[Issue]:
+    classification_path = authority["source_classification_file"]
+    classification = load_source_classification(authority, root)
+    issues: list[Issue] = []
+
+    if classification["readiness_state"] != authority["readiness_state"]:
+        issues.append(Issue(
+            code="classification_readiness_mismatch",
+            message="Source classification and schema authority readiness states differ.",
+            path=classification_path,
+        ))
+
+    declared_allowed = set(classification.get("allowed_classifications", []))
+    if declared_allowed != VALID_CLASSIFICATIONS:
+        issues.append(Issue(
+            code="invalid_classification_vocabulary",
+            message=(
+                "Classification vocabulary must be exactly: "
+                + ", ".join(sorted(VALID_CLASSIFICATIONS))
+            ),
+            path=classification_path,
+        ))
+
+    canonical_sources = classification["canonical_sources"]
+    for source in canonical_sources:
+        if source.get("classification") != "retain":
+            issues.append(Issue(
+                code="canonical_source_not_retained",
+                message="Canonical/bootstrap source must be classified retain.",
+                path=classification_path,
+            ))
+        if not (root / source.get("path", "")).exists():
+            issues.append(Issue(
+                code="classified_source_missing",
+                message="Classified canonical source does not exist.",
+                path=source.get("path", classification_path),
+            ))
+
+    deployment_plan = classification["legacy_deployment_plan"]
+    if (
+        deployment_plan.get("path") != authority["deployment_entrypoint"]
+        or deployment_plan.get("classification") != "retire"
+        or deployment_plan.get("execution_state") != "fail-closed-pending-live-baseline"
+    ):
+        issues.append(Issue(
+            code="invalid_legacy_deployment_classification",
+            message=(
+                "Legacy deployment plan must match the declared entrypoint and remain "
+                "retired/fail-closed pending the live baseline."
+            ),
+            path=classification_path,
+        ))
+
+    authority_groups = classification["competing_authorities"]
+    if len(authority_groups) != classification["competing_authority_count"]:
+        issues.append(Issue(
+            code="classification_authority_count_mismatch",
+            message="Declared competing authority count does not match classified groups.",
+            path=classification_path,
+        ))
+
+    classified_paths: list[str] = []
+    group_ids: list[str] = []
+    for source in authority_groups:
+        group_ids.append(source.get("id", ""))
+        disposition = source.get("classification")
+        if disposition not in VALID_CLASSIFICATIONS:
+            issues.append(Issue(
+                code="invalid_source_classification",
+                message=f"Unknown source classification: {disposition!r}.",
+                path=classification_path,
+            ))
+        for relative_path in source.get("paths", []):
+            classified_paths.append(relative_path)
+            if not (root / relative_path).is_file():
+                issues.append(Issue(
+                    code="classified_source_missing",
+                    message="Classified competing source does not exist.",
+                    path=relative_path,
+                ))
+
+    if len(group_ids) != len(set(group_ids)) or "" in group_ids:
+        issues.append(Issue(
+            code="duplicate_classification_id",
+            message="Competing authority classification IDs must be unique and non-empty.",
+            path=classification_path,
+        ))
+    if len(classified_paths) != len(set(classified_paths)):
+        issues.append(Issue(
+            code="duplicate_classified_source",
+            message="A competing source is classified more than once.",
+            path=classification_path,
+        ))
+
+    actual_paths = {
+        issue.path
+        for issue in check_competing_ddl(authority, root)
+        if issue.code in {"competing_ddl_authority", "competing_migration_revision"}
+    }
+    classified_set = set(classified_paths)
+    for relative_path in sorted(actual_paths - classified_set):
+        issues.append(Issue(
+            code="unclassified_competing_authority",
+            message="Competing DDL or migration source lacks a reviewed classification.",
+            path=relative_path,
+        ))
+    for relative_path in sorted(classified_set - actual_paths):
+        issues.append(Issue(
+            code="classification_targets_non_competing_source",
+            message="Classified source is no longer detected as a competing authority.",
+            path=relative_path,
+        ))
+
+    include_groups = classification["broken_deployment_include_groups"]
+    classified_includes: list[str] = []
+    include_group_ids: list[str] = []
+    for group in include_groups:
+        include_group_ids.append(group.get("id", ""))
+        disposition = group.get("classification")
+        if disposition not in VALID_CLASSIFICATIONS:
+            issues.append(Issue(
+                code="invalid_deploy_include_classification",
+                message=f"Unknown deployment include classification: {disposition!r}.",
+                path=classification_path,
+            ))
+        includes = group.get("includes", [])
+        classified_includes.extend(includes)
+        replacements = group.get("replacements", {})
+        replacement = group.get("replacement")
+        if disposition == "migrate" and not (replacement or replacements):
+            issues.append(Issue(
+                code="migration_classification_missing_replacement",
+                message="Migrating deployment includes must name reviewed replacement candidates.",
+                path=classification_path,
+            ))
+        replacement_paths = ([replacement] if replacement else []) + list(replacements.values())
+        for replacement_path in replacement_paths:
+            if not (root / replacement_path).is_file():
+                issues.append(Issue(
+                    code="classified_replacement_missing",
+                    message="Classified replacement candidate does not exist.",
+                    path=replacement_path,
+                ))
+        if replacements and set(replacements) != set(includes):
+            issues.append(Issue(
+                code="replacement_mapping_incomplete",
+                message="Per-include replacement mapping must cover its full include group.",
+                path=classification_path,
+            ))
+
+    if len(include_group_ids) != len(set(include_group_ids)) or "" in include_group_ids:
+        issues.append(Issue(
+            code="duplicate_deploy_include_group_id",
+            message="Deployment include group IDs must be unique and non-empty.",
+            path=classification_path,
+        ))
+    if len(classified_includes) != len(set(classified_includes)):
+        issues.append(Issue(
+            code="duplicate_classified_deploy_include",
+            message="A broken deployment include is classified more than once.",
+            path=classification_path,
+        ))
+    if len(classified_includes) != classification["broken_deployment_include_count"]:
+        issues.append(Issue(
+            code="classification_deploy_include_count_mismatch",
+            message="Declared broken include count does not match classified includes.",
+            path=classification_path,
+        ))
+
+    return issues
+
+
 def check_deployment_includes(authority: Mapping, root: Path) -> list[Issue]:
     entrypoint = root / authority["deployment_entrypoint"]
     if not entrypoint.is_file():
@@ -248,6 +445,19 @@ def check_deployment_includes(authority: Mapping, root: Path) -> list[Issue]:
         ]
 
     text = entrypoint.read_text(encoding="utf-8", errors="replace")
+    guard_marker = authority.get("deployment_guard_marker")
+    if guard_marker and guard_marker in text:
+        return [
+            Issue(
+                code="deployment_blocked_pending_live_baseline",
+                message=(
+                    "Deployment entrypoint is deliberately fail-closed until the live baseline "
+                    "and canonical migration chain are reviewed."
+                ),
+                path=_relative(entrypoint, root),
+            )
+        ]
+
     include_pattern = re.compile(r"(?m)^\s*\\i(?:r)?\s+['\"]?([^'\"\s]+)['\"]?\s*$")
     issues: list[Issue] = []
     for match in include_pattern.finditer(text):
@@ -387,6 +597,7 @@ def audit_repository(repo_root: Path) -> ReadinessReport:
     issues.extend(check_authority_state(authority, root))
     issues.extend(check_migration_infrastructure(authority, root))
     issues.extend(check_competing_ddl(authority, root))
+    issues.extend(check_source_classification(authority, root))
     issues.extend(check_deployment_includes(authority, root))
     issues.extend(check_rls_coverage(authority, root))
     issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))

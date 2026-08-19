@@ -207,7 +207,7 @@ export const isValidValue = (constantObj, value) =>
     Object.values(constantObj).includes(value);
 
 // Default export for convenience
-export default {
+const constants = {
     OrderStatus,
     FulfillmentStatus,
     InvoiceStatus,
@@ -224,3 +224,5 @@ export default {
     DocumentType,
     PriorityLevel
 };
+
+export default constants;

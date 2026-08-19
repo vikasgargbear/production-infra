@@ -242,7 +242,7 @@ export const getActiveAliases = (canonicalName) => {
     return all.filter(alias => !removed.includes(alias));
 };
 
-export default {
+const fieldAliases = {
     ITEM_FIELD_ALIASES,
     INVOICE_FIELD_ALIASES,
     CUSTOMER_FIELD_ALIASES,
@@ -255,3 +255,5 @@ export default {
     REMOVED_ALIASES,
     getActiveAliases,
 };
+
+export default fieldAliases;

@@ -5,18 +5,10 @@ let cachedApiBaseUrl;
 
 const ENV_FALLBACK_KEYS = [
   'REACT_APP_API_BASE_URL',
-  'REACT_APP_API_URL',
-  'REACT_APP_BACKEND_URL',
-  'REACT_APP_BACKEND_API_URL',
-  'RAILWAY_PUBLIC_DOMAIN',
-  'BACKEND_URL',
-  'API_BASE_URL',
 ];
 
 const RUNTIME_GLOBAL_KEYS = [
   '__API_BASE_URL',
-  '__BACKEND_URL',
-  '__PHARMA_API_BASE_URL',
 ];
 
 function sanitizeUrl(candidate) {

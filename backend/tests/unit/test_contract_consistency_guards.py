@@ -122,6 +122,36 @@ def test_stock_transfer_persists_same_reference_on_both_movements(monkeypatch):
     ]
 
 
+def test_purchase_service_barrels_resolve_to_mounted_canonical_modules():
+    from app.api.services.purchase import (
+        GRNService as DomainGRNService,
+        SupplierInvoiceService as DomainSupplierInvoiceService,
+    )
+    from app.api.services.purchase.grn import GRNService as PackageGRNService
+    from app.api.services.purchase.supplier_invoice import (
+        SupplierInvoiceService as PackageSupplierInvoiceService,
+    )
+    from app.api.services.purchase.supplier_invoice.service import (
+        SupplierInvoiceService as MountedSupplierInvoiceService,
+    )
+    import app.api.shared
+
+    assert DomainGRNService is PackageGRNService
+    assert DomainSupplierInvoiceService is PackageSupplierInvoiceService
+    assert PackageSupplierInvoiceService is MountedSupplierInvoiceService
+    assert MountedSupplierInvoiceService.__module__.endswith("supplier_invoice.service")
+    assert app.api.shared is not None
+
+    retired = (
+        "backend/app/api/services/purchase/purchase_service.py",
+        "backend/app/api/services/purchase/grn_service.py",
+        "backend/app/api/services/purchase/supplier_invoice_service.py",
+        "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_service.py",
+        "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_repository.py",
+    )
+    assert all(not (REPOSITORY_ROOT / path).exists() for path in retired)
+
+
 def test_document_number_reservation_commits_exactly_once(monkeypatch):
     class Database:
         commits = 0
@@ -354,6 +384,7 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" in codes
     assert "DOCUMENT_CONFIG_WITHOUT_PROVEN_CALLER" not in codes
     assert "AD_HOC_REFERENCE_GENERATORS" not in codes
+    assert "DUPLICATE_PURCHASE_SERVICE_SURFACES" not in codes
     assert "DOCUMENT_NUMBER_MUTATION_USES_GET" not in codes
     assert "DOCUMENT_NUMBER_RESERVATION_NOT_COMMITTED" not in codes
     assert "DOCUMENT_NUMBER_RESERVATION_IDEMPOTENCY_UNBASELINED" in codes

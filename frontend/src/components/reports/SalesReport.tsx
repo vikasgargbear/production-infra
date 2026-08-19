@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Calendar, Download, Filter, TrendingUp, Users,
-  Package, DollarSign, FileText, ChevronDown,
-  ChevronUp, RefreshCw, Printer
+  Download, FileText, ChevronDown,
+  ChevronUp, Printer
 } from 'lucide-react';
-import { Line, Bar } from 'react-chartjs-2';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { Line } from 'react-chartjs-2';
+import { format, subDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
-import { DatePicker, Select, DataTable } from '../global';
 
 interface SalesMetric {
   label: string;
