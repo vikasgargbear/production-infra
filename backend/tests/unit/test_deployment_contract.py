@@ -62,7 +62,7 @@ def test_render_blueprint_is_manual_free_and_health_checked():
 
     assert "name: aasopharma-erp-pilot" in frontend
     assert "runtime: static" in frontend
-    assert "plan: free" in frontend
+    assert "plan:" not in frontend
     assert "npm run typecheck" in frontend
     assert "npm run lint:critical" in frontend
     assert "npm run test:ci -- --runInBand" in frontend
