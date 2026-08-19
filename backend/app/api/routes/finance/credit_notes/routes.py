@@ -285,7 +285,10 @@ async def cancel_note(
 
 @router.get("/reasons/list")
 @with_tenant_context
-async def get_predefined_reasons():
+async def get_predefined_reasons(
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """
     Get predefined reasons for credit/debit notes
     """
@@ -382,7 +385,10 @@ async def get_invoice_items_for_notes(
 
 @router.get("/credit-note-reasons")
 @with_tenant_context
-async def get_credit_note_reasons():
+async def get_credit_note_reasons(
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """Get available credit note reason codes"""
     return [
         {"value": "SALES_RETURN", "label": "Sales Return"},
@@ -398,7 +404,10 @@ async def get_credit_note_reasons():
 
 @router.get("/debit-note-reasons")
 @with_tenant_context
-async def get_debit_note_reasons():
+async def get_debit_note_reasons(
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """Get available debit note reason codes"""
     return [
         {"value": "RATE_CORRECTION", "label": "Rate Correction"},

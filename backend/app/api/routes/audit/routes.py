@@ -8,6 +8,7 @@ from sqlalchemy import text
 import logging
 
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession, with_tenant_context
+from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/audit-logs", tags=["Audit Trail"])
 async def get_audit_summary(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context),
 ):
     """Get aggregated audit stats for the last 30 days"""
     try:
@@ -109,6 +111,7 @@ async def get_audit_logs(
     limit: int = Query(50, ge=1, le=200),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context),
 ):
     """List audit logs with filters and pagination"""
     try:
@@ -203,6 +206,7 @@ async def get_audit_log_detail(
     audit_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     current_user: Dict[str, Any] = Depends(PermissionChecker(require_admin=True)),
+    context: OrgContext = Depends(get_org_context),
 ):
     """Get full detail of a single audit log entry"""
     try:

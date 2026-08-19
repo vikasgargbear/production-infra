@@ -7,6 +7,7 @@
   "rls_policy_file": "backend/migrations/enable_rls.sql",
   "deployment_entrypoint": "database/09-deployment/01_deploy_to_supabase.sql",
   "source_classification_file": "database/schema-source-classification.json",
+  "latest_live_capture_evidence": "database/live-schema-evidence.json",
   "deployment_guard_marker": "SCHEMA_BASELINE_REQUIRED",
   "required_migration_files": [
     "backend/alembic.ini",

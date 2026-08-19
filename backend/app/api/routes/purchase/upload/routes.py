@@ -83,7 +83,10 @@ def _check_supplier_in_result(extracted_data: dict, db: TenantAwareSession):
 
 @router.get("/version")
 @with_tenant_context
-async def get_parser_version():
+async def get_parser_version(
+    _: dict = Depends(PermissionChecker("purchase", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     return {"status": "ok", "custom_parser": "available" if CUSTOM_PARSER_AVAILABLE else "not found",
             "version": "1.2", "module_imported": CUSTOM_PARSER_AVAILABLE}
 

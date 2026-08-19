@@ -2,17 +2,17 @@
 Enterprise Authentication API
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 from typing import Dict, Any
 import logging
 
 from ....core.database import get_db
-from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/logout")
@@ -92,8 +92,7 @@ async def logout(
 
 @router.get("/verify-token")
 async def verify_token(
-    req: Request,
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
 ) -> Dict[str, Any]:
     """
     Verify if current token is valid (not expired, not blacklisted).
@@ -109,15 +108,13 @@ async def verify_token(
     from ....core.auth.jwt_auth import decode_jwt
     from jose import JWTError
     
-    # Extract token from Authorization header
-    auth_header = req.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header"
         )
-    
-    token = auth_header[7:]
+
+    token = credentials.credentials
     
     try:
         # Decode and validate token (includes blacklist check)
@@ -144,33 +141,4 @@ async def verify_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=detail
-        )
-
-
-@router.get("/health")
-async def auth_health_check(db: TenantAwareSession = Depends(get_tenant_aware_db)) -> Dict[str, str]:
-    """
-    Health check for authentication service
-    Tests database connectivity
-    """
-    try:
-        # Test database connection
-        from sqlalchemy import text
-        db.execute(text("SELECT 1"))
-        
-        return {
-            "status": "healthy",
-            "service": "authentication",
-            "database": "connected"
-        }
-    except Exception as e:
-        logger.error(f"Auth health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "service": "authentication",
-                "database": "disconnected",
-                "error": str(e)
-            }
         )

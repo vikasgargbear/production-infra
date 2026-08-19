@@ -85,7 +85,10 @@ async def get_inventory_movements(
 
 
 @router.get("/reasons")
-def get_movement_reasons():
+def get_movement_reasons(
+    _: dict = Depends(PermissionChecker("inventory", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """Get predefined reasons for stock movements"""
     return {
         "receive_reasons": [

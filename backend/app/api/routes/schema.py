@@ -18,6 +18,7 @@ import json
 import logging
 
 from ...core.database import get_db
+from ...core.auth.org_context import get_org_context, OrgContext
 from ...core.security.permissions import PermissionChecker
 
 router = APIRouter(prefix="/schema", tags=["Schema Documentation"])
@@ -26,7 +27,8 @@ router = APIRouter(prefix="/schema", tags=["Schema Documentation"])
 @router.get("/all")
 async def get_all_schemas(
     _: dict = Depends(PermissionChecker("master", "view")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
 ):
     """
     Get complete database schema documentation.
@@ -130,7 +132,8 @@ async def get_all_schemas(
 async def get_schema(
     schema_name: str,
     _: dict = Depends(PermissionChecker("master", "view")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
 ):
     """
     Get all tables and columns for a specific schema.
@@ -206,7 +209,8 @@ async def get_table(
     schema_name: str,
     table_name: str,
     _: dict = Depends(PermissionChecker("master", "view")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
 ):
     """
     Get column details for a specific table.
@@ -272,7 +276,8 @@ async def get_table_columns_quick(
     schema_name: str,
     table_name: str,
     _: dict = Depends(PermissionChecker("master", "view")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
 ):
     """
     Get just the column names for a specific table (simplified for quick reference).

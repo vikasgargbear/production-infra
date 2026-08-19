@@ -149,8 +149,29 @@ routine_grants AS (
     ) g
 ),
 migration_history AS (
-    SELECT jsonb_agg(to_jsonb(m) ORDER BY to_jsonb(m)->>'version') AS value
-    FROM supabase_migrations.schema_migrations m
+    SELECT
+        to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS available,
+        CASE
+            WHEN to_regclass('supabase_migrations.schema_migrations') IS NULL
+                THEN '[]'::jsonb
+            ELSE (
+                (xpath(
+                    '/table/row/value/text()',
+                    query_to_xml(
+                        $sql$
+                        SELECT COALESCE(
+                            jsonb_agg(to_jsonb(m) ORDER BY to_jsonb(m)->>'version'),
+                            '[]'::jsonb
+                        )::text AS value
+                        FROM supabase_migrations.schema_migrations m
+                        $sql$,
+                        true,
+                        false,
+                        ''
+                    )
+                ))[1]::text
+            )::jsonb
+        END AS value
 )
 SELECT jsonb_build_object(
     'capture_format_version', 1,
@@ -169,6 +190,7 @@ SELECT jsonb_build_object(
     'enums', COALESCE((SELECT value FROM enums), '[]'::jsonb),
     'table_grants', COALESCE((SELECT value FROM table_grants), '[]'::jsonb),
     'routine_grants', COALESCE((SELECT value FROM routine_grants), '[]'::jsonb),
+    'migration_history_available', (SELECT available FROM migration_history),
     'migration_history', COALESCE((SELECT value FROM migration_history), '[]'::jsonb)
 );
 

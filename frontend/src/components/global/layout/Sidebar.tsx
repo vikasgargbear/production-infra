@@ -109,9 +109,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
 		{ id: 'analytics', label: 'Analytics', icon: TrendingUp },
 		{ id: 'reports', label: 'Reports', icon: FileText },
 		{ id: 'compliance', label: 'Compliance', icon: Shield },
-		{ id: 'profile', label: 'Company Profile', icon: User },
-		// Settings removed - handled by settings icon in header
-		{ id: 'test-save', label: 'Test Save', icon: Package }
+		{ id: 'profile', label: 'Company Profile', icon: User }
 	];
 
 	const toggleSidebar = () => setCollapsed(!collapsed);

@@ -35,10 +35,10 @@ def test_markdown_parser_rejects_docs_without_column_definitions(tmp_path: Path)
     assert schema_validator._parse_schema_docs([schema_doc]) == {}
 
 
-def test_every_current_query_schema_failure_has_exact_fail_closed_inventory():
+def test_live_verified_query_contract_clears_historical_failures_only():
     inventory_path = REPO_ROOT / "docs/architecture/query-schema-conflicts.json"
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-    expected = Counter(
+    historical = Counter(
         (query["file"], query["line"], query["query_sha256"])
         for classification in inventory["classifications"]
         for query in classification["queries"]
@@ -60,7 +60,59 @@ def test_every_current_query_schema_failure_has_exact_fail_closed_inventory():
             for error in result["errors"]
         )
 
-    assert inventory["readiness_state"] == "pending-live-baseline"
-    assert inventory["expected_failure_count"] == 36
-    assert sum(expected.values()) == inventory["expected_failure_count"]
-    assert actual == expected
+    assert inventory["readiness_state"] == "live-verified-query-contracts"
+    assert inventory["expected_failure_count"] == 0
+    assert inventory["historical_failure_count"] == 36
+    assert sum(historical.values()) == inventory["historical_failure_count"]
+    assert actual == Counter()
+
+
+def test_live_schema_evidence_is_narrow_and_does_not_claim_baseline():
+    evidence = json.loads(
+        (REPO_ROOT / "database/live-schema-evidence.json").read_text(encoding="utf-8")
+    )
+    authority = json.loads(
+        (REPO_ROOT / "database/schema-authority.json").read_text(encoding="utf-8")
+    )
+
+    verified = evidence["query_contract_verification"]["verified_columns"]
+    assert evidence["evidence_state"] == "captured_not_baselined"
+    assert evidence["migration_history_available"] is False
+    assert evidence["query_contract_verification"]["historical_failure_count"] == 36
+    assert evidence["query_contract_verification"]["current_failure_count"] == 0
+    assert set(verified) == {
+        "sales.delivery_challans",
+        "sales.invoice_items",
+        "sales.invoices",
+        "sales.order_items",
+        "sales.orders",
+        "sales.sales_return_items",
+        "sales.sales_returns",
+    }
+    assert evidence["pilot_readiness"]["status"] == "blocked"
+    assert evidence["pilot_readiness"]["allows_live_writes"] is False
+    assert (
+        evidence["pilot_readiness"]["surface_assessment"]["business_reads"]
+        == "blocked_pending_deployed_role_and_cross_tenant_proof"
+    )
+    assert evidence["tenant_isolation"]["force_rls_enabled"] == 0
+    assert authority["readiness_state"] == "unbaselined"
+    assert authority["latest_live_capture_evidence"] == "database/live-schema-evidence.json"
+
+
+def test_live_schema_evidence_loader_fails_closed_on_an_unreviewed_state(tmp_path: Path):
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "evidence_state": "baselined",
+                "artifact_sha256": "a" * 64,
+                "capture_sql_sha256": "b" * 64,
+                "query_contract_verification": {"verified_columns": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="captured_not_baselined"):
+        schema_validator._load_live_verified_columns(evidence_path)

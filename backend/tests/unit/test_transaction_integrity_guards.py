@@ -400,9 +400,13 @@ def test_release_audit_detects_unresolved_integrity_blockers():
     assert "JOURNAL_MUTATION_NOT_COMMITTED" not in codes
     assert "JOURNAL_SCHEMA_CONTRACT_MISMATCH" not in codes
     assert "ALLOCATION_TABLE_UNBASELINED" in codes
+    assert "LIVE_ALLOCATION_PROJECTION_OWNERSHIP_CONFLICT" in codes
     assert "ALLOCATION_TENANT_SCOPE_MISSING" not in codes
     assert "ALLOCATION_MUTATION_NOT_COMMITTED" not in codes
     assert "ALLOCATION_PROJECTION_RECONCILIATION_MISSING" not in codes
     assert "BANK_RECONCILIATION_SCHEMA_UNBASELINED" in codes
+    assert "LIVE_JOURNAL_IMMUTABILITY_NOT_DEPLOYED" in codes
+    assert "LIVE_ORDER_INVOICE_OWNERSHIP_CONFLICT" in codes
+    assert "LIVE_GRN_INVENTORY_OWNERSHIP_CONFLICT" in codes
     assert "CALCULATION_OWNER_DUPLICATED" not in codes
     assert "STOCK_DOUBLE_MUTATION" not in codes
