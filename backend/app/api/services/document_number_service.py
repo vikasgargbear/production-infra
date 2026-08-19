@@ -9,13 +9,35 @@ Format: PREFIX-YYYYMMDDNNNN
 
 Scoped by: document_type + org_id + date → each org gets its own 0001 per type per day
 """
-from typing import Dict, Optional
+from typing import Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Standalone number endpoints consume a sequence even when the document is not
+# subsequently created. Keep that contract explicit for OpenAPI/agent clients.
+DOCUMENT_NUMBER_RESERVATION_OPENAPI = {
+    "x-erp-risk": "consequential_write",
+    "x-erp-tenant-scope": "organization",
+    "x-erp-branch-scope": "none",
+    "x-erp-side-effects": "reserves_document_number",
+    "x-erp-approval": "none",
+    "x-erp-idempotency": "requires_durable_reservation_key_store",
+    "x-erp-mcp-export": False,
+    "x-erp-contract-status": "internal_release_blocked",
+}
+
+
+def document_number_reservation_openapi(permission: str) -> Dict[str, object]:
+    """Return consistent OpenAPI policy metadata for one reservation route."""
+    return {
+        **DOCUMENT_NUMBER_RESERVATION_OPENAPI,
+        "x-erp-permission": permission,
+    }
 
 # Document type configurations
 DOCUMENT_CONFIGS = {
@@ -30,12 +52,6 @@ DOCUMENT_CONFIGS = {
         "table": "procurement.purchase_orders",
         "column": "po_number",
         "id_column": "purchase_order_id"
-    },
-    "purchase": {
-        "prefix": "PUR",
-        "table": "procurement.purchases",
-        "column": "purchase_number",
-        "id_column": "purchase_id"
     },
     "grn": {
         "prefix": "GRN",
@@ -81,9 +97,9 @@ DOCUMENT_CONFIGS = {
     },
     "receipt": {
         "prefix": "RCT",
-        "table": "financial.receipts",
-        "column": "receipt_number",
-        "id_column": "receipt_id"
+        "table": "financial.payments",
+        "column": "payment_number",
+        "id_column": "payment_id"
     },
     "credit_note": {
         "prefix": "CN",
@@ -109,41 +125,29 @@ DOCUMENT_CONFIGS = {
         "column": "claim_number",
         "id_column": "claim_id"
     },
-    "quotation": {
-        "prefix": "QT",
-        "table": "sales.quotations",
-        "column": "quotation_number",
-        "id_column": "quotation_id"
-    },
-    "stock_adjustment": {
-        "prefix": "ADJ",
-        "table": "inventory.stock_adjustments",
-        "column": "adjustment_number",
-        "id_column": "adjustment_id"
-    },
     "adjustment": {
         "prefix": "ADJ",
-        "table": "inventory.stock_movements",
+        "table": "inventory.inventory_movements",
         "column": "reference_number",
         "id_column": "movement_id"
     },
     # New document types added for service consolidation
     "stock_receipt": {
         "prefix": "SR",
-        "table": "inventory.stock_movements",
-        "column": "movement_number",
+        "table": "inventory.inventory_movements",
+        "column": "reference_number",
         "id_column": "movement_id"
     },
     "stock_issue": {
         "prefix": "SI",
-        "table": "inventory.stock_movements",
-        "column": "movement_number",
+        "table": "inventory.inventory_movements",
+        "column": "reference_number",
         "id_column": "movement_id"
     },
     "stock_transfer": {
         "prefix": "ST",
-        "table": "inventory.stock_movements",
-        "column": "movement_number",
+        "table": "inventory.inventory_movements",
+        "column": "reference_number",
         "id_column": "movement_id"
     },
     "writeoff": {
@@ -152,23 +156,41 @@ DOCUMENT_CONFIGS = {
         "column": "writeoff_number",
         "id_column": "writeoff_id"
     },
-    "scheme": {
-        "prefix": "SCH",
-        "table": "sales.promotional_schemes",
-        "column": "scheme_code",
-        "id_column": "scheme_id"
-    },
-    "stock_count": {
-        "prefix": "CNT",
-        "table": "inventory.stock_counts",
-        "column": "count_reference",
-        "id_column": "count_id"
-    },
     "product": {
         "prefix": "PROD",
         "table": "inventory.products",
         "column": "product_code",
         "id_column": "product_id"
+    },
+    "batch": {
+        "prefix": "BATCH",
+        "table": "inventory.batches",
+        "column": "batch_number",
+        "id_column": "batch_id"
+    },
+    "supplier": {
+        "prefix": "SUP",
+        "table": "parties.suppliers",
+        "column": "supplier_code",
+        "id_column": "supplier_id"
+    },
+    "branch": {
+        "prefix": "BR",
+        "table": "master.org_branches",
+        "column": "branch_code",
+        "id_column": "branch_id"
+    },
+    "department": {
+        "prefix": "DEPT",
+        "table": "master.departments",
+        "column": "department_code",
+        "id_column": "department_id"
+    },
+    "employee": {
+        "prefix": "EMP",
+        "table": "master.employees",
+        "column": "employee_code",
+        "id_column": "employee_id"
     },
     "payroll_run": {
         "prefix": "PRL",
@@ -194,7 +216,7 @@ class DocumentNumberService:
     """Unified service for generating document numbers"""
     
     @staticmethod
-    def generate_number(db: Session, document_type: str, org_id: Optional[str] = None) -> str:
+    def generate_number(db: Session, document_type: str, org_id: str) -> str:
         """
         Generate a unique document number using atomic database sequences.
 
@@ -204,11 +226,14 @@ class DocumentNumberService:
         Args:
             db: Database session
             document_type: Type of document (invoice, purchase_order, etc.)
-            org_id: Organization ID (optional, for multi-tenant systems)
+            org_id: Organization ID used to isolate the sequence
 
         Returns:
             Generated document number in format PREFIX-YYYYMMDDNNNN
         """
+        if not org_id:
+            raise ValueError("org_id is required for document number generation")
+
         try:
             config = DOCUMENT_CONFIGS.get(document_type)
             if not config:
@@ -247,23 +272,28 @@ class DocumentNumberService:
         except Exception as e:
             logger.error(f"Error generating {document_type} number: {e}")
             raise ValueError(f"Failed to generate {document_type} number: {e}")
-    
+
     @staticmethod
-    def generate_batch_number(product_code: Optional[str] = None) -> str:
+    def reserve_number(db: Session, document_type: str, org_id: str) -> str:
+        """Generate and commit a standalone reservation.
+
+        Document creation flows should continue to call ``generate_number`` so
+        the identifier and document are committed in the same transaction.
         """
-        Generate a batch number for inventory
-        Format: BYYMMXXXX (B + YY + MM + 4-digit sequence)
-        """
-        now = datetime.now()
-        year = now.year % 100
-        month = now.month
-        
-        # Generate a 4-digit random/sequential component
-        import random
-        seq = random.randint(1000, 9999)
-        
-        batch_number = f"B{year:02d}{month:02d}{seq:04d}"
-        return batch_number
+        try:
+            document_number = DocumentNumberService.generate_number(
+                db, document_type, org_id
+            )
+            db.commit()
+            return document_number
+        except Exception:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def generate_batch_number(db: Session, org_id: str) -> str:
+        """Generate a tenant-scoped atomic batch reference."""
+        return DocumentNumberService.generate_number(db, "batch", org_id)
     
     @staticmethod
     def validate_format(document_number: str, document_type: str) -> bool:
@@ -274,7 +304,7 @@ class DocumentNumberService:
         if not config:
             return False
         
-        # Expected format: PREFIX-YYXXXXXX
+        # Expected format: PREFIX-YYYYMMDDNNNN
         parts = document_number.split('-')
         if len(parts) != 2:
             return False
@@ -283,8 +313,8 @@ class DocumentNumberService:
         if prefix != config['prefix']:
             return False
         
-        # Check if number part is 10 digits (YY + 8-digit sequence)
-        if len(number_part) != 10 or not number_part.isdigit():
+        # Date prefix (8 digits) followed by a 4-digit daily sequence.
+        if len(number_part) != 12 or not number_part.isdigit():
             return False
         
         return True
@@ -310,34 +340,3 @@ def get_table_columns(db: Session, table_name: str) -> list:
         return columns
     except:
         return []
-
-
-# Convenience functions for backward compatibility
-def generate_invoice_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate invoice number"""
-    return DocumentNumberService.generate_number(db, "invoice", org_id)
-
-def generate_purchase_order_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate purchase order number"""
-    return DocumentNumberService.generate_number(db, "purchase_order", org_id)
-
-def generate_grn_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate GRN number"""
-    return DocumentNumberService.generate_number(db, "grn", org_id)
-
-def generate_payment_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate payment number"""
-    return DocumentNumberService.generate_number(db, "payment", org_id)
-
-def generate_sales_order_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate sales order number"""
-    return DocumentNumberService.generate_number(db, "sales_order", org_id)
-
-def generate_delivery_challan_number(db: Session, org_id: Optional[str] = None) -> str:
-    """Generate delivery challan number"""
-    return DocumentNumberService.generate_number(db, "delivery_challan", org_id)
-
-def generate_return_number(db: Session, return_type: str, org_id: Optional[str] = None) -> str:
-    """Generate return number (sales or purchase)"""
-    document_type = f"{return_type}_return"
-    return DocumentNumberService.generate_number(db, document_type, org_id)

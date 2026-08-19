@@ -57,6 +57,29 @@ sequenceDiagram
     API-->>Client: 201 Created (cached response)
 ```
 
+## Current Payment Contract
+
+The payment creation endpoints below require `X-Idempotency-Key`:
+
+- `POST /api/payments/`
+- `POST /api/payments/record`
+- `POST /api/payments/customer-receipt`
+
+The server scopes each key by organization, actor, and operation. It takes a
+PostgreSQL transaction advisory lock, hashes the canonical request body, and
+stores the completed response marker on `financial.payments.internal_notes` in
+the same transaction as the payment. An identical retry replays the original
+response. Reusing the key with a different body returns
+`IDEMPOTENCY_KEY_MISMATCH` with HTTP 409.
+
+This contract is fail-closed: a missing persistence column, an invalid stored
+marker, or an incomplete response marker prevents the payment write from being
+reported as successful. The repository's schema authority remains
+`unbaselined`, so production promotion still requires verifying
+`financial.payments.internal_notes` against a reviewed live schema dump.
+Cancellation, bank reconciliation, and allocation writes are not yet covered by
+this replay contract and remain blocked by the transaction-integrity audit.
+
 ---
 
 ## Key Format
@@ -164,7 +187,9 @@ X-Idempotency-Replayed: true
 
 ## Key Expiration
 
-Idempotency keys are stored for **24 hours** after the initial request.
+Generic idempotency keys are stored for **24 hours** after the initial request.
+Payment keys are retained with the payment record and do not expire, because a
+late retry must never create a second financial transaction.
 
 After expiration:
 - Same key will process as a new request

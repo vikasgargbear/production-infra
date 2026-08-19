@@ -19,6 +19,9 @@ It is designed for the Supabase-backed Railway deployment and focuses on two thi
   - contract tests for stock receive, transfer, adjustment, and writeoff
   - contract tests for purchase order creation, direct purchase entry, purchase receipt, and purchase return create/cancel
   - contract tests for sales invoice creation, invoice cancellation reversal, sales return restock, and payment receipt
+- `test_live_calculation_matrix.py`
+  - exercises quantity, price, line discount, GST slab, and tax-regime combinations through the deployed API
+  - writes representative multi-line invoices and reconciles persisted Supabase header/item totals before cancellation
 
 ## Required Environment
 
@@ -27,19 +30,21 @@ production URL in code; these tests write live data and must point at an
 explicitly selected deployment.
 
 ```bash
-export PHARMA_LIVE_API_BASE_URL="https://pharma-backend-production-0c09.up.railway.app"
+export PHARMA_LIVE_API_BASE_URL="https://isolated-test-api.example.com"
 export PHARMA_LIVE_DATABASE_URL="postgresql://..."
-export PHARMA_LIVE_JWT_SECRET_KEY="..."
-export PHARMA_LIVE_TEST_ORG_ID="e78d6777-35f6-4b19-994f-caaede2f021a"
-export PHARMA_LIVE_TEST_USER_ID="8"
-export PHARMA_LIVE_TEST_BRANCH_ID="5"
-export PHARMA_LIVE_TEST_EMAIL="aasopharmaceuticals@gmail.com"
+export PHARMA_LIVE_ACCESS_TOKEN="short-lived-token-for-dedicated-test-user"
+export PHARMA_LIVE_TEST_ORG_ID="..."
+export PHARMA_LIVE_TEST_BRANCH_ID="..."
 
 # Optional when DNS to the DB hostname is flaky in the shell:
 # export PHARMA_LIVE_DATABASE_HOSTADDR="x.x.x.x"
 ```
 
 ## Run
+
+Use an isolated test organization. The suite creates and reverses real business
+documents. Supply a short-lived token issued through the real authentication
+flow; never give this test harness the backend JWT signing key.
 
 ```bash
 cd backend
@@ -54,3 +59,5 @@ python3 -m pytest tests/live_erp -q
 The older shell E2E scripts already captured a large amount of business knowledge, but that knowledge was split across many files and depended on `railway` + `psql`.
 
 This directory turns that knowledge into a reusable, Python-based live verification layer that can be extended action by action until the full ERP is automated.
+
+`pytest --collect-only -q tests/live_erp` currently discovers 37 live tests.

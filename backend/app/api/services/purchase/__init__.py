@@ -33,10 +33,6 @@ from .order import PurchaseOrderService, PurchaseOrderRepository
 # Shared utilities
 from .shared import PurchaseSharedRepository
 
-# Legacy support - also export from old location
-# TODO: Migrate routes to use new imports, then remove this
-from .purchase_service import PurchaseService
-
 __all__ = [
     # Calculations
     "PurchaseCalculator",
@@ -57,7 +53,4 @@ __all__ = [
     
     # Shared
     "PurchaseSharedRepository",
-    
-    # Legacy
-    "PurchaseService",
 ]

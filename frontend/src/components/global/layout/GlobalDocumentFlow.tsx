@@ -250,7 +250,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
             title: 'Stock Transfer',
             icon: 'Package',
             color: 'indigo',
-            prefix: 'TRF',
+            prefix: 'ST',
             serviceMethod: 'generateTransferNumber',
             saveLabel: 'Save Transfer',
             historyType: 'stock-transfer'

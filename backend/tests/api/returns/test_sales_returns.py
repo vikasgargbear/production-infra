@@ -55,12 +55,12 @@ class TestSalesReturnsAPI:
         return {"customer_id": 1, "customer_name": "GST Customer", "gst_number": "27AAAAA1234A1Z5"}
     
     # =========================================================================
-    # ENDPOINT: GET /api/sale-returns/generate-number
+    # ENDPOINT: POST /api/sale-returns/generate-number
     # =========================================================================
     
     def test_generate_return_number(self, returns_api):
         """Test return number generation"""
-        response = returns_api.get("/generate-number")
+        response = returns_api.post("/generate-number", {})
         
         returns_api.assert_has_fields(response, ["return_number"])
         assert response["return_number"], "Return number should not be empty"
@@ -70,7 +70,7 @@ class TestSalesReturnsAPI:
         """Test that generated numbers are unique"""
         numbers = set()
         for _ in range(3):
-            response = returns_api.get("/generate-number")
+            response = returns_api.post("/generate-number", {})
             number = response.get("return_number")
             assert number not in numbers, "Duplicate return number generated"
             numbers.add(number)

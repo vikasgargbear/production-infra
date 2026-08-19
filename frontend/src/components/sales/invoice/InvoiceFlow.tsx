@@ -4,7 +4,7 @@ import { useCompany } from '../../../contexts/CompanyContext';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
+import { calculateInvoicePreview } from '../../../services/calculations/invoiceCalculationService';
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
@@ -58,6 +58,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         sameAsShipping,
         setSameAsShipping,
         isLoading,
+        isOnline,
         error,
         setError,
         saving,
@@ -226,7 +227,7 @@ ${companyInfo?.name || 'Your Company'}`;
         }
 
         try {
-            const result = EnterpriseCalculator.calculateInvoice(invoice as any);
+            const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with calculated totals
             setInvoice(prev => ({
@@ -238,11 +239,11 @@ ${companyInfo?.name || 'Your Company'}`;
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [selectedCustomer, invoice, setInvoice]);
+    }, [selectedCustomer, invoice, isOnline, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
         try {
-            const result = EnterpriseCalculator.calculateInvoice(invoice as any);
+            const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with latest totals
             setInvoice(prev => ({
@@ -255,7 +256,7 @@ ${companyInfo?.name || 'Your Company'}`;
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [invoice, setInvoice]);
+    }, [invoice, isOnline, setInvoice]);
 
     const handleBackFromStep3 = useCallback((targetStep: number | React.MouseEvent = 2) => {
         // CRITICAL FIX: Handle if event object passed instead of number

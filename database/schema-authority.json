@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "readiness_state": "unbaselined",
+  "expected_tenant_setting": "app.org_id",
+  "bootstrap_ddl_root": "database/02-tables",
+  "canonical_migration_root": "backend/alembic",
+  "rls_policy_file": "backend/migrations/enable_rls.sql",
+  "deployment_entrypoint": "database/09-deployment/01_deploy_to_supabase.sql",
+  "required_migration_files": [
+    "backend/alembic.ini",
+    "backend/alembic/env.py",
+    "backend/alembic/script.py.mako"
+  ],
+  "migration_versions_glob": "backend/alembic/versions/*.py",
+  "migration_dependency_pattern": "^alembic(?:[<>=!~].*)?$",
+  "migration_dependency_file": "backend/requirements.txt",
+  "global_tables": [
+    "master.organizations",
+    "master.currencies",
+    "inventory.product_types",
+    "gst.hsn_sac_codes",
+    "compliance.license_types",
+    "compliance.regulatory_authorities",
+    "system_config.system_health_metrics"
+  ],
+  "notes": [
+    "unbaselined is intentional: do not stamp or generate a baseline without comparing a reviewed live schema dump",
+    "database/02-tables is legacy bootstrap DDL, not proof of the current production schema",
+    "only backend/alembic may contain new production migrations after the live baseline is established"
+  ]
+}

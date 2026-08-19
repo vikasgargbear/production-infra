@@ -18,7 +18,6 @@ from .sales.order.order_service import OrderService
 from .returns.return_service import ReturnService
 from .master.product.service import ProductService
 from .master.customer.service import CustomerService
-from .purchase.purchase_service import PurchaseService
 from .finance.payment.service import PaymentService
 from .finance.ledger.service import LedgerService
 from .finance.credit_note.service import CreditNoteService
@@ -37,8 +36,6 @@ __all__ = [
     # Master
     "CustomerService",
     "ProductService",
-    # Purchase
-    "PurchaseService",
     # Finance
     "PaymentService",
     "LedgerService",

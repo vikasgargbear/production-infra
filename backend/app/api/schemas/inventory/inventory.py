@@ -31,8 +31,8 @@ class MovementDirection(str, Enum):
     OUT = "out"
 
 
-class AdjustmentType(str, Enum):
-    """Stock adjustment types"""
+class InventoryAdjustmentReason(str, Enum):
+    """Adjustment reasons used by the legacy inventory contract."""
     DAMAGE = "damage"
     EXPIRY = "expiry"
     THEFT = "theft"

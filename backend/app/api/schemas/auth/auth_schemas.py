@@ -82,11 +82,9 @@ class LoginResponse(BaseModel):
     """Successful login response"""
     
     access_token: str = Field(..., description="JWT access token")
-    refresh_token: Optional[str] = Field(None, description="JWT refresh token")
     token_type: str = Field("bearer")
     expires_in: int = Field(..., description="Token expiry in seconds")
     user: UserSummary
-    offline_auth_hash: Optional[str] = Field(None, description="Hash for offline auth")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -97,21 +95,6 @@ class LoginResponse(BaseModel):
             }
         }
     )
-
-
-class RefreshTokenRequest(BaseModel):
-    """Token refresh request"""
-    
-    refresh_token: str = Field(..., description="Valid refresh token")
-
-
-class RefreshTokenResponse(BaseModel):
-    """Token refresh response"""
-    
-    access_token: str
-    refresh_token: Optional[str] = None
-    token_type: str = "bearer"
-    expires_in: int
 
 
 # =============================================================================

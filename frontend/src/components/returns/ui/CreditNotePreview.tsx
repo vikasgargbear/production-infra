@@ -2,8 +2,6 @@ import React from 'react';
 import { FileText, User, Phone, Mail, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { formatCurrency } from '../../../utils/formatters';
-import { determineGstType } from '../../gst/utils/gstCalculations';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 // Return reasons for display
 const RETURN_REASONS = [
@@ -58,23 +56,11 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
     // Only skip if GST customer explicitly excludes it
     if (customer.gst_number && !includeGst) return gstBreakup;
 
-    // Document-level GST type: use customer address state vs company state
-    // For invoice-linked returns, item-level rates override this
-    // For manual returns, this determines IGST vs CGST/SGST
-    const customerState = customer?.state || customer?.billing_address?.state || customer?.address_info?.billing_state || '';
-    const documentGstType = determineGstType(companyDetails?.company_state, customerState, companyDetails?.company_gst_number, customer?.gst_number);
-
     returnItems.forEach(item => {
-      const calculated = EnterpriseCalculator.calculateReturnLine(item, {
-        include_gst: !customer.gst_number || includeGst,
-        quantity_field: 'return_quantity',
-        paid_quantity_field: 'paid_quantity',
-        free_quantity_field: 'free_quantity',
-        cap_to_paid_quantity: true
-      });
+      const taxPercent = Number(item.tax_percent || 0);
 
-      if (!gstBreakup[calculated.tax_percent]) {
-        gstBreakup[calculated.tax_percent] = {
+      if (!gstBreakup[taxPercent]) {
+        gstBreakup[taxPercent] = {
           taxableAmount: 0,
           cgst: 0,
           sgst: 0,
@@ -83,11 +69,11 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
         };
       }
 
-      gstBreakup[calculated.tax_percent].taxableAmount += calculated.taxable_amount;
-      gstBreakup[calculated.tax_percent].cgst += calculated.cgst_amount;
-      gstBreakup[calculated.tax_percent].sgst += calculated.sgst_amount;
-      gstBreakup[calculated.tax_percent].igst += calculated.igst_amount;
-      gstBreakup[calculated.tax_percent].totalTax += calculated.gst_amount;
+      gstBreakup[taxPercent].taxableAmount += Number(item.taxable_amount || 0);
+      gstBreakup[taxPercent].cgst += Number(item.cgst_amount || 0);
+      gstBreakup[taxPercent].sgst += Number(item.sgst_amount || 0);
+      gstBreakup[taxPercent].igst += Number(item.igst_amount || 0);
+      gstBreakup[taxPercent].totalTax += Number(item.tax_amount || 0);
     });
 
     return gstBreakup;
@@ -298,22 +284,15 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const calculated = EnterpriseCalculator.calculateReturnLine(item, {
-                    include_gst: !customer.gst_number || includeGst,
-                    quantity_field: 'return_quantity',
-                    paid_quantity_field: 'paid_quantity',
-                    free_quantity_field: 'free_quantity',
-                    cap_to_paid_quantity: true
-                  });
                   const totalQty = parseFloat(item.quantity || 0);
                   const freeQty = parseFloat(item.free_quantity || 0);
                   const paidQty = parseFloat(item.paid_quantity || totalQty - freeQty);
                   const returnQty = parseFloat(item.return_quantity || 0);
                   const paidReturnQty = Math.min(returnQty, paidQty);
                   const freeReturnQty = returnQty > paidQty ? returnQty - paidQty : 0;
-                  const discountAmount = calculated.discount_amount;
+                  const discountAmount = Number(item.discount_amount || 0);
                   const discountPercent = parseFloat(item.discount_percent || item.discount || 0);
-                  const totalAmount = calculated.total_amount;
+                  const totalAmount = Number(item.total_amount || 0);
 
                   return (
                     <tr key={item.id || item.product_id || index} className="border-b border-gray-200">
@@ -348,7 +327,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({ returnData, custo
                         {discountAmount === 0 && '-'}
                       </td>
                       {customer.gst_number && (
-                        <td className="py-3 px-2 text-sm text-center">{calculated.tax_percent}%</td>
+                        <td className="py-3 px-2 text-sm text-center">{Number(item.tax_percent || 0)}%</td>
                       )}
                       <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                     </tr>

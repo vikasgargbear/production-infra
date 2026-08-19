@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CreditCard, Save, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
 import { notesApi } from '../../../services/api';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
+import { calculateNotePreview } from '../../../services/calculations/noteCalculationService';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 import CreditNoteFormPageCompact from './CreditNoteFormPageCompact';
 import CreditNoteReviewPage from './CreditNoteReviewPage';
 import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
@@ -51,6 +52,9 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   const [createWithoutInvoice, setCreateWithoutInvoice] = useState(false);
   const [showReviewPage, setShowReviewPage] = useState(false);
   const [includeGST, setIncludeGST] = useState(true);
+  const [calculatedTotals, setCalculatedTotals] = useState({ subtotal: 0, taxAmount: 0, grandTotal: 0 });
+  const calculationRequestRef = useRef(0);
+  const { isOnline } = useNetworkStatus();
 
   const [noteData, setNoteData] = useState({
     note_number: `CR-${Date.now().toString().slice(-6)}`,
@@ -289,9 +293,8 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     setNoteItems(prev => prev.map(item => {
       if (item.id === itemId) {
         const updated = { ...item, [field]: value };
-        // Recalculate total when quantity changes
-        if (field === 'quantity') {
-          updated.line_total = updated.quantity * updated.unit_price * (1 - updated.discount_percent / 100);
+        if (['quantity', 'unit_price', 'discount_percent', 'tax_percent'].includes(field)) {
+          updated.line_total = 0;
         }
         return updated;
       }
@@ -299,21 +302,44 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     }));
   };
 
-  const calculateTotals = () => {
-    const calculation = EnterpriseCalculator.calculateNoteTotals(noteItems, {
-      include_gst: includeGST,
-      selected_only: false,
-      quantity_field: 'quantity',
-      round_final_amount: false
-    });
-    const totals = calculation.totals;
-
-    return {
-      subtotal: totals.subtotal_amount || totals.subtotal || 0,
-      taxAmount: totals.tax_amount || totals.total_tax_amount || 0,
-      grandTotal: totals.total_amount || totals.final_amount || 0
+  useEffect(() => {
+    const requestId = ++calculationRequestRef.current;
+    if (noteItems.length === 0) {
+      setCalculatedTotals({ subtotal: 0, taxAmount: 0, grandTotal: 0 });
+      return;
+    }
+    const calculate = async () => {
+      try {
+        const result = await calculateNotePreview(noteItems, {
+          noteType: 'credit',
+          partyId: selectedCustomer?.id || selectedCustomer?.customer_id || selectedCustomer?.party_id,
+          includeGst: includeGST,
+          isOnline
+        });
+        if (requestId !== calculationRequestRef.current) return;
+        setCalculatedTotals({
+          subtotal: result.subtotal,
+          taxAmount: result.taxAmount,
+          grandTotal: result.grandTotal
+        });
+        setNoteItems(prev => {
+          let changed = false;
+          const next = prev.map((item, index) => {
+            const lineTotal = Number(result.items[index]?.total_amount || 0);
+            if (Number(item.line_total || 0) === lineTotal) return item;
+            changed = true;
+            return { ...item, line_total: lineTotal };
+          });
+          return changed ? next : prev;
+        });
+      } catch (calculationError) {
+        if (requestId === calculationRequestRef.current) {
+          setError(calculationError instanceof Error ? calculationError.message : 'Unable to calculate note totals');
+        }
+      }
     };
-  };
+    void calculate();
+  }, [noteItems, includeGST, isOnline, selectedCustomer]);
 
   // Check if ready to show review page
   const canShowReview = () => {
@@ -346,7 +372,12 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     setError(null);
 
     try {
-      const totals = calculateTotals();
+      const totals = await calculateNotePreview(noteItems, {
+        noteType: 'credit',
+        partyId: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
+        includeGst: includeGST,
+        isOnline
+      });
       const payload = {
         party_id: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
         note_date: noteData.note_date,
@@ -363,7 +394,9 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           hsn_code: item.hsn_code,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          line_total: item.line_total
+          line_total: item.line_total,
+          discount_percent: item.discount_percent,
+          gst_percent: item.tax_percent
         }))
       };
 
@@ -392,7 +425,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     }
   };
 
-  const totals = calculateTotals();
+  const totals = calculatedTotals;
 
   if (isLoading) {
     return (

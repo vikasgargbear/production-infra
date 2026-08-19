@@ -3,7 +3,6 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -11,7 +10,6 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import psycopg2
 import pytest
 import requests
-from jose import jwt
 
 
 MATRIX_PATH = Path(__file__).with_name("action_matrix.json")
@@ -35,11 +33,9 @@ def _with_connection_overrides(database_url: str) -> str:
 class LiveERPConfig:
     api_base_url: str
     database_url: str
-    jwt_secret_key: str
+    access_token: str
     test_org_id: str
-    test_user_id: int
     test_branch_id: int
-    test_email: str
     timeout_seconds: int = 30
 
 
@@ -55,11 +51,9 @@ def live_config() -> LiveERPConfig:
     return LiveERPConfig(
         api_base_url=_env_required("PHARMA_LIVE_API_BASE_URL"),
         database_url=_with_connection_overrides(_env_required("PHARMA_LIVE_DATABASE_URL")),
-        jwt_secret_key=_env_required("PHARMA_LIVE_JWT_SECRET_KEY"),
-        test_org_id=os.getenv("PHARMA_LIVE_TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a"),
-        test_user_id=int(os.getenv("PHARMA_LIVE_TEST_USER_ID", "8")),
-        test_branch_id=int(os.getenv("PHARMA_LIVE_TEST_BRANCH_ID", "5")),
-        test_email=os.getenv("PHARMA_LIVE_TEST_EMAIL", "aasopharmaceuticals@gmail.com"),
+        access_token=_env_required("PHARMA_LIVE_ACCESS_TOKEN"),
+        test_org_id=_env_required("PHARMA_LIVE_TEST_ORG_ID"),
+        test_branch_id=int(_env_required("PHARMA_LIVE_TEST_BRANCH_ID")),
         timeout_seconds=int(os.getenv("PHARMA_LIVE_TIMEOUT_SECONDS", "30")),
     )
 
@@ -70,29 +64,11 @@ def action_matrix() -> Dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def live_token(live_config: LiveERPConfig) -> str:
-    payload = {
-        "user_id": live_config.test_user_id,
-        "email": live_config.test_email,
-        "org_id": live_config.test_org_id,
-        "role_id": 6,
-        "branch_ids": [str(live_config.test_branch_id)],
-        "branch_scope": "all",
-        "data_access_level": "organization",
-        "is_admin": True,
-        "full_name": "Live ERP Test User",
-        "exp": datetime.utcnow() + timedelta(hours=4),
-        "iat": datetime.utcnow(),
-    }
-    return jwt.encode(payload, live_config.jwt_secret_key, algorithm="HS256")
-
-
-@pytest.fixture(scope="session")
-def live_session(live_config: LiveERPConfig, live_token: str) -> requests.Session:
+def live_session(live_config: LiveERPConfig) -> requests.Session:
     session = requests.Session()
     session.headers.update(
         {
-            "Authorization": f"Bearer {live_token}",
+            "Authorization": f"Bearer {live_config.access_token}",
             "Content-Type": "application/json",
         }
     )

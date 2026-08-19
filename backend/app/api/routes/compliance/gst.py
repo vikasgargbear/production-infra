@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, List, Optional, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import calendar
 from decimal import Decimal
 import logging
@@ -16,9 +16,11 @@ import logging
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
+from ....core.money import money_json
 from ....core.utils.branch_utils import get_default_branch_id
 from ...services.compliance.gst_service import GSTService
 from ...services.document_number_service import DocumentNumberService
+from ...schemas.money import GSTCalculationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -167,24 +169,24 @@ async def get_gst_dashboard(
         net_payable = total_output_tax - input_credit
 
         return {
-            "outputTax": float(total_output_tax),
-            "inputCredit": float(input_credit),
-            "netPayable": float(net_payable),
+            "outputTax": money_json(total_output_tax),
+            "inputCredit": money_json(input_credit),
+            "netPayable": money_json(net_payable),
             "period": get_current_period(),
             "summary": {
                 "total_invoices": total_invoices,
                 "total_suppliers": total_suppliers,
                 "total_supplier_invoices": total_supplier_invoices,
-                "total_taxable": float(total_taxable),
-                "total_purchase_taxable": float(total_purchase_taxable),
+                "total_taxable": money_json(total_taxable),
+                "total_purchase_taxable": money_json(total_purchase_taxable),
                 "b2b_transactions": b2b_count,
                 "b2c_transactions": b2c_count,
-                "cgst_amount": float(total_cgst),
-                "sgst_amount": float(total_sgst),
-                "igst_amount": float(total_igst),
-                "purchase_cgst_amount": float(total_purchase_cgst),
-                "purchase_sgst_amount": float(total_purchase_sgst),
-                "purchase_igst_amount": float(total_purchase_igst)
+                "cgst_amount": money_json(total_cgst),
+                "sgst_amount": money_json(total_sgst),
+                "igst_amount": money_json(total_igst),
+                "purchase_cgst_amount": money_json(total_purchase_cgst),
+                "purchase_sgst_amount": money_json(total_purchase_sgst),
+                "purchase_igst_amount": money_json(total_purchase_igst)
             }
         }
 
@@ -300,8 +302,8 @@ async def file_gst_return(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/calculate")
-@router.post("/calculate")
+@router.get("/calculate", response_model=GSTCalculationResponse)
+@router.post("/calculate", response_model=GSTCalculationResponse)
 @with_tenant_context
 async def calculate_gst(
     amount: float,
@@ -341,14 +343,14 @@ async def calculate_gst(
         )
 
         return {
-            "taxableAmount": float(amount),
+            "taxableAmount": money_json(amount),
             "gstRate": gst_rate,
             "gstType": gst_type_str,
-            "cgst": float(gst_amounts["cgst_amount"]),
-            "sgst": float(gst_amounts["sgst_amount"]),
-            "igst": float(gst_amounts["igst_amount"]),
-            "totalTax": float(gst_amounts["total_tax_amount"]),
-            "total": float(amount) + float(gst_amounts["total_tax_amount"])
+            "cgst": money_json(gst_amounts["cgst_amount"]),
+            "sgst": money_json(gst_amounts["sgst_amount"]),
+            "igst": money_json(gst_amounts["igst_amount"]),
+            "totalTax": money_json(gst_amounts["total_tax_amount"]),
+            "total": money_json(Decimal(str(amount)) + gst_amounts["total_tax_amount"])
         }
 
     except Exception as e:
@@ -416,7 +418,7 @@ async def verify_gst_data(
                 verification_results.append({
                     "invoice_number": invoice.invoice_number,
                     "customer_name": invoice.customer_name,
-                    "amount": float(invoice.final_amount or 0),
+                    "amount": money_json(invoice.final_amount or 0),
                     "issues": issues
                 })
 
@@ -481,7 +483,7 @@ async def reconcile_gst_data(
             else:
                 unmatched.append({
                     "invoice_number": purchase.supplier_invoice_number,
-                    "amount": float(purchase.invoice_total or 0),
+                    "amount": money_json(purchase.invoice_total or 0),
                     "itc_amount": itc_amount,
                     "status": "Pending GSTR-2A match"
                 })
@@ -568,7 +570,7 @@ async def get_compliance_status(
             "status": "compliant" if score >= 80 else "needs_attention",
             "issues": issues,
             "recommendations": recommendations,
-            "last_checked": datetime.now().isoformat()
+            "last_checked": datetime.now(timezone.utc).isoformat()
         }
 
     except Exception as e:

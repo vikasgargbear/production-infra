@@ -7,7 +7,6 @@
 import React, { useMemo, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useCompany } from '../../../contexts/CompanyContext';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import { ModuleHeader, DocumentFooter } from '../../global';
 import type { ReturnReviewPanelProps } from '../types/return.types';
 
@@ -95,22 +94,16 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     const taxBreakup = useMemo(() => {
         const rateMap: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> = {};
         selectedItems.forEach(item => {
-            const calculated = EnterpriseCalculator.calculateReturnLine(item, {
-                include_gst: !returnData.withhold_gst,
-                quantity_field: 'return_quantity',
-                paid_quantity_field: 'paid_quantity',
-                free_quantity_field: 'free_quantity',
-                cap_to_paid_quantity: true
-            });
-            if ((calculated.tax_percent || 0) <= 0 || calculated.base_quantity <= 0) return;
+            const taxPercent = Number(item.tax_percent || 0);
+            if (taxPercent <= 0 || Number((item as any).taxable_quantity || 0) <= 0) return;
 
-            if (!rateMap[calculated.tax_percent]) {
-                rateMap[calculated.tax_percent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
+            if (!rateMap[taxPercent]) {
+                rateMap[taxPercent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
             }
-            rateMap[calculated.tax_percent].taxable += calculated.taxable_amount;
-            rateMap[calculated.tax_percent].cgst += calculated.cgst_amount;
-            rateMap[calculated.tax_percent].sgst += calculated.sgst_amount;
-            rateMap[calculated.tax_percent].igst += calculated.igst_amount;
+            rateMap[taxPercent].taxable += Number((item as any).taxable_amount || 0);
+            rateMap[taxPercent].cgst += Number((item as any).cgst_amount || 0);
+            rateMap[taxPercent].sgst += Number((item as any).sgst_amount || 0);
+            rateMap[taxPercent].igst += Number((item as any).igst_amount || 0);
         });
         return Object.entries(rateMap)
             .sort(([a], [b]) => Number(a) - Number(b))
@@ -313,17 +306,9 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     <tbody>
                                         {selectedItems.map((item, index) => {
                                             const freeQty = parseFloat(String(item.return_free_qty || 0));
-                                            const calculatedLine = EnterpriseCalculator.calculateReturnLine({
-                                                ...item,
-                                                free_quantity: item.return_free_qty ?? item.free_quantity
-                                            }, {
-                                                quantity_field: 'return_quantity',
-                                                free_quantity_field: 'free_quantity',
-                                                exclude_free_quantity_from_taxable: true
-                                            });
-                                            const rate = calculatedLine.unit_price || item.unit_price || 0;
-                                            const taxPercent = parseFloat(String(calculatedLine.tax_percent || 0));
-                                            const lineTotal = calculatedLine.total_amount || 0;
+                                            const rate = Number(item.unit_price || 0);
+                                            const taxPercent = parseFloat(String(item.tax_percent || 0));
+                                            const lineTotal = Number((item as any).total_amount || 0);
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">

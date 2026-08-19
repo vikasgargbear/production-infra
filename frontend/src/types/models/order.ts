@@ -107,6 +107,7 @@ export interface Order {
     round_off: number;
     total_amount: number;
     final_amount?: number;
+    delivery_charges?: number;
     other_charges: number;
     total_quantity: number;
 

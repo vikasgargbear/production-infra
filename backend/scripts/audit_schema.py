@@ -10,15 +10,21 @@ Usage:
     python scripts/audit_schema.py --fix  # Auto-fix common aliases
 """
 
+import importlib.util
 import sys
 from pathlib import Path
 from typing import Dict, List
 import json
 
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from app.core.utils.schema_validator import parse_schema_doc, validate_module
+backend_root = Path(__file__).resolve().parent.parent
+validator_path = backend_root / "app" / "core" / "utils" / "schema_validator.py"
+validator_spec = importlib.util.spec_from_file_location("schema_validator", validator_path)
+if validator_spec is None or validator_spec.loader is None:
+    raise RuntimeError(f"Unable to load schema validator at {validator_path}")
+schema_validator = importlib.util.module_from_spec(validator_spec)
+validator_spec.loader.exec_module(schema_validator)
+parse_schema_doc = schema_validator.parse_schema_doc
+validate_module = schema_validator.validate_module
 
 
 # Common column aliases that should be replaced
@@ -60,8 +66,13 @@ def main():
     
     # Parse schema first
     print("📖 Parsing schema doc...")
-    schema = parse_schema_doc()
-    print(f"✅ Found {len(schema)} tables in schema doc")
+    try:
+        schema = parse_schema_doc(required=True)
+    except (FileNotFoundError, ValueError) as error:
+        print(f"❌ Schema audit cannot run: {error}")
+        sys.exit(2)
+
+    print(f"✅ Found {len(schema)} tables in schema docs")
     print()
     
     # Scan backend code

@@ -8,14 +8,14 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime
 from enum import Enum
 
-class GSTType(Enum):
+class GSTTreatment(Enum):
     CGST_SGST = "CGST/SGST"
     IGST = "IGST"
     EXEMPT = "EXEMPT"
     NIL_RATED = "NIL_RATED"
     NON_GST = "NON_GST"
 
-class CustomerType(Enum):
+class GSTCustomerCategory(Enum):
     B2B = "B2B"  # Registered business
     B2C = "B2C"  # Unregistered consumer
     EXPORT = "EXPORT"
@@ -143,18 +143,18 @@ class GSTEngine:
         
         # Step 4: Check special cases
         if self._is_exempt_supply(hsn_sac_code, customer_type):
-            result['gst_type'] = GSTType.EXEMPT.value
+            result['gst_type'] = GSTTreatment.EXEMPT.value
             result['compliance_notes'].append('Exempt supply - No GST applicable')
             return result
             
-        if is_export or customer_type == CustomerType.EXPORT.value:
-            result['gst_type'] = GSTType.IGST.value
+        if is_export or customer_type == GSTCustomerCategory.EXPORT.value:
+            result['gst_type'] = GSTTreatment.IGST.value
             result['igst_rate'] = Decimal('0')  # Zero rated
             result['compliance_notes'].append('Export supply - Zero rated IGST')
             return result
             
-        if is_sez or customer_type == CustomerType.SEZ.value:
-            result['gst_type'] = GSTType.IGST.value
+        if is_sez or customer_type == GSTCustomerCategory.SEZ.value:
+            result['gst_type'] = GSTTreatment.IGST.value
             result['igst_rate'] = Decimal('0')  # Zero rated
             result['compliance_notes'].append('SEZ supply - Zero rated IGST')
             return result
@@ -162,15 +162,15 @@ class GSTEngine:
         # Step 5: Determine GST type (CGST/SGST vs IGST)
         seller_state = self._extract_state_code(seller_gstin)
         
-        if customer_type == CustomerType.B2C.value:
+        if customer_type == GSTCustomerCategory.B2C.value:
             # B2C logic
             result = self._calculate_b2c_gst(
                 seller_state, place_of_supply, amount, gst_rate, 
                 financial_year, result
             )
-        elif customer_type == CustomerType.COMPOSITION.value:
+        elif customer_type == GSTCustomerCategory.COMPOSITION.value:
             # Composition dealer
-            result['gst_type'] = GSTType.NIL_RATED.value
+            result['gst_type'] = GSTTreatment.NIL_RATED.value
             result['compliance_notes'].append('Supply to composition dealer - No GST charged')
             if is_reverse_charge:
                 result['compliance_notes'].append('Reverse charge applicable')
@@ -258,16 +258,16 @@ class GSTEngine:
         """Determine customer type"""
         
         if is_export:
-            return CustomerType.EXPORT.value
+            return GSTCustomerCategory.EXPORT.value
         elif is_sez:
-            return CustomerType.SEZ.value
+            return GSTCustomerCategory.SEZ.value
         elif customer_gstin:
             # Check if composition
             if self._is_composition_dealer(customer_gstin):
-                return CustomerType.COMPOSITION.value
-            return CustomerType.B2B.value
+                return GSTCustomerCategory.COMPOSITION.value
+            return GSTCustomerCategory.B2B.value
         else:
-            return CustomerType.B2C.value
+            return GSTCustomerCategory.B2C.value
     
     def _is_composition_dealer(self, gstin: str) -> bool:
         """Check if GSTIN belongs to composition dealer"""
@@ -312,14 +312,14 @@ class GSTEngine:
         
         if seller_state == place_of_supply:
             # Intrastate B2C - Always CGST/SGST
-            result['gst_type'] = GSTType.CGST_SGST.value
+            result['gst_type'] = GSTTreatment.CGST_SGST.value
             result['cgst_rate'] = gst_rate / 2
             result['sgst_rate'] = gst_rate / 2
             result['compliance_notes'].append('Intrastate B2C supply')
         else:
             # Interstate B2C - Check threshold
             if self._check_b2c_interstate_threshold(amount, financial_year):
-                result['gst_type'] = GSTType.IGST.value
+                result['gst_type'] = GSTTreatment.IGST.value
                 result['igst_rate'] = gst_rate
                 result['compliance_notes'].append(
                     'Interstate B2C supply exceeding Rs. 2.5 Lakhs threshold'
@@ -329,7 +329,7 @@ class GSTEngine:
                 )
             else:
                 # Below threshold - CGST/SGST in seller state
-                result['gst_type'] = GSTType.CGST_SGST.value
+                result['gst_type'] = GSTTreatment.CGST_SGST.value
                 result['cgst_rate'] = gst_rate / 2
                 result['sgst_rate'] = gst_rate / 2
                 result['compliance_notes'].append(
@@ -345,13 +345,13 @@ class GSTEngine:
         
         if seller_state == place_of_supply:
             # Intrastate B2B
-            result['gst_type'] = GSTType.CGST_SGST.value
+            result['gst_type'] = GSTTreatment.CGST_SGST.value
             result['cgst_rate'] = gst_rate / 2
             result['sgst_rate'] = gst_rate / 2
             result['compliance_notes'].append('Intrastate B2B supply')
         else:
             # Interstate B2B
-            result['gst_type'] = GSTType.IGST.value
+            result['gst_type'] = GSTTreatment.IGST.value
             result['igst_rate'] = gst_rate
             result['compliance_notes'].append('Interstate B2B supply')
             
@@ -381,7 +381,7 @@ class GSTEngine:
             return True
             
         # UN/Embassy supplies
-        if customer_type == CustomerType.UIN.value:
+        if customer_type == GSTCustomerCategory.UIN.value:
             return True
             
         return False
@@ -392,14 +392,14 @@ class GSTEngine:
         gst_type = result.get('gst_type')
         
         # GSTR-1 filing notes
-        if customer_type == CustomerType.B2B.value:
+        if customer_type == GSTCustomerCategory.B2B.value:
             result['compliance_notes'].append('Report in GSTR-1: B2B invoices')
-        elif customer_type == CustomerType.B2C.value:
+        elif customer_type == GSTCustomerCategory.B2C.value:
             if result['igst_rate'] > 0:
                 result['compliance_notes'].append('Report in GSTR-1: B2C Large')
             else:
                 result['compliance_notes'].append('Report in GSTR-1: B2C Small')
-        elif customer_type == CustomerType.EXPORT.value:
+        elif customer_type == GSTCustomerCategory.EXPORT.value:
             result['compliance_notes'].append('Report in GSTR-1: Export invoices')
             
         # Reverse charge note

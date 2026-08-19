@@ -9,8 +9,10 @@ import * as PurchaseModule from './purchase';
 import * as ReturnsModule from './returns';
 import * as PaymentModule from './payment';
 import * as LedgerModule from './ledger';
-import * as NotesModule from './returns/notes';  // Fixed: moved from ./notes
+import CreditDebitFlow from './payment/flows/CreditDebitFlow';
 import * as InventoryModule from './inventory';
+
+const NotesModule = { CreditDebitFlow };
 
 // Import other important modules
 import * as ChallanModule from './sales/challan';

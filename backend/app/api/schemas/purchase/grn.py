@@ -9,20 +9,12 @@ from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
+from ....core.utils.constants import GRNStatus
+
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-class GRNStatus(str, Enum):
-    """GRN status lifecycle"""
-    DRAFT = "draft"
-    PENDING_QC = "pending_qc"
-    QC_PASSED = "qc_passed"
-    QC_FAILED = "qc_failed"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
 
 class QCStatus(str, Enum):
     """Quality check status"""

@@ -1,15 +1,7 @@
 import React from 'react';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 
 // Import centralized types - single source of truth
-import type {
-  Customer,
-  Invoice,
-  InvoiceItem,
-  InvoiceTotals,
-  CompanyInfo,
-  BankAccount
-} from '../types/invoiceTypes';
+import type { Invoice, InvoiceItem, CompanyInfo } from '../types/invoiceTypes';
 
 // ==================== COMPONENT PROPS ====================
 
@@ -46,7 +38,12 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
   const formatCurrency = (amount: number | string | undefined): string => {
     const value = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return EnterpriseCalculator.formatCurrency(value);
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number.isFinite(value) ? Number(value) : 0);
   };
 
   const formatDate = (date: string): string => {
@@ -436,14 +433,11 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
             </thead>
             <tbody>
               {(invoice.items || []).map((item, index) => {
-                const calculatedItem = EnterpriseCalculator.calculateItem(item, {
-                  gst_type: invoice.gst_type
-                });
-                const discount = parseFloat(String(calculatedItem.discount_percent || 0));
-                const gstPercent = parseFloat(String(calculatedItem.gst_percent || calculatedItem.tax_percent || 0));
-                const freeQty = parseFloat(String(calculatedItem.free_quantity || 0));
-                const unitPrice = parseFloat(String(calculatedItem.unit_price || item.unit_price || 0));
-                const lineTotal = calculatedItem.total_amount || 0;
+                const discount = Number(item.discount_percent || 0);
+                const gstPercent = Number(item.gst_percent || item.tax_percent || 0);
+                const freeQty = Number(item.free_quantity || 0);
+                const unitPrice = Number(item.unit_price || 0);
+                const lineTotal = Number(item.line_total ?? item.total_amount ?? item.total ?? 0);
 
                 return (
                   <tr key={index} className="border-b border-gray-200" style={{ lineHeight: '1.2' }}>
@@ -526,12 +520,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                         // Group items by GST rate for proper breakup
                         const rateGroups: Record<number, { taxable: number; tax: number }> = {};
                         (invoice.items || []).forEach((item: InvoiceItem) => {
-                          const calculatedItem = EnterpriseCalculator.calculateItem(item, {
-                            gst_type: invoice.gst_type
-                          });
-                          const rate = parseFloat(String(calculatedItem.gst_percent || calculatedItem.tax_percent || 0));
-                          const taxable = calculatedItem.taxable_amount || 0;
-                          const tax = calculatedItem.gst_amount || 0;
+                          const rate = Number(item.gst_percent || item.tax_percent || 0);
+                          const taxable = Number(item.taxable_amount || 0);
+                          const tax = Number(item.total_tax_amount ?? item.gst_amount ?? item.tax_amount ?? 0);
                           if (!rateGroups[rate]) rateGroups[rate] = { taxable: 0, tax: 0 };
                           rateGroups[rate].taxable += taxable;
                           rateGroups[rate].tax += tax;

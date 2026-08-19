@@ -101,9 +101,9 @@
 -- - track_price_history: Maintains complete price change history
 -- - monitor_competitor_pricing: Monitors competitor price differences
 
--- 11. CORE OPERATIONS TRIGGERS (8 triggers)
+-- 11. CORE OPERATIONS TRIGGERS (9 installed triggers, 7 trigger functions)
 -- Location: 11_core_operations_triggers.sql
--- - update_inventory_on_sale: Updates inventory on sales and cancellations
+-- - Sales inventory is application-owned; no invoice stock trigger is installed
 -- - update_inventory_on_purchase: Updates inventory on GRN approval
 -- - update_credit_on_transactions: Manages credit limit utilization
 -- - process_stock_return: Handles returns with saleable/damaged segregation

@@ -61,6 +61,7 @@ class SupplierInvoiceService:
             gst_type = GSTService.determine_gst_type(
                 db=db,
                 org_id=org_id,
+                branch_id=branch_id,
                 supplier_id=int(supplier_id) if supplier_id else None
             ) if supplier_id else invoice_data.get("gst_type", "CGST/SGST")
             logger.info(f"GST type determined for supplier invoice: {gst_type}")

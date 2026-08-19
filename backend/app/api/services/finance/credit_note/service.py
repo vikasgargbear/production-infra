@@ -19,6 +19,8 @@ import logging
 import uuid
 
 from ...document_number_service import DocumentNumberService
+from ...compliance.gst_service import GSTService
+from .....core.money import decimal_value, money
 from .....core.utils.constants import (
     PartyType, CreditNoteReason, InvoicePaymentStatus
 )
@@ -88,6 +90,96 @@ class CreditNoteService:
         """
         result = db.execute(text(query), {"org_id": org_id}).first()
         return dict(result._mapping) if result else None
+
+    @staticmethod
+    def calculate_note_totals(
+        note_data: Dict[str, Any],
+        gst_type: str,
+    ) -> Dict[str, Any]:
+        """Calculate note lines and totals without trusting submitted amounts."""
+        items = note_data.get("items") or []
+        include_gst = bool(
+            note_data.get("include_gst", note_data.get("is_gst_applicable", True))
+        )
+        if not items:
+            items = [{
+                "quantity": 1,
+                "unit_price": note_data.get("amount", 0),
+                "discount_percent": 0,
+                "gst_percent": note_data.get("tax_percent", 0),
+            }]
+
+        subtotal = Decimal("0")
+        discount_amount = Decimal("0")
+        taxable_amount = Decimal("0")
+        cgst_amount = Decimal("0")
+        sgst_amount = Decimal("0")
+        igst_amount = Decimal("0")
+        tax_amount = Decimal("0")
+        calculated_items = []
+
+        for item in items:
+            quantity = decimal_value(
+                item.get("quantity", 0), "quantity", minimum=Decimal("0")
+            )
+            if quantity <= 0:
+                raise ValueError("quantity must be greater than 0")
+            unit_price = decimal_value(
+                item.get("unit_price", 0), "unit_price", minimum=Decimal("0")
+            )
+            discount_rate = decimal_value(
+                item.get("discount_percent", 0),
+                "discount_percent",
+                minimum=Decimal("0"),
+                maximum=Decimal("100"),
+            )
+            tax_rate = (
+                decimal_value(
+                    item.get("gst_percent", item.get("tax_percent", 0)),
+                    "gst_percent",
+                    minimum=Decimal("0"),
+                    maximum=Decimal("100"),
+                )
+                if include_gst else Decimal("0")
+            )
+            line_subtotal = money(quantity * unit_price)
+            line_discount = money(line_subtotal * discount_rate / Decimal("100"))
+            line_taxable = line_subtotal - line_discount
+            gst = GSTService.calculate_gst_components(
+                line_taxable, tax_rate, gst_type
+            )
+            line_tax = gst["total_tax_amount"]
+
+            subtotal += line_subtotal
+            discount_amount += line_discount
+            taxable_amount += line_taxable
+            cgst_amount += gst["cgst_amount"]
+            sgst_amount += gst["sgst_amount"]
+            igst_amount += gst["igst_amount"]
+            tax_amount += line_tax
+            calculated_items.append({
+                **item,
+                "subtotal_amount": line_subtotal,
+                "discount_amount": line_discount,
+                "taxable_amount": line_taxable,
+                "cgst_amount": gst["cgst_amount"],
+                "sgst_amount": gst["sgst_amount"],
+                "igst_amount": gst["igst_amount"],
+                "tax_amount": line_tax,
+                "total_amount": line_taxable + line_tax,
+            })
+
+        return {
+            "subtotal_amount": money(subtotal),
+            "discount_amount": money(discount_amount),
+            "taxable_amount": money(taxable_amount),
+            "cgst_amount": money(cgst_amount),
+            "sgst_amount": money(sgst_amount),
+            "igst_amount": money(igst_amount),
+            "tax_amount": money(tax_amount),
+            "total_amount": money(taxable_amount + tax_amount),
+            "calculated_items": calculated_items,
+        }
 
     @staticmethod
     def _resolve_branch_id(db: Session, org_id: str, note_data: Dict[str, Any]) -> int:
@@ -260,10 +352,16 @@ class CreditNoteService:
         """
         branch_id = CreditNoteService._resolve_branch_id(db, org_id, note_data)
         note_number = DocumentNumberService.generate_number(db, "credit_note", org_id)
-        subtotal = Decimal(str(note_data["amount"]))
-        tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
-        tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
-        total_amount = subtotal + tax_amount
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=org_id,
+            branch_id=branch_id,
+            customer_id=int(note_data["party_id"]),
+        )
+        totals = CreditNoteService.calculate_note_totals(note_data, gst_type)
+        subtotal = totals["taxable_amount"]
+        tax_amount = totals["tax_amount"]
+        total_amount = totals["total_amount"]
         reason_code = CreditNoteService._map_reason_code(
             "credit",
             note_data.get("reason"),
@@ -302,10 +400,10 @@ class CreditNoteService:
             "tax_amount": tax_amount,
             "total_amount": total_amount,
             "notes": note_data.get("notes", ""),
-            "is_gst_applicable": note_data.get("is_gst_applicable", True),
-            "cgst_amount": note_data.get("cgst_amount", 0),
-            "sgst_amount": note_data.get("sgst_amount", 0),
-            "igst_amount": note_data.get("igst_amount", 0),
+            "is_gst_applicable": bool(note_data.get("include_gst", note_data.get("is_gst_applicable", True))),
+            "cgst_amount": totals["cgst_amount"],
+            "sgst_amount": totals["sgst_amount"],
+            "igst_amount": totals["igst_amount"],
             "created_by": user_id
         })
         note_id = result.scalar()
@@ -333,10 +431,21 @@ class CreditNoteService:
         party_type = note_data.get("party_type", PartyType.CUSTOMER.value)
         branch_id = CreditNoteService._resolve_branch_id(db, org_id, note_data)
         note_number = DocumentNumberService.generate_number(db, "debit_note", org_id)
-        subtotal = Decimal(str(note_data["amount"]))
-        tax_percent = Decimal(str(note_data.get("tax_percent", 0)))
-        tax_amount = subtotal * tax_percent / 100 if tax_percent > 0 else Decimal("0")
-        total_amount = subtotal + tax_amount
+        party_kwargs = (
+            {"supplier_id": int(note_data["party_id"])}
+            if party_type == PartyType.SUPPLIER.value
+            else {"customer_id": int(note_data["party_id"])}
+        )
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=org_id,
+            branch_id=branch_id,
+            **party_kwargs,
+        )
+        totals = CreditNoteService.calculate_note_totals(note_data, gst_type)
+        subtotal = totals["taxable_amount"]
+        tax_amount = totals["tax_amount"]
+        total_amount = totals["total_amount"]
         reason_code = CreditNoteService._map_reason_code(
             "debit",
             note_data.get("reason"),
@@ -376,10 +485,10 @@ class CreditNoteService:
             "tax_amount": tax_amount,
             "total_amount": total_amount,
             "notes": note_data.get("notes", ""),
-            "is_gst_applicable": note_data.get("is_gst_applicable", True),
-            "cgst_amount": note_data.get("cgst_amount", 0),
-            "sgst_amount": note_data.get("sgst_amount", 0),
-            "igst_amount": note_data.get("igst_amount", 0),
+            "is_gst_applicable": bool(note_data.get("include_gst", note_data.get("is_gst_applicable", True))),
+            "cgst_amount": totals["cgst_amount"],
+            "sgst_amount": totals["sgst_amount"],
+            "igst_amount": totals["igst_amount"],
             "created_by": user_id
         })
         note_id = result.scalar()

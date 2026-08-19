@@ -9,22 +9,12 @@ from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
+from ....core.utils.constants import POStatus
+
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-class POStatus(str, Enum):
-    """Purchase order status lifecycle"""
-    DRAFT = "draft"
-    PENDING_APPROVAL = "pending_approval"
-    APPROVED = "approved"
-    SENT = "sent"
-    PARTIALLY_RECEIVED = "partially_received"
-    RECEIVED = "received"
-    CANCELLED = "cancelled"
-    CLOSED = "closed"
-
 
 class POType(str, Enum):
     """Purchase order types"""

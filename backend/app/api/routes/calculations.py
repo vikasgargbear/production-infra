@@ -1,0 +1,240 @@
+"""Read-only calculation previews backed by the same services as document writes."""
+
+import time
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from ...core.auth.org_context import OrgContext, get_org_context
+from ...core.auth.tenant_service import (
+    TenantAwareSession,
+    get_tenant_aware_db,
+    with_tenant_context,
+)
+from ...core.security.permissions import PermissionChecker
+from ..services.compliance.gst_service import GSTService
+from ..services.purchase.calculations import PurchaseCalculator
+from ..services.returns.return_service import ReturnService
+from ..services.finance.credit_note.service import CreditNoteService
+from ..services.sales.invoice.invoice_service import InvoiceService
+from ..services.sales.challan.service import ChallanService
+from ..services.sales.order.order_service import OrderService
+from ..schemas.calculations import (
+    InvoiceCalculationRequest,
+    PurchaseCalculationRequest,
+    ChallanCalculationRequest,
+    ReturnCalculationRequest,
+    NoteCalculationRequest,
+)
+from ..schemas.sales.order import OrderCreate
+
+
+router = APIRouter(prefix="/calculations", tags=["Calculations"])
+
+
+def _preview_response(result: Dict[str, Any], gst_type: str) -> Dict[str, Any]:
+    totals = dict(result)
+    line_items = totals.pop("calculated_items")
+    return {
+        "success": True,
+        "line_items": line_items,
+        "totals": totals,
+        "calculation_timestamp": int(time.time() * 1000),
+        "gst_type": str(gst_type).strip().upper(),
+    }
+
+
+@router.post("/invoice")
+@with_tenant_context
+async def preview_invoice_totals(
+    invoice_data: InvoiceCalculationRequest,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate an invoice without writing it; commit uses the same service method."""
+    try:
+        customer_id = invoice_data.customer_id
+        if customer_id is not None:
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                customer_id=int(customer_id),
+            )
+        else:
+            gst_type = invoice_data.gst_type
+        result = InvoiceService.calculate_invoice_totals(
+            items=[item.model_dump() for item in invoice_data.items],
+            gst_type=gst_type,
+            freight_charges=invoice_data.freight_charges,
+            insurance_charges=invoice_data.insurance_charges,
+            other_charges=invoice_data.other_charges,
+            discount_type=invoice_data.discount_type,
+            discount_percent=invoice_data.discount_percent,
+            discount_amount=invoice_data.discount_amount,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(result, gst_type)
+
+
+@router.post("/sales-order")
+@with_tenant_context
+async def preview_sales_order_totals(
+    order_data: OrderCreate,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate a sales order without writing or allocating inventory."""
+    try:
+        calculation = OrderService.calculate_order_totals(
+            db=db,
+            org_id=str(context.org_id),
+            branch_id=context.primary_branch_id,
+            order_data=order_data,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(
+        calculation["totals"],
+        calculation["gst_type"],
+    )
+
+
+@router.post("/purchase-order")
+@with_tenant_context
+async def preview_purchase_order_totals(
+    purchase_data: PurchaseCalculationRequest,
+    _: dict = Depends(PermissionChecker("procurement", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate a purchase order without trusting browser-computed totals."""
+    try:
+        supplier_id = purchase_data.supplier_id
+        if supplier_id is not None:
+            gst_type = GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                supplier_id=int(supplier_id),
+            )
+        else:
+            gst_type = purchase_data.gst_type
+
+        result = PurchaseCalculator.calculate_totals(
+            items=[item.model_dump() for item in purchase_data.items],
+            gst_type=gst_type,
+            freight_charges=purchase_data.freight_charges,
+            insurance_charges=purchase_data.insurance_charges,
+            other_charges=purchase_data.other_charges,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(result, gst_type)
+
+
+@router.post("/challan")
+@with_tenant_context
+async def preview_challan_totals(
+    challan_data: ChallanCalculationRequest,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate a delivery challan using the same path as commit."""
+    try:
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=str(context.org_id),
+            branch_id=context.primary_branch_id,
+            customer_id=challan_data.customer_id,
+        )
+        result = ChallanService.calculate_challan_totals(
+            items=[item.model_dump() for item in challan_data.items],
+            gst_type=gst_type,
+            freight_charges=challan_data.freight_charges,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(result, gst_type)
+
+
+@router.post("/return")
+@with_tenant_context
+async def preview_return_totals(
+    return_data: ReturnCalculationRequest,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate sales or purchase returns with the commit-time rules."""
+    try:
+        party_kwargs: Dict[str, int] = {}
+        if return_data.return_type == "sales" and return_data.customer_id is not None:
+            party_kwargs["customer_id"] = return_data.customer_id
+        elif return_data.return_type == "purchase" and return_data.supplier_id is not None:
+            party_kwargs["supplier_id"] = return_data.supplier_id
+
+        gst_type = (
+            GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                **party_kwargs,
+            )
+            if party_kwargs and return_data.include_gst
+            else return_data.gst_type
+        )
+        result = ReturnService.calculate_return_totals(
+            [item.model_dump() for item in return_data.items],
+            gst_type,
+            include_gst=return_data.include_gst,
+            cap_to_paid_quantity=return_data.return_type == "sales",
+            exclude_free_quantity_from_taxable=return_data.return_type == "sales",
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(result, gst_type)
+
+
+@router.post("/note")
+@with_tenant_context
+async def preview_note_totals(
+    note_data: NoteCalculationRequest,
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context),
+):
+    """Calculate a credit or debit note without writing ledger state."""
+    try:
+        party_kwargs: Dict[str, int] = {}
+        if note_data.party_id is not None:
+            party_kwargs[
+                "supplier_id" if note_data.party_type == "supplier" else "customer_id"
+            ] = note_data.party_id
+        gst_type = (
+            GSTService.determine_gst_type(
+                db=db,
+                org_id=str(context.org_id),
+                branch_id=context.primary_branch_id,
+                **party_kwargs,
+            )
+            if party_kwargs and note_data.include_gst
+            else note_data.gst_type
+        )
+        result = CreditNoteService.calculate_note_totals({
+            "include_gst": note_data.include_gst,
+            "items": [item.model_dump() for item in note_data.items],
+        }, gst_type)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _preview_response(result, gst_type)

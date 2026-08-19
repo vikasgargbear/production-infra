@@ -21,7 +21,6 @@ import BulkUploadInline from '../BulkUploadInline';
 import PDFVerificationFlow from '../PDFVerificationFlow';
 import PurchaseItemEditModal from '../ui/PurchaseItemEditModal';
 import { usePurchaseEntryLogic, PurchaseItem, PurchaseData } from './hooks';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 /**
  * PurchaseEntryFlow - Purchase Entry using the full global document system
@@ -253,7 +252,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const sellingPrice = parseFloat(String(item.selling_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
                   const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-                  const totalAmount = EnterpriseCalculator.calculateItem(item).total_amount;
+                  const totalAmount = Number(item.total_amount || 0);
 
                   // Format expiry date if exists
                   const expiryDisplay = (() => {
@@ -496,11 +495,10 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 const cost = parseFloat(String(item.unit_price)) || parseFloat(String(item.unit_price)) || 0;
                 const mrp = parseFloat(String(item.mrp)) || 0;
                 const sellingPrice = parseFloat(String(item.selling_price)) || 0;
-                const calculated = EnterpriseCalculator.calculateItem(item);
-                const discountPercent = parseFloat(String(calculated.discount_percent || 0));
-                const taxPercent = parseFloat(String(calculated.gst_percent || calculated.tax_percent || 0));
-                const taxAmount = calculated.gst_amount || 0;
-                const totalWithTax = calculated.total_amount || 0;
+                const discountPercent = parseFloat(String(item.discount_percent || 0));
+                const taxPercent = parseFloat(String(item.tax_percent || 0));
+                const taxAmount = Number(item.tax_amount || 0);
+                const totalWithTax = Number(item.total_amount || 0);
 
                 // Format expiry date if exists
                 const expiryDisplay = (() => {
@@ -568,14 +566,12 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const gstBreakdown = {};
                   (purchase.items || []).forEach(item => {
                     const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-                    const calculated = EnterpriseCalculator.calculateItem(item);
-
                     if (taxPercent > 0) {
                       if (!gstBreakdown[taxPercent]) {
                         gstBreakdown[taxPercent] = { taxable: 0, tax: 0 };
                       }
-                      gstBreakdown[taxPercent].taxable += calculated.taxable_amount || 0;
-                      gstBreakdown[taxPercent].tax += calculated.gst_amount || 0;
+                      gstBreakdown[taxPercent].taxable += Number(item.taxable_amount || 0);
+                      gstBreakdown[taxPercent].tax += Number(item.tax_amount || 0);
                     }
                   });
 

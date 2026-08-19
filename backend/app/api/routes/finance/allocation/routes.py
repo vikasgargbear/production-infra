@@ -10,6 +10,7 @@ import logging
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 from .....core.utils.constants import InvoiceStatus, PaymentRecordStatus, PartyType, InvoicePaymentStatus
 from ....services.finance.allocation.service import AllocationService
 
@@ -34,6 +35,7 @@ class AutoAllocationRequest(BaseModel):
 @with_tenant_context
 async def allocate_payment(
     allocation: AllocationRequest,
+    _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -44,7 +46,7 @@ async def allocate_payment(
         if not payment:
             raise HTTPException(status_code=404, detail="Payment not found")
         
-        invoice = AllocationService.get_invoice(db, allocation.invoice_id)
+        invoice = AllocationService.get_invoice(db, org_id, allocation.invoice_id)
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
         
@@ -66,15 +68,16 @@ async def allocate_payment(
             allocation.amount, invoice_number, user_id
         )
         
-        updated_payment = AllocationService.get_payment_status(db, allocation.payment_id)
-        updated_invoice = AllocationService.get_invoice_status(db, allocation.invoice_id)
+        updated_payment = AllocationService.get_payment_status(db, org_id, allocation.payment_id)
+        updated_invoice = AllocationService.get_invoice_status(db, org_id, allocation.invoice_id)
+        db.commit()
         
         return {
             "success": True, "allocation_id": allocation_id,
             "payment": {"payment_id": allocation.payment_id, "allocation_status": updated_payment["allocation_status"],
-                       "allocated": float(updated_payment["allocated_amount"]), "unallocated": float(updated_payment["unallocated_amount"])},
+                       "allocated": money_json(updated_payment["allocated_amount"]), "unallocated": money_json(updated_payment["unallocated_amount"])},
             "invoice": {"invoice_id": allocation.invoice_id, "payment_status": updated_invoice["payment_status"],
-                       "allocated": float(updated_invoice["allocated_amount"]), "due": float(updated_invoice["due_amount"])}
+                       "allocated": money_json(updated_invoice["allocated_amount"]), "due": money_json(updated_invoice["due_amount"])}
         }
     except HTTPException:
         raise
@@ -87,6 +90,7 @@ async def allocate_payment(
 @with_tenant_context
 async def allocate_payment_bulk(
     request: BulkAllocationRequest,
+    _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -110,18 +114,20 @@ async def allocate_payment_bulk(
 @with_tenant_context
 async def auto_allocate_payment(
     request: AutoAllocationRequest,
+    _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Automatically allocate payment to outstanding invoices"""
     try:
-        allocations = AllocationService.auto_allocate(db, request.payment_id, request.method)
-        payment_status = AllocationService.get_payment_status(db, request.payment_id)
+        org_id = str(context.org_id)
+        allocations = AllocationService.auto_allocate(db, org_id, request.payment_id, request.method)
+        payment_status = AllocationService.get_payment_status(db, org_id, request.payment_id)
         return {
             "success": True, "method": request.method, "allocations": allocations,
             "payment_status": {"allocation_status": payment_status["allocation_status"],
-                              "total_allocated": float(payment_status["allocated_amount"]),
-                              "unallocated": float(payment_status["unallocated_amount"])}
+                              "total_allocated": money_json(payment_status["allocated_amount"]),
+                              "unallocated": money_json(payment_status["unallocated_amount"])}
         }
     except Exception as e:
         db.rollback()
@@ -132,16 +138,17 @@ async def auto_allocate_payment(
 @with_tenant_context
 async def get_payment_allocations(
     payment_id: int,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Get all allocations for a payment"""
     try:
-        allocations = AllocationService.get_payment_allocations(db, payment_id)
+        allocations = AllocationService.get_payment_allocations(db, str(context.org_id), payment_id)
         return {
             "payment_id": payment_id,
             "allocations": [{"allocation_id": a["allocation_id"], "invoice_id": a["invoice_id"],
-                            "invoice_number": a["invoice_number"], "allocated_amount": float(a["allocated_amount"]),
+                            "invoice_number": a["invoice_number"], "allocated_amount": money_json(a["allocated_amount"]),
                             "allocation_date": a["allocation_date"].isoformat() if a.get("allocation_date") else None,
                             "allocation_type": "manual"} for a in allocations]
         }
@@ -153,23 +160,25 @@ async def get_payment_allocations(
 @with_tenant_context
 async def get_invoice_payments(
     invoice_id: int,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Get all payments allocated to an invoice"""
     try:
-        payments = AllocationService.get_invoice_payments(db, invoice_id)
-        invoice = AllocationService.get_invoice_summary(db, invoice_id)
+        org_id = str(context.org_id)
+        payments = AllocationService.get_invoice_payments(db, org_id, invoice_id)
+        invoice = AllocationService.get_invoice_summary(db, org_id, invoice_id)
         
         return {
             "invoice": {"invoice_id": invoice_id, "invoice_number": invoice["invoice_number"] if invoice else None,
-                       "total_amount": float(invoice["final_amount"]) if invoice else 0,
-                       "allocated_amount": float(invoice["allocated_amount"]) if invoice else 0,
-                       "due_amount": float(invoice["final_amount"] - invoice["allocated_amount"]) if invoice else 0,
+                       "total_amount": money_json(invoice["final_amount"]) if invoice else "0.00",
+                       "allocated_amount": money_json(invoice["allocated_amount"]) if invoice else "0.00",
+                       "due_amount": money_json(invoice["final_amount"] - invoice["allocated_amount"]) if invoice else "0.00",
                        "payment_status": invoice["payment_status"] if invoice else None},
             "payments": [{"allocation_id": p["allocation_id"], "payment_id": p["payment_id"],
                          "payment_number": p["payment_number"], "payment_date": p["payment_date"].isoformat() if p.get("payment_date") else None,
-                         "payment_amount": float(p["payment_amount"]), "allocated_amount": float(p["allocated_amount"]),
+                         "payment_amount": money_json(p["payment_amount"]), "allocated_amount": money_json(p["allocated_amount"]),
                          "allocation_date": p["allocation_date"].isoformat() if p.get("allocation_date") else None,
                          "allocation_type": "manual"} for p in payments]
         }
@@ -181,6 +190,7 @@ async def get_invoice_payments(
 @with_tenant_context
 async def delete_allocation(
     allocation_id: int,
+    _: dict = Depends(PermissionChecker("finance", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -190,6 +200,7 @@ async def delete_allocation(
         if not allocation:
             raise HTTPException(status_code=404, detail="Allocation not found")
         AllocationService.delete_allocation(db, allocation_id)
+        db.commit()
         return {"success": True, "message": "Allocation removed successfully"}
     except HTTPException:
         raise
@@ -202,6 +213,7 @@ async def delete_allocation(
 @with_tenant_context
 async def get_unallocated_payments(
     party_id: Optional[int] = None,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -212,8 +224,8 @@ async def get_unallocated_payments(
             "payments": [{"payment_id": p["payment_id"], "payment_number": p["payment_number"],
                          "payment_date": p["payment_date"].isoformat() if p.get("payment_date") else None,
                          "party_id": p["party_id"], "party_name": p["party_name"],
-                         "total_amount": float(p["payment_amount"]), "allocated": float(p["allocated_amount"]),
-                         "unallocated": float(p["unallocated_amount"]), "status": p["allocation_status"]} for p in payments]
+                         "total_amount": money_json(p["payment_amount"]), "allocated": money_json(p["allocated_amount"]),
+                         "unallocated": money_json(p["unallocated_amount"]), "status": p["allocation_status"]} for p in payments]
         }
     except Exception as e:
         logger.error(f"Error fetching unallocated payments: {e}")
@@ -223,18 +235,22 @@ async def get_unallocated_payments(
 @with_tenant_context
 async def get_unpaid_invoices(
     customer_id: Optional[int] = None,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Get invoices with outstanding amounts"""
     try:
-        invoices = AllocationService.get_unpaid_invoices(db, customer_id, InvoiceStatus.CANCELLED.value, InvoicePaymentStatus.PAID.value)
+        invoices = AllocationService.get_unpaid_invoices(
+            db, str(context.org_id), customer_id,
+            InvoiceStatus.CANCELLED.value, InvoicePaymentStatus.PAID.value
+        )
         return {
             "invoices": [{"invoice_id": i["invoice_id"], "invoice_number": i["invoice_number"],
                          "invoice_date": i["invoice_date"].isoformat() if i.get("invoice_date") else None,
                          "customer_id": i["customer_id"], "customer_name": i["customer_name"],
-                         "total_amount": float(i["final_amount"]), "allocated": float(i["allocated_amount"]),
-                         "due": float(i["due_amount"]), "payment_status": i["payment_status"]} for i in invoices]
+                         "total_amount": money_json(i["final_amount"]), "allocated": money_json(i["allocated_amount"]),
+                         "due": money_json(i["due_amount"]), "payment_status": i["payment_status"]} for i in invoices]
         }
     except Exception as e:
         logger.error(f"Error fetching unpaid invoices: {e}")

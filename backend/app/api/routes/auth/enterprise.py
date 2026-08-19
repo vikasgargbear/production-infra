@@ -1,6 +1,5 @@
 """
 Enterprise Authentication API
-Clean, layered architecture with offline support for India's network conditions
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
@@ -9,6 +8,7 @@ from typing import Dict, Any
 import logging
 
 from ....core.database import get_db  # Regular session for auth (no tenant context yet)
+from ....core.env import is_production
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
 from ....core.rate_limiting import rate_limit
 from ...services.auth import (
@@ -22,7 +22,6 @@ from ...services.auth import (
 from ...schemas.auth.auth_schemas import (
     LoginRequest,
     LoginResponse,
-    RefreshTokenRequest,
     AuthError
 )
 
@@ -49,23 +48,16 @@ async def login(
     """
     Authenticate user and return JWT tokens
     
-    **Features**:
-    - Email/password authentication
-    - JWT token generation
-    - Offline mode support (hash provided)
-    - Remember me option (7-day tokens)
-    - Rate limiting (5 attempts/minute)
-    
-    **For Offline Mode**:
-    Response includes `offline_auth_hash` that frontend can store in IndexedDB.
-    When offline, frontend can verify credentials locally using this hash.
-    
     **Returns**:
     - access_token: Short-lived JWT (1 hour or 7 days if remember_me)
-    - refresh_token: Long-lived token for renewal (30 days)
     - user: User profile information
-    - offline_auth_hash: Hash for offline authentication
     """
+    if is_production():
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Password authentication is managed by Supabase Auth",
+        )
+
     try:
         # Authenticate using service layer
         result = await AuthService.authenticate(
@@ -75,16 +67,7 @@ async def login(
             remember_me=request_data.remember_me
         )
         
-        # Add offline auth hash for India's poor connectivity
         user_data = result["user"]
-        offline_hash = AuthService.create_offline_auth_hash(
-            email=request_data.email,
-            password=request_data.password,
-            user_data=user_data
-        )
-        
-        result["offline_auth_hash"] = offline_hash
-        
         # Log successful authentication
         logger.info(
             f"Login successful: user_id={user_data['id']}, "

@@ -5,8 +5,11 @@
 
 import axios from 'axios';
 import { getApiBaseUrl } from '../../config/apiBase';
-import { API_CONFIG } from '../../config/api.config';
-import { storageService, STORAGE_KEYS } from '../core/storageService';
+import {
+  clearErpSessionStorage,
+  getErpAccessToken,
+} from '../auth/erpSessionStorage';
+import { normalizeMoneyResponse } from './utils/dataUtils';
 
 const apiClient = axios.create({
   baseURL: `${getApiBaseUrl()}/api`,
@@ -19,20 +22,13 @@ const apiClient = axios.create({
 
 /**
  * Request Interceptor
- * Adds token and org_id to all requests
+ * Adds the ERP access token. Tenant identity is derived by the backend from it.
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Get token from storage
-    const token = storageService.getItem<string>(STORAGE_KEYS.AUTH_TOKEN);
+    const token = getErpAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    // Get org_id from user data
-    const user = storageService.getItem<{ org_id?: string }>(STORAGE_KEYS.USER);
-    if (user?.org_id) {
-      config.headers['X-Org-Id'] = user.org_id;
     }
 
     return config;
@@ -47,15 +43,17 @@ apiClient.interceptors.request.use(
  * Handle 401 unauthorized
  */
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    response.data = normalizeMoneyResponse(response.data);
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401 ||
         (error.response?.status === 403 &&
          typeof error.response?.data?.detail === 'string' &&
          error.response.data.detail.toLowerCase().includes('deactivated'))) {
       // Token expired, invalid, or account deactivated - redirect to login
-      storageService.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-      storageService.removeItem(STORAGE_KEYS.USER);
+      clearErpSessionStorage();
       window.location.href = '/login';
     }
     return Promise.reject(error);

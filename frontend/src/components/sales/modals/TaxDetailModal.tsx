@@ -1,7 +1,6 @@
 import React from 'react';
 import { X, FileText } from 'lucide-react';
 import useEscapeKey from '../../../hooks/useEscapeKey';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 interface InvoiceItem {
     gst_rate?: number;
@@ -61,8 +60,7 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
     // Group items by tax rate
     const itemsByTaxRate: Record<number, TaxGroup> = {};
     (invoice.items || []).forEach(item => {
-        const calculatedItem = EnterpriseCalculator.calculateItem(item, { gst_type: gstType });
-        const taxRate = Number(calculatedItem.gst_percent || calculatedItem.tax_percent || item.gst_rate || 0);
+        const taxRate = Number(item.gst_percent || item.tax_percent || item.gst_rate || 0);
 
         if (!itemsByTaxRate[taxRate]) {
             itemsByTaxRate[taxRate] = {
@@ -76,10 +74,10 @@ const TaxDetailModal: React.FC<TaxDetailModalProps> = ({ isOpen, onClose, invoic
         }
 
         itemsByTaxRate[taxRate].items.push(item);
-        itemsByTaxRate[taxRate].taxable_amount += calculatedItem.taxable_amount || 0;
-        itemsByTaxRate[taxRate].cgst += calculatedItem.cgst_amount || 0;
-        itemsByTaxRate[taxRate].sgst += calculatedItem.sgst_amount || 0;
-        itemsByTaxRate[taxRate].igst += calculatedItem.igst_amount || 0;
+        itemsByTaxRate[taxRate].taxable_amount += Number(item.taxable_amount || 0);
+        itemsByTaxRate[taxRate].cgst += Number(item.cgst_amount || 0);
+        itemsByTaxRate[taxRate].sgst += Number(item.sgst_amount || 0);
+        itemsByTaxRate[taxRate].igst += Number(item.igst_amount || 0);
     });
 
     const taxGroups = Object.values(itemsByTaxRate);

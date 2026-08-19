@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
+from .core.api_contract import install_operation_registry
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.request_logger import RequestLoggerMiddleware
@@ -89,7 +90,6 @@ from .api.routes.reports import outstanding as customer_outstanding
 
 # Organization Module
 from .api.routes.org import company
-from .api.routes.org import initial_setup
 
 # Settings (already in folder)
 from .api.routes.settings import router as settings_router
@@ -99,8 +99,7 @@ from .api.routes import sync as sync_router
 
 # Standalone utilities (remain at root level)
 from .api.routes import metadata
-# from .api.routes import enterprise_calculations  # REMOVED: Moved to api/shared/calculations.py
-# from .api.routes import schemes_discounts  # REMOVED: Moved to api/shared/discounts.py
+from .api.routes import calculations
 from .api.routes.loyalty import router as loyalty_router
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
@@ -170,8 +169,17 @@ app.add_middleware(
     allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Org-Id", "X-Request-ID"],
-    expose_headers=["X-Request-ID"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Request-ID",
+        "X-Idempotency-Key",
+    ],
+    expose_headers=[
+        "X-Request-ID",
+        "X-Idempotency-Key",
+        "X-Idempotency-Replayed",
+    ],
     max_age=3600,
 )
 
@@ -271,7 +279,6 @@ api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
 
 # --- Organization ---
 api.include_router(company.router, prefix="/company", tags=["Company"])
-api.include_router(initial_setup.router, prefix="/setup", tags=["Setup"])
 
 # --- Settings ---
 api.include_router(settings_router, prefix="/settings", tags=["Settings"])
@@ -282,10 +289,9 @@ api.include_router(sync_router.router, tags=["Offline Sync"])
 # --- Utilities ---
 api.include_router(documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
-# api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])  # REMOVED: Moved to shared
+api.include_router(calculations.router)
 api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
-# api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])  # REMOVED: Moved to shared
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 
 if not is_production():
@@ -299,6 +305,10 @@ async def test_connection():
     return {"status": "connected", "message": "Backend is running"}
 
 app.include_router(api)
+
+# Attach the reviewed external-operation allowlist after all routes are mounted.
+# This publishes policy metadata only; it does not implement an MCP transport.
+install_operation_registry(app)
 
 if __name__ == "__main__":
     import uvicorn

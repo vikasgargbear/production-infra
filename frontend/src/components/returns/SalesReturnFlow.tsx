@@ -17,10 +17,10 @@ import {
 import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
-import { getApiBaseUrl } from '../../config/apiBase';
 import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import offlineStorage from '../../services/offlineStorage';
-import EnterpriseCalculator from '../../services/enterpriseCalculator';
+import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useCompany } from '../../contexts/CompanyContext';
 import html2pdf from 'html2pdf.js';
 import { toast } from 'react-toastify';
@@ -38,8 +38,6 @@ import type { Customer, Invoice } from '../../types/api.types';
 // Import offline-first helpers
 import { saveReturnOffline, type OfflineSalesReturnData } from './utils/offlineReturnSaveHelpers';
 import { showFinancialEntryNotification } from '../../utils/financialEntryNotifier';
-
-const API_BASE_URL = getApiBaseUrl();
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -88,6 +86,10 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
   const firstInputRef = useRef<any>(null);
+  const calculationRequestRef = useRef(0);
+  const returnDataRef = useRef(returnData);
+  returnDataRef.current = returnData;
+  const { isOnline } = useNetworkStatus();
 
   const toastHook = useToast();
 
@@ -334,33 +336,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     });
   }, [dispatch]);
 
-  // Fetch batches
-  const fetchBatchesForProduct = useCallback(async (productId: number) => {
-    try {
-      const token = localStorage.getItem('pharma_token') || sessionStorage.getItem('pharma_token') || '';
-      const response = await fetch(
-        `${API_BASE_URL}/api/stock-movements/product/${productId}/batches`,
-        {
-          headers: {
-            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id') || '',
-            'Authorization': token ? `Bearer ${token}` : ''
-          }
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const batches = data.batches || data || [];
-        dispatch({
-          type: 'SET_AVAILABLE_BATCHES',
-          productId,
-          batches: Array.isArray(batches) ? batches.filter((b: any) => b.quantity_available > 0) : []
-        });
-      }
-    } catch (error) {
-      // Silent fail
-    }
-  }, [dispatch]);
-
   // Add manual item
   const handleAddManualItem = useCallback((product: any) => {
     if (!product) return;
@@ -441,18 +416,47 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Calculate totals whenever items or GST setting changes
   useEffect(() => {
-    const calculation = EnterpriseCalculator.calculateSalesReturn(returnData);
-    const totals = calculation.totals;
+    const requestId = ++calculationRequestRef.current;
+    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
 
-    dispatch({
-      type: 'SET_RETURN_DATA',
-      data: {
-        subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-        tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-        total_amount: totals.total_amount || totals.final_amount || 0
+    const calculate = async () => {
+      try {
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales', isOnline);
+        if (requestId !== calculationRequestRef.current) return;
+        const totals = calculation.totals;
+        let calculatedIndex = 0;
+        let itemValuesChanged = false;
+        const items = returnDataRef.current.items.map(item => {
+          if (!item.selected || item.return_quantity <= 0) return item;
+          const calculated = calculation.items[calculatedIndex++] || {};
+          const totalAmount = Number(calculated.total_amount || 0);
+          const taxableAmount = Number(calculated.taxable_amount || 0);
+          const taxAmount = Number(calculated.tax_amount || 0);
+          if (
+            Number((item as any).total_amount || 0) === totalAmount &&
+            Number((item as any).taxable_amount || 0) === taxableAmount &&
+            Number((item as any).tax_amount || 0) === taxAmount
+          ) return item;
+          itemValuesChanged = true;
+          return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
+        });
+        dispatch({
+          type: 'SET_RETURN_DATA',
+          data: {
+            ...(itemValuesChanged ? { items } : {}),
+            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+            total_amount: totals.total_amount || totals.final_amount || 0
+          }
+        });
+      } catch (error) {
+        if (requestId === calculationRequestRef.current) {
+          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
+        }
       }
-    });
-  }, [returnData.items, returnData.withhold_gst, dispatch]);
+    };
+    void calculate();
+  }, [returnData.items, returnData.withhold_gst, returnData.customer_id, isOnline, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {

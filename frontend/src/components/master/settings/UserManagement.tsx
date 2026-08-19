@@ -10,6 +10,10 @@ import {
 } from '../../../config/userRoles.config';
 import { User } from '../../../types/models/user';
 import type { Role } from '../../../types/api.types';
+import {
+  clearErpSessionStorage,
+  getErpAccessToken,
+} from '../../../services/auth/erpSessionStorage';
 
 interface UserManagementProps {
   open: boolean;
@@ -58,7 +62,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
   // Check current user's permissions
   const checkCurrentUserPermissions = () => {
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+      const token = getErpAccessToken();
       if (token) {
         const tokenParts = token.split('.');
         if (tokenParts.length === 3) {
@@ -81,8 +85,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
     setError(null);
 
     try {
-      // Check if we have auth token - try both keys for compatibility
-      const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+      const token = getErpAccessToken();
 
       if (!token) {
         setError('You are not logged in. Please login to manage users.');
@@ -98,20 +101,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ open, onClose }) => {
           const expiry = payload.exp * 1000;
           const now = Date.now();
 
-          // Debug logging
-          console.log('UserManagement - Token validation:', {
-            hasToken: !!token,
-            payload: payload,
-            orgId: payload.org_id,
-            expiryTime: new Date(expiry).toISOString(),
-            currentTime: new Date(now).toISOString(),
-            isExpired: now > expiry
-          });
-
           if (now > expiry) {
             setError('Session expired. Please login again.');
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('auth_token');
+            clearErpSessionStorage();
             setIsLoading(false);
             return;
           }

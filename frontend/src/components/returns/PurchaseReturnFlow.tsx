@@ -10,7 +10,7 @@ import {
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
-import EnterpriseCalculator from '../../services/enterpriseCalculator';
+import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
 import DebitNotePreview from './ui/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
@@ -67,6 +67,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const supplierSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
   const firstInputRef = useRef(null);
+  const calculationRequestRef = useRef(0);
 
   // Return data state - matching sales return structure
   const [returnData, setReturnData] = useState<PurchaseReturnData>({
@@ -107,6 +108,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Network status for offline-first
   const { isOnline } = useNetworkStatus();
+  const returnDataRef = useRef(returnData);
+  returnDataRef.current = returnData;
 
   // Load return reasons from system settings
   useEffect(() => {
@@ -351,35 +354,53 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Use effect to recalculate totals when items change
   React.useEffect(() => {
-    const calculation = EnterpriseCalculator.calculatePurchaseReturn(returnData);
-    const totals = calculation.totals;
+    const requestId = ++calculationRequestRef.current;
+    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
 
-    setReturnData(prev => ({
-      ...prev,
-      subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-      tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-      total_amount: totals.total_amount || totals.final_amount || 0
-    }));
-  }, [returnData.items, returnData.include_gst]);
+    const calculate = async () => {
+      try {
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase', isOnline);
+        if (requestId !== calculationRequestRef.current) return;
+        const totals = calculation.totals;
+        setReturnData(prev => {
+          let calculatedIndex = 0;
+          let itemValuesChanged = false;
+          const items = prev.items.map(item => {
+            if (!item.selected || item.return_quantity <= 0) return item;
+            const calculated = calculation.items[calculatedIndex++] || {};
+            const totalAmount = Number(calculated.total_amount || 0);
+            const taxableAmount = Number(calculated.taxable_amount || 0);
+            const taxAmount = Number(calculated.tax_amount || 0);
+            if (
+              Number(item.total_amount || 0) === totalAmount &&
+              Number(item.taxable_amount || 0) === taxableAmount &&
+              Number(item.tax_amount || 0) === taxAmount
+            ) return item;
+            itemValuesChanged = true;
+            return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
+          });
+          return {
+            ...prev,
+            items: itemValuesChanged ? items : prev.items,
+            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+            total_amount: totals.total_amount || totals.final_amount || 0
+          };
+        });
+      } catch (error) {
+        if (requestId === calculationRequestRef.current) {
+          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
+        }
+      }
+    };
+    void calculate();
+  }, [returnData.items, returnData.include_gst, returnData.supplier_id, isOnline, toast]);
 
   // Remove manual item
   const removeManualItem = (itemId) => {
     setReturnData(prev => ({
       ...prev,
       items: prev.items.filter(item => item.id !== itemId)
-    }));
-  };
-
-  // Calculate totals
-  const calculateTotals = () => {
-    const calculation = EnterpriseCalculator.calculatePurchaseReturn(returnData);
-    const totals = calculation.totals;
-
-    setReturnData(prev => ({
-      ...prev,
-      subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-      tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-      total_amount: totals.total_amount || totals.final_amount || 0
     }));
   };
 

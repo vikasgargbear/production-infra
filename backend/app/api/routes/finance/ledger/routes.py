@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 import logging
 from datetime import date
+from decimal import Decimal
 
 from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from .....core.auth.org_context import OrgContext, get_org_context
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 from ....services.finance.ledger.service import LedgerService
 
 logger = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ async def get_party_statement(
                          "name": party["name"] if party else f"Customer {party_id}",
                          "phone": party.get("primary_phone") if party else None,
                          "email": party.get("primary_email") if party else None,
-                         "credit_limit": float(party["credit_limit"]) if party and party.get("credit_limit") else None},
+                         "credit_limit": money_json(party["credit_limit"]) if party and party.get("credit_limit") else None},
                 "statement": paginated,
                 "pagination": {"page": page, "limit": limit, "total": total_count, "pages": (total_count + limit - 1) // limit},
                 "summary": {"outstanding": balance_data.get("outstanding", 0), "advance": balance_data.get("advance", 0),
@@ -178,7 +180,7 @@ async def get_last_payment_info(
             return {"party_id": party_id, "has_payments": True, "last_payment": {
                 "payment_id": result["payment_id"], "payment_number": result["payment_number"],
                 "payment_date": result["payment_date"].isoformat() if result.get("payment_date") else None,
-                "amount": float(result["payment_amount"]), "mode": result["payment_mode"],
+                "amount": money_json(result["payment_amount"]), "mode": result["payment_mode"],
                 "days_since": result["days_since"]
             }}
         return {"party_id": party_id, "has_payments": False, "last_payment": None}
@@ -230,11 +232,13 @@ async def get_top_debtors(
     try:
         debtors = LedgerService.get_top_debtors(db, str(context.org_id), limit)
         return {"top_debtors": [{"customer_id": d["customer_id"], "customer_name": d["customer_name"],
-                                "phone": d.get("phone"), "outstanding": float(d["outstanding"]),
+                                "phone": d.get("phone"), "outstanding": money_json(d["outstanding"]),
                                 "invoice_count": d["invoice_count"],
                                 "last_invoice_date": d["last_invoice_date"].isoformat() if d.get("last_invoice_date") else None
                                } for d in debtors],
-                "total_outstanding": sum(float(d["outstanding"]) for d in debtors)}
+                "total_outstanding": money_json(sum(
+                    (Decimal(str(d["outstanding"])) for d in debtors), Decimal("0")
+                ))}
     except Exception as e:
         logger.error(f"Error getting top debtors: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get top debtors: {str(e)}")

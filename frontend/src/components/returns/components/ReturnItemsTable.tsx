@@ -7,7 +7,6 @@
 import React, { useMemo, useRef, useCallback } from 'react';
 import { Trash2, Package } from 'lucide-react';
 import { ProductSearch, EditableCell } from '../../global';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 import type { ReturnItemsTableProps } from '../types/return.types';
 
 export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
@@ -76,11 +75,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
 
     // Calculate totals for an item
     const calculateItemTotal = (item: any): number => {
-        return EnterpriseCalculator.calculateReturnLine(item, {
-            quantity_field: 'return_paid_qty',
-            include_gst: true,
-            round_final_amount: false
-        }).total_amount;
+        return Number(item.total_amount || item.line_total || 0);
     };
 
     const formatExpiry = (dateStr: string | undefined): string => {

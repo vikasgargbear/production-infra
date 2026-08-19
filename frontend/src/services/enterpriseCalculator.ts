@@ -1,21 +1,13 @@
 /**
- * EnterpriseCalculator - SINGLE SOURCE OF TRUTH FOR ALL CALCULATIONS
+ * EnterpriseCalculator - deterministic offline and display calculations
  * 
- * ⚠️ WARNING: DO NOT CREATE NEW CALCULATORS!
- * ⚠️ All calculation logic MUST be in this file.
+ * The backend application service is authoritative for online previews and all
+ * persisted documents. This calculator exists for explicit offline behavior and
+ * UI-only estimates; online failures must not silently fall back to it.
  * 
- * This is the ONLY calculator used across the entire application:
- * ✅ Invoices
- * ✅ Sales Orders  
- * ✅ Delivery Challans
- * ✅ Purchase Orders
- * ✅ Returns
- * ✅ Quotations
- * 
- * If you need new calculation functionality:
- * 1. ADD IT TO THIS FILE
- * 2. Do NOT create wrapper calculators
- * 3. Update this documentation
+ * Do not add a new high-risk online workflow here. Add a backend preview over
+ * the commit service and keep a named offline adapter, as invoice and sales
+ * order flows do.
  * 
  * Architecture:
  * - calculateItem() → Single item calculations
@@ -39,7 +31,6 @@
  */
 
 // Import centralized field aliases - SINGLE SOURCE OF TRUTH for variable naming
-// @ts-ignore
 import { getNumericField } from '../config/fieldAliases';
 import { InvoiceItem, InvoiceTotals, GstType, Invoice } from '../components/sales/invoice/types/invoiceTypes';
 

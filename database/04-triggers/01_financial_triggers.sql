@@ -42,7 +42,7 @@ BEGIN
     END IF;
     
     -- Set posting details
-    NEW.posted_by := NEW.updated_by;
+    NEW.posted_by := COALESCE(NEW.posted_by, NEW.created_by);
     NEW.posted_at := CURRENT_TIMESTAMP;
     
     RETURN NEW;
@@ -54,6 +54,52 @@ CREATE TRIGGER trigger_validate_journal_balance
     FOR EACH ROW
     WHEN (NEW.entry_status = 'posted')
     EXECUTE FUNCTION validate_journal_entry_balance();
+
+-- Posted journals are append-only. Corrections must use a reversal document.
+CREATE OR REPLACE FUNCTION protect_posted_journal_lines()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_journal_id INTEGER;
+BEGIN
+    v_journal_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.journal_id ELSE NEW.journal_id END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM financial.journal_entries
+        WHERE journal_id = v_journal_id
+          AND entry_status IN ('posted', 'reversed')
+    ) THEN
+        RAISE EXCEPTION 'Posted journal % is immutable; create a reversal entry', v_journal_id;
+    END IF;
+
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_protect_posted_journal_lines
+    BEFORE INSERT OR UPDATE OR DELETE ON financial.journal_entry_lines
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_posted_journal_lines();
+
+CREATE OR REPLACE FUNCTION protect_posted_journal_entries()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' AND OLD.entry_status IN ('posted', 'reversed') THEN
+        RAISE EXCEPTION 'Posted journal % cannot be deleted', OLD.journal_id;
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND OLD.entry_status IN ('posted', 'reversed') THEN
+        RAISE EXCEPTION 'Posted journal % is immutable; create a reversal entry', OLD.journal_id;
+    END IF;
+
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_protect_posted_journal_entries
+    BEFORE UPDATE OR DELETE ON financial.journal_entries
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_posted_journal_entries();
 
 -- =============================================
 -- 2. PAYMENT ALLOCATION VALIDATION

@@ -6,11 +6,9 @@
  * The main component handles only rendering.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { purchasesApi } from '../../../../services/api';
-import { searchCache } from '../../../../utils/searchCache';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
+import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
@@ -138,7 +136,6 @@ export function usePurchaseOrderLogic({
     const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrderData>(() => getInitialPurchaseOrder(prefilledData));
     const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
     const [currentStep, setCurrentStep] = useState(1);
-    const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     // Modal States
@@ -148,6 +145,9 @@ export function usePurchaseOrderLogic({
 
     // Data States
     const [createdPOData, setCreatedPOData] = useState<CreatedPOData | null>(null);
+    const calculationRequestRef = useRef(0);
+    const purchaseOrderRef = useRef(purchaseOrder);
+    purchaseOrderRef.current = purchaseOrder;
 
     // Network status for offline-first
     const { isOnline } = useNetworkStatus();
@@ -167,8 +167,9 @@ export function usePurchaseOrderLogic({
     }, []);
 
     // Calculate totals
-    const calculateTotals = useCallback(() => {
-        if (!purchaseOrder.items || purchaseOrder.items.length === 0) {
+    const calculateTotals = useCallback(async (order: PurchaseOrderData) => {
+        const requestId = ++calculationRequestRef.current;
+        if (!order.items || order.items.length === 0) {
             setPurchaseOrder(prev => ({
                 ...prev,
                 gross_amount: 0,
@@ -179,31 +180,45 @@ export function usePurchaseOrderLogic({
             return;
         }
 
-        const calculation = EnterpriseCalculator.calculateTotals(
-            purchaseOrder.items.filter(item => item.product_id),
-            {
-                invoice_discount: Number(purchaseOrder.discount_amount) || 0,
-                freight_charges: Number(purchaseOrder.freight_charges) || 0,
-                round_final_amount: false
-            }
-        );
-        const totals = calculation.totals;
+        try {
+            const calculation = await calculatePurchaseOrderPreview(order, isOnline);
+            if (requestId !== calculationRequestRef.current) return;
+            const totals = calculation.totals;
 
-        setPurchaseOrder(prev => ({
-            ...prev,
-            gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
-            tax_amount: totals.total_tax_amount || totals.total_tax || 0,
-            net_amount: totals.net_amount || totals.total_amount || 0,
-            total_amount: totals.total_amount || totals.final_amount || 0
-        }));
-    }, [purchaseOrder.items, purchaseOrder.discount_amount, purchaseOrder.freight_charges]);
+            setPurchaseOrder(prev => {
+                let itemTotalsChanged = false;
+                const items = prev.items.map((item, index) => {
+                    const calculatedTotal = Number(calculation.items[index]?.total || 0);
+                    if (Number(item.total || 0) === calculatedTotal) return item;
+                    itemTotalsChanged = true;
+                    return { ...item, total: calculatedTotal };
+                });
+                return {
+                    ...prev,
+                    items: itemTotalsChanged ? items : prev.items,
+                    gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
+                    tax_amount: totals.tax_amount || totals.total_tax_amount || totals.total_tax || 0,
+                    net_amount: totals.net_amount || totals.total_amount || 0,
+                    total_amount: totals.total_amount || totals.final_amount || 0
+                };
+            });
+        } catch (error) {
+            if (requestId !== calculationRequestRef.current) return;
+            toast.error(error instanceof Error ? error.message : 'Unable to calculate purchase-order totals.');
+        }
+    }, [isOnline, toast]);
 
     // Trigger calculations when items change
     useEffect(() => {
-        if (purchaseOrder.items) {
-            calculateTotals();
+        if (purchaseOrderRef.current.items) {
+            void calculateTotals(purchaseOrderRef.current);
         }
-    }, [purchaseOrder.items, purchaseOrder.discount_amount, purchaseOrder.freight_charges]);
+    }, [
+        calculateTotals,
+        purchaseOrder.items,
+        purchaseOrder.discount_amount,
+        purchaseOrder.freight_charges
+    ]);
 
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {
@@ -217,12 +232,6 @@ export function usePurchaseOrderLogic({
     }, []);
 
     const handleAddItem = useCallback((product: any) => {
-        const calculated = EnterpriseCalculator.calculateItem({
-            quantity: 1,
-            unit_price: product.unit_price || (product.mrp || 0) * 0.7,
-            tax_percent: product.tax_percent || 12,
-            discount_percent: 0
-        });
         const newItem: PurchaseOrderItem = {
             id: Date.now() + Math.random(),
             product_id: product.product_id,
@@ -243,7 +252,7 @@ export function usePurchaseOrderLogic({
             pack_size: 10,
             packages_per_box: 10,
             manufacturer: product.manufacturer || '',
-            total: calculated.total_amount
+            total: 0
         };
 
         setPurchaseOrder(prev => ({
@@ -275,9 +284,15 @@ export function usePurchaseOrderLogic({
         const newErrors: Record<string, string> = {};
         if (!selectedSupplier) newErrors.supplier = 'Supplier is required';
         if (!purchaseOrder.items || purchaseOrder.items.length === 0) newErrors.items = 'At least one item is required';
+        if (Number(purchaseOrder.discount_amount) !== 0) {
+            newErrors.discount_amount = 'Header discounts are unavailable until the purchase tax contract is baselined';
+        }
+        if (Number(purchaseOrder.freight_charges) !== 0) {
+            newErrors.freight_charges = 'Freight is unavailable until purchase-order persistence is baselined';
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [selectedSupplier, purchaseOrder.items]);
+    }, [selectedSupplier, purchaseOrder]);
 
     // Offline-first save hook
     const { saving: offlineSaving, handleSavePurchaseOrder } = usePurchaseOrderSave({
@@ -304,7 +319,7 @@ export function usePurchaseOrderLogic({
         setSelectedSupplier,
         currentStep,
         setCurrentStep,
-        saving: offlineSaving || saving,
+        saving: offlineSaving,
         errors,
         showSupplierModal,
         setShowSupplierModal,

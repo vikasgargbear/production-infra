@@ -153,10 +153,18 @@ async def record_stock_movement(
 ):
     """Record a stock movement"""
     try:
-        return InventoryService.record_stock_movement(db, movement)
+        movement = movement.model_copy(update={
+            "org_id": context.org_id,
+            "created_by": context.user_id,
+        })
+        result = InventoryService.record_stock_movement(db, movement)
+        db.commit()
+        return result
     except ValueError as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        db.rollback()
         raise handle_error(e, "record stock movement")
 
 

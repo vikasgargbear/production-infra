@@ -4,7 +4,6 @@ from .auth_schemas import (
     UserRole, SessionStatus,
     # Login
     LoginRequest, LoginResponse, UserSummary,
-    RefreshTokenRequest, RefreshTokenResponse,
     # Password
     PasswordChangeRequest, PasswordResetRequest, PasswordResetConfirm,
     # Error & Session
@@ -18,7 +17,6 @@ __all__ = [
     "UserRole", "SessionStatus",
     # Login
     "LoginRequest", "LoginResponse", "UserSummary",
-    "RefreshTokenRequest", "RefreshTokenResponse",
     # Password
     "PasswordChangeRequest", "PasswordResetRequest", "PasswordResetConfirm",
     # Error & Session

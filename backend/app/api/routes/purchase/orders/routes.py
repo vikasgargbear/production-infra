@@ -231,6 +231,7 @@ async def create_purchase_entry(
         gst_type = GSTService.determine_gst_type(
             db=db,
             org_id=context.org_id,
+            branch_id=context.branch_id,
             supplier_id=int(supplier_id) if supplier_id else None
         ) if supplier_id else "CGST/SGST"
         logger.info(f"GST type determined for purchase entry: {gst_type}")
@@ -317,7 +318,7 @@ async def create_purchase_entry(
             # Generate batch number if not provided
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
-                batch_number = DocumentNumberService.generate_batch_number()
+                batch_number = DocumentNumberService.generate_batch_number(db, str(context.org_id))
 
             # Calculate pricing values
             mrp_value = Decimal(str(item.get("mrp", 0)))
@@ -665,7 +666,7 @@ async def create_purchase_with_items(
             # Generate batch number if not provided using repository
             batch_number = item.get("batch_number")
             if not batch_number or batch_number.strip() == "":
-                batch_number = PurchaseOrderRepository.generate_batch_number(db)
+                batch_number = DocumentNumberService.generate_batch_number(db, str(context.org_id))
 
             # Create PO item using repository
             po_item_data = {

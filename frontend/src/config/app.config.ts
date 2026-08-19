@@ -15,13 +15,6 @@ export interface AppConfig {
         TIMEOUT: number;
         HEADERS: Record<string, string>;
     };
-    AUTH: {
-        TOKEN_KEY: string;
-        USER_KEY: string;
-        ORG_KEY: string;
-        REFRESH_TOKEN_KEY: string;
-        TOKEN_EXPIRY_BUFFER: number;
-    };
     LOCALE: {
         DEFAULT: string;
         CURRENCY: string;
@@ -118,14 +111,6 @@ export const APP_CONFIG: AppConfig = {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
-    },
-
-    AUTH: {
-        TOKEN_KEY: 'authToken',
-        USER_KEY: 'userData',
-        ORG_KEY: 'orgId',
-        REFRESH_TOKEN_KEY: 'refreshToken',
-        TOKEN_EXPIRY_BUFFER: 5 * 60 * 1000,
     },
 
     LOCALE: {
@@ -248,18 +233,6 @@ export const formatCurrency = (amount: number): string => {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(amount);
-};
-
-export const getAuthToken = (): string | null => {
-    return localStorage.getItem(APP_CONFIG.AUTH.TOKEN_KEY);
-};
-
-export const setAuthToken = (token: string): void => {
-    localStorage.setItem(APP_CONFIG.AUTH.TOKEN_KEY, token);
-};
-
-export const removeAuthToken = (): void => {
-    localStorage.removeItem(APP_CONFIG.AUTH.TOKEN_KEY);
 };
 
 export const isFeatureEnabled = (feature: keyof AppConfig['FEATURES']): boolean => {

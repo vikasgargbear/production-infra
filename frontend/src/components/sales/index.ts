@@ -3,8 +3,6 @@
  * Central export for all sales-related components
  */
 
-import EnterpriseCalculator from '../../services/enterpriseCalculator';
-
 // Types
 export interface InvoiceItem {
     quantity: number;
@@ -19,12 +17,6 @@ export interface InvoiceData {
     customer_id?: number;
     items?: InvoiceItem[];
     [key: string]: unknown;
-}
-
-export interface InvoiceTotals {
-    subtotal: number;
-    taxAmount: number;
-    total: number;
 }
 
 export interface ValidationResult {
@@ -89,26 +81,6 @@ export const INVOICE_STATUS = {
     PAID: 'paid',
     CANCELLED: 'cancelled'
 } as const;
-
-// Sales utilities
-export const calculateInvoiceTotal = (
-    items: InvoiceItem[],
-    discountAmount: number = 0,
-    otherCharges: number = 0
-): InvoiceTotals => {
-    const result = EnterpriseCalculator.calculateTotals(items, {
-        invoice_discount: discountAmount,
-        freight_charges: otherCharges,
-        round_final_amount: false
-    });
-    const totals = result.totals;
-
-    return {
-        subtotal: totals.subtotal_amount || totals.subtotal || 0,
-        taxAmount: totals.total_tax_amount || totals.total_tax || 0,
-        total: totals.total_amount || totals.final_amount || 0
-    };
-};
 
 export const validateInvoiceData = (invoiceData: InvoiceData): ValidationResult => {
     const errors: Record<string, string> = {};

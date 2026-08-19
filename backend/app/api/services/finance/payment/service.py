@@ -13,6 +13,13 @@ import logging
 from uuid import UUID
 
 from ...document_number_service import DocumentNumberService
+from .....core.idempotency import (
+    IdempotencyClaim,
+    IdempotencyStateError,
+    build_idempotency_claim,
+    replay_response,
+)
+from .....core.env import is_production
 from .....core.utils.constants import (
     PaymentStatus, PaymentRecordStatus, PaymentMethod, PaymentType, PartyType
 )
@@ -38,19 +45,109 @@ class PaymentService:
     def generate_receipt_number(db: Session, org_id: Optional[str] = None) -> str:
         """Generate unique receipt number using DocumentNumberService."""
         return DocumentNumberService.generate_number(db, "receipt", org_id)
+
+    @staticmethod
+    def _begin_idempotent_payment(
+        db: Session,
+        *,
+        org_id: str,
+        actor_id: Any,
+        operation: str,
+        idempotency_key: str,
+        request_payload: Dict[str, Any],
+    ) -> tuple[Optional[Dict[str, Any]], IdempotencyClaim]:
+        """Serialize a scoped payment key and replay its committed response."""
+        if is_production():
+            raise IdempotencyStateError(
+                "Temporary payment idempotency backend is disabled in production"
+            )
+        claim = build_idempotency_claim(
+            org_id=org_id,
+            actor_id=actor_id,
+            operation=operation,
+            key=idempotency_key,
+            request_payload=request_payload,
+        )
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": claim.lock_key},
+        )
+        existing = db.execute(text("""
+            SELECT payment_id, internal_notes
+            FROM financial.payments
+            WHERE org_id = :org_id
+              AND internal_notes LIKE :marker_pattern
+            ORDER BY payment_id
+            LIMIT 1
+            FOR UPDATE
+        """), {
+            "org_id": org_id,
+            "marker_pattern": f"{claim.marker_prefix}%",
+        }).first()
+        if not existing:
+            return None, claim
+
+        response = replay_response(existing.internal_notes, claim)
+        response["_idempotency_replayed"] = True
+        return response, claim
+
+    @staticmethod
+    def _complete_idempotent_payment(
+        db: Session,
+        *,
+        org_id: str,
+        payment_id: int,
+        claim: IdempotencyClaim,
+        response: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist the response on the payment row in the same transaction."""
+        public_response = dict(response)
+        public_response.pop("_idempotency_replayed", None)
+        result = db.execute(text("""
+            UPDATE financial.payments
+            SET internal_notes = :completed_marker,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE payment_id = :payment_id
+              AND org_id = :org_id
+              AND internal_notes = :pending_marker
+        """), {
+            "completed_marker": claim.completed_marker(public_response),
+            "payment_id": payment_id,
+            "org_id": org_id,
+            "pending_marker": claim.pending_marker,
+        })
+        if result.rowcount != 1:
+            raise RuntimeError("Failed to finalize payment idempotency record")
+        public_response["_idempotency_replayed"] = False
+        return public_response
     
     @staticmethod
     def record_payment(
         db: Session, 
         invoice_id: int, 
         payment_data: Dict[str, Any],
-        org_id: Optional[str] = None
+        org_id: str,
+        idempotency_key: str,
     ) -> Dict[str, Any]:
         """
         Record a payment against an invoice.
         
         TenantAwareSession auto-filters by org_id.
         """
+        actor_id = payment_data.get("created_by")
+        request_payload = dict(payment_data)
+        request_payload.pop("created_by", None)
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=actor_id,
+            operation="payment.record",
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+        )
+        if replay is not None:
+            return replay
+
         # Get invoice details (TenantAwareSession auto-adds org_id filter)
         invoice = db.execute(text("""
             SELECT invoice_id, invoice_number, customer_id, due_date,
@@ -58,7 +155,9 @@ class PaymentService:
                    COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id}).fetchone()
+              AND (:org_id IS NULL OR org_id = :org_id)
+            FOR UPDATE
+        """), {"invoice_id": invoice_id, "org_id": org_id}).fetchone()
         
         if not invoice:
             raise ValueError(f"Invoice {invoice_id} not found or access denied")
@@ -105,7 +204,7 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type,
                 payment_method_id, party_type, party_id, party_name,
-                payment_amount, payment_status, reference_number, created_by
+                payment_amount, payment_status, reference_number, internal_notes, created_by
             )
             SELECT
                 i.org_id,
@@ -113,12 +212,16 @@ class PaymentService:
                 :payment_reference, :payment_date, 'receipt',
                 :payment_method_id, 'customer', i.customer_id,
                 COALESCE((SELECT customer_name FROM parties.customers WHERE customer_id = i.customer_id), 'Unknown'),
-                :payment_amount, 'cleared', :transaction_reference,
+                :payment_amount, 'cleared', :transaction_reference, :idempotency_marker,
                 COALESCE(:created_by, (SELECT user_id FROM master.org_users WHERE org_id = i.org_id LIMIT 1))
             FROM sales.invoices i
             WHERE i.invoice_id = :invoice_id
             RETURNING payment_id
-        """), {**payment_record, "created_by": payment_data.get("created_by")})
+        """), {
+            **payment_record,
+            "created_by": payment_data.get("created_by"),
+            "idempotency_marker": claim.pending_marker,
+        })
         
         payment_id = result.scalar()
 
@@ -255,15 +358,22 @@ class PaymentService:
                     WHERE order_id = :order_id
                 """), {"order_id": order_id})
         
-        return {
+        response = {
             "payment_id": payment_id,
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
-            "amount": payment_amount,
-            "balance_amount": total_amount - new_paid_amount,
+            "amount": float(payment_amount),
+            "balance_amount": float(total_amount - new_paid_amount),
             "payment_status": new_payment_status,
             "message": "Payment recorded successfully"
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=effective_org_id,
+            payment_id=payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_invoice_payments(
@@ -386,6 +496,7 @@ class PaymentService:
             WHERE p.payment_id = :payment_id
                 AND p.org_id = :org_id
                 AND p.payment_status NOT IN ('cancelled', 'failed')
+            FOR UPDATE
         """), {"payment_id": payment_id, "org_id": org_id}).fetchone()
         
         if not payment:
@@ -515,12 +626,32 @@ class PaymentService:
         payment_date: Optional[date] = None,
         reference_number: Optional[str] = None,
         notes: Optional[str] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        idempotency_key: str = "",
     ) -> Dict[str, Any]:
         """
         Create a customer payment receipt.
         TenantAwareSession auto-filters by org_id.
         """
+        effective_date = payment_date or date.today()
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=created_by,
+            operation="payment.customer_receipt",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "customer_id": customer_id,
+                "amount": amount,
+                "payment_mode": payment_mode,
+                "payment_date": effective_date,
+                "reference_number": reference_number,
+                "notes": notes,
+            },
+        )
+        if replay is not None:
+            return replay
+
         # Generate receipt number
         receipt_number = PaymentService.generate_receipt_number(db, org_id)
         
@@ -548,23 +679,24 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type,
                 payment_method_id, party_type, party_id, party_name,
-                payment_amount, reference_number, payment_status, created_by
+                payment_amount, reference_number, payment_status, internal_notes, created_by
             ) VALUES (
                 :org_id,
                 COALESCE((SELECT branch_id FROM master.org_branches WHERE org_id = :org_id::uuid LIMIT 1), 5),
                 :receipt_number, :payment_date, 'receipt',
                 :payment_method_id, 'customer', :customer_id, :customer_name,
-                :amount, :reference_number, 'cleared', :created_by
+                :amount, :reference_number, 'cleared', :idempotency_marker, :created_by
             ) RETURNING payment_id, payment_number, payment_amount
         """), {
             "org_id": org_id,
             "receipt_number": receipt_number,
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "customer_id": customer_id,
             "customer_name": customer_name,
             "amount": amount,
             "payment_method_id": method_id,
             "reference_number": reference_number,
+            "idempotency_marker": claim.pending_marker,
             "created_by": created_by
         })
         
@@ -587,7 +719,7 @@ class PaymentService:
             "customer_id": customer_id,
             "payment_id": payment.payment_id,
             "receipt_number": payment.payment_number,
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "negative_amount": -float(amount)  # Negative to reduce outstanding
         })
         
@@ -598,17 +730,24 @@ class PaymentService:
                 updated_at = CURRENT_TIMESTAMP
             WHERE customer_id = :customer_id
         """), {
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "customer_id": customer_id
         })
         
-        return {
+        response = {
             "success": True,
             "payment_id": payment.payment_id,
             "receipt_number": payment.payment_number,
             "amount": float(payment.payment_amount),
             "message": "Payment receipt created successfully"
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=org_id,
+            payment_id=payment.payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_overview(db: Session) -> Dict[str, Any]:
@@ -833,10 +972,13 @@ class PaymentService:
         """
         # Get payment details
         payment = db.execute(text("""
-            SELECT payment_id, payment_amount, party_id, payment_type
+            SELECT payment_id, payment_amount, party_id, party_type, payment_type
             FROM financial.payments
-            WHERE payment_id = :payment_id AND payment_status IN ('completed', 'cleared')
-        """), {"payment_id": payment_id}).first()
+            WHERE payment_id = :payment_id
+              AND org_id = :org_id
+              AND payment_status IN ('completed', 'cleared')
+            FOR UPDATE
+        """), {"payment_id": payment_id, "org_id": org_id}).first()
 
         if not payment:
             raise ValueError("Payment not found or not in a valid status for allocation")
@@ -852,13 +994,17 @@ class PaymentService:
 
             # Get invoice balance
             invoice = db.execute(text("""
-                SELECT invoice_id, invoice_number, final_amount, paid_amount
+                SELECT invoice_id, invoice_number, customer_id, final_amount, paid_amount
                 FROM sales.invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
+                FOR UPDATE
             """), {"invoice_id": invoice_id, "org_id": org_id}).first()
 
             if not invoice:
                 raise ValueError(f"Invoice {invoice_id} not found")
+
+            if str(payment.party_type).lower() == "customer" and payment.party_id != invoice.customer_id:
+                raise ValueError(f"Invoice {invoice_id} belongs to a different customer")
 
             balance = invoice.final_amount - (invoice.paid_amount or 0)
             actual_allocation = min(allocated_amount, balance)
@@ -1004,13 +1150,25 @@ class PaymentService:
         org_id: str,
         branch_id: int,
         payment_data: Dict[str, Any],
-        user_id: int
+        user_id: int,
+        idempotency_key: str,
     ) -> Dict[str, Any]:
         """
         Create a general payment (advance, invoice payment, or adjustment).
         Handles sequence generation and insert.
         """
         from ...document_number_service import DocumentNumberService
+
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=user_id,
+            operation="payment.create",
+            idempotency_key=idempotency_key,
+            request_payload=payment_data,
+        )
+        if replay is not None:
+            return replay
         
         # Generate payment number if not provided
         payment_number = payment_data.get("payment_number")
@@ -1036,11 +1194,11 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type, payment_method_id,
                 party_type, party_id, party_name, payment_amount, payment_status,
-                clearance_date, reference_number, narration, created_by
+                clearance_date, reference_number, narration, internal_notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_method_id,
                 :party_type, :party_id, :party_name, :payment_amount, :payment_status,
-                :clearance_date, :reference_number, :narration, :created_by
+                :clearance_date, :reference_number, :narration, :idempotency_marker, :created_by
             ) RETURNING payment_id, payment_number, payment_amount, payment_status
         """), {
             "org_id": org_id,
@@ -1057,15 +1215,23 @@ class PaymentService:
             "clearance_date": payment_data.get("cleared_date") or (payment_data.get("payment_date") if payment_data.get("payment_mode") == "cash" else None),
             "reference_number": payment_data.get("reference_number"),
             "narration": payment_data.get("notes"),
+            "idempotency_marker": claim.pending_marker,
             "created_by": user_id
         }).fetchone()
         
-        return {
+        response = {
             "payment_id": result.payment_id,
             "payment_number": result.payment_number,
             "amount": float(result.payment_amount),
             "status": result.payment_status
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=org_id,
+            payment_id=result.payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_outstanding_invoices(

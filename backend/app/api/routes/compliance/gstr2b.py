@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy import text
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from decimal import Decimal
 import json
 import uuid
 import logging
@@ -15,6 +16,8 @@ import logging
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession, with_tenant_context
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
+from ....core.money import money_json
+from ...schemas.money import GSTR2BMismatchResponse, GSTR2BStatusResponse
 
 router = APIRouter(tags=["GSTR-2B Reconciliation"])
 logger = logging.getLogger(__name__)
@@ -374,8 +377,10 @@ async def reconcile_gstr2b(
             "mismatched": mismatched,
             "missing": missing,
             "match_rate": match_rate,
-            "itc_at_risk": round(sum(float(inv.itc_available or 0) for inv in gstr2b_invoices 
-                                     if inv.id in [i.id for i in gstr2b_invoices]), 2),
+            "itc_at_risk": money_json(sum(
+                (Decimal(str(inv.itc_available or 0)) for inv in gstr2b_invoices),
+                Decimal("0"),
+            )),
             "message": f"Reconciliation complete: {match_rate}% match rate"
         }
         
@@ -387,7 +392,7 @@ async def reconcile_gstr2b(
         raise HTTPException(status_code=500, detail="Failed to reconcile GSTR-2B data")
 
 
-@router.get("/gstr2b/status")
+@router.get("/gstr2b/status", response_model=GSTR2BStatusResponse)
 @with_tenant_context
 async def get_gstr2b_status(
     period: Optional[str] = Query(None, description="Return period (YYYY-MM)"),
@@ -436,7 +441,7 @@ async def get_gstr2b_status(
                 "file_name": upload.file_name,
                 "uploaded_at": upload.uploaded_at.isoformat() if upload.uploaded_at else None,
                 "total_invoices": upload.total_invoices,
-                "total_itc_available": float(upload.total_itc_available or 0),
+                "total_itc_available": money_json(upload.total_itc_available or 0),
                 "total_suppliers": upload.total_suppliers,
                 "status": upload.status,
                 "reconciled": upload.reconciled_at is not None,
@@ -453,7 +458,7 @@ async def get_gstr2b_status(
         return {"uploads": [], "error": "Failed to retrieve GSTR-2B status"}
 
 
-@router.get("/gstr2b/mismatches")
+@router.get("/gstr2b/mismatches", response_model=GSTR2BMismatchResponse)
 @with_tenant_context
 async def get_gstr2b_mismatches(
     upload_id: Optional[str] = Query(None),
@@ -497,10 +502,10 @@ async def get_gstr2b_mismatches(
         invoices = db.execute(query, params).fetchall()
         
         results = []
-        total_itc_at_risk = 0
+        total_itc_at_risk = Decimal("0")
         
         for inv in invoices:
-            itc = float(inv.itc_available or 0)
+            itc = Decimal(str(inv.itc_available or 0))
             if inv.match_status in ('mismatched', 'missing'):
                 total_itc_at_risk += itc
             
@@ -511,20 +516,20 @@ async def get_gstr2b_mismatches(
                 "supplier_name": inv.supplier_name,
                 "invoice_number": inv.invoice_number,
                 "invoice_date": inv.invoice_date.isoformat() if inv.invoice_date else None,
-                "invoice_value": float(inv.invoice_value or 0),
-                "itc_available": itc,
+                "invoice_value": money_json(inv.invoice_value or 0),
+                "itc_available": money_json(itc),
                 "match_status": inv.match_status,
                 "mismatch_type": inv.mismatch_type,
                 "mismatch_details": inv.mismatch_details,
                 "our_invoice_number": inv.our_invoice_number,
-                "our_invoice_amount": float(inv.our_invoice_amount or 0) if inv.our_invoice_amount else None,
-                "amount_difference": float(inv.amount_difference or 0) if inv.amount_difference else None
+                "our_invoice_amount": money_json(inv.our_invoice_amount) if inv.our_invoice_amount is not None else None,
+                "amount_difference": money_json(inv.amount_difference) if inv.amount_difference is not None else None
             })
         
         return {
             "invoices": results,
             "total_count": len(results),
-            "total_itc_at_risk": round(total_itc_at_risk, 2)
+            "total_itc_at_risk": money_json(total_itc_at_risk)
         }
         
     except Exception as e:

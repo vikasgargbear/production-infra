@@ -47,7 +47,7 @@ export const expensesApi = {
     },
 
     generateClaimNumber: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/expense-claims/generate-claim-number');
+        return apiHelpers.post('/expense-claims/generate-claim-number', {});
     },
 
     getCategories: (): Promise<AxiosResponse> => {

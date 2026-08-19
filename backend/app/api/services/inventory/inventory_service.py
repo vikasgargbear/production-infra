@@ -279,17 +279,60 @@ class InventoryService:
         responsible for calling db.commit() to maintain transaction atomicity.
         """
         try:
+            if not movement_data.org_id:
+                raise ValueError("org_id is required to record a stock movement")
+            if not movement_data.location_id:
+                raise ValueError("location_id is required to record a stock movement")
+
+            org_id = str(movement_data.org_id)
+            product_exists = db.execute(text("""
+                SELECT product_id
+                FROM inventory.products
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {
+                "product_id": movement_data.product_id,
+                "org_id": org_id,
+            }).scalar()
+            if product_exists is None:
+                raise ValueError("Product not found or access denied")
+
+            location_exists = db.execute(text("""
+                SELECT location_id
+                FROM inventory.storage_locations
+                WHERE location_id = :location_id AND org_id = :org_id
+            """), {
+                "location_id": movement_data.location_id,
+                "org_id": org_id,
+            }).scalar()
+            if location_exists is None:
+                raise ValueError("Location not found or access denied")
+
             # Get current stock levels
             if movement_data.batch_id:
-                current = db.execute(text("""
-                    SELECT quantity_available FROM inventory.batches 
+                batch = db.execute(text("""
+                    SELECT quantity_available
+                    FROM inventory.batches
                     WHERE batch_id = :batch_id
-                """), {"batch_id": movement_data.batch_id}).scalar()
+                      AND product_id = :product_id
+                      AND org_id = :org_id
+                    FOR UPDATE
+                """), {
+                    "batch_id": movement_data.batch_id,
+                    "product_id": movement_data.product_id,
+                    "org_id": org_id,
+                }).first()
+                if batch is None:
+                    raise ValueError("Batch not found or access denied")
+                current = batch.quantity_available
             else:
                 current = db.execute(text("""
                     SELECT COALESCE(SUM(quantity_available), 0) 
-                    FROM inventory.batches WHERE product_id = :product_id
-                """), {"product_id": movement_data.product_id}).scalar()
+                    FROM inventory.batches
+                    WHERE product_id = :product_id AND org_id = :org_id
+                """), {
+                    "product_id": movement_data.product_id,
+                    "org_id": org_id,
+                }).scalar()
             
             stock_before = current or 0
             
@@ -311,7 +354,7 @@ class InventoryService:
             
             # Build movement record - org_id needed for INSERT
             movement_params = {
-                "org_id": str(movement_data.org_id) if movement_data.org_id else None,
+                "org_id": org_id,
                 "product_id": movement_data.product_id,
                 "batch_id": movement_data.batch_id,
                 "movement_type": movement_data.movement_type,
@@ -358,10 +401,11 @@ class InventoryService:
                     UPDATE inventory.batches
                     SET quantity_available = quantity_available + :quantity_change,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE batch_id = :batch_id
+                    WHERE batch_id = :batch_id AND org_id = :org_id
                 """), {
                     "quantity_change": quantity_change,
-                    "batch_id": movement_data.batch_id
+                    "batch_id": movement_data.batch_id,
+                    "org_id": org_id,
                 })
 
             # Update location_wise_stock if location_id provided
@@ -461,7 +505,8 @@ class InventoryService:
         destination_location_id: int,
         movement_date: date = None,
         reason: str = "Stock transfer",
-        created_by: int = None
+        created_by: int = None,
+        reference_number: str = None,
     ) -> dict:
         """
         Atomic stock transfer between two locations.
@@ -492,6 +537,7 @@ class InventoryService:
             movement_date=movement_date,
             quantity=quantity,
             reference_type="stock_transfer",
+            reference_number=reference_number,
             location_id=source_location_id,
             transfer_type="inter_location",
             reason=reason,
@@ -509,6 +555,7 @@ class InventoryService:
             movement_date=movement_date,
             quantity=quantity,
             reference_type="stock_transfer",
+            reference_number=reference_number,
             location_id=destination_location_id,
             transfer_type="inter_location",
             reason=reason,
@@ -734,30 +781,41 @@ class InventoryService:
         if not batch_deductions:
             return 0
         
-        case_parts = []
-        batch_ids_to_update = []
-        update_params = {"org_id": org_id}
-        
-        for i, bd in enumerate(batch_deductions):
-            case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
-            batch_ids_to_update.append(bd["batch_id"])
-            update_params[f"bid_{i}"] = bd["batch_id"]
-            update_params[f"qty_{i}"] = bd["quantity"]
-        
-        update_params["batch_ids"] = batch_ids_to_update
-        
-        bulk_update_sql = f"""
-            UPDATE inventory.batches
-            SET 
-                quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
-                last_movement_date = CURRENT_TIMESTAMP,
+        requested = {}
+        for deduction in batch_deductions:
+            batch_id = int(deduction["batch_id"])
+            quantity = Decimal(str(deduction["quantity"]))
+            if quantity <= 0:
+                raise ValueError("stock deduction quantity must be greater than zero")
+            requested[batch_id] = requested.get(batch_id, Decimal("0")) + quantity
+
+        values = []
+        params = {"org_id": org_id}
+        for index, (batch_id, quantity) in enumerate(requested.items()):
+            values.append(f"(:batch_id_{index}, :quantity_{index})")
+            params[f"batch_id_{index}"] = batch_id
+            params[f"quantity_{index}"] = quantity
+
+        result = db.execute(text(f"""
+            WITH requested(batch_id, quantity) AS (
+                VALUES {", ".join(values)}
+            )
+            UPDATE inventory.batches AS batch
+            SET quantity_available = batch.quantity_available - requested.quantity,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
-        """
-        db.execute(text(bulk_update_sql), update_params)
-        logger.info(f"✅ Bulk updated {len(batch_deductions)} batch quantities")
-        
-        return len(batch_deductions)
+            FROM requested
+            WHERE batch.batch_id = requested.batch_id
+              AND batch.org_id = :org_id
+              AND batch.quantity_available >= requested.quantity
+            RETURNING batch.batch_id
+        """), params)
+        updated_batch_ids = {row[0] for row in result.fetchall()}
+        if updated_batch_ids != set(requested):
+            missing = sorted(set(requested) - updated_batch_ids)
+            raise ValueError(f"insufficient or inaccessible stock for batches: {missing}")
+
+        logger.info(f"Bulk updated {len(updated_batch_ids)} batch quantities")
+        return len(updated_batch_ids)
     
     @staticmethod
     def bulk_insert_movements(
@@ -860,12 +918,13 @@ class InventoryService:
             if not location_id or not org_id or not product_id:
                 continue
 
-            # Check if row exists
+            # Lock the projection row before deciding how to mutate it.
             existing = db.execute(text("""
                 SELECT stock_id FROM inventory.location_wise_stock
                 WHERE org_id = :org_id AND product_id = :product_id
                 AND location_id = :location_id
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
+                FOR UPDATE
             """), {
                 "org_id": org_id, "product_id": product_id,
                 "location_id": location_id, "batch_id": batch_id
@@ -880,12 +939,19 @@ class InventoryService:
                         WHERE stock_id = :stock_id
                     """), {"quantity": quantity, "stock_id": existing})
                 else:
-                    db.execute(text("""
+                    result = db.execute(text("""
                         UPDATE inventory.location_wise_stock
                         SET quantity_available = quantity_available - :quantity,
                             last_movement_date = CURRENT_DATE, last_updated = CURRENT_TIMESTAMP
                         WHERE stock_id = :stock_id
-                    """), {"quantity": quantity, "stock_id": existing})
+                          AND org_id = :org_id
+                          AND quantity_available >= :quantity
+                        RETURNING stock_id
+                    """), {"quantity": quantity, "stock_id": existing, "org_id": org_id})
+                    if result.scalar() is None:
+                        raise ValueError(
+                            f"insufficient location stock for product {product_id}, batch {batch_id}"
+                        )
             elif direction == 'in':
                 # Only create new rows for stock-in (purchase/receive)
                 db.execute(text("""
@@ -898,31 +964,9 @@ class InventoryService:
                     "product_id": product_id, "batch_id": batch_id, "quantity": quantity
                 })
             else:
-                # Stock-out but no LWS row exists — backfill from batch then deduct
-                batch_qty = db.execute(text("""
-                    SELECT COALESCE(quantity_available, 0)
-                    FROM inventory.batches
-                    WHERE batch_id = :batch_id AND org_id = :org_id
-                """), {"batch_id": batch_id, "org_id": org_id}).scalar() or 0
-
-                # Batch qty is already deducted by bulk_update_batch_quantities,
-                # so the "before" value was batch_qty + quantity
-                backfill_qty = float(batch_qty) + float(quantity)
-                new_qty = max(float(batch_qty), 0)  # After deduction
-
-                logger.info(
-                    f"📦 Backfilling location_wise_stock for product={product_id}, "
-                    f"batch={batch_id}, location={location_id}: qty={new_qty}"
+                raise ValueError(
+                    f"location stock is missing for product {product_id}, batch {batch_id}"
                 )
-                db.execute(text("""
-                    INSERT INTO inventory.location_wise_stock (
-                        org_id, location_id, product_id, batch_id,
-                        quantity_available, quantity_reserved, last_movement_date
-                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, 0, CURRENT_DATE)
-                """), {
-                    "org_id": org_id, "location_id": location_id,
-                    "product_id": product_id, "batch_id": batch_id, "quantity": new_qty
-                })
 
             updated += 1
 

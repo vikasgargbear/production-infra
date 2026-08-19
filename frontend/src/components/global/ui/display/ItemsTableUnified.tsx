@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, RefObject, ForwardRefRenderFunction } from 'react';
 import { Trash2 } from 'lucide-react';
 import EditableCell, { EditableCellRef } from './EditableCell';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -146,7 +145,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     };
 
     const calculateItemTotal = (item: ItemsTableItem): number => {
-        return EnterpriseCalculator.calculateItem(item).total_amount;
+        return Number(item.line_total ?? item.total ?? 0);
     };
 
     useEffect(() => {
@@ -161,7 +160,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 }
             }
         }
-    }, [items.length, readOnly]);
+    }, [items, readOnly]);
 
     return (
         <div className={`overflow-x-auto ${className}`}>

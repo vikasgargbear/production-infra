@@ -9,6 +9,7 @@ import logging
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ...services.payroll.leave_service import LeaveService
+from ...schemas.payroll import LeavePolicyDeleteResponse, LeavePolicyMutationResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +29,7 @@ async def list_leave_policies(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("", response_model=Dict[str, Any])
+@router.post("", response_model=LeavePolicyMutationResponse)
 @with_tenant_context
 async def create_leave_policy(
     payload: Dict[str, Any],
@@ -53,7 +54,7 @@ async def create_leave_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{policy_id}", response_model=Dict[str, Any])
+@router.put("/{policy_id}", response_model=LeavePolicyMutationResponse)
 @with_tenant_context
 async def update_leave_policy(
     policy_id: int,
@@ -74,7 +75,7 @@ async def update_leave_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{policy_id}", response_model=Dict[str, Any])
+@router.delete("/{policy_id}", response_model=LeavePolicyDeleteResponse)
 @with_tenant_context
 async def delete_leave_policy(
     policy_id: int,

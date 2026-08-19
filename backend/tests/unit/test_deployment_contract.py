@@ -1,0 +1,178 @@
+import re
+from pathlib import Path
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _read(relative_path: str) -> str:
+    return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def test_backend_image_is_cloud_run_compatible_and_non_root():
+    dockerfile = _read("backend/Dockerfile")
+    dockerignore = _read("backend/.dockerignore")
+
+    assert "FROM python:3.11-slim" in dockerfile
+    assert "PORT=8080" in dockerfile
+    assert "EXPOSE 8080" in dockerfile
+    assert "--host 0.0.0.0" in dockerfile
+    assert "${PORT:-8080}" in dockerfile
+    assert "USER appuser" in dockerfile
+    assert dockerfile.index("USER appuser") < dockerfile.index("CMD [")
+    assert "HEALTHCHECK" in dockerfile
+    assert "/health" in dockerfile
+    assert ".env.*" in dockerignore
+    assert "venv" in dockerignore
+    assert "tests" in dockerignore
+
+
+def test_cloud_run_template_is_mumbai_bounded_and_probed():
+    template = _read("deploy/cloud-run/service.template.yaml")
+
+    assert "asia-south1-docker.pkg.dev/" in template
+    assert 'autoscaling.knative.dev/minScale: "0"' in template
+    max_scale = int(re.search(
+        r'autoscaling\.knative\.dev/maxScale: "(\d+)"', template
+    ).group(1))
+    concurrency = int(re.search(r"containerConcurrency: (\d+)", template).group(1))
+    assert 1 <= max_scale <= 10
+    assert 1 <= concurrency <= 40
+    assert "timeoutSeconds: 300" in template
+    assert template.count("path: /health") == 2
+    assert "startupProbe:" in template
+    assert "livenessProbe:" in template
+    assert "serviceAccountName:" in template
+
+
+def test_render_blueprint_is_manual_free_and_health_checked():
+    blueprint = _read("render.yaml")
+    backend, frontend = blueprint.split("  - type: web", 2)[1:]
+
+    assert "name: aasopharma-api-pilot" in backend
+    assert "runtime: docker" in backend
+    assert "plan: free" in backend
+    assert "region: singapore" in backend
+    assert "dockerfilePath: ./backend/Dockerfile" in backend
+    assert "dockerContext: ./backend" in backend
+    assert "healthCheckPath: /health" in backend
+    assert 'autoDeployTrigger: "off"' in backend
+    assert "key: PORT" not in backend
+
+    assert "name: aasopharma-erp-pilot" in frontend
+    assert "runtime: static" in frontend
+    assert "plan: free" in frontend
+    assert "npm run typecheck" in frontend
+    assert "npm run lint:critical" in frontend
+    assert "npm run test:ci -- --runInBand" in frontend
+    assert "CI=false npm run build" in frontend
+    assert "staticPublishPath: ./frontend/build" in frontend
+    assert "source: /*" in frontend
+    assert "destination: /index.html" in frontend
+    assert 'autoDeployTrigger: "off"' in frontend
+    assert "key: REACT_APP_API_BASE_URL" in frontend
+    assert "key: REACT_APP_SUPABASE_URL" in frontend
+    assert "key: REACT_APP_SUPABASE_ANON_KEY" in frontend
+
+
+def test_render_blueprint_contains_no_runtime_secret_values():
+    blueprint = _read("render.yaml")
+    backend = blueprint.split("name: aasopharma-api-pilot", 1)[1].split(
+        "name: aasopharma-erp-pilot", 1
+    )[0]
+    secret_names = (
+        "DATABASE_URL",
+        "JWT_SECRET_KEY",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+    )
+
+    for name in secret_names:
+        block = backend.split(f"key: {name}", 1)[1].split("- key:", 1)[0]
+        assert "sync: false" in block, name
+        assert "value:" not in block, name
+
+    assert "key: SECRET_KEY" not in backend
+
+
+def test_production_database_configuration_fails_closed():
+    database = _read("backend/app/core/database.py")
+
+    assert 'os.getenv("DATABASE_URL", "").strip()' in database
+    assert "if is_production() and (" in database
+    assert "DATABASE_URL must be explicitly configured in production" in database
+
+
+def test_render_frontend_has_only_public_supabase_auth_configuration():
+    blueprint = _read("render.yaml")
+    frontend = blueprint.split("name: aasopharma-erp-pilot", 1)[1]
+
+    for name in (
+        "REACT_APP_API_BASE_URL",
+        "REACT_APP_SUPABASE_URL",
+        "REACT_APP_SUPABASE_ANON_KEY",
+    ):
+        block = frontend.split(f"key: {name}", 1)[1].split("- key:", 1)[0]
+        assert "sync: false" in block, name
+        assert "value:" not in block, name
+
+    for forbidden in (
+        "REACT_APP_SUPABASE_SERVICE_ROLE_KEY",
+        "REACT_APP_DATABASE_URL",
+        "REACT_APP_JWT_SECRET_KEY",
+    ):
+        assert forbidden not in frontend
+
+
+def test_render_runbook_separates_supabase_and_google_redirects():
+    runbook = _read("docs/deployment/render-pilot.md")
+
+    assert "allow that exact origin as a redirect URL" in runbook
+    assert "allow `http://localhost:3000`" in runbook
+    assert "https://<project-ref>.supabase.co/auth/v1/callback" in runbook
+    assert "Do not use wildcard production redirects" in runbook
+    assert "master.org_users.auth_user_id" in runbook
+    assert "email-only lookup" in runbook
+
+
+def test_runtime_credentials_only_use_secret_manager_references():
+    template = _read("deploy/cloud-run/service.template.yaml")
+    secret_names = (
+        "DATABASE_URL",
+        "JWT_SECRET_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+    )
+
+    for name in secret_names:
+        block = template.split(f"- name: {name}", 1)[1].split("- name:", 1)[0]
+        assert "valueFrom:" in block, name
+        assert "secretKeyRef:" in block, name
+        assert re.search(r"\n\s+value:", block) is None, name
+
+
+def test_cloudflare_pages_build_has_spa_fallback_and_public_api_config_only():
+    redirects = _read("frontend/public/_redirects").strip()
+    runbook = _read("docs/deployment/google-cloud-run-cloudflare-pages.md")
+
+    assert redirects == "/* /index.html 200"
+    assert "Root directory: `frontend`" in runbook
+    assert "Build output: `build`" in runbook
+    assert "Node version: `20`" in runbook
+    assert "No secret belongs in a `REACT_APP_*` variable" in runbook
+
+
+def test_mcp_shares_the_api_container_or_remains_an_explicit_release_gate():
+    main = _read("backend/app/main.py")
+    runbook = _read("docs/deployment/google-cloud-run-cloudflare-pages.md")
+
+    if '"/mcp"' in main or "'/mcp'" in main:
+        assert "same Cloud Run origin" in runbook
+    else:
+        assert "`/mcp` check must fail release if the transport is absent" in runbook
+        assert "Do not expose\n`/mcp` publicly" in runbook

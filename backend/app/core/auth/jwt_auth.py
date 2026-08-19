@@ -27,6 +27,8 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
 
 ALGORITHM = "HS256"
+TOKEN_ISSUER = "aasopharma-api"
+TOKEN_AUDIENCE = "aasopharma-api"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 if IS_PRODUCTION else 1440  # 1h prod, 24h dev
 
 # Password hashing
@@ -72,10 +74,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     
     # Add jti (JWT ID) for blacklist support
     jti = str(uuid.uuid4())
+    subject = data.get("auth_user_id") or data.get("user_id")
     to_encode.update({
         "exp": expire,
         "jti": jti,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "sub": str(subject),
+        "iss": TOKEN_ISSUER,
+        "aud": TOKEN_AUDIENCE,
+        "token_use": "access",
     })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -98,7 +105,16 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
     Raises:
         JWTError: If token is invalid, expired, or blacklisted
     """
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+        audience=TOKEN_AUDIENCE,
+        issuer=TOKEN_ISSUER,
+        options={"require_exp": True, "require_iat": True, "require_sub": True},
+    )
+    if payload.get("token_use") != "access":
+        raise JWTError("Invalid token use")
     
     # Check if token is blacklisted (for logout support)
     if check_blacklist:
@@ -225,7 +241,7 @@ async def get_current_user_and_org(
     )
     
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_jwt(token)
         
         # Handle both old and new token formats
         user_id = payload.get("user_id") or payload.get("sub")

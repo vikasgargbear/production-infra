@@ -14,6 +14,7 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
 from .....core.utils.feature_flags import check_negative_stock_allowed
+from .....core.money import money_json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stock-movements"])
@@ -62,8 +63,8 @@ async def get_inventory_movements(
                 "batch_id": m.get("batch_id"),
                 "batch_number": m.get("batch_number"),
                 "quantity": float(m.get("quantity")) if m.get("quantity") else 0,
-                "unit_price": float(m.get("unit_price")) if m.get("unit_price") else 0,
-                "total_value": float(m.get("total_value")) if m.get("total_value") else 0,
+                "unit_price": money_json(m.get("unit_price") or 0),
+                "total_value": money_json(m.get("total_value") or 0),
                 "reference_type": m.get("reference_type"),
                 "reference_number": m.get("reference_number"),
                 "from_location_id": m.get("from_location_id"),
@@ -280,7 +281,8 @@ async def create_stock_transfer(
             destination_location_id=transfer_data["destination_location"],
             movement_date=transfer_data["movement_date"],
             reason=transfer_data.get("reason", "Stock transfer"),
-            created_by=context.user_id
+            created_by=context.user_id,
+            reference_number=movement_number,
         )
         db.commit()
 

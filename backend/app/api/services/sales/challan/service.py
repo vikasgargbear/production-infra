@@ -9,11 +9,85 @@ from datetime import date, datetime
 from decimal import Decimal
 import logging
 
+from app.api.shared.calculations import calculate_line_item
+from app.core.money import decimal_value, money
+
 logger = logging.getLogger(__name__)
 
 
 class ChallanService:
     """Service class for Challan operations"""
+
+    @staticmethod
+    def calculate_challan_totals(
+        items: List[Dict[str, Any]],
+        gst_type: str,
+        freight_charges: Any = 0,
+    ) -> Dict[str, Any]:
+        """Calculate delivery-challan lines and totals for preview and commit."""
+        if not items:
+            raise ValueError("items must contain at least one challan line")
+        normalized_gst_type = str(gst_type).strip().upper()
+        if normalized_gst_type not in {"IGST", "CGST/SGST"}:
+            raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'")
+
+        calculated_items: List[Dict[str, Any]] = []
+        subtotal = Decimal("0")
+        discount = Decimal("0")
+        taxable = Decimal("0")
+        cgst = Decimal("0")
+        sgst = Decimal("0")
+        igst = Decimal("0")
+
+        for item in items:
+            quantity = decimal_value(item.get("quantity", 0), "quantity", minimum=Decimal("0"))
+            if quantity <= 0:
+                raise ValueError("quantity must be greater than 0")
+            unit_price = decimal_value(item.get("unit_price", 0), "unit_price", minimum=Decimal("0"))
+            discount_percent = decimal_value(
+                item.get("discount_percent", 0),
+                "discount_percent",
+                minimum=Decimal("0"),
+                maximum=Decimal("100"),
+            )
+            gst_percent = decimal_value(
+                item.get("gst_percent", item.get("tax_percent", 0)) or 0,
+                "gst_percent",
+                minimum=Decimal("0"),
+                maximum=Decimal("100"),
+            )
+            line = calculate_line_item(
+                quantity=quantity,
+                unit_price=unit_price,
+                discount_percent=discount_percent,
+                gst_percent=gst_percent,
+                gst_type=normalized_gst_type,
+            )
+            line["gst_percent"] = float(gst_percent)
+            line["total_tax_amount"] = line["total_tax"]
+            calculated_items.append(line)
+            subtotal += money(line["subtotal"])
+            discount += money(line["discount_amount"])
+            taxable += money(line["taxable_amount"])
+            cgst += money(line["cgst_amount"])
+            sgst += money(line["sgst_amount"])
+            igst += money(line["igst_amount"])
+
+        freight = money(decimal_value(freight_charges, "freight_charges", minimum=Decimal("0")))
+        total_tax = money(cgst + sgst + igst)
+        final_amount = money(taxable + total_tax + freight)
+        return {
+            "subtotal_amount": float(money(subtotal)),
+            "discount_amount": float(money(discount)),
+            "taxable_amount": float(money(taxable)),
+            "cgst_amount": float(money(cgst)),
+            "sgst_amount": float(money(sgst)),
+            "igst_amount": float(money(igst)),
+            "total_tax_amount": float(total_tax),
+            "freight_charges": float(freight),
+            "final_amount": float(final_amount),
+            "calculated_items": calculated_items,
+        }
     
     @staticmethod
     def get_branch_id(db: Session, org_id: str) -> Optional[int]:

@@ -71,6 +71,12 @@ export interface BankReconciliationData {
     }>;
 }
 
+function paymentIdempotencyKey(operation: string): string {
+    const random = globalThis.crypto?.randomUUID?.()
+        || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return `${operation}_${random}`;
+}
+
 // ============================================
 // API Module
 // ============================================
@@ -89,7 +95,11 @@ export const paymentsApi = {
     },
 
     create: (data: PaymentData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/payments', data);
+        return apiHelpers.post('/payments', data, {
+            headers: {
+                'X-Idempotency-Key': paymentIdempotencyKey('payment_create')
+            }
+        });
     },
 
     // Compatibility shim for older sync paths. The backend currently has no

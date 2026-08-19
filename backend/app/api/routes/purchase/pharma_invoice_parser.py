@@ -3,9 +3,12 @@ Custom pharmaceutical invoice parser for better extraction
 """
 import pdfplumber
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
+from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import logging
+
+from ....core.money import money_json
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +28,15 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                 "success": True,
                 "extracted_data": {
                     "invoice_number": "",
-                    "invoice_date": datetime.now().isoformat()[:10],
+                    "invoice_date": date.today().isoformat(),
                     "supplier_name": "",
                     "supplier_gstin": "",
                     "supplier_address": "",
                     "drug_license": "",
-                    "subtotal": 0,
-                    "tax_amount": 0,
-                    "discount_amount": 0,
-                    "grand_total": 0,
+                    "subtotal": Decimal("0"),
+                    "tax_amount": Decimal("0"),
+                    "discount_amount": Decimal("0"),
+                    "grand_total": Decimal("0"),
                     "items": []
                 },
                 "confidence_score": 0.8,
@@ -135,11 +138,11 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                                     "expiry_date": "",
                                     "quantity": 0,
                                     "unit": "strip",
-                                    "cost_price": 0,
-                                    "mrp": 0,
+                                    "cost_price": Decimal("0"),
+                                    "mrp": Decimal("0"),
                                     "discount_percent": 0,
                                     "tax_percent": 12,
-                                    "amount": 0
+                                    "amount": Decimal("0")
                                 }
                             
                                 # Parse expiry date for this item
@@ -164,7 +167,7 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                                 # Parse numeric values for this item
                                 if i < len(mrps) and mrps[i]:
                                     try:
-                                        item["mrp"] = float(mrps[i].replace(',', ''))
+                                        item["mrp"] = Decimal(mrps[i].replace(',', ''))
                                     except:
                                         pass
                                 
@@ -176,13 +179,13 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                                 
                                 if i < len(rates) and rates[i]:
                                     try:
-                                        item["cost_price"] = float(rates[i].replace(',', ''))
+                                        item["cost_price"] = Decimal(rates[i].replace(',', ''))
                                     except:
                                         pass
                                 
                                 if i < len(amounts) and amounts[i]:
                                     try:
-                                        item["amount"] = float(amounts[i].replace(',', ''))
+                                        item["amount"] = Decimal(amounts[i].replace(',', ''))
                                     except:
                                         pass
                                 
@@ -203,7 +206,7 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
             # Extract totals
             grand_total_match = re.search(r'Grand Total\s+(\d+(?:\.\d+)?)', text)
             if grand_total_match:
-                result["extracted_data"]["grand_total"] = float(grand_total_match.group(1))
+                result["extracted_data"]["grand_total"] = Decimal(grand_total_match.group(1))
             
             # Calculate subtotal from items
             if result["extracted_data"]["items"]:
@@ -212,19 +215,27 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                 )
             
             # Extract tax amounts - look for both percentage and amount patterns
-            cgst_amount = 0
-            sgst_amount = 0
+            cgst_amount = Decimal("0")
+            sgst_amount = Decimal("0")
             
             # Look for tax amounts in format "C.G.S.T. 6.0 452.94"
             cgst_matches = re.findall(r'C\.?G\.?S\.?T\.?\s*\d+\.?\d*\s+(\d+(?:\.\d+)?)', text)
             if cgst_matches:
-                cgst_amount = sum(float(x) for x in cgst_matches)
+                cgst_amount = sum((Decimal(x) for x in cgst_matches), Decimal("0"))
             
             sgst_matches = re.findall(r'S\.?G\.?S\.?T\.?\s*\d+\.?\d*\s+(\d+(?:\.\d+)?)', text)
             if sgst_matches:
-                sgst_amount = sum(float(x) for x in sgst_matches)
+                sgst_amount = sum((Decimal(x) for x in sgst_matches), Decimal("0"))
             
             result["extracted_data"]["tax_amount"] = cgst_amount + sgst_amount
+
+            for item in result["extracted_data"]["items"]:
+                for field in ("cost_price", "mrp", "amount"):
+                    item[field] = money_json(item.get(field, 0))
+            for field in ("subtotal", "tax_amount", "discount_amount", "grand_total"):
+                result["extracted_data"][field] = money_json(
+                    result["extracted_data"].get(field, 0)
+                )
             
             return result
     
@@ -235,15 +246,15 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
             "message": "Failed to parse invoice. Please enter details manually.",
             "extracted_data": {
                 "invoice_number": "",
-                "invoice_date": datetime.now().isoformat()[:10],
+                "invoice_date": date.today().isoformat(),
                 "supplier_name": "",
                 "supplier_gstin": "",
                 "supplier_address": "",
                 "drug_license": "",
-                "subtotal": 0,
-                "tax_amount": 0,
-                "discount_amount": 0,
-                "grand_total": 0,
+                "subtotal": "0.00",
+                "tax_amount": "0.00",
+                "discount_amount": "0.00",
+                "grand_total": "0.00",
                 "items": []
             },
             "confidence_score": 0,

@@ -1,7 +1,6 @@
 import React from 'react';
 import { formatCurrency } from '../../../../utils/formatters';
-import type { Challan, ChallanItem, CustomerDetails, CompanyInfo } from '../types/challanTypes';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
+import type { Challan, CompanyInfo } from '../types/challanTypes';
 
 // Use canonical types from types/challanTypes - DO NOT define duplicates
 
@@ -23,8 +22,13 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
         });
     };
 
-    const calculation = EnterpriseCalculator.calculateChallan(challan);
-    const totals = calculation.totals;
+    const totals = {
+        taxable_amount: challan.taxable_amount || 0,
+        total_tax_amount: challan.total_tax_amount || 0,
+        total_tax: challan.total_tax_amount || 0,
+        total_amount: challan.total_amount,
+        final_amount: challan.total_amount
+    };
 
     return (
         <div className="bg-white w-full">
@@ -216,12 +220,9 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                         </thead>
                         <tbody>
                             {challan.items.map((item, index) => {
-                                const calculatedItem = EnterpriseCalculator.calculateItem(item, {
-                                    gst_type: (challan as any).gst_type
-                                });
-                                const price = calculatedItem.unit_price || item.unit_price || item.sale_price || 0;
-                                const gstPercent = calculatedItem.gst_percent || calculatedItem.tax_percent || 0;
-                                const totalAmount = calculatedItem.total_amount || 0;
+                                const price = item.unit_price || item.sale_price || 0;
+                                const gstPercent = item.gst_percent || item.tax_percent || 0;
+                                const totalAmount = item.line_total || item.total || 0;
                                 return (
                                     <tr key={index} className="border-b border-gray-200">
                                         <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>

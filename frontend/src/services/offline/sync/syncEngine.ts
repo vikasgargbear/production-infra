@@ -16,6 +16,7 @@ import { AxiosResponse } from 'axios';
 // SyncStats is used via offlineDB.updateSyncStats() calls throughout this file
 import { SyncQueueItem as BaseSyncQueueItem, SyncStats } from '../types';
 import type { SyncTrigger } from './deltaSyncService';
+import { getErpAccessToken } from '../../auth/erpSessionStorage';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -214,7 +215,7 @@ class SyncEngine {
             return;
         }
 
-        const token = localStorage.getItem('authToken');
+        const token = getErpAccessToken();
         if (!token) {
             console.log('[SyncEngine] Not authenticated, skipping pull sync');
             return;

@@ -3,7 +3,6 @@ import { FileText, Building2, Phone, Mail, Truck } from 'lucide-react';
 import { formatCurrency } from '../../../utils/formatters';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 import { determineGstType } from '../../gst/utils/gstCalculations';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 interface ReturnItem {
   id?: string | number;
@@ -17,6 +16,13 @@ interface ReturnItem {
   unit_price: number;
   discount_percent?: number;
   tax_percent?: number;
+  discount_amount?: number;
+  taxable_amount?: number;
+  cgst_amount?: number;
+  sgst_amount?: number;
+  igst_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
 }
 
 interface Supplier {
@@ -98,12 +104,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
     const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; igst: number; totalTax: number }> = {};
 
     returnItems.forEach(item => {
-      const calculated = EnterpriseCalculator.calculateReturnLine(item, {
-        include_gst: true,
-        quantity_field: 'return_quantity',
-        gst_type: gstType
-      });
-      const taxPercent = calculated.tax_percent || 0;
+      const taxPercent = Number(item.tax_percent || 0);
 
       if (!gstBreakup[taxPercent]) {
         gstBreakup[taxPercent] = {
@@ -115,14 +116,14 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
         };
       }
 
-      gstBreakup[taxPercent].taxableAmount += calculated.taxable_amount;
+      gstBreakup[taxPercent].taxableAmount += Number(item.taxable_amount || 0);
       if (isIGST) {
-        gstBreakup[taxPercent].igst += calculated.gst_amount;
+        gstBreakup[taxPercent].igst += Number(item.igst_amount || item.tax_amount || 0);
       } else {
-        gstBreakup[taxPercent].cgst += calculated.cgst_amount;
-        gstBreakup[taxPercent].sgst += calculated.sgst_amount;
+        gstBreakup[taxPercent].cgst += Number(item.cgst_amount || 0);
+        gstBreakup[taxPercent].sgst += Number(item.sgst_amount || 0);
       }
-      gstBreakup[taxPercent].totalTax += calculated.gst_amount;
+      gstBreakup[taxPercent].totalTax += Number(item.tax_amount || 0);
     });
 
     return gstBreakup;
@@ -320,13 +321,8 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const calculated = EnterpriseCalculator.calculateReturnLine(item, {
-                    include_gst: true,
-                    quantity_field: 'return_quantity',
-                    gst_type: gstType
-                  });
                   const price = item.unit_price || item.unit_price || item.unit_price || 0;
-                  const totalAmount = calculated.total_amount;
+                  const totalAmount = Number(item.total_amount || 0);
 
                   return (
                     <tr key={item.id} className="border-b border-gray-200">
@@ -339,7 +335,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                       </td>
                       <td className="py-3 px-2 text-sm text-center">{item.return_quantity}</td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(price)}</td>
-                      <td className="py-3 px-2 text-sm text-center">{calculated.tax_percent}%</td>
+                      <td className="py-3 px-2 text-sm text-center">{Number(item.tax_percent || 0)}%</td>
                       <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                     </tr>
                   );

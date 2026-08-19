@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { companyApi } from '../services/api';
-import type { CompanyContextInfo as CompanyInfo, BankAccount, BusinessSettings } from '../types/common/company.types';
+import type { CompanyContextInfo as CompanyInfo } from '../types/common/company.types';
+import { useAuth } from './AuthContext';
 
 interface CompanyContextValue {
     companyInfo: CompanyInfo | null;
@@ -9,7 +10,6 @@ interface CompanyContextValue {
     error: Error | null;
     updateCompanyInfo: (updates: Partial<CompanyInfo>) => Promise<{ success: boolean; data?: CompanyInfo; error?: Error }>;
     refreshCompanyData: () => Promise<void>;
-    getOrgId: () => string;
 }
 
 const CompanyContext = createContext<CompanyContextValue | null>(null);
@@ -27,8 +27,8 @@ interface CompanyProviderProps {
 }
 
 export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) => {
+    const { user } = useAuth();
     const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-    const [orgId, setOrgId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
 
@@ -74,12 +74,9 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
                 business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}'),
             };
 
-            const cachedOrgId = localStorage.getItem('orgId');
-
             // Set cached data immediately - this enables offline-first behavior
             if (cachedCompanyInfo.name) {
                 setCompanyInfo(cachedCompanyInfo);
-                setOrgId(cachedOrgId);
                 setLoading(false); // Unblock UI immediately with cached data
             }
 
@@ -209,18 +206,13 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
         }
     };
 
-    const getOrgId = (): string => {
-        return orgId || localStorage.getItem('orgId') || 'default-org-id';
-    };
-
     const value: CompanyContextValue = {
         companyInfo,
-        orgId,
+        orgId: user?.org_id || null,
         loading,
         error,
         updateCompanyInfo,
         refreshCompanyData: loadCompanyData,
-        getOrgId
     };
 
     return (

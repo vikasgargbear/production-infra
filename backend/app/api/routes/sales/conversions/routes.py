@@ -12,6 +12,7 @@ from decimal import Decimal
 from .....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from .....core.auth.org_context import OrgContext, get_org_context
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 from ....services.document_number_service import DocumentNumberService
 from ....services.sales.conversion.service import ConversionService
 
@@ -241,7 +242,7 @@ async def _create_invoice_from_challans(
     return {"success": True, "source_type": "challans", "source_ids": challan_ids,
             "source_numbers": [c["challan_number"] for c in challans],
             "target_type": "invoice", "target_id": invoice_id, "target_number": invoice_number,
-            "total_amount": float(final_amount), "message": f"Created invoice {invoice_number} from {len(challan_ids)} challan(s)"}
+            "total_amount": money_json(final_amount), "message": f"Created invoice {invoice_number} from {len(challan_ids)} challan(s)"}
 
 
 @router.get("/eligible-challans")

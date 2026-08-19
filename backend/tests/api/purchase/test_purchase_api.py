@@ -48,6 +48,20 @@ def request_get(endpoint: str, params: dict = None):
         print(f"   Error: {e}")
         return None
 
+
+def request_post(endpoint: str, data: dict = None):
+    """Make POST request with error handling"""
+    try:
+        return requests.post(
+            f"{API_BASE_URL}/api{endpoint}",
+            headers=HEADERS,
+            json=data or {},
+            timeout=TIMEOUT,
+        )
+    except Exception as e:
+        print(f"   Error: {e}")
+        return None
+
 # ============================================
 # PURCHASES (Purchase Orders)
 # ============================================
@@ -147,10 +161,10 @@ def test_grn_list():
     return finish_test(passed)
 
 def test_grn_generate_number():
-    """Test GET /api/grn/generate-number - get next GRN number"""
-    response = request_get("/grn/generate-number")
+    """Test POST /api/grn/generate-number - reserve next GRN number"""
+    response = request_post("/grn/generate-number")
     passed = response and response.status_code in [200, 401, 403]  # Auth may be required
-    log_result("GET /api/grn/generate-number", passed, response)
+    log_result("POST /api/grn/generate-number", passed, response)
     return finish_test(passed)
 
 def test_grn_by_id():

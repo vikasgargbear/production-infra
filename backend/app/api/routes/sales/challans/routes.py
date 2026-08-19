@@ -14,6 +14,7 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from ....services.sales.challan.service import ChallanService
 from ....services.document_number_service import DocumentNumberService
+from ....services.compliance.gst_service import GSTService
 from .....core.utils.constants import ProductDefaults
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,19 @@ class ChallanCreationRequest(BaseModel):
     items: List[ChallanItemRequest]
 
 
+class ChallanCreationResponse(BaseModel):
+    challan_id: int
+    challan_number: str
+    customer_name: Optional[str] = None
+    status: str
+    total_amount: Decimal
+    taxable_amount: Decimal
+    gst_amount: Decimal
+    freight_charges: Decimal
+    items: int
+    is_independent: bool
+
+
 class ChallanTrackingRequest(BaseModel):
     location: str
     status: str
@@ -71,7 +85,7 @@ class ChallanTrackingRequest(BaseModel):
     longitude: Optional[float] = None
 
 
-@router.post("/", response_model=Dict[str, Any])
+@router.post("/", response_model=ChallanCreationResponse)
 @with_tenant_context
 async def create_delivery_challan(
     request: ChallanCreationRequest,
@@ -85,9 +99,6 @@ async def create_delivery_challan(
         created_by = context.user_id
         order = None
         customer_name = None
-        taxable_amount = Decimal("0")
-        gst_amount = Decimal("0")
-        total_amount = Decimal("0")
         freight = Decimal(str(request.freight_charges)) if request.freight_charges else Decimal("0")
         branch_id = ChallanService.get_branch_id(db, org_id)
         
@@ -101,18 +112,25 @@ async def create_delivery_challan(
         else:
             customer_name = ChallanService.get_customer_name(db, request.customer_id)
         
-        if not request.order_id:
-            for item in request.items:
-                item_total = Decimal(str(item.unit_price)) * Decimal(str(item.dispatched_quantity))
-                taxable_amount += item_total
-                gst_rate = Decimal(str(item.gst_percent)) if item.gst_percent else Decimal("0")
-                gst_amount += item_total * gst_rate / 100
-            total_amount = taxable_amount + gst_amount + freight
-        else:
-            if order:
-                total_amount = Decimal(str(order.get("final_amount", 0))) + freight
-                taxable_amount = (Decimal(str(order.get("final_amount", 0))) - freight) / Decimal("1.12")
-                gst_amount = Decimal(str(order.get("final_amount", 0))) - freight - taxable_amount
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=org_id,
+            branch_id=branch_id,
+            customer_id=request.customer_id,
+        )
+        calculation = ChallanService.calculate_challan_totals(
+            items=[{
+                "quantity": item.dispatched_quantity,
+                "unit_price": item.unit_price,
+                "discount_percent": 0,
+                "gst_percent": item.gst_percent or 0,
+            } for item in request.items],
+            gst_type=gst_type,
+            freight_charges=freight,
+        )
+        taxable_amount = Decimal(str(calculation["taxable_amount"]))
+        gst_amount = Decimal(str(calculation["total_tax_amount"]))
+        total_amount = Decimal(str(calculation["final_amount"]))
         
         challan_number = DocumentNumberService.generate_number(db, "delivery_challan", org_id)
         
@@ -161,8 +179,8 @@ async def create_delivery_challan(
         db.commit()
         
         return {"challan_id": challan_id, "challan_number": challan_number, "customer_name": customer_name,
-                "status": "draft", "total_amount": float(total_amount), "taxable_amount": float(taxable_amount),
-                "gst_amount": float(gst_amount), "freight_charges": float(freight), "items": len(request.items),
+                "status": "draft", "total_amount": total_amount, "taxable_amount": taxable_amount,
+                "gst_amount": gst_amount, "freight_charges": freight, "items": len(request.items),
                 "is_independent": request.order_id is None}
     except HTTPException:
         db.rollback()

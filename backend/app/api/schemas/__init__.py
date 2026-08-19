@@ -40,7 +40,7 @@ from .sales.returns import (
     SalesReturnItem, SalesReturnCreate, SalesReturnResponse
 )
 from .sales.billing import (
-    InvoiceStatus, PaymentMode, GSTType,
+    InvoiceStatus, PaymentMode, BillingGSTCode,
     InvoiceCreate, InvoiceResponse, InvoiceSummary,
     PaymentCreate, PaymentResponse as InvoicePaymentResponse,
     GeneralPaymentCreate, InvoicePaymentCreate
@@ -70,7 +70,7 @@ from .finance.finance import (
 
 # Inventory schemas
 from .inventory.inventory import (
-    MovementType, MovementDirection, AdjustmentType,
+    MovementType, MovementDirection, InventoryAdjustmentReason,
     BatchCreate, BatchUpdate, BatchResponse, BatchSummary,
     StockMovementCreate, StockMovementResponse,
     StockAdjustment, StockTransfer,
@@ -82,7 +82,6 @@ from .inventory.inventory import (
 from .auth.auth_schemas import (
     UserRole, SessionStatus,
     LoginRequest, LoginResponse, UserSummary,
-    RefreshTokenRequest, RefreshTokenResponse,
     PasswordChangeRequest, PasswordResetRequest,
     AuthError, SessionInfo, SessionListResponse,
     UserCreate, UserUpdate, UserResponse

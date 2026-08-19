@@ -1,0 +1,67 @@
+schema_version: 1
+snapshot_date: "2026-08-19"
+policy:
+  online_authority: backend application service
+  offline_fallback: EnterpriseCalculator through a named calculation adapter
+  online_failure_fallback_allowed: false
+
+migrated:
+  invoice:
+    online_endpoint: /api/calculations/invoice
+    adapter: frontend/src/services/calculations/invoiceCalculationService.ts
+    offline_fallback: EnterpriseCalculator.calculateInvoice
+  sales_order:
+    online_endpoint: /api/calculations/sales-order
+    commit_service: OrderService.calculate_order_totals
+    adapter: frontend/src/services/calculations/salesOrderCalculationService.ts
+    offline_fallback: EnterpriseCalculator.calculateSalesOrder
+    direct_ui_calculator_calls: 0
+  purchase_order_preview:
+    online_endpoint: /api/calculations/purchase-order
+    adapter: frontend/src/services/calculations/purchaseOrderCalculationService.ts
+    offline_fallback: EnterpriseCalculator.calculateTotals
+    direct_ui_calculator_calls: 0
+    persistence_status: blocked_pending_schema_baseline
+    blocked_features:
+      - header_discount_tax_treatment
+      - freight_persistence
+  purchase_entry:
+    online_endpoint: /api/calculations/purchase-order
+    adapter: frontend/src/services/calculations/purchaseOrderCalculationService.ts
+    direct_ui_calculator_calls: 0
+    persistence_status: blocked_pending_schema_baseline
+  return_workflows:
+    online_endpoint: /api/calculations/return
+    commit_service: ReturnService.calculate_return_totals
+    adapter: frontend/src/services/calculations/returnCalculationService.ts
+    offline_fallback:
+      - EnterpriseCalculator.calculateSalesReturn
+      - EnterpriseCalculator.calculatePurchaseReturn
+    migrated_flows:
+      - frontend/src/components/returns/SalesReturnFlow.tsx
+      - frontend/src/components/returns/PurchaseReturnFlow.tsx
+    corrected_commit_rule: sales withhold_gst now disables returned GST
+  notes:
+    online_endpoint: /api/calculations/note
+    commit_service: CreditNoteService.calculate_note_totals
+    adapter: frontend/src/services/calculations/noteCalculationService.ts
+    offline_fallback: EnterpriseCalculator.calculateNoteTotals
+    direct_ui_calculator_calls: 0
+    duplicate_legacy_workflow_removed: true
+  delivery_challan:
+    online_endpoint: /api/calculations/challan
+    commit_service: ChallanService.calculate_challan_totals
+    adapter: frontend/src/services/calculations/challanCalculationService.ts
+    offline_fallback: EnterpriseCalculator.calculateChallan
+    hardcoded_order_gst_removed: true
+    direct_ui_calculator_calls: 0
+  calculated_displays:
+    direct_ui_calculator_calls: 0
+    authoritative_line_values_consumed: true
+
+remaining: {}
+
+release_blocked_boundaries:
+  - live product/HSN GST rate authority and override policy
+  - purchase and GRN persistence schema reconciliation
+  - live Supabase calculation and inventory transaction matrix

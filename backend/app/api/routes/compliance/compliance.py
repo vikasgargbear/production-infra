@@ -14,6 +14,11 @@ from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_contex
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ....core.auth.jwt_auth import get_org_id_string
+from ...schemas.compliance.mutations import (
+    ComplianceAuditMutationResponse,
+    DrugLicenseMutationResponse,
+    InspectorVisitMutationResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +71,7 @@ class ComplianceDocument(BaseModel):
     reminder_days: int = 30
     tags: Optional[List[str]] = []
 
-@router.post("/drug-licenses", response_model=dict)
+@router.post("/drug-licenses", response_model=DrugLicenseMutationResponse)
 @with_tenant_context
 async def create_drug_license(
     license: DrugLicenseCreate,
@@ -291,7 +296,7 @@ async def get_expiring_licenses(
         logger.error(f"Error fetching expiring licenses: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch expiring licenses")
 
-@router.post("/audits", response_model=dict)
+@router.post("/audits", response_model=ComplianceAuditMutationResponse)
 @with_tenant_context
 async def record_compliance_audit(
     audit: ComplianceAudit,
@@ -397,7 +402,7 @@ async def record_compliance_audit(
         logger.error(f"Error recording audit: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record audit: {str(e)}")
 
-@router.post("/inspector-visits", response_model=dict)
+@router.post("/inspector-visits", response_model=InspectorVisitMutationResponse)
 @with_tenant_context
 async def record_inspector_visit(
     visit: InspectorVisit,

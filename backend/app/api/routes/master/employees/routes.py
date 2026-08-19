@@ -15,6 +15,12 @@ from .....core.security.permissions import PermissionChecker
 
 # Service layer
 from ....services.master.employee.service import EmployeeService
+from ....services.document_number_service import DocumentNumberService
+from ....schemas.master.mutations import (
+    EmployeeCreateResponse,
+    EmployeeUpdateResponse,
+    MasterDeleteResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -78,7 +84,7 @@ async def get_employee(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("", response_model=Dict[str, Any])
+@router.post("", response_model=EmployeeCreateResponse)
 @with_tenant_context
 async def create_employee(
     employee_data: Dict[str, Any], 
@@ -93,8 +99,7 @@ async def create_employee(
         # Generate employee code if not provided
         employee_code = employee_data.get("employee_code")
         if not employee_code:
-            count = EmployeeService.count_employees(db, org_id)
-            employee_code = f"EMP{count + 1:04d}"
+            employee_code = DocumentNumberService.generate_number(db, "employee", org_id)
         
         # Extract name parts
         employee_name = employee_data.get("employee_name", "")
@@ -150,7 +155,7 @@ async def create_employee(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{employee_id}", response_model=Dict[str, Any])
+@router.put("/{employee_id}", response_model=EmployeeUpdateResponse)
 @with_tenant_context
 async def update_employee(
     employee_id: int,
@@ -270,7 +275,7 @@ async def update_employee(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{employee_id}", response_model=Dict[str, Any])
+@router.delete("/{employee_id}", response_model=MasterDeleteResponse)
 @with_tenant_context
 async def delete_employee(
     employee_id: int,

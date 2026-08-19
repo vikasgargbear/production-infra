@@ -1,12 +1,11 @@
 """
 Enterprise Authentication Service - Business Logic Layer
-Handles authentication workflows with offline support
+Provides ERP authorization claims after identity verification.
 """
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 from datetime import timedelta
 import logging
-import hashlib
 
 from ....core.auth.jwt_auth import verify_password, create_access_token
 from ....repositories.user_repository import UserRepository
@@ -22,14 +21,12 @@ logger = logging.getLogger(__name__)
 
 class AuthService:
     """
-    Core authentication service
-    Supports both online and offline authentication
+    Legacy password verification and shared ERP claim preparation.
     """
     
-    # Token expiry settings (optimized for India's connectivity)
+    # Legacy non-production password endpoint expiry settings.
     ACCESS_TOKEN_EXPIRY_SHORT = timedelta(hours=1)      # Standard: 1 hour
     ACCESS_TOKEN_EXPIRY_REMEMBER = timedelta(days=7)     # Remember me: 7 days
-    REFRESH_TOKEN_EXPIRY = timedelta(days=30)            # Refresh: 30 days
     
     @staticmethod
     async def authenticate(
@@ -48,7 +45,7 @@ class AuthService:
             remember_me: If True, issue longer-lived tokens
             
         Returns:
-            Dict with access_token, refresh_token, and user info
+            Dict with an access token and user info
             
         Raises:
             InvalidCredentialsError: Wrong email/password
@@ -104,17 +101,6 @@ class AuthService:
             expires_delta=expiry
         )
         
-        # Create refresh token (always 30 days)
-        refresh_token_data = {
-            "user_id": user_data["user_id"],
-            "org_id": str(user_data["org_id"]),
-            "type": "refresh"
-        }
-        refresh_token = create_access_token(
-            data=refresh_token_data,
-            expires_delta=AuthService.REFRESH_TOKEN_EXPIRY
-        )
-        
         # Step 7: Update last login (non-blocking)
         UserRepository.update_last_login(user_data["user_id"], db)
         
@@ -123,7 +109,6 @@ class AuthService:
         
         return {
             "access_token": access_token,
-            "refresh_token": refresh_token,
             "token_type": "bearer",
             "expires_in": int(expiry.total_seconds()),
             "user": {
@@ -140,7 +125,6 @@ class AuthService:
                 "permissions": user_data.get("permissions", {})
             }
         }
-    
     @staticmethod
     def _prepare_token_data(user_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -179,18 +163,3 @@ class AuthService:
             "is_admin": user_data.get("is_admin", False),
             "full_name": user_data.get("full_name")
         }
-    
-    @staticmethod
-    def create_offline_auth_hash(email: str, password: str, user_data: Dict) -> str:
-        """
-        Create a hash for offline authentication
-        Frontend can store this hash in IndexedDB for offline mode
-        
-        Returns: SHA256 hash of email+password+salt
-        """
-        # Create a deterministic hash for offline verification
-        # user_data might have "id" or "user_id" depending on source
-        user_id = user_data.get("user_id") or user_data.get("id")
-        salt = str(user_id) + str(user_data["org_id"])
-        combined = f"{email}:{password}:{salt}"
-        return hashlib.sha256(combined.encode()).hexdigest()

@@ -9,24 +9,15 @@ from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
+from ....core.utils.constants import SupplierInvoiceStatus
+
 
 # =============================================================================
 # ENUMS
 # =============================================================================
 
-class SupplierInvoiceStatus(str, Enum):
-    """Supplier invoice status"""
-    DRAFT = "draft"
-    PENDING_VERIFICATION = "pending_verification"
-    VERIFIED = "verified"
-    DISPUTED = "disputed"
-    PAID = "paid"
-    PARTIALLY_PAID = "partially_paid"
-    CANCELLED = "cancelled"
-
-
-class PaymentStatus(str, Enum):
-    """Payment status"""
+class SupplierInvoicePaymentStatus(str, Enum):
+    """Payment status values exposed by supplier invoice APIs."""
     PENDING = "pending"
     OVERDUE = "overdue"
     PAID = "paid"
@@ -142,7 +133,7 @@ class SupplierInvoiceResponse(SupplierInvoiceBase):
     invoice_id: int
     org_id: UUID
     invoice_status: SupplierInvoiceStatus = SupplierInvoiceStatus.DRAFT
-    payment_status: PaymentStatus = PaymentStatus.PENDING
+    payment_status: SupplierInvoicePaymentStatus = SupplierInvoicePaymentStatus.PENDING
     
     grn_number: Optional[str] = None
     po_number: Optional[str] = None
@@ -185,7 +176,7 @@ class SupplierInvoiceSummary(BaseModel):
     total_amount: Decimal
     balance_amount: Decimal
     invoice_status: SupplierInvoiceStatus
-    payment_status: PaymentStatus
+    payment_status: SupplierInvoicePaymentStatus
     due_date: Optional[date] = None
     days_overdue: int = 0
 
@@ -206,7 +197,7 @@ class SupplierInvoiceFilter(BaseModel):
     
     supplier_id: Optional[int] = None
     status: Optional[SupplierInvoiceStatus] = None
-    payment_status: Optional[PaymentStatus] = None
+    payment_status: Optional[SupplierInvoicePaymentStatus] = None
     date_from: Optional[date] = None
     date_to: Optional[date] = None
     min_amount: Optional[Decimal] = Field(None, ge=0)

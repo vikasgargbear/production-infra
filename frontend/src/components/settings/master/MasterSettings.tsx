@@ -8,6 +8,7 @@ import {
   Save,
   RefreshCw
 } from 'lucide-react';
+import apiClient from '../../../services/api/apiClient';
 
 // Simple Card components (inline implementation since UI components don't exist)
 const Card: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
@@ -195,17 +196,8 @@ const MasterSettings = () => {
   const fetchFeatures = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/settings/features', {
-        headers: {
-          'X-Org-ID': localStorage.getItem('orgId') || '',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setFeatures(data.features || {});
-      }
+      const response = await apiClient.get('/settings/features');
+      setFeatures(response.data.features || {});
     } catch (error) {
       console.error('Error fetching features:', error);
       setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -233,15 +225,7 @@ const MasterSettings = () => {
       setMessage(null);
 
       // Save to org settings (UI preferences)
-      const settingsResponse = await fetch('/api/settings/features', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Org-ID': localStorage.getItem('orgId') || '',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ features })
-      });
+      await apiClient.put('/settings/features', { features });
 
       // Also update database feature flags for system-level features
       const systemFeatures = {};
@@ -249,23 +233,9 @@ const MasterSettings = () => {
         systemFeatures[key] = features[key] || false;
       });
 
-      const flagsResponse = await fetch('/api/settings/features/database-flags', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Org-ID': localStorage.getItem('orgId') || '',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(systemFeatures)
-      });
-
-      if (settingsResponse.ok && flagsResponse.ok) {
-        setMessage({ type: 'success', text: 'Settings saved successfully!' });
-        // Refresh to get confirmed state from backend
-        await fetchFeatures();
-      } else {
-        throw new Error('Failed to save some settings');
-      }
+      await apiClient.post('/settings/features/database-flags', systemFeatures);
+      setMessage({ type: 'success', text: 'Settings saved successfully!' });
+      await fetchFeatures();
     } catch (error) {
       console.error('Error saving settings:', error);
       setMessage({ type: 'error', text: 'Failed to save settings' });

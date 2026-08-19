@@ -2,8 +2,8 @@
 CREATE TABLE IF NOT EXISTS public.document_number_sequences (
     sequence_id SERIAL PRIMARY KEY,
     document_type VARCHAR(50) NOT NULL,
-    org_id UUID,
-    year_prefix VARCHAR(4) NOT NULL,
+    org_id UUID NOT NULL,
+    year_prefix VARCHAR(8) NOT NULL,
     last_sequence_number BIGINT NOT NULL DEFAULT 10000000,
     last_generated_number VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

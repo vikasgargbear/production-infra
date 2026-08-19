@@ -3,16 +3,15 @@
  * Manages state and logic for sales order creation flow
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { apiClient, usersApi, authApi } from '../../../../services/api';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
-import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
+import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
-import type { Order, OrderItem, Address, CalculationResult, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
+import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -162,7 +161,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [sameAsBilling, setSameAsBilling] = useState(true);
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<BankAccount | null>(null);
@@ -189,6 +187,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [showProductModal, setShowProductModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [newProductName, setNewProductName] = useState('');
+    const calculationRequestRef = useRef(0);
 
     // Load employees
     useEffect(() => {
@@ -239,6 +238,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
     // Recalculate totals
     const recalculateTotals = useCallback(async (items: OrderItem[]): Promise<void> => {
+        const requestId = ++calculationRequestRef.current;
         if (!items || items.length === 0) {
             setOrder(prev => ({
                 ...prev,
@@ -252,8 +252,18 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         }
 
         try {
-            const orderData = { ...order, items, customer_id: selectedCustomer?.customer_id };
-            const result = EnterpriseCalculator.calculateSalesOrder(orderData);
+            const orderData = {
+                ...order,
+                items,
+                customer_id: Number(
+                    selectedCustomer?.customer_id || selectedCustomer?.id || order.customer_id
+                )
+            };
+            const result = await calculateSalesOrderPreview(orderData, isOnline);
+
+            if (requestId !== calculationRequestRef.current) {
+                return;
+            }
 
             if (result && result.totals) {
                 const formattedTotals = result.totals;
@@ -289,10 +299,13 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 }));
             }
         } catch (error) {
+            if (requestId !== calculationRequestRef.current) {
+                return;
+            }
             console.error('Calculation error:', error);
             toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [order, selectedCustomer]);
+    }, [isOnline, order, selectedCustomer]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -411,13 +424,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             const unitPrice = product.sale_price || product.mrp || 0;
             const discountPercent = 0;
             const gstPercent = product.gst_percent || 0;
-            const calculated = EnterpriseCalculator.calculateItem({
-                quantity,
-                unit_price: unitPrice,
-                discount_percent: discountPercent,
-                gst_percent: gstPercent
-            });
-
             const newItem: OrderItem = {
                 id: Date.now(),
                 product_id: product.product_id,
@@ -431,11 +437,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 mrp: product.mrp || 0,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
-                discount_amount: calculated.discount_amount,
+                discount_amount: 0,
                 gst_percent: gstPercent,
-                tax_amount: calculated.gst_amount,
-                subtotal: calculated.subtotal,
-                total: calculated.total_amount,
+                tax_amount: 0,
+                subtotal: 0,
+                total: 0,
                 manufacturer: product.manufacturer,
                 category: product.category
             };
@@ -494,14 +500,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         const updatedItems = order.items.map((item, i) => {
             if (i === index) {
                 const updatedItem = { ...item, [field]: value };
-
-                if (field === 'quantity' || field === 'unit_price' || field === 'discount_percent' || field === 'gst_percent') {
-                    const calculated = EnterpriseCalculator.calculateItem(updatedItem);
-                    updatedItem.subtotal = calculated.subtotal;
-                    updatedItem.discount_amount = calculated.discount_amount;
-                    updatedItem.tax_amount = calculated.gst_amount;
-                    updatedItem.total = calculated.total_amount;
-                }
 
                 return updatedItem;
             }
@@ -582,7 +580,7 @@ Expected Delivery: ${order.expected_delivery_date}
         sameAsBilling,
         setSameAsBilling,
         employees,
-        saving: offlineSaving || saving,
+        saving: offlineSaving,
         message,
         messageType,
         selectedBankAccount,
