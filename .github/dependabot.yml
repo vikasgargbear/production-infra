@@ -1,0 +1,36 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: build(deps)
+      prefix-development: build(deps-dev)
+      include: scope
+    groups:
+      frontend-runtime-security:
+        applies-to: security-updates
+        dependency-type: production
+      frontend-toolchain-security:
+        applies-to: security-updates
+        dependency-type: development
+      frontend-runtime-minor-patch:
+        applies-to: version-updates
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      frontend-toolchain-minor-patch:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
