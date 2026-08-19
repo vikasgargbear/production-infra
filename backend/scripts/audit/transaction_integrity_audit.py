@@ -80,16 +80,30 @@ def collect_issues() -> List[IntegrityIssue]:
                 "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED",
                 "payment idempotency fails closed on internal_notes, but the live schema is not baselined",
             ))
-    non_create_payment_mutations = (
-        "async def cancel_payment",
-        "async def create_bank_reconciliation",
-        "async def allocate_payment",
+    allocation_routes = _read("backend/app/api/routes/finance/allocation/routes.py")
+    mutation_contracts = (
+        (payment_routes, "cancel_payment", "payment.cancel"),
+        (payment_routes, "create_bank_reconciliation", "payment.reconcile"),
+        (payment_routes, "allocate_payment", "payment.allocate"),
+        (allocation_routes, "allocate_payment", "payment.allocate"),
+        (allocation_routes, "allocate_payment_bulk", "payment.allocate"),
+        (allocation_routes, "auto_allocate_payment", "payment.allocate"),
+        (allocation_routes, "delete_allocation", "payment.allocate"),
     )
+    def mutation_is_guarded(source: str, method: str, operation: str) -> bool:
+        body = source.split(f"async def {method}", 1)[1].split("@router.", 1)[0]
+        durable_guard = (
+            f'operation="{operation}"' in body
+            or (
+                "_require_allocation_idempotency(idempotency_key)" in body
+                and f'operation="{operation}"' in source
+            )
+        )
+        return 'alias="X-Idempotency-Key"' in body and durable_guard
+
     if any(
-        'alias="X-Idempotency-Key"' not in payment_routes.split(method, 1)[1].split(
-            "@router.", 1
-        )[0]
-        for method in non_create_payment_mutations
+        not mutation_is_guarded(source, method, operation)
+        for source, method, operation in mutation_contracts
     ):
         issues.append(IntegrityIssue(
             "PAYMENT_MUTATION_IDEMPOTENCY_INCOMPLETE",
@@ -158,7 +172,6 @@ def collect_issues() -> List[IntegrityIssue]:
             "finance services require financial.allocations, but bootstrap DDL defines payment_allocations",
         ))
     allocation_service = _read("backend/app/api/services/finance/allocation/service.py")
-    allocation_routes = _read("backend/app/api/routes/finance/allocation/routes.py")
     unscoped_allocation_reads = (
         "def get_payment_allocations" in allocation_service
         and "FROM financial.allocations\n            WHERE payment_id = :payment_id" in allocation_service
@@ -178,17 +191,41 @@ def collect_issues() -> List[IntegrityIssue]:
             "ALLOCATION_MUTATION_NOT_COMMITTED",
             "manual allocation returns success but the request closes without committing",
         ))
-    sql_sources = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore")
-        for path in (REPOSITORY_ROOT / "database").rglob("*.sql")
+    projection_reconciliation = all(
+        "AllocationService.reconcile_allocation_projections" in method
+        for method in (
+            allocation_service.split("def create_allocation", 1)[1].split(
+                "def get_payment_status", 1
+            )[0],
+            allocation_service.split("def delete_allocation", 1)[1].split(
+                "def get_unallocated_payments", 1
+            )[0],
+            payment_service.split("def allocate_payment_to_invoices", 1)[1].split(
+                "def process_bank_reconciliation", 1
+            )[0],
+        )
     )
-    if (
-        "trg_update_reference_paid_amount" in application_finance
-        and "CREATE TRIGGER trg_update_reference_paid_amount" not in sql_sources
+    if not projection_reconciliation:
+        issues.append(IntegrityIssue(
+            "ALLOCATION_PROJECTION_RECONCILIATION_MISSING",
+            "allocation writes do not explicitly reconcile payment, invoice, and outstanding projections",
+        ))
+
+    reconciliation_method = payment_service.split(
+        "def process_bank_reconciliation", 1
+    )[1].split("def create_general_payment", 1)[0]
+    if all(token in reconciliation_method for token in (
+        "financial.bank_reconciliations",
+        "bank_account",
+        "opening_balance",
+        "financial.unmatched_transactions",
+    )) and (
+        "bank_account TEXT" not in financial_tables
+        or "CREATE TABLE financial.unmatched_transactions" not in financial_tables
     ):
         issues.append(IntegrityIssue(
-            "ALLOCATION_TRIGGER_NOT_REPRODUCIBLE",
-            "application correctness depends on trg_update_reference_paid_amount, but no checked-in SQL defines it",
+            "BANK_RECONCILIATION_SCHEMA_UNBASELINED",
+            "bank reconciliation service targets columns and tables absent from checked-in authority",
         ))
 
     component_calculator_imports = []

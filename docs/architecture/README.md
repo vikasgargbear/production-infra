@@ -32,6 +32,9 @@ that the target state is already implemented.
 - [`spreadsheet-dependency-inventory.json`](spreadsheet-dependency-inventory.json):
   browser spreadsheet input/output contracts, security boundary, and pinned
   SheetJS distribution evidence.
+- [`query-schema-conflicts.json`](query-schema-conflicts.json): exact source
+  locations and hashes for application queries that require live-catalog
+  reconciliation before any column rename.
 - [`document-number-data-model-inventory.yaml`](document-number-data-model-inventory.yaml):
   machine-readable number ownership, canonical data-model mappings, retired
   duplication, and residual live-schema gates.
@@ -56,8 +59,9 @@ decision.
 - The unregistered RLS middleware and its unsigned organization-header fallback
   have been retired. Live database RLS coverage is still unverified until a
   reviewed Supabase baseline is available.
-- Payment create paths have a temporary fail-closed idempotency proof backend;
-  the dedicated database store and remaining payment mutations are still gated.
+- Payment create paths have a temporary fail-closed idempotency proof backend.
+  Cancel, reconciliation, and allocation require idempotency keys and return a
+  service-unavailable response before SQL until the dedicated store is implemented.
 
 These observations make a direct MCP-to-database adapter, direct OpenAPI import,
 or broad exposure of existing routes unacceptable for production.

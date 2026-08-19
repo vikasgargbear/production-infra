@@ -14,6 +14,11 @@ from uuid import UUID
 
 
 MARKER_VERSION = "erp-idempotency:v1"
+DEDICATED_PAYMENT_STORE_OPERATIONS = frozenset({
+    "payment.cancel",
+    "payment.reconcile",
+    "payment.allocate",
+})
 
 
 class IdempotencyConflictError(ValueError):
@@ -22,6 +27,20 @@ class IdempotencyConflictError(ValueError):
 
 class IdempotencyStateError(RuntimeError):
     """A persisted idempotency marker is incomplete or malformed."""
+
+
+def require_dedicated_payment_idempotency_store(
+    *, operation: str, key: str
+) -> None:
+    """Fail closed until the reviewed payment replay store is available."""
+    if operation not in DEDICATED_PAYMENT_STORE_OPERATIONS:
+        raise ValueError("Unsupported dedicated payment idempotency operation")
+    if not isinstance(key, str) or key != key.strip() or not 8 <= len(key) <= 255:
+        raise ValueError("Idempotency key must be 8-255 characters without edge whitespace")
+    raise IdempotencyStateError(
+        f"{operation} requires the dedicated payment idempotency store; "
+        "this mutation is disabled until the live schema is baselined"
+    )
 
 
 def _json_value(value: Any) -> Any:

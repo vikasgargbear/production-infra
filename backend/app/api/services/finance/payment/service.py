@@ -13,6 +13,7 @@ import logging
 from uuid import UUID
 
 from ...document_number_service import DocumentNumberService
+from ..allocation.service import AllocationService
 from .....core.idempotency import (
     IdempotencyClaim,
     IdempotencyStateError,
@@ -239,9 +240,7 @@ class PaymentService:
 
         new_credit_amount = max(Decimal("0"), total_amount - new_paid_amount)
 
-        # Create allocation row (links payment to invoice).
-        # DB trigger trg_update_reference_paid_amount auto-updates
-        # sales.invoices (paid_amount, credit_amount, payment_status).
+        # Create the allocation row linking the payment to the invoice.
         created_by = payment_data.get("created_by")
         if not created_by:
             created_by = db.execute(text(
@@ -972,7 +971,8 @@ class PaymentService:
         """
         # Get payment details
         payment = db.execute(text("""
-            SELECT payment_id, payment_amount, party_id, party_type, payment_type
+            SELECT payment_id, payment_amount, allocated_amount, party_id,
+                   party_type, payment_type
             FROM financial.payments
             WHERE payment_id = :payment_id
               AND org_id = :org_id
@@ -983,11 +983,15 @@ class PaymentService:
         if not payment:
             raise ValueError("Payment not found or not in a valid status for allocation")
         
-        total_allocated = 0
+        total_allocated = Decimal("0")
+        payment_available = (
+            Decimal(str(payment.payment_amount))
+            - Decimal(str(payment.allocated_amount or 0))
+        )
 
         for allocation in allocations:
             invoice_id = allocation.get("invoice_id")
-            allocated_amount = allocation.get("amount", 0)
+            allocated_amount = Decimal(str(allocation.get("amount", 0)))
 
             if allocated_amount <= 0:
                 continue
@@ -1006,20 +1010,22 @@ class PaymentService:
             if str(payment.party_type).lower() == "customer" and payment.party_id != invoice.customer_id:
                 raise ValueError(f"Invoice {invoice_id} belongs to a different customer")
 
-            balance = invoice.final_amount - (invoice.paid_amount or 0)
-            actual_allocation = min(allocated_amount, balance)
+            balance = (
+                Decimal(str(invoice.final_amount))
+                - Decimal(str(invoice.paid_amount or 0))
+            )
+            actual_allocation = min(allocated_amount, balance, payment_available)
 
             if actual_allocation > 0:
-                # Create allocation record in financial.allocations (base table)
-                # DB trigger trg_update_reference_paid_amount handles invoice + outstanding updates
+                # Create the allocation record, then rebuild its projections explicitly.
                 db.execute(text("""
-                    INSERT INTO financial.allocations (
-                        payment_id, reference_type, reference_id, reference_number,
-                        allocated_amount, source_type, created_by
-                    ) VALUES (
-                        :payment_id, 'INVOICE', :reference_id, :reference_number,
-                        :allocated_amount, 'payment', :created_by
-                    )
+                INSERT INTO financial.allocations (
+                    payment_id, reference_type, reference_id, reference_number,
+                    allocated_amount, allocation_status, source_type, created_by
+                ) VALUES (
+                    :payment_id, 'INVOICE', :reference_id, :reference_number,
+                    :allocated_amount, 'active', 'payment', :created_by
+                )
                 """), {
                     "payment_id": payment_id,
                     "reference_id": invoice_id,
@@ -1028,23 +1034,23 @@ class PaymentService:
                     "created_by": user_id
                 })
 
+                AllocationService.reconcile_allocation_projections(
+                    db, org_id, payment_id, invoice_id
+                )
                 total_allocated += actual_allocation
+                payment_available -= actual_allocation
         
-        # Update payment with allocated amount
-        db.execute(text("""
-            UPDATE financial.payments
-            SET allocated_amount = :allocated_amount,
-                unallocated_amount = payment_amount - :allocated_amount
+        payment_balance = db.execute(text("""
+            SELECT unallocated_amount
+            FROM financial.payments
             WHERE payment_id = :payment_id
-        """), {
-            "allocated_amount": total_allocated,
-            "payment_id": payment_id
-        })
+              AND org_id = :org_id
+        """), {"payment_id": payment_id, "org_id": org_id}).first()
 
         return {
             "payment_id": payment_id,
             "total_allocated": total_allocated,
-            "unallocated_amount": float(payment.payment_amount) - total_allocated,
+            "unallocated_amount": payment_balance.unallocated_amount,
             "status": "success"
         }
     

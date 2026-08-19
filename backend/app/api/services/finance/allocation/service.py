@@ -13,6 +13,94 @@ logger = logging.getLogger(__name__)
 
 class AllocationService:
     """Service class for Payment Allocation operations"""
+
+    @staticmethod
+    def reconcile_allocation_projections(
+        db: Session,
+        org_id: str,
+        payment_id: int,
+        invoice_id: int,
+    ) -> None:
+        """Rebuild payment and invoice balances from active allocation rows."""
+        payment_result = db.execute(text("""
+            WITH active_allocations AS (
+                SELECT COALESCE(SUM(a.allocated_amount), 0) AS allocated_amount
+                FROM financial.allocations a
+                JOIN financial.payments owner ON owner.payment_id = a.payment_id
+                WHERE a.payment_id = :payment_id
+                  AND owner.org_id = :org_id
+                  AND a.source_type = 'payment'
+                  AND a.allocation_status = 'active'
+            )
+            UPDATE financial.payments payment
+            SET allocated_amount = active.allocated_amount,
+                unallocated_amount = GREATEST(0, payment.payment_amount - active.allocated_amount),
+                allocation_status = CASE
+                    WHEN active.allocated_amount = 0 THEN 'unallocated'
+                    WHEN active.allocated_amount >= payment.payment_amount THEN 'full'
+                    ELSE 'partial'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            FROM active_allocations active
+            WHERE payment.payment_id = :payment_id
+              AND payment.org_id = :org_id
+        """), {"payment_id": payment_id, "org_id": org_id})
+        if payment_result.rowcount != 1:
+            raise ValueError("Payment not found or access denied")
+
+        invoice_result = db.execute(text("""
+            WITH active_allocations AS (
+                SELECT COALESCE(SUM(a.allocated_amount), 0) AS allocated_amount
+                FROM financial.allocations a
+                JOIN financial.payments payment ON payment.payment_id = a.payment_id
+                WHERE UPPER(a.reference_type) = 'INVOICE'
+                  AND a.reference_id = :invoice_id
+                  AND a.source_type = 'payment'
+                  AND a.allocation_status = 'active'
+                  AND payment.org_id = :org_id
+            )
+            UPDATE sales.invoices invoice
+            SET paid_amount = LEAST(invoice.final_amount, active.allocated_amount),
+                payment_status = CASE
+                    WHEN active.allocated_amount <= 0 THEN 'pending'
+                    WHEN active.allocated_amount < invoice.final_amount THEN 'partial'
+                    ELSE 'paid'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            FROM active_allocations active
+            WHERE invoice.invoice_id = :invoice_id
+              AND invoice.org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
+        if invoice_result.rowcount != 1:
+            raise ValueError("Invoice not found or access denied")
+
+        db.execute(text("""
+            WITH active_allocations AS (
+                SELECT COALESCE(SUM(a.allocated_amount), 0) AS allocated_amount
+                FROM financial.allocations a
+                JOIN financial.payments payment ON payment.payment_id = a.payment_id
+                WHERE UPPER(a.reference_type) = 'INVOICE'
+                  AND a.reference_id = :invoice_id
+                  AND a.source_type = 'payment'
+                  AND a.allocation_status = 'active'
+                  AND payment.org_id = :org_id
+            )
+            UPDATE financial.customer_outstanding outstanding
+            SET paid_amount = active.allocated_amount,
+                outstanding_amount = GREATEST(
+                    0, outstanding.original_amount - active.allocated_amount
+                ),
+                status = CASE
+                    WHEN active.allocated_amount >= outstanding.original_amount THEN 'paid'
+                    WHEN active.allocated_amount > 0 THEN 'partial'
+                    ELSE 'open'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            FROM active_allocations active
+            WHERE outstanding.org_id = :org_id
+              AND outstanding.document_type = 'INVOICE'
+              AND outstanding.document_id = :invoice_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
     
     @staticmethod
     def get_payment(db: Session, org_id: str, payment_id: int) -> Optional[Dict[str, Any]]:
@@ -29,7 +117,8 @@ class AllocationService:
     def get_invoice(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get and lock an invoice in the payment's organization."""
         result = db.execute(text("""
-            SELECT invoice_id, invoice_number, customer_id, final_amount, allocated_amount
+            SELECT invoice_id, invoice_number, customer_id, final_amount,
+                   paid_amount AS allocated_amount
             FROM sales.invoices
             WHERE invoice_id = :invoice_id AND org_id = :org_id
             FOR UPDATE
@@ -40,20 +129,15 @@ class AllocationService:
     @staticmethod
     def create_allocation(
         db: Session, org_id: str, payment_id: int, invoice_id: int,
-        amount: float, invoice_number: str, user_id: int
+        amount: Decimal, invoice_number: str, user_id: int
     ) -> int:
-        """Create payment allocation. Returns allocation_id.
-
-        Inserts into financial.allocations (actual table).
-        DB trigger trg_update_reference_paid_amount updates sales.invoices.
-        customer_outstanding is a separate table and needs manual update.
-        """
+        """Create an allocation and rebuild its denormalized balances."""
         result = db.execute(text("""
             INSERT INTO financial.allocations
             (payment_id, reference_type, reference_id, reference_number,
-             allocated_amount, created_by, source_type)
+             allocated_amount, allocation_status, created_by, source_type)
             VALUES (:payment_id, 'INVOICE', :reference_id, :reference_number,
-                    :amount, :created_by, 'payment')
+                    :amount, 'active', :created_by, 'payment')
             RETURNING allocation_id
         """), {
             "payment_id": payment_id,
@@ -64,25 +148,12 @@ class AllocationService:
         })
 
         allocation_id = result.scalar()
+        if allocation_id is None:
+            raise RuntimeError("Failed to create payment allocation")
 
-        # Update customer_outstanding (separate denormalized table, no trigger cascade)
-        db.execute(text("""
-            UPDATE financial.customer_outstanding
-            SET outstanding_amount = outstanding_amount - :amount,
-                paid_amount = COALESCE(paid_amount, 0) + :amount,
-                status = CASE
-                    WHEN outstanding_amount - :amount <= 0 THEN 'paid'
-                    ELSE 'partial'
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE document_type = 'INVOICE'
-            AND document_id = :invoice_id
-            AND org_id = :org_id
-        """), {
-            "amount": amount,
-            "invoice_id": invoice_id,
-            "org_id": org_id
-        })
+        AllocationService.reconcile_allocation_projections(
+            db, org_id, payment_id, invoice_id
+        )
 
         return allocation_id
     
@@ -101,7 +172,8 @@ class AllocationService:
     def get_invoice_status(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get updated invoice status."""
         result = db.execute(text("""
-            SELECT payment_status, allocated_amount, final_amount - allocated_amount as due_amount
+            SELECT payment_status, paid_amount AS allocated_amount,
+                   final_amount - paid_amount as due_amount
             FROM sales.invoices
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
@@ -129,7 +201,7 @@ class AllocationService:
             JOIN financial.payments payment ON payment.payment_id = allocation.payment_id
             WHERE allocation.payment_id = :payment_id
               AND payment.org_id = :org_id
-              AND allocation.reference_type = 'INVOICE'
+              AND UPPER(allocation.reference_type) = 'INVOICE'
               AND allocation.allocation_status = 'active'
             ORDER BY allocation.created_at DESC
         """), {"payment_id": payment_id, "org_id": org_id})
@@ -144,7 +216,7 @@ class AllocationService:
             FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
             JOIN sales.invoices invoice ON invoice.invoice_id = pa.reference_id
-            WHERE pa.reference_type = 'INVOICE' AND pa.reference_id = :invoice_id
+            WHERE UPPER(pa.reference_type) = 'INVOICE' AND pa.reference_id = :invoice_id
             AND pa.allocation_status = 'active'
             AND p.org_id = :org_id AND invoice.org_id = :org_id
             ORDER BY pa.created_at DESC
@@ -155,7 +227,8 @@ class AllocationService:
     def get_invoice_summary(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get invoice summary for allocation view."""
         result = db.execute(text("""
-            SELECT invoice_number, final_amount, allocated_amount, payment_status
+            SELECT invoice_number, final_amount, paid_amount AS allocated_amount,
+                   payment_status
             FROM sales.invoices
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
@@ -169,16 +242,43 @@ class AllocationService:
             SELECT pa.*, p.org_id FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
             WHERE pa.allocation_id = :allocation_id AND p.org_id = :org_id
+              AND pa.source_type = 'payment'
+              AND UPPER(pa.reference_type) = 'INVOICE'
+            FOR UPDATE
         """), {"allocation_id": allocation_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
     @staticmethod
-    def delete_allocation(db: Session, allocation_id: int) -> None:
-        """Delete an allocation."""
-        db.execute(text(
-            "DELETE FROM financial.allocations WHERE allocation_id = :allocation_id"
-        ), {"allocation_id": allocation_id})
+    def delete_allocation(
+        db: Session,
+        org_id: str,
+        allocation_id: int,
+        payment_id: int,
+        invoice_id: int,
+    ) -> None:
+        """Delete a tenant-owned payment allocation and rebuild projections."""
+        result = db.execute(text("""
+            DELETE FROM financial.allocations allocation
+            USING financial.payments payment
+            WHERE allocation.allocation_id = :allocation_id
+              AND allocation.payment_id = :payment_id
+              AND UPPER(allocation.reference_type) = 'INVOICE'
+              AND allocation.reference_id = :invoice_id
+              AND allocation.source_type = 'payment'
+              AND payment.payment_id = allocation.payment_id
+              AND payment.org_id = :org_id
+        """), {
+            "allocation_id": allocation_id,
+            "payment_id": payment_id,
+            "invoice_id": invoice_id,
+            "org_id": org_id,
+        })
+        if result.rowcount != 1:
+            raise ValueError("Allocation not found or access denied")
+        AllocationService.reconcile_allocation_projections(
+            db, org_id, payment_id, invoice_id
+        )
     
     @staticmethod
     def get_unallocated_payments(
@@ -208,7 +308,8 @@ class AllocationService:
         """Get invoices with outstanding amounts."""
         query = """
             SELECT invoice_id, invoice_number, invoice_date, customer_id, customer_name,
-                   final_amount, allocated_amount, final_amount - allocated_amount as due_amount,
+                   final_amount, paid_amount AS allocated_amount,
+                   final_amount - paid_amount as due_amount,
                    payment_status
             FROM sales.invoices
             WHERE org_id = :org_id

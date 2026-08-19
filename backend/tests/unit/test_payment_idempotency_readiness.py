@@ -52,4 +52,4 @@ def test_readiness_gate_fails_closed_without_live_baseline_and_dedicated_store()
     assert "DEDICATED_IDEMPOTENCY_STORE_UNIMPLEMENTED" in codes
     assert "LIVE_SCHEMA_BASELINE_REQUIRED" in codes
     assert "TEMPORARY_IDEMPOTENCY_BACKEND" in codes
-    assert "PAYMENT_MUTATIONS_NOT_COVERED" in codes
+    assert "PAYMENT_MUTATIONS_NOT_COVERED" not in codes

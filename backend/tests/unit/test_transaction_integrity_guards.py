@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.api.services.finance.journal.service import JournalService
+from app.api.services.finance.allocation.service import AllocationService
+from app.api.services.finance.payment.service import PaymentService
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -112,6 +114,124 @@ def test_manual_allocation_locks_payment_and_tenant_invoice():
     assert "FOR UPDATE" in payment_method
     assert "org_id = :org_id" in invoice_method
     assert "FOR UPDATE" in invoice_method
+
+
+def test_allocation_creation_rebuilds_all_financial_projections():
+    class Result:
+        def __init__(self, *, scalar=None, rowcount=1):
+            self._scalar = scalar
+            self.rowcount = rowcount
+
+        def scalar(self):
+            return self._scalar
+
+    class Database:
+        def __init__(self):
+            self.calls = []
+            self.results = iter([
+                Result(scalar=17),
+                Result(),
+                Result(),
+                Result(),
+            ])
+
+        def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+            return next(self.results)
+
+    db = Database()
+    allocation_id = AllocationService.create_allocation(
+        db,
+        org_id="org-1",
+        payment_id=10,
+        invoice_id=20,
+        amount=Decimal("40.00"),
+        invoice_number="INV-20",
+        user_id=7,
+    )
+
+    assert allocation_id == 17
+    statements = "\n".join(statement for statement, _ in db.calls)
+    assert "UPDATE financial.payments payment" in statements
+    assert "UPDATE sales.invoices invoice" in statements
+    assert "UPDATE financial.customer_outstanding outstanding" in statements
+    assert "SUM(a.allocated_amount)" in statements
+    assert "allocation_status = 'active'" in statements
+    assert "trg_update_reference_paid_amount" not in statements
+
+
+def test_bulk_payment_allocation_cannot_exceed_locked_payment_balance(monkeypatch):
+    class Result:
+        def __init__(self, row=None):
+            self._row = row
+
+        def first(self):
+            return self._row
+
+    class Database:
+        def __init__(self):
+            self.calls = []
+            self.results = iter([
+                Result(SimpleNamespace(
+                    payment_id=10,
+                    payment_amount=Decimal("100.00"),
+                    allocated_amount=Decimal("20.00"),
+                    party_id=5,
+                    party_type="customer",
+                    payment_type="receipt",
+                )),
+                Result(SimpleNamespace(
+                    invoice_id=21,
+                    invoice_number="INV-21",
+                    customer_id=5,
+                    final_amount=Decimal("100.00"),
+                    paid_amount=Decimal("0.00"),
+                )),
+                Result(),
+                Result(SimpleNamespace(
+                    invoice_id=22,
+                    invoice_number="INV-22",
+                    customer_id=5,
+                    final_amount=Decimal("100.00"),
+                    paid_amount=Decimal("0.00"),
+                )),
+                Result(),
+                Result(SimpleNamespace(unallocated_amount=Decimal("0.00"))),
+            ])
+
+        def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+            return next(self.results)
+
+    reconciled = []
+    monkeypatch.setattr(
+        AllocationService,
+        "reconcile_allocation_projections",
+        staticmethod(lambda _db, org_id, payment_id, invoice_id: reconciled.append(
+            (org_id, payment_id, invoice_id)
+        )),
+    )
+    db = Database()
+    result = PaymentService.allocate_payment_to_invoices(
+        db,
+        org_id="org-1",
+        payment_id=10,
+        allocations=[
+            {"invoice_id": 21, "amount": "50.00"},
+            {"invoice_id": 22, "amount": "50.00"},
+        ],
+        user_id=7,
+    )
+
+    inserted = [
+        params["allocated_amount"]
+        for statement, params in db.calls
+        if "INSERT INTO financial.allocations" in statement
+    ]
+    assert inserted == [Decimal("50.00"), Decimal("30.00")]
+    assert sum(inserted) == Decimal("80.00")
+    assert result["total_allocated"] == Decimal("80.00")
+    assert reconciled == [("org-1", 10, 21), ("org-1", 10, 22)]
 
 
 def test_finance_mutations_require_rbac_and_compensating_reversal():
@@ -273,7 +393,7 @@ def test_release_audit_detects_unresolved_integrity_blockers():
     codes = {issue.code for issue in module.collect_issues()}
     assert "PAYMENT_IDEMPOTENCY_MISSING" not in codes
     assert "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED" in codes
-    assert "PAYMENT_MUTATION_IDEMPOTENCY_INCOMPLETE" in codes
+    assert "PAYMENT_MUTATION_IDEMPOTENCY_INCOMPLETE" not in codes
     assert "INVOICE_STOCK_OWNERSHIP_CONFLICT" not in codes
     assert "POSTED_JOURNAL_HEADER_MUTABLE" not in codes
     assert "JOURNAL_REVERSAL_NOT_COMPENSATING" not in codes
@@ -282,6 +402,7 @@ def test_release_audit_detects_unresolved_integrity_blockers():
     assert "ALLOCATION_TABLE_UNBASELINED" in codes
     assert "ALLOCATION_TENANT_SCOPE_MISSING" not in codes
     assert "ALLOCATION_MUTATION_NOT_COMMITTED" not in codes
-    assert "ALLOCATION_TRIGGER_NOT_REPRODUCIBLE" in codes
+    assert "ALLOCATION_PROJECTION_RECONCILIATION_MISSING" not in codes
+    assert "BANK_RECONCILIATION_SCHEMA_UNBASELINED" in codes
     assert "CALCULATION_OWNER_DUPLICATED" not in codes
     assert "STOCK_DOUBLE_MUTATION" not in codes

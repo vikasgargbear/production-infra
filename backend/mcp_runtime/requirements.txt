@@ -1,0 +1,3 @@
+# Isolated compatibility environment only. Do not merge into backend/requirements.txt.
+mcp==2.0.0
+packaging==25.0

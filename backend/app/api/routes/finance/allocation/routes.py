@@ -3,7 +3,8 @@ Payment Allocation API
 REFACTORED: Uses AllocationService for database operations
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query
+from decimal import Decimal
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 import logging
 
@@ -11,6 +12,10 @@ from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_conte
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from .....core.money import money_json
+from .....core.idempotency import (
+    IdempotencyStateError,
+    require_dedicated_payment_idempotency_store,
+)
 from .....core.utils.constants import InvoiceStatus, PaymentRecordStatus, PartyType, InvoicePaymentStatus
 from ....services.finance.allocation.service import AllocationService
 
@@ -18,10 +23,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payment-allocation", tags=["payment-allocation"])
 
+
+def _require_allocation_idempotency(idempotency_key: str) -> None:
+    try:
+        require_dedicated_payment_idempotency_store(
+            operation="payment.allocate",
+            key=idempotency_key,
+        )
+    except IdempotencyStateError as error:
+        raise HTTPException(status_code=503, detail={
+            "code": "IDEMPOTENCY_STATE_UNAVAILABLE",
+            "message": str(error),
+        }) from error
+
 class AllocationRequest(BaseModel):
     payment_id: int
     invoice_id: int
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     
 class BulkAllocationRequest(BaseModel):
     payment_id: int
@@ -35,11 +53,18 @@ class AutoAllocationRequest(BaseModel):
 @with_tenant_context
 async def allocate_payment(
     allocation: AllocationRequest,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Manually allocate a payment to an invoice"""
+    _require_allocation_idempotency(idempotency_key)
     try:
         org_id = str(context.org_id)
         payment = AllocationService.get_payment(db, org_id, allocation.payment_id)
@@ -53,8 +78,12 @@ async def allocate_payment(
         if payment["party_type"] == PartyType.CUSTOMER.value and payment["party_id"] != invoice["customer_id"]:
             raise HTTPException(status_code=400, detail="Payment and invoice belong to different customers")
         
-        payment_available = float(payment["payment_amount"]) - float(payment.get("allocated_amount") or 0)
-        invoice_due = float(invoice["final_amount"]) - float(invoice.get("allocated_amount") or 0)
+        payment_available = Decimal(str(payment["payment_amount"])) - Decimal(
+            str(payment.get("allocated_amount") or 0)
+        )
+        invoice_due = Decimal(str(invoice["final_amount"])) - Decimal(
+            str(invoice.get("allocated_amount") or 0)
+        )
         
         if allocation.amount > payment_available:
             raise HTTPException(status_code=400, detail=f"Insufficient payment balance. Available: {payment_available}")
@@ -90,17 +119,26 @@ async def allocate_payment(
 @with_tenant_context
 async def allocate_payment_bulk(
     request: BulkAllocationRequest,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Allocate a payment to multiple invoices"""
+    _require_allocation_idempotency(idempotency_key)
     try:
         results = []
         for alloc in request.allocations:
             try:
                 allocation = AllocationRequest(payment_id=request.payment_id, invoice_id=alloc["invoice_id"], amount=alloc["amount"])
-                result = await allocate_payment(allocation, db, context)
+                result = await allocate_payment(
+                    allocation, idempotency_key, db=db, context=context
+                )
                 results.append(result)
             except HTTPException as e:
                 results.append({"invoice_id": alloc["invoice_id"], "error": e.detail})
@@ -114,11 +152,18 @@ async def allocate_payment_bulk(
 @with_tenant_context
 async def auto_allocate_payment(
     request: AutoAllocationRequest,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("finance", "edit")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Automatically allocate payment to outstanding invoices"""
+    _require_allocation_idempotency(idempotency_key)
     try:
         org_id = str(context.org_id)
         allocations = AllocationService.auto_allocate(db, org_id, request.payment_id, request.method)
@@ -190,16 +235,29 @@ async def get_invoice_payments(
 @with_tenant_context
 async def delete_allocation(
     allocation_id: int,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("finance", "delete")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Delete an allocation"""
+    _require_allocation_idempotency(idempotency_key)
     try:
         allocation = AllocationService.get_allocation_with_org(db, str(context.org_id), allocation_id)
         if not allocation:
             raise HTTPException(status_code=404, detail="Allocation not found")
-        AllocationService.delete_allocation(db, allocation_id)
+        AllocationService.delete_allocation(
+            db,
+            str(context.org_id),
+            allocation_id,
+            allocation["payment_id"],
+            allocation["reference_id"],
+        )
         db.commit()
         return {"success": True, "message": "Allocation removed successfully"}
     except HTTPException:
