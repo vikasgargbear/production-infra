@@ -49,4 +49,10 @@ module.exports = {
       },
     },
   },
-}; 
+  jest: {
+    configure: (jestConfig) => {
+      jestConfig.watchPlugins = [];
+      return jestConfig;
+    },
+  },
+};
