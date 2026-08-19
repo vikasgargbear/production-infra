@@ -105,14 +105,17 @@ the conditional Render release probe pass, publish it to ChatGPT or Claude, or c
 below are implemented and tested.
 
 The official Python MCP SDK cannot be added safely as a one-line dependency in
-the current environment. The current stable `mcp==2.0.0` requires at least
+the shared FastAPI environment. The current stable `mcp==2.0.0` requires at least
 `pydantic>=2.12.0`, `PyJWT[crypto]>=2.10.1`, `python-multipart>=0.0.9`, and
 `uvicorn>=0.31.1`. This repository pins `pydantic==2.5.0`, `PyJWT==2.8.0`,
 `python-multipart==0.0.6`, and `uvicorn==0.24.0`. The workstation interpreter
-and existing virtual environment are Python 3.9.6, while Render/Docker and CI
-target Python 3.11; the local Docker daemon was unavailable for validating the
-required global upgrade. Treat the SDK upgrade as a tested dependency migration,
-not a pilot hotfix.
+and existing virtual environment remain Python 3.9.6, while Render/Docker and
+CI target Python 3.11. The `mcp-sdk-compatibility` CI job installs the official
+SDK from `backend/mcp_runtime/requirements.txt` in an isolated Python 3.11 job,
+constructs its stateless JSON Streamable HTTP ASGI application, and compares
+the installed SDK metadata to the backend pins. This validates the SDK itself
+without claiming the shared runtime upgrade is safe. Treat that upgrade as a
+separate tested dependency migration, not a pilot hotfix.
 
 Supabase now supplies the OAuth 2.1 authorization server needed by remote MCP,
 but it does not supply an MCP server. Its OAuth server is beta and free during

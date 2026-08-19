@@ -10,7 +10,7 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Implemented evidence
 
-- The complete hermetic backend unit suite passes 183 tests; frontend
+- The complete hermetic backend unit suite passes 194 tests; frontend
   type-checking and all 41 Jest tests pass. The frontend production build also
   completes, and the changed auth/API/calculation boundary passes a strict
   zero-warning lint gate.
@@ -51,16 +51,20 @@ override the database, transaction, browser, or live-environment gates below.
 2. `audit_schema.py` finds 36 application/query mismatches across 15 files. The
    checked-in schema documentation describes only 40 sales/master tables;
    finance, inventory, parties, and procurement documentation is incomplete.
-3. `transaction_integrity_audit.py` reports four blockers: unverified payment
-   idempotency storage, incomplete idempotency for payment mutations, the
-   unbaselined allocation table, and its unreproducible roll-up trigger.
+3. `transaction_integrity_audit.py` reports three blockers: unverified payment
+   idempotency storage, the unbaselined allocation table, and the unbaselined
+   bank-reconciliation schema. Allocation writes now reconcile payment, invoice,
+   and outstanding projections explicitly instead of relying on an undeclared
+   roll-up trigger.
 4. `contract_consistency_audit.py` reports three blockers: four live document
    targets absent from the checked-in authority, missing durable idempotency for
    standalone number reservations, and unbaselined product/HSN GST authority.
    Divergent enums, audited binary-float money responses, and generic mutation
    response contracts have been resolved.
-5. `payment_idempotency_readiness.py` reports four blockers and intentionally
-   disables the temporary proof backend in production.
+5. `payment_idempotency_readiness.py` reports three blockers and intentionally
+   disables the temporary proof backend in production. Cancel, reconciliation,
+   and allocation routes are covered by required idempotency headers and fail
+   before database access until the dedicated store is available.
 6. Legacy `backend/tests/integration/*_critical_path.py` files with missing
    fixtures and simulated workflows were retired because they were false test
    evidence. CI rejects any reintroduced placeholders; the 37-test,

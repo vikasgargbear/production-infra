@@ -39,8 +39,20 @@ GET route is safe merely because it appears in OpenAPI.
 
 There is no `/mcp` route today. The official Python SDK 2.0 dependency floor
 conflicts with the repository's pinned Pydantic, PyJWT, multipart, and Uvicorn
-versions, and that dependency migration has not been validated in the project's
-Python 3.11 target locally.
+versions. The `mcp-sdk-compatibility` CI job now installs the official SDK in an
+isolated Python 3.11 environment, constructs its stateless JSON Streamable HTTP
+ASGI application, reads the SDK's installed dependency metadata, and verifies
+the exact three-tool registry. This executable gate proves the SDK surface
+without importing incompatible dependencies into the production FastAPI
+process. It intentionally keeps `mcp_transport_implemented` false.
+
+The existing ERP HS256 access token is valid for protected REST calls, but it
+is not an MCP audience-restricted OAuth grant and carries no consented MCP
+scopes. Registry `oauth_scope` values are policy metadata, not issued grants;
+the adapter must not treat them as user consent. Product and supplier reads
+already have service functions, while GST settings assembly remains owned by
+its FastAPI route. That route logic must move behind a tested application
+operation before an MCP tool can call it without coupling to HTTP handlers.
 Supabase's OAuth 2.1 server solves authorization-server discovery, PKCE, consent,
 DCR, and token rotation, but the application still needs asymmetric JWT/JWKS
 validation, a consent UI, protected-resource metadata, ERP membership mapping,

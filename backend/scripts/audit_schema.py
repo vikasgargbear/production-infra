@@ -99,7 +99,10 @@ def main():
         
         for error in result["errors"]:
             total_errors += 1
-            print(f"\n   ❌ Query: {error['query']}")
+            print(
+                f"\n   ❌ Query at line {error['line']} "
+                f"(sha256:{error['query_sha256'][:12]}): {error['query']}"
+            )
             for issue in error["issues"]:
                 print(f"      {issue}")
     

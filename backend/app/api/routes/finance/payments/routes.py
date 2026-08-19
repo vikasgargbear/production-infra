@@ -24,7 +24,11 @@ from ....services.document_number_service import (
     DocumentNumberService,
     document_number_reservation_openapi,
 )
-from .....core.idempotency import IdempotencyConflictError, IdempotencyStateError
+from .....core.idempotency import (
+    IdempotencyConflictError,
+    IdempotencyStateError,
+    require_dedicated_payment_idempotency_store,
+)
 from ....schemas.sales.billing import (
     GeneralPaymentCreate, InvoicePaymentCreate, 
     PaymentListResponse, PaymentSummaryResponse, PaymentResponse
@@ -57,7 +61,7 @@ def _idempotency_http_error(error: Exception) -> HTTPException:
             "code": "IDEMPOTENCY_KEY_MISMATCH",
             "message": str(error),
         })
-    return HTTPException(status_code=409, detail={
+    return HTTPException(status_code=503, detail={
         "code": "IDEMPOTENCY_STATE_UNAVAILABLE",
         "message": str(error),
     })
@@ -391,6 +395,12 @@ async def get_payment_summary(
 async def cancel_payment(
     payment_id: int,
     reason: str = Query(..., description="Cancellation reason"),
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "delete")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -403,6 +413,10 @@ async def cancel_payment(
     - Maintains audit trail with user context
     """
     try:
+        require_dedicated_payment_idempotency_store(
+            operation="payment.cancel",
+            key=idempotency_key,
+        )
         result = PaymentService.cancel_payment(
             db=db, 
             payment_id=payment_id, 
@@ -412,6 +426,9 @@ async def cancel_payment(
         )
         db.commit()
         return result
+    except IdempotencyStateError as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -469,6 +486,12 @@ async def create_customer_receipt(
 @with_tenant_context
 async def create_bank_reconciliation(
     reconciliation_data: dict,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -481,6 +504,10 @@ async def create_bank_reconciliation(
     - Update payment clearing status
     """
     try:
+        require_dedicated_payment_idempotency_store(
+            operation="payment.reconcile",
+            key=idempotency_key,
+        )
         # Extract reconciliation details
         bank_account = reconciliation_data.get("bank_account")
         statement_date = reconciliation_data.get("statement_date")
@@ -504,6 +531,9 @@ async def create_bank_reconciliation(
         
         return result
         
+    except IdempotencyStateError as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating bank reconciliation: {str(e)}")
@@ -513,6 +543,12 @@ async def create_bank_reconciliation(
 @with_tenant_context
 async def allocate_payment(
     allocation_data: dict,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "edit")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -525,6 +561,10 @@ async def allocate_payment(
     - Update invoice payment status
     """
     try:
+        require_dedicated_payment_idempotency_store(
+            operation="payment.allocate",
+            key=idempotency_key,
+        )
         payment_id = allocation_data.get("payment_id")
         allocations = allocation_data.get("allocations", [])
         
@@ -541,6 +581,9 @@ async def allocate_payment(
         
         return result
         
+    except IdempotencyStateError as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

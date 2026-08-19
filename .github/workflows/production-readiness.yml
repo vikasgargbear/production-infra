@@ -16,6 +16,20 @@ permissions:
   contents: read
 
 jobs:
+  mcp-sdk-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/mcp_runtime/requirements.txt
+      - name: Install official MCP SDK in an isolated compatibility environment
+        run: pip install -r backend/mcp_runtime/requirements.txt
+      - name: Verify SDK ASGI surface, dependency boundary, and read-only registry
+        run: python backend/scripts/mcp_runtime_gate.py --probe-sdk
+
   backend-unit:
     runs-on: ubuntu-latest
     steps:

@@ -13,6 +13,7 @@ Usage:
     ''')
 """
 
+import hashlib
 import re
 from typing import Dict, Iterable, Set, List, Tuple, Optional
 from pathlib import Path
@@ -244,6 +245,10 @@ def validate_module(module_path: Path) -> Dict[str, any]:
             continue
         
         results["total_queries"] += 1
+        query_metadata = {
+            "line": content.count("\n", 0, match.start()) + 1,
+            "query_sha256": hashlib.sha256(" ".join(sql.split()).encode("utf-8")).hexdigest(),
+        }
         
         try:
             validation = validate_query(sql, strict=False)
@@ -252,12 +257,14 @@ def validate_module(module_path: Path) -> Dict[str, any]:
             else:
                 results["errors"].append({
                     "query": sql[:100] + "..." if len(sql) > 100 else sql,
-                    "issues": validation["errors"]
+                    "issues": validation["errors"],
+                    **query_metadata,
                 })
         except Exception as e:
             results["errors"].append({
                 "query": sql[:100] + "..." if len(sql) > 100 else sql,
-                "issues": [str(e)]
+                "issues": [str(e)],
+                **query_metadata,
             })
     
     return results

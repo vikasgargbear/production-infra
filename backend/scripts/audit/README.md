@@ -62,8 +62,9 @@ python scripts/audit/validate_constants.py --show-all
 ### 3. Transaction Integrity Audit
 
 **Purpose**: Fails the release when inventory or finance has competing mutation
-owners, missing payment idempotency, mutable posted journals, unreproducible
-allocation triggers, or duplicated calculation ownership.
+owners, missing payment idempotency, mutable posted journals, missing allocation
+projection reconciliation, unbaselined finance schema, or duplicated calculation
+ownership.
 
 ```bash
 python scripts/audit/transaction_integrity_audit.py
@@ -90,8 +91,9 @@ authority; do not suppress the code with an allowlist.
 ### 5. Payment Idempotency Readiness
 
 **Purpose**: Prevents promotion while payment replay relies on a temporary
-payment-note field, the live schema is unbaselined, or payment mutations remain
-uncovered.
+payment-note field or the live schema and dedicated replay store are unbaselined.
+Cancel, reconciliation, and allocation routes require an idempotency key and
+fail before database access until that store is implemented.
 
 ```bash
 python scripts/audit/payment_idempotency_readiness.py
