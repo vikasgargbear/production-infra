@@ -46,8 +46,9 @@ jobs:
       - run: npm run lint:critical
       - run: npm run test:ci -- --runInBand
       - run: CI=false npm run build
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
 
   production-blockers:
     runs-on: ubuntu-latest

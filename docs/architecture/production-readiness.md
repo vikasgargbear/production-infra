@@ -80,6 +80,10 @@ override the database, transaction, browser, or live-environment gates below.
 10. Create React App 5 declares a TypeScript 4 peer range while this application
     is validated on TypeScript 5. Clean installs therefore use a repository
     scoped `legacy-peer-deps` policy until the frontend is migrated off CRA.
+11. The 2026-08-19 GitHub clean install reported 66 npm advisories (12 low,
+    14 moderate, 37 high, and 3 critical). The registry audit must be split into
+    shipped runtime and build-only dependency paths, remediated without a
+    forced breaking upgrade, and rerun clean before promotion.
 
 ## Required commands
 
@@ -97,6 +101,7 @@ APP_ENV=test TEST_MODE=false PYTHONPATH=backend \
 cd frontend
 npm run typecheck
 npm run test:ci -- --runInBand
+npm audit --omit=dev
 ```
 
 Run all fail-closed release audits from the repository root:
