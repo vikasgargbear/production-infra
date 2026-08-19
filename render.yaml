@@ -53,6 +53,8 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: REACT_APP_API_BASE_URL
         sync: false
       - key: REACT_APP_SUPABASE_URL
