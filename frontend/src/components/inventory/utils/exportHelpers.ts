@@ -5,7 +5,8 @@
  * Used across CurrentStock, BatchTracking, StockReport, etc.
  */
 
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+import { autoTable } from 'jspdf-autotable';
 import { BaseStockItem, BaseBatch, ExportFormat } from '../types/inventorySharedTypes';
 
 /**
@@ -76,7 +77,7 @@ export const exportToPDF = <T>(
         try {
             const tableData = data.map(formatter);
 
-            (doc as any).autoTable({
+            autoTable(doc, {
                 head: [headers],
                 body: tableData,
                 startY: 30,

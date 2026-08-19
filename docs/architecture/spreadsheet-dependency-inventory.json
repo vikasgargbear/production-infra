@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "status": "migrated",
+  "dependency": {
+    "package": "xlsx",
+    "previous_version": "0.18.5",
+    "approved_version": "0.20.3",
+    "approved_source": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "source_documentation": "https://docs.sheetjs.com/docs/getting-started/installation/frameworks/"
+  },
+  "security_boundary": {
+    "trust_level": "untrusted-browser-upload",
+    "risk": "User-selected spreadsheet bytes are parsed in the browser before validation or API submission.",
+    "resolved_advisories": [
+      "https://cdn.sheetjs.com/advisories/CVE-2023-30533",
+      "https://cdn.sheetjs.com/advisories/CVE-2024-22363"
+    ]
+  },
+  "runtime_consumers": [
+    {
+      "path": "frontend/src/components/purchase/BulkUploadInline.tsx",
+      "import": "import * as XLSX from 'xlsx'",
+      "inputs": [
+        ".xlsx",
+        ".xls",
+        ".csv"
+      ],
+      "input_sheet_selection": "Products sheet, otherwise first sheet",
+      "input_conversion": "sheet_to_json with raw=false",
+      "outputs": [
+        "purchase_products_template_<timestamp>.xlsx"
+      ],
+      "output_sheets": [
+        "Instructions",
+        "Products",
+        "Valid Options"
+      ]
+    },
+    {
+      "path": "frontend/src/components/global/upload/BulkProductUpload.tsx",
+      "import": "import * as XLSX from 'xlsx'",
+      "inputs": [
+        ".xlsx",
+        ".xls",
+        ".csv"
+      ],
+      "input_sheet_selection": "Data sheet, otherwise first sheet",
+      "input_conversion": "sheet_to_json with raw=false",
+      "outputs": [
+        "product_upload_template_<timestamp>.xlsx"
+      ],
+      "output_sheets": [
+        "Instructions",
+        "Data"
+      ]
+    }
+  ],
+  "required_wire_capabilities": [
+    "read-xlsx",
+    "read-xls",
+    "read-csv",
+    "write-xlsx",
+    "preserve-sheet-order-and-names",
+    "sheet-to-json-formatted-values"
+  ],
+  "candidate_evaluation": [
+    {
+      "candidate": "SheetJS CE 0.20.3 official distribution",
+      "decision": "selected",
+      "reason": "Preserves the existing xlsx API and required XLSX, XLS, and CSV behavior while resolving the known advisories."
+    },
+    {
+      "candidate": "ExcelJS 4.4.0",
+      "decision": "rejected",
+      "reason": "Its documented browser/file formats do not include legacy XLS input, which is part of both upload contracts.",
+      "source": "https://github.com/exceljs/exceljs"
+    }
+  ],
+  "regression_gate": "frontend/src/tests/unit/spreadsheetDependency.test.ts"
+}

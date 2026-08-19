@@ -13,7 +13,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
 import apiClient from '../../../services/api/apiClient';
 import { ModuleHeader } from '../../global';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 
 // Import extracted components
 import { StockFilters } from './components/StockFilters';

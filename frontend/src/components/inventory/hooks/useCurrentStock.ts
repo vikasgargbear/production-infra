@@ -12,7 +12,7 @@ import {
     validateProductData,
     transformToStockItem
 } from '../utils/stockValidation';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 
 // Types
 export interface StockItem extends BaseStockItem {

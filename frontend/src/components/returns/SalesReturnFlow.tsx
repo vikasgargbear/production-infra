@@ -674,9 +674,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
 
     const options = {
-      margin: [5, 5, 5, 5],  // Smaller margins for more content space
+      margin: [5, 5, 5, 5] as [number, number, number, number],
       filename: `CreditNote-${createdReturnData.creditNoteNumber || createdReturnData.returnNumber}.pdf`,
-      image: { type: 'jpeg', quality: 1 },  // JPEG with max quality often renders better
+      image: { type: 'jpeg' as const, quality: 1 },
       html2canvas: {
         scale: 3,  // Reduced scale - too high can cause blurry output
         useCORS: true,
@@ -690,7 +690,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       jsPDF: {
         unit: 'mm',
         format: 'a4',
-        orientation: 'portrait',
+        orientation: 'portrait' as const,
         compress: false,  // Disable compression for sharper text
         precision: 16  // Higher precision
       },

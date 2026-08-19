@@ -26,6 +26,12 @@ that the target state is already implemented.
   machine-readable evidence for retired and unresolved compatibility surfaces.
 - [`frontend-calculation-inventory.yaml`](frontend-calculation-inventory.yaml):
   migration state for client-side business-rule calculations.
+- [`frontend-router-inventory.yaml`](frontend-router-inventory.yaml):
+  evidence for retiring the unused router dependency and the gates for future
+  URL-based navigation.
+- [`spreadsheet-dependency-inventory.json`](spreadsheet-dependency-inventory.json):
+  browser spreadsheet input/output contracts, security boundary, and pinned
+  SheetJS distribution evidence.
 - [`document-number-data-model-inventory.yaml`](document-number-data-model-inventory.yaml):
   machine-readable number ownership, canonical data-model mappings, retired
   duplication, and residual live-schema gates.

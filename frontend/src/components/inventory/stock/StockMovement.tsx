@@ -7,7 +7,8 @@ import {
 import { stockApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 import { DataTable, ModuleHeader } from '../../global';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+import { autoTable } from 'jspdf-autotable';
 
 // TypeScript interfaces
 interface StockMovementProps {
@@ -220,8 +221,6 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
     if (itemsToExport.length === 0) return;
 
     try {
-      const autoTable = require('jspdf-autotable');
-
       const doc = new jsPDF();
       doc.setFontSize(16);
       doc.text('Stock Movement Report', 20, 20);
@@ -236,7 +235,7 @@ const StockMovement: React.FC<StockMovementProps> = ({ open = true, onClose }) =
         item.status || 'N/A'
       ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [['Movement #', 'Product', 'Type', 'Quantity', 'Value', 'Date', 'Status']],
         body: tableData,
         startY: 30,

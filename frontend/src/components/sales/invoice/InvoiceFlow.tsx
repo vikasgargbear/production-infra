@@ -154,9 +154,9 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
 
         // Maximum quality settings for html2pdf
         const options = {
-            margin: [5, 5, 5, 5],  // Smaller margins for more content space
+            margin: [5, 5, 5, 5] as [number, number, number, number],
             filename: `Invoice-${invoiceData.invoiceNumber || 'draft'}.pdf`,
-            image: { type: 'jpeg', quality: 1 },  // JPEG with max quality often renders better
+            image: { type: 'jpeg' as const, quality: 1 },
             html2canvas: {
                 scale: 3,  // Reduced scale - too high can cause blurry output
                 useCORS: true,
@@ -170,7 +170,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             jsPDF: {
                 unit: 'mm',
                 format: 'a4',
-                orientation: 'portrait',
+                orientation: 'portrait' as const,
                 compress: false,  // Disable compression for sharper text
                 precision: 16  // Higher precision
             },
