@@ -139,15 +139,26 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
         "frontend",
         "frontend-dependency-audit",
         "mcp-sdk-compatibility",
+        "production-blockers",
     ):
         assert f"- {dependency}" in job
-    assert "production-blockers" not in job
     assert 'commitId' in job
     assert "$GITHUB_SHA" in job
     assert '"$RENDER_API_URL/ready"' in job
     assert "secrets.RENDER_API_KEY" in job
     assert "vars.RENDER_API_SERVICE_ID" in job
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
+
+
+def test_frontend_builds_use_the_reviewed_node_runtime():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    blueprint = _read("render.yaml")
+    package = _read("frontend/package.json")
+
+    assert 'node-version: "20"' not in workflow
+    assert workflow.count('node-version: "22"') == 2
+    assert 'key: NODE_VERSION\n        value: "22"' in blueprint
+    assert '"node": ">=22 <25"' in package
 
 
 def test_production_database_configuration_fails_closed():
