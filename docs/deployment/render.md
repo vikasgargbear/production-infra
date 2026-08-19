@@ -17,6 +17,13 @@ hosted OAuth grant flow are not implemented yet.
 Automatic Render deployments are disabled. Every Blueprint sync and deployment
 must follow a reviewed commit and current readiness report.
 
+The Render services use public Git URLs, so Render-native auto-deploy is kept
+off. On pushes to `main`, GitHub Actions deploys the exact commit only after the
+backend, frontend, dependency-audit, and MCP compatibility jobs pass. The
+intentional `production-blockers` report remains fail-closed and visible while
+the internal pilot is still restricted. Repository variables identify the two
+service IDs and origins; `RENDER_API_KEY` is stored only as an Actions secret.
+
 ## Required Render Values
 
 Enter these operator-supplied values when creating or syncing the Blueprint:
