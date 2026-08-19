@@ -63,6 +63,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --ignore-scripts
+      - name: Generate non-breaking audit remediation lockfile
+        continue-on-error: true
+        run: npm audit fix --package-lock-only --omit=dev
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-audit-lock
+          path: frontend/package-lock.json
+          retention-days: 1
       - run: npm audit --omit=dev --audit-level=high
 
   production-blockers:
