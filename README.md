@@ -2,6 +2,8 @@
 
 Enterprise-grade Pharmacy Management System with offline-first capabilities, multi-tenancy, and GST compliance.
 
+Built for pharmaceutical distribution, where the domain does not forgive mistakes: batch and expiry tracking for drug compliance, multi-rate GST invoicing where even the order of discounts changes the tax, customer credit ledgers, and split-payment reconciliation. In daily production use. React + FastAPI + PostgreSQL, with web and Electron desktop clients. Roadmap: an MCP layer over the API, so the full ERP can be operated in natural language.
+
 ## 🚀 Quick Start (5 Minutes)
 
 ### Prerequisites
