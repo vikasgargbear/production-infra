@@ -10,6 +10,32 @@ from urllib.parse import urlparse, urlunparse
 
 from .env import is_production
 
+
+def classify_database_connection(database_url: str) -> str:
+    """Classify documented Supabase Postgres endpoint modes without connecting."""
+    try:
+        parsed = urlparse(database_url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return "other"
+
+    if hostname.endswith(".pooler.supabase.com"):
+        if port == 5432:
+            return "supabase_session_pooler"
+        if port == 6543:
+            return "supabase_transaction_pooler"
+        return "supabase_pooler_unknown"
+
+    if hostname.startswith("db.") and hostname.endswith(".supabase.co"):
+        if port in (None, 5432):
+            return "supabase_direct"
+        if port == 6543:
+            return "supabase_transaction_pooler"
+        return "supabase_direct_unknown"
+
+    return "other"
+
 _configured_database_url = os.getenv("DATABASE_URL", "").strip()
 if is_production() and (
     not _configured_database_url
@@ -29,27 +55,20 @@ if "supabase.co" in DATABASE_URL and "target_session_attrs" not in DATABASE_URL:
     DATABASE_URL = f"{DATABASE_URL}{separator}target_session_attrs=read-write"
     print(f"[DATABASE] Added IPv4 preference for Supabase connection")
 
-# Supabase connection validation and detection
-IS_SUPABASE = "supabase.com" in DATABASE_URL
-IS_POOLER_HOSTNAME = ".pooler.supabase.com" in DATABASE_URL
-IS_POOLER_PORT = ":6543" in DATABASE_URL
-IS_DIRECT_PORT = ":5432" in DATABASE_URL
+# Supabase documents direct and session connections on 5432, and transaction
+# pooling on 6543. Host and port must be considered together.
+DATABASE_CONNECTION_MODE = classify_database_connection(DATABASE_URL)
+IS_SUPABASE = DATABASE_CONNECTION_MODE.startswith("supabase_")
+IS_SUPABASE_POOLER = DATABASE_CONNECTION_MODE == "supabase_transaction_pooler"
 
-# Validate configuration
-if IS_SUPABASE:
-    if IS_POOLER_HOSTNAME and IS_DIRECT_PORT:
-        print("[DATABASE] ❌ ERROR: Pooler hostname with direct port detected!")
-        print("[DATABASE] ❌ URL has .pooler.supabase.com:5432 - this is WRONG")
-        print("[DATABASE] ✅ Change to: db.PROJECT-ID.supabase.co:5432 (direct)")
-        print("[DATABASE] ✅ OR to: .pooler.supabase.com:6543 (pooler)")
-        print("[DATABASE] ⚠️  Attempting to connect anyway, but may fail...")
-    
-    if IS_POOLER_HOSTNAME and IS_POOLER_PORT:
-        print(f"[DATABASE] Supabase Transaction Pooler detected (correct config)")
-    elif not IS_POOLER_HOSTNAME and IS_DIRECT_PORT:
-        print(f"[DATABASE] Supabase Direct Connection detected (correct config)")
-
-IS_SUPABASE_POOLER = IS_POOLER_HOSTNAME and IS_POOLER_PORT
+if DATABASE_CONNECTION_MODE == "supabase_direct":
+    print("[DATABASE] Supabase direct connection detected")
+elif DATABASE_CONNECTION_MODE == "supabase_session_pooler":
+    print("[DATABASE] Supabase session pooler detected")
+elif DATABASE_CONNECTION_MODE == "supabase_transaction_pooler":
+    print("[DATABASE] Supabase transaction pooler detected")
+elif DATABASE_CONNECTION_MODE.startswith("supabase_"):
+    print("[DATABASE] WARNING: Supabase endpoint uses an unrecognized port")
 
 if IS_SUPABASE_POOLER:
     print(f"[DATABASE] Using aggressive connection recycling for pooler mode")

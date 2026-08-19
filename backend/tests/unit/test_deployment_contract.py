@@ -55,7 +55,7 @@ def test_render_blueprint_is_manual_free_and_health_checked():
     assert "region: singapore" in backend
     assert "dockerfilePath: ./backend/Dockerfile" in backend
     assert "dockerContext: ./backend" in backend
-    assert "healthCheckPath: /health" in backend
+    assert "healthCheckPath: /ready" in backend
     assert 'autoDeployTrigger: "off"' in backend
     assert "key: PORT" not in backend
     assert "key: APP_URL" in backend
@@ -96,6 +96,34 @@ def test_render_blueprint_contains_no_runtime_secret_values():
         assert "value:" not in block, name
 
     assert "key: SECRET_KEY" not in backend
+
+
+def test_render_finance_audit_enforces_a_read_only_database_session():
+    fixtures = _read("backend/tests/live_erp/conftest.py")
+    audit = _read("backend/tests/live_erp/test_live_finance_gst_audit.py")
+    runbook = _read("docs/deployment/render.md")
+
+    assert '"PHARMA_LIVE_DATABASE_READ_ONLY", ""' in fixtures
+    assert "conn.set_session(readonly=True, autocommit=True)" in fixtures
+    assert 'cur.execute("SHOW transaction_read_only")' in fixtures
+    assert "require_read_only_database" in audit
+    assert "PHARMA_LIVE_DATABASE_READ_ONLY=true" in runbook
+
+
+def test_render_readiness_requires_database_without_replacing_liveness():
+    main = _read("backend/app/main.py")
+    dockerfile = _read("backend/Dockerfile")
+    blueprint = _read("render.yaml")
+    provisioner = _read("backend/scripts/provision_render_pilot.py")
+
+    assert '@app.get("/health")' in main
+    assert '@app.get("/ready", include_in_schema=False)' in main
+    assert 'text("SELECT 1")' in main
+    assert "READINESS_TIMEOUT_SECONDS = 5.0" in main
+    assert 'content={"status": "not_ready"}' in main
+    assert "/health" in dockerfile
+    assert "healthCheckPath: /ready" in blueprint
+    assert provisioner.count('"healthCheckPath": "/ready"') == 2
 
 
 def test_production_database_configuration_fails_closed():

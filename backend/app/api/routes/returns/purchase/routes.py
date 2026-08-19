@@ -23,6 +23,7 @@ from ....services.finance.credit_note.service import CreditNoteService
 from ....schemas.inventory.inventory import StockMovementCreate
 from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
 from .....core.money import money_json
+from .....core.env import is_production
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +334,7 @@ async def cancel_purchase_return(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/test/validate/{return_id}")
+@router.get("/test/validate/{return_id}", include_in_schema=False)
 @with_tenant_context
 async def validate_purchase_return_data(
     return_id: int,
@@ -345,6 +346,8 @@ async def validate_purchase_return_data(
     Validate that all fields in a purchase return are correctly populated.
     Returns detailed validation report with pass/fail status for each field.
     """
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
     try:
         # Fetch the return header
         header_query = text("""
@@ -473,12 +476,14 @@ async def validate_purchase_return_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/test/return-methods")
+@router.get("/test/return-methods", include_in_schema=False)
 async def get_purchase_return_methods():
     """
     Get all supported purchase return methods with descriptions.
     For testing and documentation purposes.
     """
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
     return {
         "return_methods": [
             {

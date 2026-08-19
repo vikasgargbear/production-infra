@@ -2,7 +2,7 @@ import json
 import os
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -32,11 +32,12 @@ def _with_connection_overrides(database_url: str) -> str:
 @dataclass
 class LiveERPConfig:
     api_base_url: str
-    database_url: str
-    access_token: str
+    database_url: str = field(repr=False)
+    access_token: str = field(repr=False)
     test_org_id: str
     test_branch_id: int
     timeout_seconds: int = 30
+    database_read_only: bool = False
 
 
 def _env_required(name: str) -> str:
@@ -55,6 +56,9 @@ def live_config() -> LiveERPConfig:
         test_org_id=_env_required("PHARMA_LIVE_TEST_ORG_ID"),
         test_branch_id=int(_env_required("PHARMA_LIVE_TEST_BRANCH_ID")),
         timeout_seconds=int(os.getenv("PHARMA_LIVE_TIMEOUT_SECONDS", "30")),
+        database_read_only=os.getenv(
+            "PHARMA_LIVE_DATABASE_READ_ONLY", ""
+        ).lower() in {"1", "true", "yes"},
     )
 
 
@@ -79,8 +83,16 @@ def live_session(live_config: LiveERPConfig) -> requests.Session:
 @pytest.fixture(scope="session")
 def db_conn(live_config: LiveERPConfig):
     conn = psycopg2.connect(live_config.database_url)
-    conn.autocommit = True
+    if live_config.database_read_only:
+        conn.set_session(readonly=True, autocommit=True)
+    else:
+        conn.autocommit = True
     try:
+        if live_config.database_read_only:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_read_only")
+                if cur.fetchone()[0] != "on":
+                    raise RuntimeError("Live database connection is not read-only")
         yield conn
     finally:
         conn.close()

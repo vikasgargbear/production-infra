@@ -8,8 +8,17 @@ GST dashboard values matching the database source of truth.
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
+import pytest
+
 
 VALID_GST_TYPES = {"CGST/SGST", "CGST_SGST", "IGST", "EXEMPT", "NON_GST"}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def require_read_only_database(live_config):
+    assert live_config.database_read_only, (
+        "Set PHARMA_LIVE_DATABASE_READ_ONLY=true for the finance/GST audit"
+    )
 
 
 def _money(value) -> Decimal:

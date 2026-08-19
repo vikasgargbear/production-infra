@@ -14,6 +14,7 @@ Usage:
 """
 
 import hashlib
+import json
 import re
 from typing import Dict, Iterable, Set, List, Tuple, Optional
 from pathlib import Path
@@ -30,6 +31,46 @@ def _default_schema_doc_paths() -> List[Path]:
     repository_root = Path(__file__).resolve().parents[4]
     schema_directory = repository_root / "docs" / "backend" / "database" / "schemas"
     return sorted(schema_directory.glob("*.md"))
+
+
+def _default_live_evidence_path() -> Path:
+    repository_root = Path(__file__).resolve().parents[4]
+    return repository_root / "database" / "live-schema-evidence.json"
+
+
+def _load_live_verified_columns(path: Optional[Path] = None) -> Dict[str, Set[str]]:
+    """Load the deliberately narrow query contract proven by a live capture."""
+    evidence_path = path or _default_live_evidence_path()
+    if not evidence_path.is_file():
+        return {}
+
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if evidence.get("evidence_state") != "captured_not_baselined":
+        raise ValueError("Live schema evidence must remain captured_not_baselined")
+
+    for hash_field in ("artifact_sha256", "capture_sql_sha256"):
+        value = evidence.get(hash_field, "")
+        if not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise ValueError(f"Live schema evidence has invalid {hash_field}")
+
+    verified = evidence.get("query_contract_verification", {}).get("verified_columns")
+    if not isinstance(verified, dict):
+        raise ValueError("Live schema evidence has no verified_columns mapping")
+
+    schema_map: Dict[str, Set[str]] = {}
+    qualified_table = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
+    identifier = re.compile(r"^[A-Za-z_]\w*$")
+    for table, columns in verified.items():
+        if not qualified_table.fullmatch(table) or not isinstance(columns, list):
+            raise ValueError("Live schema evidence contains an invalid table contract")
+        if not columns or any(
+            not isinstance(column, str) or not identifier.fullmatch(column)
+            for column in columns
+        ):
+            raise ValueError(f"Live schema evidence contains invalid columns for {table}")
+        schema_map[table] = set(columns)
+
+    return schema_map
 
 
 def _parse_schema_docs(paths: Iterable[Path]) -> Dict[str, Set[str]]:
@@ -100,6 +141,9 @@ def parse_schema_doc(required: bool = False) -> Dict[str, Set[str]]:
             raise ValueError(message)
         logger.warning("%s. Skipping validation.", message)
         return {}
+
+    for table, columns in _load_live_verified_columns().items():
+        schema_map.setdefault(table, set()).update(columns)
     
     _SCHEMA_CACHE = schema_map
     logger.info("Parsed schema docs: %s tables", len(schema_map))

@@ -833,7 +833,7 @@ async def update_company_settings(
 # ============================================
 # TEST ENDPOINT FOR DEBUGGING
 # ============================================
-@router.get("/test-save")
+@router.get("/test-save", include_in_schema=False)
 @with_tenant_context
 async def test_company_save(
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -849,6 +849,10 @@ async def test_company_save(
     
     This helps debug issues where data appears to save but doesn't persist.
     """
+    from .....core.env import is_production
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
+
     from datetime import datetime as dt
     
     test_terms = f"Test Terms - Saved at {dt.now().isoformat()}"

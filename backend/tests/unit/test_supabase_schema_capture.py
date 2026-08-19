@@ -79,6 +79,9 @@ def test_capture_sql_is_static_read_only_catalog_query(tmp_path: Path):
 
     assert "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;" in sql
     assert "transaction_read_only" in sql
+    assert "to_regclass('supabase_migrations.schema_migrations')" in sql
+    assert "query_to_xml(" in sql
+    assert "'migration_history_available'" in sql
     assert not capture.FORBIDDEN_SQL.search(sql)
 
     unsafe = tmp_path / "unsafe.sql"

@@ -35,3 +35,22 @@ python3 backend/scripts/schema_readiness.py --validate-claim
 After the baseline is established, only `backend/alembic` may contain new
 production migrations. Legacy SQL remains evidence for reconciliation until it
 is explicitly archived; it is not an executable migration chain.
+
+## Reviewed Live Capture
+
+The read-only capture from project `jfrairkkzxwkhbtqejnz` on 2026-08-19 is
+summarized in `database/live-schema-evidence.json`. Its artifact hash is checked
+in, while the 0600 raw artifact remains ignored because catalog output may
+contain operational details.
+
+The capture verifies that every column in the 36-query conflict inventory exists
+live. It does not establish a migration baseline: Supabase migration history was
+unavailable, 92 of 175 reviewed business tables had RLS disabled, no reviewed
+business table used `FORCE RLS`, and `system_config.feature_flags` had RLS enabled
+without a policy.
+
+Do not start the backend pilot against live data until the deployed database role
+is proven to be a non-owner without RLS bypass, every request is proven to set
+`app.org_id`, cross-tenant read tests pass with that exact role, and pilot routes
+are restricted to an allowlist of reviewed RLS-protected tables. All live writes
+remain blocked by unresolved trigger ownership and transaction-contract issues.

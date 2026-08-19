@@ -36,6 +36,10 @@ export PHARMA_LIVE_ACCESS_TOKEN="short-lived-token-for-dedicated-test-user"
 export PHARMA_LIVE_TEST_ORG_ID="..."
 export PHARMA_LIVE_TEST_BRANCH_ID="..."
 
+# Required for test_live_finance_gst_audit.py only. Do not set this for the
+# explicitly mutating journey/write-contract suite.
+export PHARMA_LIVE_DATABASE_READ_ONLY=true
+
 # Optional when DNS to the DB hostname is flaky in the shell:
 # export PHARMA_LIVE_DATABASE_HOSTADDR="x.x.x.x"
 ```

@@ -6,7 +6,7 @@ import os
 
 from ...core.auth.org_context import get_org_context, OrgContext
 
-router = APIRouter(prefix="/test", tags=["Testing"])
+router = APIRouter(prefix="/test", tags=["Testing"], include_in_schema=False)
 
 @router.get("/env-check")
 async def check_test_mode():

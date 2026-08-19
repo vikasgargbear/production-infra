@@ -22,6 +22,8 @@ def _read(relative_path: str) -> str:
 
 def collect_issues() -> List[IntegrityIssue]:
     issues: List[IntegrityIssue] = []
+    live_evidence = json.loads(_read("database/live-schema-evidence.json"))
+    live_transactions = live_evidence["transaction_safety"]
 
     inventory_trigger = _read("database/04-triggers/02_inventory_triggers.sql")
     movement_function = inventory_trigger.split(
@@ -78,7 +80,7 @@ def collect_issues() -> List[IntegrityIssue]:
         if schema_authority.get("readiness_state") != "baselined":
             issues.append(IntegrityIssue(
                 "PAYMENT_IDEMPOTENCY_SCHEMA_UNVERIFIED",
-                "payment idempotency fails closed on internal_notes, but the live schema is not baselined",
+                "live capture confirms internal_notes, but no reviewed migration baseline owns its durable idempotency contract",
             ))
     allocation_routes = _read("backend/app/api/routes/finance/allocation/routes.py")
     mutation_contracts = (
@@ -169,7 +171,15 @@ def collect_issues() -> List[IntegrityIssue]:
     ):
         issues.append(IntegrityIssue(
             "ALLOCATION_TABLE_UNBASELINED",
-            "finance services require financial.allocations, but bootstrap DDL defines payment_allocations",
+            "live financial.allocations exists, but migration history is unavailable and bootstrap DDL defines payment_allocations",
+        ))
+    if set(live_transactions.get("allocation_projection_owners", [])) == {
+        "database_triggers",
+        "application_service",
+    }:
+        issues.append(IntegrityIssue(
+            "LIVE_ALLOCATION_PROJECTION_OWNERSHIP_CONFLICT",
+            "live allocation triggers and the application both update financial projections",
         ))
     allocation_service = _read("backend/app/api/services/finance/allocation/service.py")
     unscoped_allocation_reads = (
@@ -219,13 +229,34 @@ def collect_issues() -> List[IntegrityIssue]:
         "bank_account",
         "opening_balance",
         "financial.unmatched_transactions",
-    )) and (
-        "bank_account TEXT" not in financial_tables
-        or "CREATE TABLE financial.unmatched_transactions" not in financial_tables
+    )) and not live_transactions.get(
+        "bank_reconciliation_service_contract_matches_live", True
     ):
         issues.append(IntegrityIssue(
             "BANK_RECONCILIATION_SCHEMA_UNBASELINED",
-            "bank reconciliation service targets columns and tables absent from checked-in authority",
+            "live bank reconciliation and payment columns do not match the application service contract",
+        ))
+
+    if not live_transactions.get("live_journal_immutability_triggers_present", True):
+        issues.append(IntegrityIssue(
+            "LIVE_JOURNAL_IMMUTABILITY_NOT_DEPLOYED",
+            "live journal tables lack the checked-in posted-header and posted-line immutability triggers",
+        ))
+    if set(live_transactions.get("order_invoice_generation_owners", [])) == {
+        "database_trigger",
+        "application_service",
+    }:
+        issues.append(IntegrityIssue(
+            "LIVE_ORDER_INVOICE_OWNERSHIP_CONFLICT",
+            "live order delivery trigger and application conversion paths can both generate invoices",
+        ))
+    if set(live_transactions.get("grn_inventory_effect_owners", [])) == {
+        "database_trigger",
+        "application_service",
+    }:
+        issues.append(IntegrityIssue(
+            "LIVE_GRN_INVENTORY_OWNERSHIP_CONFLICT",
+            "live GRN trigger and application paths can both apply inventory effects",
         ))
 
     component_calculator_imports = []

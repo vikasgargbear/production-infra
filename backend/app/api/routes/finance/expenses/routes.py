@@ -64,7 +64,10 @@ async def generate_claim_number(
 
 @router.get("/expense-types")
 @with_tenant_context
-async def get_expense_types():
+async def get_expense_types(
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """Get list of available expense types"""
     return {
         "expense_types": [

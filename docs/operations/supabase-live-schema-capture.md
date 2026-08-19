@@ -28,11 +28,12 @@ Use either of these local clients:
   is used automatically when `psql` is unavailable and does not require a
   separate PostgreSQL client installation.
 
-Obtain a database role that can read PostgreSQL catalogs and
-`supabase_migrations.schema_migrations`. The command does not require or read
-`SUPABASE_ACCESS_TOKEN`, anon keys, service role keys, or any repository `.env`
-file. Both client paths pass the password separately from the validated URL and
-suppress remote error details.
+Obtain a database role that can read PostgreSQL catalogs. When
+`supabase_migrations.schema_migrations` exists, the capture includes its rows;
+otherwise it records `migration_history_available = false` and an empty history.
+The command does not require or read `SUPABASE_ACCESS_TOKEN`, anon keys, service
+role keys, or any repository `.env` file. Both client paths pass the password
+separately from the validated URL and suppress remote error details.
 
 ## Validate Without Connecting
 

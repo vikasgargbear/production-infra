@@ -1,7 +1,9 @@
 {
-  "version": 1,
-  "readiness_state": "pending-live-baseline",
-  "expected_failure_count": 36,
+  "version": 2,
+  "readiness_state": "live-verified-query-contracts",
+  "expected_failure_count": 0,
+  "historical_failure_count": 36,
+  "live_evidence": "database/live-schema-evidence.json",
   "review_basis": [
     "docs/backend/database/schemas/sales.md",
     "database/02-tables/04_sales_tables.sql",
@@ -9,7 +11,7 @@
     "database/schema-source-classification.json",
     "backend application query and mutation paths"
   ],
-  "authority_constraint": "The schema authority is unbaselined. The numbered DDL is legacy bootstrap evidence and the Markdown schema is not a reviewed live baseline, so conflicts between them cannot be resolved by renaming application columns.",
+  "authority_constraint": "The reviewed live capture verifies the inventoried query columns only. Migration history is unavailable and the full schema authority remains unbaselined.",
   "contract_conflicts": [
     {
       "tables": ["sales.invoices", "sales.invoice_items"],

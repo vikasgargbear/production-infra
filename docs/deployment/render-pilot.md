@@ -18,8 +18,9 @@ have been reviewed.
 ## Backend
 
 The Docker service builds with context `backend/`, runs as a non-root user,
-binds the platform `PORT`, and exposes `GET /health` for Render health checks.
-REST lives under `/api`. A future Streamable HTTP MCP transport must mount at
+binds the platform `PORT`, and exposes `GET /health` for process liveness and
+`GET /ready` for Render's database-backed health gate. REST lives under `/api`.
+A future Streamable HTTP MCP transport must mount at
 `/mcp` in this same FastAPI service; do not create a second MCP web service.
 
 The reviewed MCP registry is not a hosted MCP transport today. `/mcp` must not
@@ -114,6 +115,7 @@ After a manually approved Blueprint deployment:
 
 ```bash
 curl --fail --silent --show-error https://your-backend.onrender.com/health
+curl --fail --silent --show-error https://your-backend.onrender.com/ready
 curl --fail --silent --show-error https://your-frontend.onrender.com/
 ```
 

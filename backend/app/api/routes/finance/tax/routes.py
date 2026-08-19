@@ -137,7 +137,10 @@ async def get_tax_analytics(
 
 @router.get("/overview")
 @with_tenant_context
-async def tax_overview():
+async def tax_overview(
+    _: dict = Depends(PermissionChecker("finance", "view")),
+    context: OrgContext = Depends(get_org_context),
+):
     """Get tax service overview"""
     return {"status": "Tax service available", "features": ["Tax calculation", "GSTR-1 summary generation", "Tax analytics", "Sales tax reporting"],
             "note": "Simplified version using sales invoice data"}

@@ -31,6 +31,7 @@ from ....schemas.sales.returns import SalesReturnItem as ReturnItem, SalesReturn
 from .....core.utils.branch_utils import get_default_branch_id
 from .....core.money import money_json
 from .....core.money import money, rupees
+from .....core.env import is_production
 from datetime import date
 
 # Note: Schema classes moved to schemas/returns.py
@@ -594,7 +595,7 @@ async def cancel_sale_return(
 
 # ==================== TEST ENDPOINTS ====================
 
-@router.get("/test/verify-return/{return_id}")
+@router.get("/test/verify-return/{return_id}", include_in_schema=False)
 @with_tenant_context
 async def verify_return_flow(
     return_id: int,
@@ -610,6 +611,8 @@ async def verify_return_flow(
     - Customer credit balance
     - Inventory movements
     """
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
     try:
         result = ReturnService.get_return_with_ledger_info(db, return_id)
         
@@ -628,12 +631,14 @@ async def verify_return_flow(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/test/return-methods")
+@router.get("/test/return-methods", include_in_schema=False)
 async def get_return_methods():
     """
     Get all supported return methods with descriptions.
     For testing and documentation purposes.
     """
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
     return {
         "return_methods": [
             {
@@ -667,7 +672,7 @@ async def get_return_methods():
         ]
     }
 
-@router.get("/test/validate/{return_id}")
+@router.get("/test/validate/{return_id}", include_in_schema=False)
 @with_tenant_context
 async def validate_sales_return_data(
     return_id: int,
@@ -679,6 +684,8 @@ async def validate_sales_return_data(
     Validate that all fields in a sales return are correctly populated.
     Returns detailed validation report with pass/fail status for each field.
     """
+    if is_production():
+        raise HTTPException(status_code=404, detail="Not found")
     try:
         # Fetch the return header
         header_query = text("""

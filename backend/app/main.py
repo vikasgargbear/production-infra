@@ -2,11 +2,16 @@
 FastAPI Main Application
 Reorganized with domain-based folder structure
 """
+import asyncio
 import os
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
+from .core.database import engine
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
@@ -215,6 +220,29 @@ async def root():
 async def health_check():
     return {"status": "healthy", "service": "pharma-erp-backend", "version": "3.0.0"}
 
+
+READINESS_TIMEOUT_SECONDS = 5.0
+
+
+def _database_is_ready() -> bool:
+    with engine.connect() as connection:
+        return connection.execute(text("SELECT 1")).scalar_one() == 1
+
+
+@app.get("/ready", include_in_schema=False)
+async def readiness_check():
+    try:
+        ready = await asyncio.wait_for(
+            run_in_threadpool(_database_is_ready),
+            timeout=READINESS_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+
+    if not ready:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}
+
 # =============================================================================
 # API ROUTER REGISTRATION
 # =============================================================================
@@ -310,10 +338,6 @@ if not is_production():
     api.include_router(test_routes.router, tags=["Testing"])
 # api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
 # api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
-
-@api.get("/test-connection")
-async def test_connection():
-    return {"status": "connected", "message": "Backend is running"}
 
 app.include_router(api)
 
