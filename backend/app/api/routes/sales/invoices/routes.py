@@ -3,12 +3,11 @@ Invoice API - Sales invoice management
 
 PRODUCTION-READY: Uses TenantAwareSession for AI-agent safety
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 import logging
-import time
 from typing import Optional
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
@@ -16,129 +15,50 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import InvoiceStatus, InvoicePaymentStatus, PaymentMethod
-from ....services.document_number_service import DocumentNumberService
+from ....services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
 from ....services.compliance.gst_service import GSTService
-from ....services.inventory.inventory_service import InventoryService
 from ....services.sales.invoice import InvoiceService
 from ....schemas.inventory.inventory import StockMovementCreate
 from ....schemas.sales.billing import (
     InvoiceCreateRequest, InvoiceItemCreate, 
     InvoiceCancelRequest, InvoiceResponse, InvoiceSummary
 )
-from decimal import Decimal
-# Consolidated: using main DocumentNumberService
-from .....api.shared.calculations import calculate_line_item, finalize_totals  # Shared helpers
-from ....services.settings.settings_service import SettingsService  # NEW: Settings enforcement
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
 
-@router.get("/generate-number")
+@router.post(
+    "/generate-number",
+    operation_id="sales_reserve_invoice_number_v1",
+    summary="Reserve an invoice number",
+    openapi_extra=document_number_reservation_openapi("sales.create"),
+)
 @with_tenant_context
 async def generate_invoice_number(
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
+    _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """Generate and reserve next invoice number atomically"""
     try:
-        # Get org_id from context
         org_id = str(context.org_id)
-        # Use V2 service for atomic number generation
-        new_number = DocumentNumberService.generate_number(db.session, "invoice", org_id)
+        new_number = DocumentNumberService.reserve_number(db, "invoice", org_id)
         return {"invoice_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate invoice number: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate invoice number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve invoice number")
 
 # REMOVED: /simple endpoint - legacy fallback no longer needed
 # Use main POST /invoices/ endpoint with offline-first approach
-
-def process_inventory_background(
-    org_id: str,
-    invoice_id: int,
-    batch_deductions: list,
-    movement_records: list,
-    invoice_totals: dict,
-    created_by: int
-):
-    """
-    Background task to process inventory updates after invoice is returned.
-    This runs AFTER the response is sent to the user for faster perceived performance.
-    """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    import os
-    
-    try:
-        # Create new DB session for background task (can't reuse request session)
-        database_url = os.environ.get("DATABASE_URL")
-        if not database_url:
-            logger.error("DATABASE_URL not set for background task")
-            return
-        
-        engine = create_engine(database_url)
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        
-        try:
-            # Extract invoice_number early for movement references
-            invoice_number = (invoice_totals or {}).get("invoice_number", "")
-
-            # Use service methods for bulk operations
-
-            # 1. Bulk update batch quantities
-            if batch_deductions:
-                InventoryService.bulk_update_batch_quantities(db, batch_deductions, org_id)
-                logger.info(f"✅ [BACKGROUND] Updated {len(batch_deductions)} batch quantities for invoice {invoice_id}")
-
-            # 2. Bulk insert inventory movements
-            if movement_records:
-                InventoryService.bulk_insert_movements(db, movement_records, invoice_id, created_by, invoice_number)
-                logger.info(f"✅ [BACKGROUND] Inserted {len(movement_records)} inventory movements for invoice {invoice_id}")
-            
-            # 3. Update invoice totals
-            if invoice_totals:
-                InvoiceService.update_invoice_totals(db, invoice_id, invoice_totals)
-                logger.info(f"✅ [BACKGROUND] Updated totals for invoice {invoice_id}")
-            
-            # 4. Create customer outstanding entry in financial.customer_outstanding
-            if invoice_totals:
-                customer_id = invoice_totals.get("customer_id")
-                final_amount = invoice_totals.get("final_amount", 0)
-                invoice_number = invoice_totals.get("invoice_number")
-                invoice_date = invoice_totals.get("invoice_date")
-                due_date = invoice_totals.get("due_date")
-                if customer_id and final_amount:
-                    InvoiceService.update_customer_outstanding(
-                        db, 
-                        customer_id, 
-                        final_amount,
-                        invoice_id=invoice_id,
-                        invoice_number=invoice_number,
-                        invoice_date=invoice_date,
-                        org_id=org_id,
-                        due_date=due_date
-                    )
-            
-            db.commit()
-            logger.info(f"✅ [BACKGROUND] Completed async processing for invoice {invoice_id}")
-            
-        except Exception as e:
-            db.rollback()
-            logger.error(f"❌ [BACKGROUND] Failed async processing for invoice {invoice_id}: {e}")
-        finally:
-            db.close()
-            
-    except Exception as e:
-        logger.error(f"❌ [BACKGROUND] Failed to create session for invoice {invoice_id}: {e}")
 
 @router.post("/")
 @with_tenant_context
 async def create_invoice(
     invoice_data: InvoiceCreateRequest,
-    background_tasks: BackgroundTasks,
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
@@ -332,8 +252,9 @@ async def cancel_invoice(
         
         # Get invoice with date for deadline calculation
         invoice_result = db.execute(text("""
-            SELECT invoice_id, invoice_status, invoice_date, paid_amount, final_amount, gstr1_reported_date
-            FROM sales.invoices
+            SELECT i.invoice_id, i.invoice_status, i.invoice_date, i.paid_amount, i.final_amount,
+                   to_jsonb(i) AS invoice_json
+            FROM sales.invoices i
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
         
@@ -345,7 +266,8 @@ async def cancel_invoice(
         invoice_status = invoice.invoice_status
         invoice_date = invoice.invoice_date
         paid_amount = float(invoice.paid_amount or 0)
-        gstr1_reported = invoice.gstr1_reported_date is not None
+        invoice_json = invoice.invoice_json or {}
+        gstr1_reported = bool(invoice_json.get("gstr1_reported_date"))
         
         # Rule 1: Already cancelled
         if invoice_status == InvoiceStatus.CANCELLED.value:

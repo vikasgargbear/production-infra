@@ -6,9 +6,10 @@
  * The main component handles only rendering.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { purchasesApi } from '../../../../services/api';
 import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
+import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
 import { useToast } from '../../../global';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { usePurchaseEntrySave } from './usePurchaseEntrySave';
@@ -188,6 +189,9 @@ export function usePurchaseEntryLogic({
     const [newProductToAdd, setNewProductToAdd] = useState<any>(null);
     const [currentEditItem, setCurrentEditItem] = useState<any>(null);
     const [createdPurchaseData, setCreatedPurchaseData] = useState<CreatedPurchaseData | null>(null);
+    const calculationRequestRef = useRef(0);
+    const purchaseRef = useRef(purchase);
+    purchaseRef.current = purchase;
 
     // Network status for offline-first
     const { isOnline } = useNetworkStatus();
@@ -208,8 +212,9 @@ export function usePurchaseEntryLogic({
     }, []);
 
     // Calculate totals
-    const calculateTotals = useCallback(() => {
-        if (!purchase.items || purchase.items.length === 0) {
+    const calculateTotals = useCallback(async (purchaseData: PurchaseData) => {
+        const requestId = ++calculationRequestRef.current;
+        if (!purchaseData.items || purchaseData.items.length === 0) {
             setPurchase(prev => ({
                 ...prev,
                 gross_amount: 0,
@@ -221,46 +226,48 @@ export function usePurchaseEntryLogic({
             return;
         }
 
-        let grossTotal = 0;
-        let taxTotal = 0;
-
-        purchase.items.forEach(item => {
-            if (item.product_id || item.product_name) {
-                const quantity = parseFloat(String(item.quantity)) || 0;
-                const purchasePrice = parseFloat(String(item.unit_price || item.unit_price || item.unit_price)) || 0;
-                const taxPercent = parseFloat(String(item.tax_percent || item.tax || item.gst_percent)) || 0;
-
-                const itemTotal = quantity * purchasePrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-
-                grossTotal += itemTotal;
-                taxTotal += itemTax;
+        try {
+            const calculation = await calculatePurchaseOrderPreview(purchaseData, isOnline);
+            if (requestId !== calculationRequestRef.current) return;
+            const totals = calculation.totals;
+            setPurchase(prev => {
+                let itemValuesChanged = false;
+                const items = prev.items.map((item, index) => {
+                    const calculated = calculation.items[index] || {};
+                    const taxableAmount = Number(calculated.taxable_amount || 0);
+                    const taxAmount = Number(calculated.tax_amount || 0);
+                    const totalAmount = Number(calculated.total || calculated.total_amount || 0);
+                    if (
+                        Number(item.taxable_amount || 0) === taxableAmount &&
+                        Number(item.tax_amount || 0) === taxAmount &&
+                        Number(item.total_amount || 0) === totalAmount
+                    ) return item;
+                    itemValuesChanged = true;
+                    return { ...item, taxable_amount: taxableAmount, tax_amount: taxAmount, total_amount: totalAmount };
+                });
+                return {
+                    ...prev,
+                    items: itemValuesChanged ? items : prev.items,
+                    gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
+                    tax_amount: totals.tax_amount || totals.total_tax_amount || totals.total_tax || 0,
+                    round_off: totals.round_off_amount || totals.round_off || 0,
+                    net_amount: totals.net_amount || totals.total_amount || 0,
+                    total_amount: totals.final_amount || totals.total_amount || 0
+                };
+            });
+        } catch (calculationError) {
+            if (requestId === calculationRequestRef.current) {
+                toast.error(calculationError instanceof Error ? calculationError.message : 'Unable to calculate purchase totals');
             }
-        });
-
-        const discountAmount = parseFloat(String(purchase.discount_amount)) || 0;
-        const otherCharges = parseFloat(String(purchase.other_charges)) || 0;
-
-        const netAmount = grossTotal + taxTotal - discountAmount + otherCharges;
-        const roundOff = Math.round(netAmount) - netAmount;
-        const finalAmount = Math.round(netAmount);
-
-        setPurchase(prev => ({
-            ...prev,
-            gross_amount: grossTotal,
-            tax_amount: taxTotal,
-            round_off: roundOff,
-            net_amount: netAmount,
-            total_amount: finalAmount
-        }));
-    }, [purchase.items, purchase.discount_amount, purchase.other_charges]);
+        }
+    }, [isOnline, toast]);
 
     // Trigger calculations when items change
     useEffect(() => {
-        if (purchase.items) {
-            calculateTotals();
+        if (purchaseRef.current.items) {
+            void calculateTotals(purchaseRef.current);
         }
-    }, [purchase.items, purchase.discount_amount, purchase.other_charges]);
+    }, [calculateTotals, purchase.items, purchase.discount_amount, purchase.other_charges]);
 
     // Update payment amount when final amount changes
     useEffect(() => {

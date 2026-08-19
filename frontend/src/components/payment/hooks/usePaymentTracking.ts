@@ -119,9 +119,9 @@ export function usePaymentTracking(): UsePaymentTrackingReturn {
 
         try {
             const response = await paymentsApi.getAll();
+            const paymentsData = response?.data?.payments || [];
 
-            if (response?.data && Array.isArray(response.data)) {
-                const paymentsData = response.data;
+            if (Array.isArray(paymentsData)) {
                 setPayments(paymentsData);
 
                 await offlineStorage.storeOffline('payments', paymentsData, {

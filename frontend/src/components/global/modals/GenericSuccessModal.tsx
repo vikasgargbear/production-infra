@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, X, Printer, Download, Send, Copy, ExternalLink, Sparkles, Share2, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
-import PrintUtility from '../ui/PrintUtility';
+import { CheckCircle, X, Printer, Download, Copy, Share2, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 

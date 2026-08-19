@@ -25,11 +25,8 @@ export { default as SupplierSelector } from './ui/SupplierSelector';
 export { default as PurchaseHeader } from './ui/PurchaseHeader';
 export { default as PurchaseSummary } from './ui/PurchaseSummary';
 export { default as PurchaseSummaryTop } from './ui/PurchaseSummaryTop';
-export { default as PurchaseOrderPreview } from './ui/PurchaseOrderPreview';
-export { default as ProductLineEntry } from './ui/ProductLineEntry';
 export { default as PurchaseItemEditModal } from './ui/PurchaseItemEditModal';
 export { default as SupplierQuickSelect } from './ui/SupplierQuickSelect';
-export { default as GRNItemsTable } from './ui/GRNItemsTable';
 
 // ==================== MODALS ====================
 export { default as ProductVerificationModal } from './modals/ProductVerificationModal';

@@ -11,6 +11,11 @@ from ....core.auth.org_context import get_org_context, OrgContext
 from ...services.payroll.payroll_calculation_service import PayrollCalculationService
 from ...services.payroll.salary_slip_service import SalarySlipService
 from ...services.payroll.payroll_report_service import PayrollReportService
+from ...schemas.payroll import (
+    PayrollCalculationResponse,
+    PayrollRunConfirmationResponse,
+    PayrollRunGenerationResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,7 +56,7 @@ async def get_payroll_run(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/calculate", response_model=Dict[str, Any])
+@router.post("/calculate", response_model=PayrollCalculationResponse)
 @with_tenant_context
 async def calculate_payroll(
     payload: Dict[str, Any],
@@ -77,7 +82,7 @@ async def calculate_payroll(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/generate", response_model=Dict[str, Any])
+@router.post("/generate", response_model=PayrollRunGenerationResponse)
 @with_tenant_context
 async def generate_payroll(
     payload: Dict[str, Any],
@@ -108,7 +113,7 @@ async def generate_payroll(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/runs/{run_id}/confirm", response_model=Dict[str, Any])
+@router.post("/runs/{run_id}/confirm", response_model=PayrollRunConfirmationResponse)
 @with_tenant_context
 async def confirm_payroll_run(
     run_id: int,

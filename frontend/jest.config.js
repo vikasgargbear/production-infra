@@ -59,12 +59,6 @@ module.exports = {
     '/.next/',
   ],
   
-  // Watch plugins
-  watchPlugins: [
-    'jest-watch-typeahead/filename',
-    'jest-watch-typeahead/testname',
-  ],
-  
   // Globals
   globals: {
     'ts-jest': {

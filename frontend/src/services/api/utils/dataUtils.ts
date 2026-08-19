@@ -32,6 +32,53 @@ const STRING_FIELDS: string[] = [
   'pack_type', 'pack_size', 'pack_input', 'pack_unit_type', 'unit_measurement'
 ];
 
+const MONEY_RESPONSE_PATTERN = /^-?(?:0|[1-9]\d*)\.\d{2}$/;
+
+const MONEY_RESPONSE_FIELDS = new Set([
+  'amount', 'total', 'paid', 'advance', 'outstanding', 'allocated', 'unallocated', 'due',
+  'outputTax', 'inputCredit', 'netPayable', 'taxableAmount', 'totalTax',
+  'totalOutstanding', 'overdueAmount', 'currentWeekCollections',
+  'outstandingAmount', 'creditLimit',
+  'total_amount', 'approved_amount', 'taxable_amount', 'total_tax',
+  'total_debit', 'total_credit', 'total_taxable', 'total_purchase_taxable',
+  'cgst', 'sgst', 'igst', 'cgst_amount', 'sgst_amount', 'igst_amount',
+  'purchase_cgst_amount', 'purchase_sgst_amount', 'purchase_igst_amount',
+  'allocated_amount', 'unallocated_amount', 'payment_amount', 'due_amount',
+  'outstanding_amount', 'total_outstanding', 'total_overdue', 'total_advance',
+  'net_position', 'net_balance', 'daily_revenue', 'mtd_collections',
+  'pipeline_value', 'risk_amount', 'today_collections', 'overdue_amount',
+  'subtotal', 'grand_total', 'invoice_value', 'itc_available',
+  'total_itc_available', 'total_itc_at_risk', 'our_invoice_amount',
+  'amount_difference', 'itc_at_risk', 'unit_price', 'total_value',
+  'mrp', 'mrp_per_unit', 'sale_price', 'sale_price_per_unit',
+  'cost_price', 'cost_per_unit', 'current_outstanding', 'rate'
+]);
+
+/**
+ * Adapt exact money strings from the HTTP contract to legacy numeric UI models.
+ * Server-side calculations remain authoritative; this is only a compatibility
+ * boundary for components that format or compare response values as numbers.
+ */
+export const normalizeMoneyResponse = (value: any): any => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeMoneyResponse);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    if (
+      MONEY_RESPONSE_FIELDS.has(key) &&
+      typeof entry === 'string' &&
+      MONEY_RESPONSE_PATTERN.test(entry)
+    ) {
+      return [key, Number(entry)];
+    }
+    return [key, normalizeMoneyResponse(entry)];
+  }));
+};
+
 /**
  * Clean data before sending to API
  * - Removes empty strings

@@ -9,21 +9,12 @@ from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
+from ....core.utils.constants import InvoiceStatus
+
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-class InvoiceStatus(str, Enum):
-    """Invoice lifecycle status"""
-    DRAFT = "draft"
-    GENERATED = "generated"
-    SENT = "sent"
-    PAID = "paid"
-    PARTIALLY_PAID = "partially_paid"
-    OVERDUE = "overdue"
-    CANCELLED = "cancelled"
-
 
 class PaymentMode(str, Enum):
     """Payment modes"""
@@ -37,8 +28,8 @@ class PaymentMode(str, Enum):
     CREDIT = "credit"
 
 
-class GSTType(str, Enum):
-    """GST calculation type"""
+class BillingGSTCode(str, Enum):
+    """Lowercase GST code used by the sales billing wire contract."""
     CGST_SGST = "cgst_sgst"  # Within state
     IGST = "igst"  # Inter-state
 
@@ -156,7 +147,7 @@ class InvoiceBase(BaseModel):
     shipping_pincode: Optional[str] = Field(None, pattern=r"^\d{6}$")
     
     # GST details
-    gst_type: GSTType = Field(..., description="CGST/SGST or IGST")
+    gst_type: BillingGSTCode = Field(..., description="cgst_sgst or igst")
     place_of_supply: str = Field(..., description="State code (e.g., 27)")
     is_reverse_charge: bool = Field(default=False)
     

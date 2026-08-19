@@ -5,7 +5,7 @@ Provides comprehensive receivables management and collection analytics
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text, func, case, and_, or_
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import logging
 from decimal import Decimal
@@ -13,6 +13,11 @@ from decimal import Decimal
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker  # RBAC
+from ....core.money import money_json
+from ...schemas.money import (
+    CollectionPerformanceResponse,
+    ExactMoneyCustomerOutstandingResponse,
+)
 
 router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)
@@ -118,8 +123,18 @@ async def get_aging_data(
         customers_data = result.fetchall()
         
         # Calculate summary metrics
-        total_outstanding = sum(float(row.outstanding_amount or 0) for row in customers_data)
-        overdue_amount = sum(float(row.outstanding_amount or 0) for row in customers_data if row.max_overdue_days > 0)
+        total_outstanding = sum(
+            (Decimal(str(row.outstanding_amount or 0)) for row in customers_data),
+            Decimal("0"),
+        )
+        overdue_amount = sum(
+            (
+                Decimal(str(row.outstanding_amount or 0))
+                for row in customers_data
+                if row.max_overdue_days > 0
+            ),
+            Decimal("0"),
+        )
         
         # Get collection efficiency from last 7 days
         collections_query = text("""
@@ -136,31 +151,31 @@ async def get_aging_data(
         aging_buckets = [
             {
                 "range": "0-30",
-                "amount": sum(float(row.bucket_0_30 or 0) for row in customers_data),
+                "amount": sum((Decimal(str(row.bucket_0_30 or 0)) for row in customers_data), Decimal("0")),
                 "count": sum(1 for row in customers_data if row.bucket_0_30 > 0),
                 "percentage": 0
             },
             {
                 "range": "31-60", 
-                "amount": sum(float(row.bucket_31_60 or 0) for row in customers_data),
+                "amount": sum((Decimal(str(row.bucket_31_60 or 0)) for row in customers_data), Decimal("0")),
                 "count": sum(1 for row in customers_data if row.bucket_31_60 > 0),
                 "percentage": 0
             },
             {
                 "range": "61-90",
-                "amount": sum(float(row.bucket_61_90 or 0) for row in customers_data),
+                "amount": sum((Decimal(str(row.bucket_61_90 or 0)) for row in customers_data), Decimal("0")),
                 "count": sum(1 for row in customers_data if row.bucket_61_90 > 0),
                 "percentage": 0
             },
             {
                 "range": "91-120",
-                "amount": sum(float(row.bucket_91_120 or 0) for row in customers_data),
+                "amount": sum((Decimal(str(row.bucket_91_120 or 0)) for row in customers_data), Decimal("0")),
                 "count": sum(1 for row in customers_data if row.bucket_91_120 > 0),
                 "percentage": 0
             },
             {
                 "range": "120+",
-                "amount": sum(float(row.bucket_120_plus or 0) for row in customers_data),
+                "amount": sum((Decimal(str(row.bucket_120_plus or 0)) for row in customers_data), Decimal("0")),
                 "count": sum(1 for row in customers_data if row.bucket_120_plus > 0),
                 "percentage": 0
             }
@@ -180,9 +195,9 @@ async def get_aging_data(
                 "phone": row.primary_phone or "",
                 "email": row.primary_email or "",
                 "location": "",  # Address data from separate table
-                "outstandingAmount": float(row.outstanding_amount or 0),
+                "outstandingAmount": money_json(row.outstanding_amount or 0),
                 "daysOverdue": int(row.max_overdue_days or 0),
-                "creditLimit": float(row.credit_limit or 0),
+                "creditLimit": money_json(row.credit_limit or 0),
                 "creditUtilization": round(float(row.credit_utilization or 0), 1),
                 "lastPayment": "2024-06-15",  # TODO: Get from payment history
                 "lastFollowUp": "2024-07-18",  # TODO: Get from follow-up history
@@ -193,23 +208,26 @@ async def get_aging_data(
                 "preferredContactTime": "10:00 AM - 12:00 PM",  # TODO: Store in customer preferences
                 "assignedAgent": "Auto-assigned",  # TODO: Get from agent assignments
                 "agingBreakdown": [
-                    {"range": "0-30", "amount": float(row.bucket_0_30 or 0)},
-                    {"range": "31-60", "amount": float(row.bucket_31_60 or 0)},
-                    {"range": "61-90", "amount": float(row.bucket_61_90 or 0)},
-                    {"range": "91-120", "amount": float(row.bucket_91_120 or 0)},
-                    {"range": "120+", "amount": float(row.bucket_120_plus or 0)}
+                    {"range": "0-30", "amount": money_json(row.bucket_0_30 or 0)},
+                    {"range": "31-60", "amount": money_json(row.bucket_31_60 or 0)},
+                    {"range": "61-90", "amount": money_json(row.bucket_61_90 or 0)},
+                    {"range": "91-120", "amount": money_json(row.bucket_91_120 or 0)},
+                    {"range": "120+", "amount": money_json(row.bucket_120_plus or 0)}
                 ]
             })
         
         return {
             "summary": {
-                "totalOutstanding": total_outstanding,
-                "overdueAmount": overdue_amount,
-                "currentWeekCollections": float(collections_result.week_collections or 0),
+                "totalOutstanding": money_json(total_outstanding),
+                "overdueAmount": money_json(overdue_amount),
+                "currentWeekCollections": money_json(collections_result.week_collections or 0),
                 "collectionEfficiency": 82,  # TODO: Calculate based on targets
                 "avgCollectionDays": 45  # TODO: Calculate from payment history
             },
-            "agingBuckets": aging_buckets,
+            "agingBuckets": [
+                {**bucket, "amount": money_json(bucket["amount"])}
+                for bucket in aging_buckets
+            ],
             "parties": parties
         }
         
@@ -267,7 +285,7 @@ async def send_whatsapp_reminder(
         return {
             "success": True,
             "message_id": f"whatsapp_{datetime.now().timestamp()}",
-            "delivered_at": datetime.now().isoformat(),
+            "delivered_at": datetime.now(timezone.utc).isoformat(),
             "customer_name": result.customer_name
         }
         
@@ -304,7 +322,7 @@ async def send_sms_reminder(
         return {
             "success": True,
             "message_id": f"sms_{datetime.now().timestamp()}",
-            "delivered_at": datetime.now().isoformat(),
+            "delivered_at": datetime.now(timezone.utc).isoformat(),
             "customer_name": result.customer_name
         }
         
@@ -317,7 +335,7 @@ async def send_sms_reminder(
 # COLLECTION ANALYTICS APIs
 # ============================================================================
 
-@router.get("/analytics/performance")
+@router.get("/analytics/performance", response_model=CollectionPerformanceResponse)
 @with_tenant_context
 async def get_collection_performance(
     start_date: date = Query(...),
@@ -349,20 +367,24 @@ async def get_collection_performance(
             "end_date": end_date
         })
         
+        daily_rows = daily_result.fetchall()
         daily_collections = [
             {
                 "date": row.date.strftime("%Y-%m-%d"),
-                "amount": float(row.amount),
+                "amount": money_json(row.amount or 0),
                 "count": row.count
             }
-            for row in daily_result.fetchall()
+            for row in daily_rows
         ]
         
         # Calculate total metrics
-        total_collections = sum(item["amount"] for item in daily_collections)
+        total_collections = sum(
+            (Decimal(str(row.amount or 0)) for row in daily_rows),
+            Decimal("0"),
+        )
         
         return {
-            "total_collections": total_collections,
+            "total_collections": money_json(total_collections),
             "daily_collections": daily_collections,
             "collection_rate": 85.5,  # TODO: Calculate actual rate
             "outstanding_change": -5.2  # TODO: Calculate change
@@ -421,7 +443,10 @@ async def get_agent_performance(
 # CUSTOMER RECEIVABLES APIs
 # ============================================================================
 
-@router.get("/customer/{customer_id}/outstanding")
+@router.get(
+    "/customer/{customer_id}/outstanding",
+    response_model=ExactMoneyCustomerOutstandingResponse,
+)
 @with_tenant_context
 async def get_customer_outstanding(
     customer_id: int,
@@ -460,8 +485,8 @@ async def get_customer_outstanding(
                 "id": bill.bill_id,
                 "number": bill.bill_number,
                 "date": bill.bill_date.strftime("%Y-%m-%d"),
-                "amount": float(bill.bill_amount),
-                "outstanding": float(bill.outstanding_amount),
+                "amount": money_json(bill.bill_amount or 0),
+                "outstanding": money_json(bill.outstanding_amount or 0),
                 "dueDate": bill.due_date.strftime("%Y-%m-%d"),
                 "daysOverdue": int(bill.overdue_days or 0),
                 "status": bill.status
@@ -470,7 +495,10 @@ async def get_customer_outstanding(
         return {
             "customer_id": customer_id,
             "invoices": invoices,
-            "total_outstanding": sum(float(bill.outstanding_amount) for bill in bills)
+            "total_outstanding": money_json(sum(
+                (Decimal(str(bill.outstanding_amount or 0)) for bill in bills),
+                Decimal("0"),
+            ))
         }
         
     except Exception as e:
@@ -569,15 +597,15 @@ async def get_hub_statistics(
         overdue_result = db.execute(overdue_query, {"org_id": str(context.org_id)}).fetchone()
         
         return {
-            "total_outstanding": float(outstanding_result.total_outstanding or 0),
-            "overdue_amount": 0,  # Would need another query
-            "today_collections": float(today_result.today_collections or 0),
+            "total_outstanding": money_json(outstanding_result.total_outstanding or 0),
+            "overdue_amount": "0.00",  # Would need another query
+            "today_collections": money_json(today_result.today_collections or 0),
             "collection_efficiency": 82,  # Placeholder
             "active_campaigns": 2,
             "field_agents": 0,
             "high_risk_customers": int(overdue_result.overdue_count or 0),
             "total_customers": int(outstanding_result.unpaid_count or 0),
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:

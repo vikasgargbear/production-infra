@@ -5,7 +5,7 @@ Implements GST-compliant customer management with credit tracking
 PRODUCTION-READY: All endpoints use TenantAwareSession for AI-agent safety
 """
 from typing import Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy import text
 import logging
@@ -15,6 +15,7 @@ import json
 from .....core.database import SessionLocal
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession  
 from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.money import money_json
 from .....core.utils.state_utils import get_state_code  # Shared Indian GST state codes
 from .....core.utils.api_utils import handle_error  # Shared error handler
 from .....core.security.permissions import PermissionChecker  # RBAC
@@ -128,8 +129,8 @@ async def get_all_customers_with_addresses(
             customer["addresses"] = addresses_by_customer.get(cid, [])
             
             # Convert decimal fields
-            customer["credit_limit"] = float(customer["credit_limit"] or 0)
-            customer["current_outstanding"] = float(customer["current_outstanding"] or 0)
+            customer["credit_limit"] = money_json(customer["credit_limit"] or 0)
+            customer["current_outstanding"] = money_json(customer["current_outstanding"] or 0)
             customer["created_at"] = str(customer["created_at"]) if customer["created_at"] else None
             customer["updated_at"] = str(customer["updated_at"]) if customer["updated_at"] else None
             customer["drug_license_validity"] = str(customer["drug_license_validity"]) if customer["drug_license_validity"] else None
@@ -288,7 +289,7 @@ async def create_customer(
             "credit_limit": customer_data.get("credit_limit", 0),
             "credit_days": customer_data.get("credit_days", 0),
             "is_active": True,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "message": "Customer created successfully"
         }
         

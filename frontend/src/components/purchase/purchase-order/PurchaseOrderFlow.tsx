@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { Package, FileText, Building2, Truck, CreditCard } from 'lucide-react';
 import {
   GlobalDocumentFlow,
-  DocumentSummaryTop,
   SupplierSearch,
   ProductSearch,
   ItemsTable,
@@ -13,8 +12,7 @@ import {
   NumberInput,
   StandardDatePicker
 } from '../../global';
-import { PURCHASE_CONFIG } from '../../../config/purchase.config';
-import { usePurchaseOrderLogic, PurchaseOrderData } from './hooks';
+import { usePurchaseOrderLogic } from './hooks';
 import { toast } from 'react-toastify';
 import { searchCache } from '../../../utils/searchCache';
 
@@ -305,15 +303,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
               total: {
                 label: 'Total',
                 align: 'right',
-                render: (item) => {
-                  const qty = parseFloat(item.quantity) || 0;
-                  const price = parseFloat(item.unit_price) || 0;
-                  const taxPercent = parseFloat(item.tax_percent) || 0;
-                  const subtotal = qty * price;
-                  const tax = subtotal * (taxPercent / 100);
-                  const total = subtotal + tax;
-                  return <span className="font-medium">₹{total.toFixed(2)}</span>;
-                }
+                render: (item) => (
+                  <span className="font-medium">₹{Number(item.total || 0).toFixed(2)}</span>
+                )
               }
             }}
           />

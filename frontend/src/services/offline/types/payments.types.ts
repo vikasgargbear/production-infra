@@ -9,6 +9,7 @@
 // ============================================
 
 export interface OfflinePayment {
+    temp_id?: string;
     payment_id: string;
     payment_number: string;
     payment_date: string;
@@ -39,6 +40,7 @@ export interface OfflinePayment {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }
@@ -48,6 +50,7 @@ export interface OfflinePayment {
 // ============================================
 
 export interface OfflinePaymentReceipt {
+    temp_id?: string;
     receipt_id: string;
     receipt_number: string;
     receipt_date: string;
@@ -70,6 +73,7 @@ export interface OfflinePaymentReceipt {
     // Sync metadata
     sync_status?: 'synced' | 'pending' | 'error';
     last_synced_at?: string;
+    // Legacy alias kept for older IndexedDB records only. New writes use temp_id.
     local_id?: string;
     created_offline?: boolean;
 }

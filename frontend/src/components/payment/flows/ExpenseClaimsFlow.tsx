@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle, User } from 'lucide-react';
 import { ModuleHeader } from '../../global';
 import { expensesApi } from '../../../services/api';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface ExpenseClaimsFlowProps {
@@ -45,7 +46,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       setError(null);
 
       // Load expense types from API
-      const expenseTypesResponse = await expensesApi.getExpenseTypes();
+      const expenseTypesResponse = await expensesApi.getCategories();
       setExpenseTypes(expenseTypesResponse?.data?.expense_types || expenseTypesResponse?.data || []);
 
       // Set default employee name (in real app, get from auth context)
@@ -141,8 +142,19 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
 
       // Call the actual API to save the expense claim
       const response = await expensesApi.create(claimData as any);
+      const claimResult = response.data?.data || response.data;
 
-      alert(`Expense claim saved successfully! Claim Number: ${response.data?.claim_number}`);
+      showFinancialEntryNotification({
+        title: 'Expense Claim Posted',
+        reference: claimResult?.claim_number,
+        amount: expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0),
+        status: 'confirmed',
+        impacts: [
+          'This expense is now recorded in the system.',
+          'Your business cost goes up by this amount.',
+          'The team can now use this record for repayment and reports.'
+        ]
+      });
 
       // Reset form after successful save
       setExpenses([{ id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }]);

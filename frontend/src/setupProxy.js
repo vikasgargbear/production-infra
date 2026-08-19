@@ -1,17 +1,7 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const resolveTarget = () => {
-  const candidates = [
-    process.env.REACT_APP_API_BASE_URL,
-    process.env.REACT_APP_API_URL,
-    process.env.REACT_APP_BACKEND_URL,
-    process.env.REACT_APP_BACKEND_API_URL,
-    process.env.RAILWAY_PUBLIC_DOMAIN,
-    process.env.BACKEND_URL,
-    process.env.API_BASE_URL,
-  ];
-
-  const raw = candidates.find((value) => value && value.trim()) || 'http://localhost:8000';
+  const raw = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
   const trimmed = raw.trim();
   const withProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
   const stripped = withProtocol.replace(/\/+$/, '');

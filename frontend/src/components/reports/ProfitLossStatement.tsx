@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Download, Printer, Calendar, TrendingUp, TrendingDown, Filter, ChevronRight, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { FileText, Download, Printer, TrendingUp, TrendingDown, Filter, ChevronRight, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,7 +14,6 @@ import {
   Filler
 } from 'chart.js';
 import apiClient from '../../services/api/apiClient';
-import { formatCurrency } from '../../utils/formatters';
 
 ChartJS.register(
   CategoryScale,

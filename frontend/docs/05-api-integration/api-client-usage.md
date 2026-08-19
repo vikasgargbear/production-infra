@@ -78,7 +78,7 @@ services/api/
 | | `productsApi` | getAll, getById, create, update, search |
 | **Finance** | `paymentsApi` | getAll, create, allocate |
 | | `ledgerApi` | getPartyLedger, getOutstanding |
-| **Auth** | `authApi` | login, logout, refreshToken |
+| **Auth** | `AuthContext` | Supabase email/Google login, persistent session, logout |
 | | `usersApi` | getCurrentUser, updateProfile |
 
 ---

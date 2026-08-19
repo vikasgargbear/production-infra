@@ -10,12 +10,22 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 import random
 import string
 
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
 
 
 def generate_random_sku():
@@ -149,15 +159,36 @@ def test_list_products():
             print(f"     SKU: {p.get('sku')}")
             print(f"     MRP: ₹{p.get('mrp')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
-def test_get_product(product_id):
+def get_any_product_id():
+    """Get any product ID for standalone pytest execution."""
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/products/?limit=1", headers=headers, timeout=30)
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        products = result if isinstance(result, list) else result.get("products") or result.get("data", [])
+        if products:
+            return products[0].get("product_id") or products[0].get("id")
+    except requests.RequestException:
+        return None
+    return None
+
+
+def test_get_product(product_id=None):
     """Test getting product details"""
+    if product_id is None:
+        product_id = get_any_product_id()
+    if product_id is None:
+        pytest.skip("No product available for product detail test")
+
     print("\n" + "=" * 70)
     print("TEST 2: GET PRODUCT DETAILS")
     print("=" * 70)
@@ -187,15 +218,20 @@ def test_get_product(product_id):
         print(f"   GST: {result.get('gst_percent')}%")
         print(f"   Category: {result.get('category_name')}")
         
-        return result
+        return finish_test(result)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return None
+        return finish_test(None)
 
 
-def test_get_product_batches(product_id):
+def test_get_product_batches(product_id=None):
     """Test getting batches for a product"""
+    if product_id is None:
+        product_id = get_any_product_id()
+    if product_id is None:
+        pytest.skip("No product available for product batch test")
+
     print("\n" + "=" * 70)
     print("TEST 3: GET PRODUCT BATCHES")
     print("=" * 70)
@@ -228,11 +264,11 @@ def test_get_product_batches(product_id):
             print(f"     Expiry: {b.get('expiry_date')}")
             print(f"     MRP: ₹{b.get('mrp_per_unit')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def test_search_products_with_batches():
@@ -269,11 +305,11 @@ def test_search_products_with_batches():
             for b in batches[:2]:
                 print(f"       - {b.get('batch_number')}: Qty {b.get('quantity_available')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def print_verification_queries(product_id):

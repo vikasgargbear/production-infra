@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, RefObject, Dispatch, SetStateAction } from 'react';
 import { toast } from 'react-toastify';
-import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
+import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
 import { employeesApi } from '../../../../services/api';
 import offlineDB from '../../../../services/offline/core/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
@@ -125,6 +125,7 @@ export interface UseInvoiceLogicReturn {
     sameAsShipping: boolean;
     setSameAsShipping: Dispatch<SetStateAction<boolean>>;
     isLoading: boolean;
+    isOnline: boolean;
     error: string | null;
     setError: Dispatch<SetStateAction<string | null>>;
 
@@ -379,48 +380,34 @@ export const useInvoiceLogic = (
             return;
         }
 
-        EnterpriseCalculator.calculateDebounced(
-            invoice,
-            (error: Error | null, result: any) => {
-                if (error) {
-                    console.error('❌ Calculation error:', error);
-                    return;
+        let cancelled = false;
+        const timeoutId = window.setTimeout(async () => {
+            try {
+                const result = await calculateInvoicePreview(invoice, isOnline);
+                if (cancelled) return;
+
+                setInvoice(prev => ({
+                    ...prev,
+                    gst_type: result.gst_type as GstType,
+                    items: prev.items.map((item, idx) => ({
+                        ...item,
+                        ...(result.items[idx] || {})
+                    })),
+                    totals: result.totals as InvoiceTotals,
+                    final_amount: Number(result.totals.final_amount || 0)
+                }));
+            } catch (calculationError) {
+                if (!cancelled) {
+                    console.error('Invoice calculation failed:', calculationError);
+                    setError('Unable to calculate invoice totals. Please review the entries and try again.');
                 }
+            }
+        }, 300);
 
-                if (result && result.totals) {
-                    // Concise logging - only key info
-                    console.log(`🧮 Calculated: ${result.items?.length || 0} items → ₹${result.totals.final_amount}`);
-
-                    setInvoice(prev => {
-                        const enrichedItems = prev.items.map((item, idx) => {
-                            const calculatedItem = result.items[idx] || {};
-
-                            return {
-                                ...item,
-                                // Use canonical field names from enterpriseCalculator
-                                subtotal: calculatedItem.subtotal,
-                                discount_amount: calculatedItem.discount_amount,
-                                taxable_amount: calculatedItem.taxable_amount,
-                                gst_amount: calculatedItem.gst_amount,
-                                total_amount: calculatedItem.total_amount,
-                                cgst_amount: calculatedItem.cgst_amount,
-                                sgst_amount: calculatedItem.sgst_amount,
-                                igst_amount: calculatedItem.igst_amount,
-                            };
-                        });
-
-                        return {
-                            ...prev,
-                            items: enrichedItems,
-                            totals: result.totals,
-                            final_amount: result.totals.final_amount
-                        };
-                    });
-                }
-            },
-            300,
-            'invoice'
-        );
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeoutId);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -432,7 +419,9 @@ export const useInvoiceLogic = (
         }))),
         invoice.freight_charges,
         invoice.discount_amount,
-        invoice.discount_percent
+        invoice.discount_percent,
+        invoice.customer_details?.customer_id,
+        isOnline
     ]);
 
     // Handlers
@@ -480,7 +469,7 @@ export const useInvoiceLogic = (
         }));
 
         // Note: Toast removed to prevent duplicates (parent component may also show selection feedback)
-    }, [sameAsShipping, companyInfo?.state]);
+    }, [sameAsShipping, companyInfo]);
 
     const handleAddItem = useCallback(async (product: ProductInput) => {
         if (!product) return;
@@ -612,7 +601,7 @@ export const useInvoiceLogic = (
         });
 
         // Message already shown via toast.success above
-    }, []);
+    }, [isOnline]);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: unknown) => {
         console.log(`🔄 [UPDATE ITEM] Index: ${index}, Field: ${field}, Value: ${value}`);
@@ -690,6 +679,7 @@ export const useInvoiceLogic = (
         sameAsShipping,
         setSameAsShipping,
         isLoading,
+        isOnline,
         error,
         setError,
 

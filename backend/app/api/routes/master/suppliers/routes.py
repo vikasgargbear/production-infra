@@ -19,6 +19,7 @@ from .....core.security.permissions import PermissionChecker  # RBAC
 
 # Service layer
 from ....services.master.supplier.service import SupplierService
+from ....services.document_number_service import DocumentNumberService
 
 # Supplier-specific imports
 from ....schemas.master.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
@@ -118,8 +119,7 @@ async def create_supplier(
         # Generate supplier_code if not provided
         supplier_code = supplier_data.supplier_code
         if not supplier_code:
-            count = SupplierService.count_suppliers(db, org_id)
-            supplier_code = f"SUP-{count + 1:04d}"
+            supplier_code = DocumentNumberService.generate_number(db, "supplier", org_id)
         
         # Build supplier data dict (map schema fields to DB column names)
         data = {

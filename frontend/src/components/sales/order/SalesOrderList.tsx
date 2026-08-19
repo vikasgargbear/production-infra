@@ -3,10 +3,11 @@ import {
     FileText, Truck, Search,
     Eye, Download, Printer, Calendar, ChevronDown, MessageCircle, XCircle
 } from 'lucide-react';
-import { salesOrdersApi } from '../../../services/api';
+import { ordersApi } from '../../../services/api';
 import ConvertToInvoiceButton from '../ui/ConvertToInvoiceButton';
 import CancelDocumentModal from '../../global/modals/CancelDocumentModal';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+import { autoTable } from 'jspdf-autotable';
 import type { Order } from '../../../types/models';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -17,17 +18,6 @@ interface InvoiceData {
     invoice_number: string;
     invoice_id?: number | string;
     [key: string]: unknown;
-}
-
-// Extend jsPDF with autoTable
-interface jsPDFWithAutoTable extends jsPDF {
-    autoTable: (options: {
-        head: string[][];
-        body: string[][];
-        startY: number;
-        styles: { fontSize: number };
-        headStyles: { fillColor: number[] };
-    }) => void;
 }
 
 // ==================== MAIN COMPONENT ====================
@@ -68,7 +58,7 @@ const OrderList: React.FC = () => {
                 params.order_status = filterStatus;
             }
 
-            const response = await salesOrdersApi.getAll(params);
+            const response = await ordersApi.getAll(params);
             setOrders(response.data || []);
         } catch {
             // Silent error handling
@@ -189,10 +179,7 @@ const OrderList: React.FC = () => {
         if (itemsToExport.length === 0) return;
 
         try {
-            // Try to use jspdf-autotable if available
-            const autoTable = require('jspdf-autotable');
-
-            const doc = new jsPDF() as jsPDFWithAutoTable;
+            const doc = new jsPDF();
             doc.setFontSize(16);
             doc.text('Sales Orders Report', 20, 20);
 
@@ -204,7 +191,7 @@ const OrderList: React.FC = () => {
                 order.order_status || 'pending'
             ]);
 
-            doc.autoTable({
+            autoTable(doc, {
                 head: [['Order #', 'Date', 'Customer', 'Amount', 'Status']],
                 body: tableData,
                 startY: 30,

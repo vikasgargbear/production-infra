@@ -23,7 +23,7 @@ class JournalService:
         """Get chart of accounts with filters."""
         query = """
             SELECT account_id, account_code, account_name, account_type,
-                   parent_account_id, account_level, is_active, created_at
+                   parent_account_id, is_active, created_at
             FROM financial.chart_of_accounts WHERE org_id = :org_id
         """
         params = {"org_id": org_id}
@@ -42,63 +42,82 @@ class JournalService:
         return [dict(row._mapping) for row in result]
     
     @staticmethod
-    def get_active_user(db: Session, org_id: str) -> Optional[int]:
-        """Get first active user for org."""
-        result = db.execute(text("""
-            SELECT user_id FROM master.org_users 
-            WHERE org_id = :org_id AND is_active = true ORDER BY user_id LIMIT 1
-        """), {"org_id": org_id})
-        row = result.first()
-        return row.user_id if row else None
-    
-    @staticmethod
     def insert_journal_entry(db: Session, org_id: str, data: Dict[str, Any]) -> int:
         """Insert journal entry header. Returns journal_id."""
         result = db.execute(text("""
             INSERT INTO financial.journal_entries (
-                org_id, journal_number, journal_date, reference_number,
-                narration, entry_status, created_by, created_at
+                org_id, branch_id, journal_number, journal_date, journal_type,
+                reference_type, reference_id, reference_number, narration,
+                entry_status, is_reversal, reversal_of_journal_id,
+                created_by, created_at
             ) VALUES (
-                :org_id, :journal_number, :journal_date, :reference_number,
-                :narration, 'posted', :created_by, CURRENT_TIMESTAMP
+                :org_id, :branch_id, :journal_number, :journal_date, :journal_type,
+                :reference_type, :reference_id, :reference_number, :narration,
+                'draft', :is_reversal, :reversal_of_journal_id,
+                :created_by, CURRENT_TIMESTAMP
             ) RETURNING journal_id
-        """), {"org_id": org_id, **data})
+        """), {
+            "org_id": org_id,
+            "reference_type": None,
+            "reference_id": None,
+            "reference_number": None,
+            "is_reversal": False,
+            "reversal_of_journal_id": None,
+            **data,
+        })
         return result.scalar()
     
     @staticmethod
-    def get_or_create_account(
+    def get_account(
         db: Session, org_id: str, account_code: str, account_name: str
-    ) -> int:
-        """Get account_id or create if not exists."""
-        result = db.execute(text(
-            "SELECT account_id FROM financial.chart_of_accounts WHERE account_code = :code AND org_id = :org_id"
-        ), {"code": account_code, "org_id": org_id})
-        row = result.first()
-        
-        if row:
-            return row.account_id
-        
-        # Create account
+    ) -> Dict[str, Any]:
+        """Resolve an active tenant account; journal posting never creates accounts."""
         result = db.execute(text("""
-            INSERT INTO financial.chart_of_accounts (
-                org_id, account_code, account_name, account_type, is_active
-            ) VALUES (:org_id, :account_code, :account_name, 'general', true)
-            RETURNING account_id
-        """), {"org_id": org_id, "account_code": account_code, "account_name": account_name})
-        return result.scalar()
+            SELECT account_id, account_code, account_name
+            FROM financial.chart_of_accounts
+            WHERE account_code = :code AND org_id = :org_id AND is_active = true
+        """), {"code": account_code, "org_id": org_id})
+        row = result.first()
+        if row is None:
+            raise ValueError(f"Active account {account_code} was not found")
+        account = dict(row._mapping)
+        if account["account_name"] != account_name:
+            raise ValueError(f"Account name does not match code {account_code}")
+        return account
     
     @staticmethod
     def insert_journal_line(db: Session, data: Dict[str, Any]) -> None:
         """Insert journal entry line."""
         db.execute(text("""
             INSERT INTO financial.journal_entry_lines (
-                journal_id, account_id, account_code, account_name,
+                journal_id, account_code, account_name,
                 debit_amount, credit_amount, line_narration
             ) VALUES (
-                :journal_id, :account_id, :account_code, :account_name,
+                :journal_id, :account_code, :account_name,
                 :debit_amount, :credit_amount, :line_narration
             )
         """), data)
+
+    @staticmethod
+    def post_journal_entry(
+        db: Session, org_id: str, journal_id: int, posted_by: int
+    ) -> None:
+        """Post a completed draft; the database trigger validates its lines."""
+        result = db.execute(text("""
+            UPDATE financial.journal_entries
+            SET entry_status = 'posted', posted_by = :posted_by,
+                posted_at = CURRENT_TIMESTAMP
+            WHERE journal_id = :journal_id
+              AND org_id = :org_id
+              AND entry_status = 'draft'
+            RETURNING journal_id
+        """), {
+            "journal_id": journal_id,
+            "org_id": org_id,
+            "posted_by": posted_by,
+        })
+        if result.scalar() is None:
+            raise ValueError("Journal entry is missing, already posted, or access denied")
     
     @staticmethod
     def list_journal_entries(
@@ -172,17 +191,73 @@ class JournalService:
     def get_journal_lines(db: Session, journal_id: int) -> List[Dict[str, Any]]:
         """Get journal entry lines."""
         result = db.execute(text("""
-            SELECT line_id, account_id, account_code, account_name,
+            SELECT line_id, account_code, account_name,
                    debit_amount, credit_amount, line_narration
             FROM financial.journal_entry_lines WHERE journal_id = :journal_id ORDER BY line_id
         """), {"journal_id": journal_id})
         return [dict(row._mapping) for row in result]
     
     @staticmethod
-    def reverse_journal_entry(db: Session, journal_id: int, reason: str) -> None:
-        """Mark journal entry as reversed."""
-        db.execute(text("""
-            UPDATE financial.journal_entries 
-            SET entry_status = 'reversed', reversed_reason = :reason, reversed_at = CURRENT_TIMESTAMP
+    def reverse_journal_entry(
+        db: Session,
+        org_id: str,
+        journal_id: int,
+        journal_number: str,
+        reversal_date: date,
+        reason: str,
+        created_by: int,
+    ) -> int:
+        """Create and post one compensating journal without mutating the original."""
+        original = db.execute(text("""
+            SELECT journal_id, journal_number, branch_id
+            FROM financial.journal_entries
+            WHERE journal_id = :journal_id AND org_id = :org_id
+              AND entry_status = 'posted' AND is_reversal = false
+            FOR UPDATE
+        """), {"journal_id": journal_id, "org_id": org_id}).first()
+        if original is None:
+            raise ValueError("Posted journal was not found or access was denied")
+
+        existing = db.execute(text("""
+            SELECT journal_id
+            FROM financial.journal_entries
+            WHERE org_id = :org_id AND reversal_of_journal_id = :journal_id
+            LIMIT 1
+        """), {"journal_id": journal_id, "org_id": org_id}).scalar()
+        if existing is not None:
+            raise ValueError("Journal has already been reversed")
+
+        lines = db.execute(text("""
+            SELECT account_code, account_name, debit_amount, credit_amount,
+                   line_narration
+            FROM financial.journal_entry_lines
             WHERE journal_id = :journal_id
-        """), {"journal_id": journal_id, "reason": reason})
+            ORDER BY line_id
+        """), {"journal_id": journal_id}).fetchall()
+        if len(lines) < 2:
+            raise ValueError("Posted journal has insufficient lines to reverse")
+
+        reversal_id = JournalService.insert_journal_entry(db, org_id, {
+            "branch_id": original.branch_id,
+            "journal_number": journal_number,
+            "journal_date": reversal_date,
+            "journal_type": "manual",
+            "reference_type": "journal_reversal",
+            "reference_id": journal_id,
+            "reference_number": original.journal_number,
+            "narration": f"Reversal: {reason.strip()}",
+            "is_reversal": True,
+            "reversal_of_journal_id": journal_id,
+            "created_by": created_by,
+        })
+        for line in lines:
+            JournalService.insert_journal_line(db, {
+                "journal_id": reversal_id,
+                "account_code": line.account_code,
+                "account_name": line.account_name,
+                "debit_amount": line.credit_amount,
+                "credit_amount": line.debit_amount,
+                "line_narration": f"Reversal: {line.line_narration or reason.strip()}",
+            })
+        JournalService.post_journal_entry(db, org_id, reversal_id, created_by)
+        return reversal_id

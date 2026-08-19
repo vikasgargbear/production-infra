@@ -1,6 +1,6 @@
 /**
  * Documents API Module
- * Handles generic document operations like number generation
+ * Handles generic document operations like number reservation
  */
 import { apiHelpers } from '../../apiClient';
 
@@ -10,12 +10,10 @@ const ENDPOINTS = {
 
 export const documentsApi = {
     /**
-     * Generate next document number for any type
+     * Reserve the next server-backed document number for a supported type.
      * @param type Document type code (INV, PO, DC, etc.)
      */
-    generateNumber: (type: string) => {
-        return apiHelpers.get(ENDPOINTS.GENERATE_NUMBER, {
-            params: { type }
-        });
+    reserveNumber: (type: string) => {
+        return apiHelpers.post(`${ENDPOINTS.GENERATE_NUMBER}?type=${encodeURIComponent(type)}`, {});
     }
 };

@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Receipt, Save, Calendar, Filter, Calculator, AlertCircle, CheckCircle, Users, FileText, FileInput
 } from 'lucide-react';
 import { CustomerSearch, Select, Card, DatePicker, Button, CustomerCreation } from '../../global';
 import { notesApi, invoicesApi } from '../../../services/api';
 import offlineStorage from '../../../services/offlineStorage';
+import { calculateNotePreview } from '../../../services/calculations/noteCalculationService';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 interface DebitNoteFlowProps {
   onClose?: () => void;
@@ -18,6 +21,7 @@ interface NoteItem {
   quantity: number;
   unit_price: number;
   discount_percent: number;
+  tax_percent?: number;
   total_amount: number;
 }
 
@@ -31,6 +35,9 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [calculatedTotals, setCalculatedTotals] = useState({ subtotal: 0, taxAmount: 0, grandTotal: 0 });
+  const calculationRequestRef = useRef(0);
+  const { isOnline } = useNetworkStatus();
 
   // Pagination and filter state
   const [invoicePage, setInvoicePage] = useState(1);
@@ -179,6 +186,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
         quantity: parseFloat(item.quantity || 0),
         unit_price: parseFloat(item.unit_price || item.unit_price || 0),
         discount_percent: parseFloat(item.discount_percent || 0),
+        tax_percent: parseFloat(item.gst_percent || item.tax_percent || ((item.cgst_rate || item.cgst_percent || 0) + (item.sgst_rate || item.sgst_percent || 0) + (item.igst_rate || item.igst_percent || 0)) || 0),
         total_amount: parseFloat(item.line_total || item.total_amount || 0)
       })) || [];
 
@@ -211,9 +219,8 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
     setNoteItems(prev => prev.map(item => {
       if (item.id === itemId) {
         const updated = { ...item, [field]: value };
-        // Recalculate total when quantity changes
-        if (field === 'quantity') {
-          updated.total_amount = updated.quantity * updated.unit_price * (1 - updated.discount_percent / 100);
+        if (['quantity', 'unit_price', 'discount_percent', 'tax_percent'].includes(field)) {
+          updated.total_amount = 0;
         }
         return updated;
       }
@@ -221,17 +228,44 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
     }));
   };
 
-  const calculateTotals = () => {
-    const subtotal = noteItems.reduce((sum, item) => sum + item.total_amount, 0);
-    const taxAmount = subtotal * 0.18; // Assuming 18% GST
-    const grandTotal = subtotal + taxAmount;
-
-    return {
-      subtotal,
-      taxAmount,
-      grandTotal
+  useEffect(() => {
+    const requestId = ++calculationRequestRef.current;
+    if (noteItems.length === 0) {
+      setCalculatedTotals({ subtotal: 0, taxAmount: 0, grandTotal: 0 });
+      return;
+    }
+    const calculate = async () => {
+      try {
+        const result = await calculateNotePreview(noteItems, {
+          noteType: 'debit',
+          partyId: selectedCustomer?.id || selectedCustomer?.customer_id || selectedCustomer?.party_id,
+          includeGst: true,
+          isOnline
+        });
+        if (requestId !== calculationRequestRef.current) return;
+        setCalculatedTotals({
+          subtotal: result.subtotal,
+          taxAmount: result.taxAmount,
+          grandTotal: result.grandTotal
+        });
+        setNoteItems(prev => {
+          let changed = false;
+          const next = prev.map((item, index) => {
+            const lineTotal = Number(result.items[index]?.total_amount || 0);
+            if (Number(item.total_amount || 0) === lineTotal) return item;
+            changed = true;
+            return { ...item, total_amount: lineTotal };
+          });
+          return changed ? next : prev;
+        });
+      } catch (calculationError) {
+        if (requestId === calculationRequestRef.current) {
+          setError(calculationError instanceof Error ? calculationError.message : 'Unable to calculate note totals');
+        }
+      }
     };
-  };
+    void calculate();
+  }, [noteItems, isOnline, selectedCustomer]);
 
   // Simple validation for single-page flow
   const canSave = () => {
@@ -246,12 +280,18 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
 
     setSaving(true);
     try {
-      await notesApi.createCreditDebitNote({
+      const totals = await calculateNotePreview(noteItems, {
+        noteType: 'debit',
+        partyId: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
+        includeGst: true,
+        isOnline
+      });
+      await notesApi.create({
         note_type: 'debit',
         party_id: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
         party_type: 'customer',
         note_date: noteData.note_date,
-        amount: calculateTotals().grandTotal,
+        amount: totals.grandTotal,
         reason: noteData.reason,
         reference_invoice_id: noteData.selected_invoice?.id,
         notes: noteData.customer_remarks,
@@ -259,8 +299,21 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           description: item.product_name,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          line_total: item.total_amount
+          line_total: item.total_amount,
+          discount_percent: item.discount_percent,
+          gst_percent: item.tax_percent
         }))
+      });
+      showFinancialEntryNotification({
+        title: 'Debit Note Posted',
+        reference: noteData.note_number,
+        amount: totals.grandTotal,
+        status: 'confirmed',
+        impacts: [
+          'This customer now has an extra charge in the system.',
+          'The customer will need to pay more by this amount.',
+          'This extra amount is now included in the customer account record.'
+        ]
       });
 
       // Success feedback
@@ -268,13 +321,13 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
       if (onClose) onClose();
 
     } catch (error) {
-      alert(`Error saving debit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Error saving debit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const totals = calculateTotals();
+  const totals = calculatedTotals;
 
   return (
     <div className="h-full bg-orange-50">

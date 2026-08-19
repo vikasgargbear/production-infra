@@ -1,7 +1,7 @@
 # Inventory schemas
 from .inventory import (
     # Enums
-    MovementType, MovementDirection, AdjustmentType, AlertLevel,
+    MovementType, MovementDirection, InventoryAdjustmentReason, AlertLevel,
     # Batch
     BatchBase, BatchCreate, BatchUpdate, BatchResponse, BatchSummary, BatchListResponse,
     # Stock Movement
@@ -16,7 +16,7 @@ from .inventory import (
 
 __all__ = [
     # Enums
-    "MovementType", "MovementDirection", "AdjustmentType", "AlertLevel",
+    "MovementType", "MovementDirection", "InventoryAdjustmentReason", "AlertLevel",
     # Batch
     "BatchBase", "BatchCreate", "BatchUpdate", "BatchResponse", "BatchSummary", "BatchListResponse",
     # Stock Movement

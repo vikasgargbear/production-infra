@@ -22,6 +22,8 @@ class OrderStatus(str, Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
     PROCESSING = "processing"
+    PACKED = "packed"
+    SHIPPED = "shipped"
     INVOICED = "invoiced"
     DELIVERED = "delivered"
     COMPLETED = "completed"
@@ -37,6 +39,7 @@ class InvoiceStatus(str, Enum):
     SENT = "sent"
     PAID = "paid"
     PARTIALLY_PAID = "partially_paid"
+    OVERDUE = "overdue"
     CANCELLED = "cancelled"
     VOID = "void"
 
@@ -105,18 +108,27 @@ class POStatus(str, Enum):
     """Purchase order status constants"""
     DRAFT = "draft"
     PENDING = "pending"
+    PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
     ORDERED = "ordered"
+    SENT = "sent"
     PARTIAL = "partial"
+    PARTIALLY_RECEIVED = "partially_received"
     RECEIVED = "received"
     CANCELLED = "cancelled"
+    CLOSED = "closed"
 
 
 class GRNStatus(str, Enum):
     """Goods Receipt Note status constants"""
+    DRAFT = "draft"
     PENDING = "pending"
+    PENDING_QC = "pending_qc"
+    QC_PASSED = "qc_passed"
+    QC_FAILED = "qc_failed"
     RECEIVED = "received"
     PARTIAL = "partial"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
 
 
@@ -124,9 +136,13 @@ class SupplierInvoiceStatus(str, Enum):
     """Supplier invoice status constants"""
     DRAFT = "draft"
     PENDING = "pending"
+    PENDING_VERIFICATION = "pending_verification"
+    VERIFIED = "verified"
     APPROVED = "approved"
+    DISPUTED = "disputed"
     PAID = "paid"
     PARTIAL = "partial"
+    PARTIALLY_PAID = "partially_paid"
     CANCELLED = "cancelled"
 
 
@@ -163,6 +179,7 @@ class ReturnStatus(str, Enum):
     DRAFT = "draft"
     PENDING = "pending"
     APPROVED = "approved"
+    PROCESSING = "processing"
     COMPLETED = "completed"
     REJECTED = "rejected"
     CANCELLED = "cancelled"

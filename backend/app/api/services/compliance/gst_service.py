@@ -17,6 +17,8 @@ from datetime import date
 import logging
 import re
 
+from app.core.money import decimal_value, money
+
 logger = logging.getLogger(__name__)
 
 # Valid GST slabs in India
@@ -72,6 +74,7 @@ class GSTService:
     def determine_gst_type(
         db: Session,
         org_id: UUID,
+        branch_id: Optional[int] = None,
         customer_id: Optional[int] = None,
         supplier_id: Optional[int] = None,
         delivery_address_id: Optional[int] = None,
@@ -109,21 +112,26 @@ class GSTService:
                 )
                 FROM master.org_branches ob
                 JOIN master.organizations o ON o.org_id = ob.org_id
-                WHERE ob.org_id = :org_id AND ob.is_default_location = true
+                WHERE ob.org_id = :org_id
+                  AND (
+                    (:branch_id IS NOT NULL AND ob.branch_id = :branch_id)
+                    OR (:branch_id IS NULL AND ob.is_default_location = true)
+                  )
+                  AND ob.is_active = true
                 LIMIT 1
-            """), {"org_id": org_id}).scalar()
+            """), {"org_id": org_id, "branch_id": branch_id}).scalar()
 
             party_gstin = None
             if customer_id:
                 party_gstin = db.execute(text("""
                     SELECT gst_number FROM parties.customers
-                    WHERE customer_id = :customer_id
-                """), {"customer_id": customer_id}).scalar()
+                    WHERE customer_id = :customer_id AND org_id = :org_id
+                """), {"customer_id": customer_id, "org_id": org_id}).scalar()
             elif supplier_id:
                 party_gstin = db.execute(text("""
                     SELECT gst_number FROM parties.suppliers
-                    WHERE supplier_id = :supplier_id
-                """), {"supplier_id": supplier_id}).scalar()
+                    WHERE supplier_id = :supplier_id AND org_id = :org_id
+                """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
 
             # Compare GSTIN state codes if both are available
             if company_gstin and party_gstin and len(company_gstin) >= 2 and len(party_gstin) >= 2:
@@ -146,15 +154,19 @@ class GSTService:
                     address->>'state_name'
                 ) as company_state
                 FROM master.org_branches
-                WHERE org_id = :org_id AND is_default_location = true
+                WHERE org_id = :org_id
+                  AND (
+                    (:branch_id IS NOT NULL AND branch_id = :branch_id)
+                    OR (:branch_id IS NULL AND is_default_location = true)
+                  )
+                  AND is_active = true
                 LIMIT 1
-            """), {"org_id": org_id}).scalar()
+            """), {"org_id": org_id, "branch_id": branch_id}).scalar()
 
             company_state = result
 
             if not company_state:
-                logger.warning(f"Company state not found for org_id={org_id}, defaulting to CGST/SGST")
-                return "CGST/SGST"
+                raise ValueError("Active billing branch must have a GSTIN or state before tax can be calculated")
 
             # Get party state from addresses
             party_state = None
@@ -164,16 +176,16 @@ class GSTService:
                 party_state = db.execute(text("""
                     SELECT state_name
                     FROM master.addresses
-                    WHERE address_id = :address_id AND is_active = true
-                """), {"address_id": delivery_address_id}).scalar()
+                    WHERE address_id = :address_id AND org_id = :org_id AND is_active = true
+                """), {"address_id": delivery_address_id, "org_id": org_id}).scalar()
 
             # Fallback to billing address
             if not party_state and billing_address_id:
                 party_state = db.execute(text("""
                     SELECT state_name
                     FROM master.addresses
-                    WHERE address_id = :address_id AND is_active = true
-                """), {"address_id": billing_address_id}).scalar()
+                    WHERE address_id = :address_id AND org_id = :org_id AND is_active = true
+                """), {"address_id": billing_address_id, "org_id": org_id}).scalar()
 
             # Fallback to customer's default address
             if not party_state and customer_id:
@@ -182,10 +194,11 @@ class GSTService:
                     FROM master.addresses
                     WHERE entity_type = 'customer'
                       AND entity_id = :customer_id
+                      AND org_id = :org_id
                       AND is_active = true
                     ORDER BY is_default DESC, created_at DESC
                     LIMIT 1
-                """), {"customer_id": customer_id}).scalar()
+                """), {"customer_id": customer_id, "org_id": org_id}).scalar()
 
             # Fallback to supplier's default address
             if not party_state and supplier_id:
@@ -194,14 +207,14 @@ class GSTService:
                     FROM master.addresses
                     WHERE entity_type = 'supplier'
                       AND entity_id = :supplier_id
+                      AND org_id = :org_id
                       AND is_active = true
                     ORDER BY is_default DESC, created_at DESC
                     LIMIT 1
-                """), {"supplier_id": supplier_id}).scalar()
+                """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
 
             if not party_state:
-                logger.warning("Party state not found, defaulting to CGST/SGST")
-                return "CGST/SGST"
+                raise ValueError("Customer or supplier must have a GSTIN or active address before tax can be calculated")
 
             # Compare states (case-insensitive)
             company_state_clean = company_state.strip().upper()
@@ -216,8 +229,7 @@ class GSTService:
 
         except Exception as e:
             logger.error(f"Error determining GST type: {e}")
-            # Safe fallback
-            return "CGST/SGST"
+            raise ValueError(f"Unable to determine GST type: {e}") from e
 
     @staticmethod
     def get_product_gst_rate(
@@ -269,51 +281,40 @@ class GSTService:
             Dict with keys: igst_percent, igst_amount, cgst_percent, cgst_amount,
                            sgst_percent, sgst_amount, total_tax_amount
         """
-        try:
-            # Ensure Decimal types
-            taxable_amount = Decimal(str(taxable_amount))
-            gst_rate = Decimal(str(gst_rate))
+        taxable_amount = decimal_value(taxable_amount, "taxable_amount", minimum=Decimal("0"))
+        gst_rate = decimal_value(gst_rate, "gst_rate", minimum=Decimal("0"), maximum=Decimal("100"))
+        normalized_gst_type = str(gst_type).strip().upper()
+        if normalized_gst_type not in {"IGST", "CGST/SGST"}:
+            raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'")
 
-            if gst_type == "IGST":
-                # Inter-state: Full GST as IGST
-                igst_amount = (taxable_amount * gst_rate) / 100
-                return {
-                    "igst_percent": gst_rate,
-                    "igst_amount": igst_amount.quantize(Decimal("0.01")),
-                    "cgst_percent": Decimal("0"),
-                    "cgst_amount": Decimal("0"),
-                    "sgst_percent": Decimal("0"),
-                    "sgst_amount": Decimal("0"),
-                    "total_tax_amount": igst_amount.quantize(Decimal("0.01"))
-                }
-            else:
-                # Intra-state: Split between CGST and SGST
-                half_rate = gst_rate / 2
-                cgst_amount = (taxable_amount * half_rate) / 100
-                sgst_amount = (taxable_amount * half_rate) / 100
-                total_tax = cgst_amount + sgst_amount
-
-                return {
-                    "igst_percent": Decimal("0"),
-                    "igst_amount": Decimal("0"),
-                    "cgst_percent": half_rate,
-                    "cgst_amount": cgst_amount.quantize(Decimal("0.01")),
-                    "sgst_percent": half_rate,
-                    "sgst_amount": sgst_amount.quantize(Decimal("0.01")),
-                    "total_tax_amount": total_tax.quantize(Decimal("0.01"))
-                }
-
-        except Exception as e:
-            logger.error(f"Error calculating GST components: {e}")
-            # Return zeros on error
+        if normalized_gst_type == "IGST":
+            # Inter-state: Full GST as IGST
+            igst_amount = (taxable_amount * gst_rate) / 100
             return {
-                "igst_percent": Decimal("0"),
-                "igst_amount": Decimal("0"),
+                "igst_percent": gst_rate,
+                "igst_amount": money(igst_amount),
                 "cgst_percent": Decimal("0"),
                 "cgst_amount": Decimal("0"),
                 "sgst_percent": Decimal("0"),
                 "sgst_amount": Decimal("0"),
-                "total_tax_amount": Decimal("0")
+                "total_tax_amount": money(igst_amount)
+            }
+        else:
+            # Intra-state: Split between CGST and SGST
+            half_rate = gst_rate / 2
+            cgst_amount = (taxable_amount * half_rate) / 100
+            sgst_amount = (taxable_amount * half_rate) / 100
+            rounded_cgst = money(cgst_amount)
+            rounded_sgst = money(sgst_amount)
+
+            return {
+                "igst_percent": Decimal("0"),
+                "igst_amount": Decimal("0"),
+                "cgst_percent": half_rate,
+                "cgst_amount": rounded_cgst,
+                "sgst_percent": half_rate,
+                "sgst_amount": rounded_sgst,
+                "total_tax_amount": rounded_cgst + rounded_sgst
             }
 
     @staticmethod
@@ -348,11 +349,16 @@ class GSTService:
         """
         try:
             # Convert to Decimal for precision
-            quantity = Decimal(str(quantity))
-            unit_price = Decimal(str(unit_price))
-            discount_percent = Decimal(str(discount_percent))
-            gst_rate = Decimal(str(gst_rate))
-            free_quantity = Decimal(str(free_quantity))
+            quantity = decimal_value(quantity, "quantity", minimum=Decimal("0"))
+            unit_price = decimal_value(unit_price, "unit_price", minimum=Decimal("0"))
+            discount_percent = decimal_value(
+                discount_percent, "discount_percent", minimum=Decimal("0"), maximum=Decimal("100")
+            )
+            gst_rate = decimal_value(gst_rate, "gst_rate", minimum=Decimal("0"), maximum=Decimal("100"))
+            free_quantity = decimal_value(free_quantity, "free_quantity", minimum=Decimal("0"))
+
+            if free_quantity > quantity:
+                raise ValueError("free_quantity cannot exceed quantity")
 
             # Base quantity (what customer pays for)
             base_quantity = quantity - free_quantity
@@ -380,12 +386,12 @@ class GSTService:
                 "base_quantity": base_quantity,
                 "free_quantity": free_quantity,
                 "unit_price": unit_price,
-                "gross_amount": gross_amount.quantize(Decimal("0.01")),
+                "gross_amount": money(gross_amount),
                 "discount_percent": discount_percent,
-                "discount_amount": discount_amount.quantize(Decimal("0.01")),
-                "taxable_amount": taxable_amount.quantize(Decimal("0.01")),
+                "discount_amount": money(discount_amount),
+                "taxable_amount": money(taxable_amount),
                 **gst_components,
-                "line_total": line_total.quantize(Decimal("0.01"))
+                "line_total": money(line_total)
             }
 
         except Exception as e:

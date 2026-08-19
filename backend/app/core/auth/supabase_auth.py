@@ -35,9 +35,47 @@ class SupabaseAuthService:
         # SECURITY: Do NOT fallback to JWT_SECRET_KEY — it's a different key type
         # If SUPABASE_SERVICE_ROLE_KEY is not set, Supabase admin features are disabled
         
-        if not all([self.supabase_url, self.supabase_service_key]):
-            logger.warning("Supabase configuration not complete. Auth features may be limited.")
-    
+        if not all([self.supabase_url, self.supabase_anon_key]):
+            logger.warning("Supabase user authentication is not configured.")
+        if not self.supabase_service_key:
+            logger.warning("Supabase admin features are disabled.")
+
+    async def get_user_from_access_token(self, access_token: str) -> Dict[str, Any]:
+        """Resolve a Supabase bearer token without trusting browser identity fields."""
+        if not self.supabase_url or not self.supabase_anon_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Supabase authentication is not configured",
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.supabase_url}/auth/v1/user",
+                    headers={
+                        "apikey": self.supabase_anon_key,
+                        "Authorization": f"Bearer {access_token}",
+                    },
+                )
+        except httpx.RequestError as exc:
+            logger.error("Supabase user verification request failed: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Authentication service is unavailable",
+            ) from exc
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired Supabase session",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user = response.json()
+        if not user.get("id") or not user.get("email"):
+            raise HTTPException(status_code=401, detail="Supabase identity is incomplete")
+        return user
+
     async def create_auth_user(self, email: str, password: str, user_metadata: Dict[str, Any] = None) -> Optional[str]:
         """
         Create a user in Supabase Auth

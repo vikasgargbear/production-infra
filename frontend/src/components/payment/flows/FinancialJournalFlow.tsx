@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ModuleHeader } from '../../global';
 import { journalApi } from '../../../services/api';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 
 interface FinancialJournalFlowProps {
@@ -176,7 +177,17 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
       // Call the actual API to save the journal entry
       const response = await journalApi.create(journalData as any);
 
-      alert(`Journal entry saved successfully! Journal Number: ${response.data?.journal_number}`);
+      showFinancialEntryNotification({
+        title: 'Journal Entry Posted',
+        reference: response.data?.journal_number,
+        amount: totalDebit,
+        status: 'confirmed',
+        impacts: [
+          'This adjustment is now saved in your accounts.',
+          'One side goes up and the other side goes down by the same amount.',
+          'Your financial reports will now use this new entry.'
+        ]
+      });
 
       // Reset form after successful save
       setLines([

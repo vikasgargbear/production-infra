@@ -5,9 +5,8 @@ import {
 } from 'lucide-react';
 import { format, subDays, startOfMonth } from 'date-fns';
 import {
-  LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart,
-  Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, Area, AreaChart
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Area, AreaChart
 } from 'recharts';
 import { ModuleHeader } from '../global';
 import apiClient from '../../services/api/apiClient';

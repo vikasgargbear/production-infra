@@ -9,6 +9,7 @@ import logging
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ...services.payroll.salary_structure_service import SalaryStructureService
+from ...schemas.payroll import SalaryStructureCreateResponse, SalaryStructureUpdateResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -68,7 +69,7 @@ async def get_employee_salary_structure(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("", response_model=Dict[str, Any])
+@router.post("", response_model=SalaryStructureCreateResponse)
 @with_tenant_context
 async def create_salary_structure(
     payload: Dict[str, Any],
@@ -99,7 +100,7 @@ async def create_salary_structure(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{structure_id}", response_model=Dict[str, Any])
+@router.put("/{structure_id}", response_model=SalaryStructureUpdateResponse)
 @with_tenant_context
 async def update_salary_structure(
     structure_id: int,

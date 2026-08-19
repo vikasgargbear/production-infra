@@ -8,7 +8,7 @@
  * 3. Sales Orders API: GET /api/sales-orders
  */
 
-import { invoicesApi, challansApi, salesOrdersApi } from '../../services/api';
+import { invoicesApi, challansApi, ordersApi } from '../../services/api';
 
 // Expected response structures based on backend code:
 
@@ -153,7 +153,7 @@ async function testSalesOrdersApi() {
   console.log('Endpoint: GET /api/sales-orders');
 
   try {
-    const response = await salesOrdersApi.getAll({ skip: 0, limit: 5 });
+    const response = await ordersApi.getAll({ skip: 0, limit: 5 });
     console.log('Response status: SUCCESS');
     console.log('Response data structure:');
     console.log(JSON.stringify(response.data, null, 2));

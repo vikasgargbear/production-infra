@@ -15,7 +15,7 @@ class PurchaseReturnService:
     """Service class for Purchase Return operations"""
     
     @staticmethod
-    def get_returnable_items_from_invoice(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
+    def get_returnable_items_from_invoice(db: Session, invoice_id: int, org_id: str) -> List[Dict[str, Any]]:
         """Get returnable items from supplier invoice."""
         result = db.execute(text("""
             SELECT sii.invoice_item_id, sii.product_id, p.product_name, sii.batch_id, sii.batch_number,
@@ -25,16 +25,16 @@ class PurchaseReturnService:
                    COALESCE(sii.cgst_percent, 0) + COALESCE(sii.sgst_percent, 0) + COALESCE(sii.igst_percent, 0) as tax_percent,
                    sii.total_amount, p.hsn_code, sii.unit, b.expiry_date, b.manufacturing_date
             FROM procurement.supplier_invoice_items sii
-            JOIN inventory.products p ON sii.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id
+            JOIN inventory.products p ON sii.product_id = p.product_id AND p.org_id = :org_id
+            LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id AND b.org_id = p.org_id
             WHERE sii.supplier_invoice_id = :invoice_id
             AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
             ORDER BY sii.invoice_item_id
-        """), {"invoice_id": invoice_id})
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
-    
+
     @staticmethod
-    def get_returnable_items_from_grn(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
+    def get_returnable_items_from_grn(db: Session, invoice_id: int, org_id: str) -> List[Dict[str, Any]]:
         """Get returnable items from GRN linked to invoice."""
         result = db.execute(text("""
             SELECT gi.grn_item_id as invoice_item_id, gi.product_id, p.product_name,
@@ -48,20 +48,20 @@ class PurchaseReturnService:
             FROM procurement.supplier_invoices si
             JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
             JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
-            JOIN inventory.products p ON gi.product_id = p.product_id
+            JOIN inventory.products p ON gi.product_id = p.product_id AND p.org_id = :org_id
             WHERE si.supplier_invoice_id = :invoice_id
             AND gi.received_quantity - COALESCE(gi.quantity_returned, 0) > 0
             ORDER BY gi.grn_item_id
-        """), {"invoice_id": invoice_id})
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
-    
+
     @staticmethod
-    def get_supplier(db: Session, supplier_id: int) -> Optional[Dict[str, Any]]:
+    def get_supplier(db: Session, supplier_id: int, org_id: str) -> Optional[Dict[str, Any]]:
         """Get supplier details."""
         result = db.execute(text("""
             SELECT supplier_id, supplier_name, gst_number
-            FROM parties.suppliers WHERE supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id})
+            FROM parties.suppliers WHERE supplier_id = :supplier_id AND org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
@@ -281,10 +281,51 @@ class PurchaseReturnService:
             {"return_id": return_id}
         ).fetchall()
 
+        movement_rows = db.execute(text("""
+            SELECT product_id, batch_id, location_id, COALESCE(SUM(quantity), 0) AS quantity
+            FROM inventory.inventory_movements
+            WHERE reference_id = :return_id
+              AND reference_type = 'PURCHASE_RETURN'
+              AND movement_direction = 'out'
+            GROUP BY product_id, batch_id, location_id
+        """), {"return_id": return_id}).fetchall()
+
         # 1. Reverse batch stock (only RETURN_TO_SUPPLIER items had qty deducted)
         for item in items:
+            return_qty = float(item.return_quantity or 0)
+
+            if item.grn_item_id:
+                db.execute(text("""
+                    UPDATE procurement.grn_items
+                    SET quantity_returned = GREATEST(0, COALESCE(quantity_returned, 0) - :return_qty)
+                    WHERE grn_item_id = :grn_item_id
+                """), {
+                    "return_qty": return_qty,
+                    "grn_item_id": item.grn_item_id,
+                })
+
+            if item.product_id:
+                db.execute(text("""
+                    UPDATE procurement.supplier_invoice_items sii
+                    SET quantity_returned = GREATEST(0, COALESCE(sii.quantity_returned, 0) - :return_qty),
+                        updated_at = CURRENT_TIMESTAMP
+                    FROM procurement.purchase_returns pr
+                    WHERE pr.return_id = :return_id
+                      AND sii.supplier_invoice_id = pr.supplier_invoice_id
+                      AND sii.product_id = :product_id
+                      AND (
+                        COALESCE(sii.batch_id, 0) = COALESCE(:batch_id, 0)
+                        OR (sii.batch_id IS NULL AND sii.batch_number = :batch_number)
+                      )
+                """), {
+                    "return_id": return_id,
+                    "return_qty": return_qty,
+                    "product_id": item.product_id,
+                    "batch_id": item.batch_id,
+                    "batch_number": item.batch_number,
+                })
+
             if item.batch_id and item.disposition == "RETURN_TO_SUPPLIER":
-                return_qty = float(item.return_quantity or 0)
                 db.execute(text("""
                     UPDATE inventory.batches
                     SET quantity_available = quantity_available + :return_qty,
@@ -296,29 +337,103 @@ class PurchaseReturnService:
                     "batch_id": item.batch_id
                 })
 
-        # 2. Delete inventory movements for this purchase return
+        # 2. Reverse location-wise stock using the recorded movements
+        for movement in movement_rows:
+            if not movement.batch_id or not movement.location_id or not movement.product_id:
+                continue
+
+            update_result = db.execute(text("""
+                UPDATE inventory.location_wise_stock
+                SET quantity_available = quantity_available + :quantity,
+                    last_movement_date = CURRENT_DATE,
+                    last_updated = CURRENT_TIMESTAMP
+                WHERE batch_id = :batch_id
+                  AND location_id = :location_id
+                  AND product_id = :product_id
+                  AND org_id = :org_id
+            """), {
+                "quantity": float(movement.quantity or 0),
+                "batch_id": movement.batch_id,
+                "location_id": movement.location_id,
+                "product_id": movement.product_id,
+                "org_id": org_id,
+            })
+
+            if update_result.rowcount == 0:
+                db.execute(text("""
+                    INSERT INTO inventory.location_wise_stock (
+                        org_id,
+                        location_id,
+                        product_id,
+                        batch_id,
+                        quantity_available,
+                        quantity_reserved,
+                        last_movement_date
+                    ) VALUES (
+                        :org_id,
+                        :location_id,
+                        :product_id,
+                        :batch_id,
+                        :quantity,
+                        0,
+                        CURRENT_DATE
+                    )
+                """), {
+                    "org_id": org_id,
+                    "location_id": movement.location_id,
+                    "product_id": movement.product_id,
+                    "batch_id": movement.batch_id,
+                    "quantity": float(movement.quantity or 0),
+                })
+
+        # 3. Delete inventory movements for this purchase return
         db.execute(text("""
             DELETE FROM inventory.inventory_movements
             WHERE reference_id = :return_id
               AND reference_type = 'PURCHASE_RETURN'
         """), {"return_id": return_id})
 
-        # 3. Void supplier outstanding entry (if debit note was created)
+        # 4. Void supplier outstanding entry and cancel debit note (if created)
         if org_id:
-            db.execute(text("""
-                UPDATE financial.supplier_outstanding
-                SET status = 'cancelled', outstanding_amount = 0,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE document_type = 'debit_note'
-                  AND document_id = :return_id
-                  AND org_id = :org_id
-            """), {"return_id": return_id, "org_id": org_id})
+            debit_note = db.execute(text("""
+                SELECT debit_note_id
+                FROM financial.debit_notes
+                WHERE org_id = :org_id
+                  AND reference_type = 'PURCHASE_RETURN'
+                  AND reference_id = :return_id
+                ORDER BY debit_note_id DESC
+                LIMIT 1
+            """), {"return_id": return_id, "org_id": org_id}).first()
 
-        # 4. Mark return as cancelled
+            if debit_note:
+                db.execute(text("""
+                    UPDATE financial.debit_notes
+                    SET status = 'cancelled',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE debit_note_id = :debit_note_id
+                """), {"debit_note_id": debit_note.debit_note_id})
+
+                db.execute(text("""
+                    UPDATE financial.supplier_outstanding
+                    SET status = 'cancelled',
+                        outstanding_amount = 0,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE document_type = 'debit_note'
+                      AND document_id = :debit_note_id
+                      AND org_id = :org_id
+                """), {"debit_note_id": debit_note.debit_note_id, "org_id": org_id})
+
+            db.execute(text("""
+                UPDATE procurement.purchase_returns
+                SET debit_note_status = 'cancelled',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE return_id = :return_id
+            """), {"return_id": return_id})
+
+        # 5. Mark return as cancelled
         db.execute(text("""
             UPDATE procurement.purchase_returns
             SET approval_status = 'cancelled',
-                debit_note_status = 'cancelled',
                 updated_at = CURRENT_TIMESTAMP
             WHERE return_id = :return_id
         """), {"return_id": return_id})

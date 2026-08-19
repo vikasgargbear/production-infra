@@ -8,6 +8,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
+from ....core.utils.constants import ReturnStatus
+
 
 # =============================================================================
 # ENUMS
@@ -41,15 +43,6 @@ class Disposition(str, Enum):
     RETURN_TO_SUPPLIER = "RETURN_TO_SUPPLIER"
 
 
-class ReturnStatus(str, Enum):
-    """Return processing status"""
-    PENDING = "pending"
-    APPROVED = "approved"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    REJECTED = "rejected"
-
-
 # =============================================================================
 # SALES RETURN SCHEMAS
 # =============================================================================
@@ -69,8 +62,8 @@ class SalesReturnItem(BaseModel):
     unit_price: Decimal = Field(..., ge=0, description="Unit price")
     mrp: Optional[Decimal] = Field(None, ge=0, description="MRP per unit")
     
-    # Optional manual override - if provided, use this instead of calculated value
-    return_value: Optional[Decimal] = Field(None, ge=0, description="Manual override for credit amount")
+    # Accepted for backward-compatible previews only; the backend always recalculates it.
+    return_value: Optional[Decimal] = Field(None, ge=0, description="Non-authoritative client preview")
     
     tax_percent: Decimal = Field(default=Decimal("0"), ge=0, le=28)
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)

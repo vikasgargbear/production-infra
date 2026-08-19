@@ -15,7 +15,7 @@ import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
 import { LedgerHub } from './components/ledger';
-import { NotesHub } from './components/returns/notes';
+import CreditDebitFlow from './components/payment/flows/CreditDebitFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import PayrollHub from './components/payroll/PayrollHub';
@@ -46,6 +46,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
+const CalculationSmokePage = lazy(() => import('./e2e/CalculationSmokePage'));
 const Products = lazy(() => import('./components/master/products/Products'));
 const Orders = lazy(() => import('./components/sales/order/Orders'));
 // BatchesInventory removed - use StockHub instead
@@ -299,7 +300,7 @@ const AppContent = (): JSX.Element => {
       case 'party-ledger':
         return <LedgerHub key="party-ledger" onClose={() => setActiveTab('home')} />;
       case 'credit-debit-note':
-        return <NotesHub key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
+        return <CreditDebitFlow key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
       case 'gst':
         return <GSTHub key="gst" open={true} onClose={() => setActiveTab('home')} />;
       case 'master':
@@ -314,6 +315,18 @@ const AppContent = (): JSX.Element => {
         return <Home key="home-default" setActiveTab={setActiveTabGuarded} />;
     }
   };
+
+  // Check if user wants to see auth diagnostic
+  if (
+    process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true' &&
+    window.location.pathname === '/e2e/calculation-smoke'
+  ) {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <CalculationSmokePage />
+      </Suspense>
+    );
+  }
 
   // Check if user wants to see auth diagnostic
   if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {

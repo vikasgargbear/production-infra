@@ -62,7 +62,6 @@ const MyComponent: React.FC = () => {
 | `login` | `(credentials) => Promise` | Login function |
 | `logout` | `() => void` | Logout function |
 | `hasPermission` | `(permission: string) => boolean` | Check permission |
-| `refreshToken` | `() => Promise` | Refresh auth token |
 
 ---
 

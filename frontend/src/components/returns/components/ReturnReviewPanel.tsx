@@ -94,36 +94,16 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
     const taxBreakup = useMemo(() => {
         const rateMap: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> = {};
         selectedItems.forEach(item => {
-            const qty = parseFloat(String(item.return_quantity || 0));
-            const freeQty = parseFloat(String(item.return_free_qty || 0));
-            const paidQty = Math.max(0, qty - freeQty);
-            const rate = parseFloat(String(item.unit_price || 0));
-            const discPercent = parseFloat(String(item.discount_percent || 0));
-            const taxPercent = parseFloat(String(item.tax_percent || 0));
-            if (taxPercent <= 0 || paidQty <= 0) return;
-
-            const baseAmount = paidQty * rate;
-            const discountAmount = (baseAmount * discPercent) / 100;
-            const taxable = baseAmount - discountAmount;
-
-            // Read original invoice rates to determine CGST/SGST vs IGST
-            const igstRate = parseFloat(String(item.igst_rate || 0));
-            const cgstRate = parseFloat(String(item.cgst_rate || 0));
-            const sgstRate = parseFloat(String(item.sgst_rate || 0));
+            const taxPercent = Number(item.tax_percent || 0);
+            if (taxPercent <= 0 || Number((item as any).taxable_quantity || 0) <= 0) return;
 
             if (!rateMap[taxPercent]) {
                 rateMap[taxPercent] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
             }
-            rateMap[taxPercent].taxable += taxable;
-
-            if (igstRate > 0) {
-                // Inter-state: full tax as IGST
-                rateMap[taxPercent].igst += (taxable * igstRate) / 100;
-            } else {
-                // Intra-state: split CGST/SGST
-                rateMap[taxPercent].cgst += (taxable * cgstRate) / 100;
-                rateMap[taxPercent].sgst += (taxable * sgstRate) / 100;
-            }
+            rateMap[taxPercent].taxable += Number((item as any).taxable_amount || 0);
+            rateMap[taxPercent].cgst += Number((item as any).cgst_amount || 0);
+            rateMap[taxPercent].sgst += Number((item as any).sgst_amount || 0);
+            rateMap[taxPercent].igst += Number((item as any).igst_amount || 0);
         });
         return Object.entries(rateMap)
             .sort(([a], [b]) => Number(a) - Number(b))
@@ -325,16 +305,10 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                                     </thead>
                                     <tbody>
                                         {selectedItems.map((item, index) => {
-                                            const qty = parseFloat(String(item.return_quantity || 0));
                                             const freeQty = parseFloat(String(item.return_free_qty || 0));
-                                            const paidQty = Math.max(0, qty - freeQty);
-                                            const rate = parseFloat(String(item.unit_price || 0));
-                                            const discPercent = parseFloat(String(item.discount_percent || 0));
+                                            const rate = Number(item.unit_price || 0);
                                             const taxPercent = parseFloat(String(item.tax_percent || 0));
-                                            const baseAmount = paidQty * rate;
-                                            const discountAmount = (baseAmount * discPercent) / 100;
-                                            const taxableAmount = baseAmount - discountAmount;
-                                            const lineTotal = taxableAmount + (taxableAmount * taxPercent / 100);
+                                            const lineTotal = Number((item as any).total_amount || 0);
 
                                             return (
                                                 <tr key={index} className="border-b border-gray-200">

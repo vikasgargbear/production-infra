@@ -1,6 +1,5 @@
 import React, { ReactNode, useState, MouseEvent as ReactMouseEvent } from 'react';
-import { theme, classes } from '../../../config/theme.config';
-import { DESIGN_TOKENS, getHeaderClasses, getCardClasses } from '../../../config/design-system.config';
+import { getCardClasses } from '../../../config/design-system.config';
 
 // ==================== TYPE DEFINITIONS ====================
 

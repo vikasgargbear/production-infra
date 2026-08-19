@@ -150,29 +150,51 @@ class InventoryService:
             # Note: We do NOT commit here - caller controls transaction
 
             # Return created batch
-            return InventoryService.get_batch(db, batch_id)
+            return InventoryService.get_batch(db, batch_id, org_id)
 
         except Exception as e:
             logger.error(f"Error creating batch: {str(e)}")
             raise
     
     @staticmethod
-    def get_batch(db: Session, batch_id: int) -> BatchResponse:
+    def get_batch(db: Session, batch_id: int, org_id: Optional[str] = None) -> BatchResponse:
         """
         Get batch details with calculated fields.
-        TenantAwareSession auto-filters by org_id.
+        Requires explicit org_id to avoid leaking batch data across tenants.
         """
+        if not org_id:
+            raise ValueError("org_id is required to fetch batch details")
+
         result = db.execute(text("""
-            SELECT b.*, p.product_name, p.product_code,
-                   b.initial_quantity as quantity_received,
-                   b.cost_per_unit as cost_price,
-                   b.mrp_per_unit as mrp,
-                   b.storage_location as location_code,
-                   b.initial_quantity - b.quantity_available - COALESCE(b.quantity_returned, 0) as quantity_sold
+            SELECT
+                b.batch_id,
+                b.org_id,
+                b.product_id,
+                p.product_name,
+                p.product_code,
+                b.batch_number,
+                b.manufacturing_date,
+                b.expiry_date,
+                b.initial_quantity as quantity_received,
+                b.quantity_available,
+                COALESCE(b.quantity_reserved, 0) as quantity_reserved,
+                COALESCE(b.cost_per_unit, 0) as cost_price,
+                b.mrp_per_unit as mrp,
+                b.sale_price_per_unit as sale_price,
+                b.supplier_id,
+                NULL::TEXT as purchase_invoice_number,
+                NULL::INTEGER as grn_id,
+                sl.location_code as location_code,
+                NULL::TEXT as notes,
+                0 as quantity_sold,
+                b.created_at,
+                b.updated_at
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
+            LEFT JOIN inventory.storage_locations sl ON b.primary_location_id = sl.location_id
             WHERE b.batch_id = :batch_id
-        """), {"batch_id": batch_id})
+                AND b.org_id = :org_id
+        """), {"batch_id": batch_id, "org_id": org_id})
         
         batch = result.fetchone()
         if not batch:
@@ -184,7 +206,7 @@ class InventoryService:
         batch_dict["quantity_sold"] = batch_dict.get("quantity_sold", 0)
         batch_dict["stock_value"] = (
             Decimal(str(batch_dict["quantity_available"])) *
-            Decimal(str(batch_dict.get("cost_per_unit", 0)))
+            Decimal(str(batch_dict.get("cost_price", 0)))
         )
         
         if batch_dict["expiry_date"]:
@@ -257,17 +279,60 @@ class InventoryService:
         responsible for calling db.commit() to maintain transaction atomicity.
         """
         try:
+            if not movement_data.org_id:
+                raise ValueError("org_id is required to record a stock movement")
+            if not movement_data.location_id:
+                raise ValueError("location_id is required to record a stock movement")
+
+            org_id = str(movement_data.org_id)
+            product_exists = db.execute(text("""
+                SELECT product_id
+                FROM inventory.products
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {
+                "product_id": movement_data.product_id,
+                "org_id": org_id,
+            }).scalar()
+            if product_exists is None:
+                raise ValueError("Product not found or access denied")
+
+            location_exists = db.execute(text("""
+                SELECT location_id
+                FROM inventory.storage_locations
+                WHERE location_id = :location_id AND org_id = :org_id
+            """), {
+                "location_id": movement_data.location_id,
+                "org_id": org_id,
+            }).scalar()
+            if location_exists is None:
+                raise ValueError("Location not found or access denied")
+
             # Get current stock levels
             if movement_data.batch_id:
-                current = db.execute(text("""
-                    SELECT quantity_available FROM inventory.batches 
+                batch = db.execute(text("""
+                    SELECT quantity_available
+                    FROM inventory.batches
                     WHERE batch_id = :batch_id
-                """), {"batch_id": movement_data.batch_id}).scalar()
+                      AND product_id = :product_id
+                      AND org_id = :org_id
+                    FOR UPDATE
+                """), {
+                    "batch_id": movement_data.batch_id,
+                    "product_id": movement_data.product_id,
+                    "org_id": org_id,
+                }).first()
+                if batch is None:
+                    raise ValueError("Batch not found or access denied")
+                current = batch.quantity_available
             else:
                 current = db.execute(text("""
                     SELECT COALESCE(SUM(quantity_available), 0) 
-                    FROM inventory.batches WHERE product_id = :product_id
-                """), {"product_id": movement_data.product_id}).scalar()
+                    FROM inventory.batches
+                    WHERE product_id = :product_id AND org_id = :org_id
+                """), {
+                    "product_id": movement_data.product_id,
+                    "org_id": org_id,
+                }).scalar()
             
             stock_before = current or 0
             
@@ -289,7 +354,7 @@ class InventoryService:
             
             # Build movement record - org_id needed for INSERT
             movement_params = {
-                "org_id": str(movement_data.org_id) if movement_data.org_id else None,
+                "org_id": org_id,
                 "product_id": movement_data.product_id,
                 "batch_id": movement_data.batch_id,
                 "movement_type": movement_data.movement_type,
@@ -336,10 +401,11 @@ class InventoryService:
                     UPDATE inventory.batches
                     SET quantity_available = quantity_available + :quantity_change,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE batch_id = :batch_id
+                    WHERE batch_id = :batch_id AND org_id = :org_id
                 """), {
                     "quantity_change": quantity_change,
-                    "batch_id": movement_data.batch_id
+                    "batch_id": movement_data.batch_id,
+                    "org_id": org_id,
                 })
 
             # Update location_wise_stock if location_id provided
@@ -439,7 +505,8 @@ class InventoryService:
         destination_location_id: int,
         movement_date: date = None,
         reason: str = "Stock transfer",
-        created_by: int = None
+        created_by: int = None,
+        reference_number: str = None,
     ) -> dict:
         """
         Atomic stock transfer between two locations.
@@ -470,6 +537,7 @@ class InventoryService:
             movement_date=movement_date,
             quantity=quantity,
             reference_type="stock_transfer",
+            reference_number=reference_number,
             location_id=source_location_id,
             transfer_type="inter_location",
             reason=reason,
@@ -487,6 +555,7 @@ class InventoryService:
             movement_date=movement_date,
             quantity=quantity,
             reference_type="stock_transfer",
+            reference_number=reference_number,
             location_id=destination_location_id,
             transfer_type="inter_location",
             reason=reason,
@@ -524,10 +593,13 @@ class InventoryService:
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.quantity_available > 0
+            WHERE b.org_id = :org_id
+                AND p.org_id = :org_id
+                AND b.quantity_available > 0
                 AND b.expiry_date <= :cutoff_date
             ORDER BY b.expiry_date, p.product_name
         """), {
+            "org_id": str(org_id),
             "cutoff_date": cutoff_date
         })
         
@@ -589,10 +661,12 @@ class InventoryService:
                 COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as value
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.quantity_available > 0
+            WHERE b.org_id = :org_id
+                AND p.org_id = :org_id
+                AND b.quantity_available > 0
             GROUP BY p.category_id
             ORDER BY value DESC
-        """))
+        """), {"org_id": str(org_id)})
         
         valuation["category_wise"] = [
             dict(row._mapping) for row in category_result
@@ -636,7 +710,8 @@ class InventoryService:
                 FROM inventory.batches
                 GROUP BY product_id
             ) sq ON p.product_id = sq.product_id
-        """)).fetchone()
+            WHERE p.org_id = :org_id
+        """), {"org_id": str(org_id)}).fetchone()
         
         # Today's activity (all movement types, not just sales)
         activity = db.execute(text("""
@@ -663,10 +738,11 @@ class InventoryService:
                 AND im.movement_type = 'sale'
                 AND im.movement_direction = 'out'
                 AND im.movement_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE p.org_id = :org_id
             GROUP BY p.product_id, p.product_code, p.product_name
             ORDER BY movement_quantity DESC
             LIMIT 10
-        """))
+        """), {"org_id": str(org_id)})
         
         # Get expiry alerts
         expiry_alerts = InventoryService.get_expiry_alerts(db, org_id, days_ahead=90)
@@ -705,30 +781,41 @@ class InventoryService:
         if not batch_deductions:
             return 0
         
-        case_parts = []
-        batch_ids_to_update = []
-        update_params = {"org_id": org_id}
-        
-        for i, bd in enumerate(batch_deductions):
-            case_parts.append(f"WHEN batch_id = :bid_{i} THEN quantity_available - :qty_{i}")
-            batch_ids_to_update.append(bd["batch_id"])
-            update_params[f"bid_{i}"] = bd["batch_id"]
-            update_params[f"qty_{i}"] = bd["quantity"]
-        
-        update_params["batch_ids"] = batch_ids_to_update
-        
-        bulk_update_sql = f"""
-            UPDATE inventory.batches
-            SET 
-                quantity_available = CASE {" ".join(case_parts)} ELSE quantity_available END,
-                last_movement_date = CURRENT_TIMESTAMP,
+        requested = {}
+        for deduction in batch_deductions:
+            batch_id = int(deduction["batch_id"])
+            quantity = Decimal(str(deduction["quantity"]))
+            if quantity <= 0:
+                raise ValueError("stock deduction quantity must be greater than zero")
+            requested[batch_id] = requested.get(batch_id, Decimal("0")) + quantity
+
+        values = []
+        params = {"org_id": org_id}
+        for index, (batch_id, quantity) in enumerate(requested.items()):
+            values.append(f"(:batch_id_{index}, :quantity_{index})")
+            params[f"batch_id_{index}"] = batch_id
+            params[f"quantity_{index}"] = quantity
+
+        result = db.execute(text(f"""
+            WITH requested(batch_id, quantity) AS (
+                VALUES {", ".join(values)}
+            )
+            UPDATE inventory.batches AS batch
+            SET quantity_available = batch.quantity_available - requested.quantity,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE batch_id = ANY(:batch_ids) AND org_id = :org_id
-        """
-        db.execute(text(bulk_update_sql), update_params)
-        logger.info(f"✅ Bulk updated {len(batch_deductions)} batch quantities")
-        
-        return len(batch_deductions)
+            FROM requested
+            WHERE batch.batch_id = requested.batch_id
+              AND batch.org_id = :org_id
+              AND batch.quantity_available >= requested.quantity
+            RETURNING batch.batch_id
+        """), params)
+        updated_batch_ids = {row[0] for row in result.fetchall()}
+        if updated_batch_ids != set(requested):
+            missing = sorted(set(requested) - updated_batch_ids)
+            raise ValueError(f"insufficient or inaccessible stock for batches: {missing}")
+
+        logger.info(f"Bulk updated {len(updated_batch_ids)} batch quantities")
+        return len(updated_batch_ids)
     
     @staticmethod
     def bulk_insert_movements(
@@ -831,12 +918,13 @@ class InventoryService:
             if not location_id or not org_id or not product_id:
                 continue
 
-            # Check if row exists
+            # Lock the projection row before deciding how to mutate it.
             existing = db.execute(text("""
                 SELECT stock_id FROM inventory.location_wise_stock
                 WHERE org_id = :org_id AND product_id = :product_id
                 AND location_id = :location_id
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
+                FOR UPDATE
             """), {
                 "org_id": org_id, "product_id": product_id,
                 "location_id": location_id, "batch_id": batch_id
@@ -851,12 +939,19 @@ class InventoryService:
                         WHERE stock_id = :stock_id
                     """), {"quantity": quantity, "stock_id": existing})
                 else:
-                    db.execute(text("""
+                    result = db.execute(text("""
                         UPDATE inventory.location_wise_stock
                         SET quantity_available = quantity_available - :quantity,
                             last_movement_date = CURRENT_DATE, last_updated = CURRENT_TIMESTAMP
                         WHERE stock_id = :stock_id
-                    """), {"quantity": quantity, "stock_id": existing})
+                          AND org_id = :org_id
+                          AND quantity_available >= :quantity
+                        RETURNING stock_id
+                    """), {"quantity": quantity, "stock_id": existing, "org_id": org_id})
+                    if result.scalar() is None:
+                        raise ValueError(
+                            f"insufficient location stock for product {product_id}, batch {batch_id}"
+                        )
             elif direction == 'in':
                 # Only create new rows for stock-in (purchase/receive)
                 db.execute(text("""
@@ -869,31 +964,9 @@ class InventoryService:
                     "product_id": product_id, "batch_id": batch_id, "quantity": quantity
                 })
             else:
-                # Stock-out but no LWS row exists — backfill from batch then deduct
-                batch_qty = db.execute(text("""
-                    SELECT COALESCE(quantity_available, 0)
-                    FROM inventory.batches
-                    WHERE batch_id = :batch_id AND org_id = :org_id
-                """), {"batch_id": batch_id, "org_id": org_id}).scalar() or 0
-
-                # Batch qty is already deducted by bulk_update_batch_quantities,
-                # so the "before" value was batch_qty + quantity
-                backfill_qty = float(batch_qty) + float(quantity)
-                new_qty = max(float(batch_qty), 0)  # After deduction
-
-                logger.info(
-                    f"📦 Backfilling location_wise_stock for product={product_id}, "
-                    f"batch={batch_id}, location={location_id}: qty={new_qty}"
+                raise ValueError(
+                    f"location stock is missing for product {product_id}, batch {batch_id}"
                 )
-                db.execute(text("""
-                    INSERT INTO inventory.location_wise_stock (
-                        org_id, location_id, product_id, batch_id,
-                        quantity_available, quantity_reserved, last_movement_date
-                    ) VALUES (:org_id, :location_id, :product_id, :batch_id, :quantity, 0, CURRENT_DATE)
-                """), {
-                    "org_id": org_id, "location_id": location_id,
-                    "product_id": product_id, "batch_id": batch_id, "quantity": new_qty
-                })
 
             updated += 1
 
@@ -948,10 +1021,10 @@ class InventoryService:
             query += " AND (im.location_id = :location_id OR im.from_location_id = :location_id OR im.to_location_id = :location_id)"
             params["location_id"] = location_id
         if from_date:
-            query += " AND im.movement_date >= :from_date::date"
+            query += " AND im.movement_date >= CAST(:from_date AS date)"
             params["from_date"] = from_date
         if to_date:
-            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            query += " AND im.movement_date < CAST(:to_date AS date) + INTERVAL '1 day'"
             params["to_date"] = to_date
         
         sort_field = "im.movement_date" if sort == "movement_date" else "im.movement_id"
@@ -981,12 +1054,12 @@ class InventoryService:
             query += " AND im.batch_id = :batch_id"
             params["batch_id"] = batch_id
         if from_date:
-            query += " AND im.movement_date >= :from_date::date"
+            query += " AND im.movement_date >= CAST(:from_date AS date)"
             params["from_date"] = from_date
         else:
             query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
         if to_date:
-            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            query += " AND im.movement_date < CAST(:to_date AS date) + INTERVAL '1 day'"
             params["to_date"] = to_date
         
         return db.execute(text(query), params).scalar() or 0
@@ -1188,8 +1261,19 @@ class InventoryService:
         params = {}
         
         if category:
-            query += " AND p.category_id = :category"
-            params["category"] = category
+            category_value = str(category).strip()
+            if category_value.isdigit():
+                query += " AND p.category_id = :category_id"
+                params["category_id"] = int(category_value)
+            else:
+                query += """
+                    AND (
+                        c.category_name ILIKE :category_name
+                        OR p.product_class ILIKE :category_name
+                        OR p.product_type ILIKE :category_name
+                    )
+                """
+                params["category_name"] = f"%{category_value}%"
         if low_stock_only:
             query += " AND COALESCE(b.total_quantity, 0) <= COALESCE(p.reorder_level, 0) AND p.reorder_level IS NOT NULL AND p.reorder_level > 0"
         

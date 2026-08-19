@@ -54,6 +54,9 @@ export interface ChallanItem {
     sale_price?: number;
     gst_percent?: number;
     tax_percent?: number;
+    taxable_amount?: number;
+    tax_amount?: number;
+    total_tax_amount?: number;
     total?: number;
     line_total?: number;
     manufacturer?: string;
@@ -131,6 +134,9 @@ export interface Challan {
     total_weight: number;
     total_quantity: number;
     total_amount: number;
+    taxable_amount?: number;
+    total_tax_amount?: number;
+    gst_type?: 'CGST/SGST' | 'IGST';
 
     // Notes
     notes: string;

@@ -5,13 +5,13 @@
 
 // Main Components
 import ModularPaymentEntry from './entry/ModularPaymentEntry';
+import PaymentSummary from './shared/PaymentSummary';
+import InvoiceSelector from './shared/InvoiceSelector';
+
 export { ModularPaymentEntry };
 // TODO: Implement these components
 // export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
 // export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
-
-import PaymentSummary from './shared/PaymentSummary';
-import InvoiceSelector from './shared/InvoiceSelector';
 export { PaymentSummary, InvoiceSelector };
 // export { default as PaymentModeSelector } from './components/PaymentModeSelector'; // TODO: Implement
 // export { default as InvoiceAllocation } from './components/InvoiceAllocation'; // TODO: Implement
@@ -87,7 +87,7 @@ interface PaymentUtils {
 }
 
 // Default export
-interface PaymentModule {
+interface PaymentModuleExports {
   ModularPaymentEntry: React.ComponentType<any>;
   // ModularPaymentEntryV2: React.ComponentType<any>;
   // ModularPaymentEntryV3: React.ComponentType<any>;
@@ -96,7 +96,7 @@ interface PaymentModule {
   utils: PaymentUtils;
 }
 
-const PaymentModule: PaymentModule = {
+const PaymentModule: PaymentModuleExports = {
   ModularPaymentEntry,
   // ModularPaymentEntryV2,
   // ModularPaymentEntryV3,

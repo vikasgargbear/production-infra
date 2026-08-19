@@ -46,7 +46,6 @@ import {
 |--------|----------|-------------|
 | `login(credentials)` | POST `/auth/login` | User login |
 | `logout()` | POST `/auth/logout` | User logout |
-| `refreshToken()` | POST `/auth/refresh` | Refresh token |
 | `forgotPassword(email)` | POST `/auth/forgot-password` | Password reset |
 
 ### usersApi

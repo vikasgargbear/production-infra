@@ -444,7 +444,7 @@ export interface User {
   full_name: string;
   email: string;
   role: 'admin' | 'manager' | 'operator' | 'viewer';
-  organization_id: number;
+  organization_id: string;
   permissions: string[];
   last_login?: string;
 }
@@ -457,7 +457,7 @@ export interface LoginResponse {
 }
 
 export interface Organization {
-  id: number;
+  id: string;
   name: string;
   legal_name: string;
   gst_number: string;

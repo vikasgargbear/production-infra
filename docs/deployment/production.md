@@ -287,10 +287,9 @@ curl https://api.yourdomain.com/health
 # Check version
 curl https://api.yourdomain.com/version
 
-# Test authentication
-curl -X POST https://api.yourdomain.com/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "test", "password": "test"}'
+# Test the Supabase-to-ERP session exchange with a confirmed pilot identity
+curl -X POST https://api.yourdomain.com/api/auth/oauth/supabase/session \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 
 # Check critical endpoints
 curl https://api.yourdomain.com/api/sales/invoices \

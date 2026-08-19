@@ -63,11 +63,6 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                 const discountPercent = parseFloat(String(item.discount_percent)) || 0;
                 const taxPercent = parseFloat(String(item.gst_percent)) || 0;
 
-                const subtotal = quantity * unitPrice;
-                const discountAmount = (subtotal * discountPercent) / 100;
-                const taxableAmount = subtotal - discountAmount;
-                const taxAmount = (taxableAmount * taxPercent) / 100;
-
                 return {
                     product_id: parseInt(String(item.product_id)),
                     product_code: item.product_code || null,
@@ -78,9 +73,9 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                     unit_price: unitPrice,
                     mrp: parseFloat(String(item.mrp)) || unitPrice,
                     discount_percent: discountPercent,
-                    discount_amount: discountAmount,
+                    discount_amount: parseFloat(String(item.discount_amount)) || 0,
                     tax_percent: taxPercent,
-                    tax_amount: taxAmount,
+                    tax_amount: parseFloat(String(item.tax_amount)) || 0,
                     gst_type: order.gst_type || 'CGST/SGST',
                     uom: item.uom || null,
                     pack_type: item.pack_type || null
@@ -90,6 +85,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             billing_address: order.billing_address || '',
             shipping_address: order.shipping_address || '',
             discount_amount: parseFloat(String(order.discount_amount)) || 0,
+            delivery_charges: parseFloat(String(order.delivery_charges)) || 0,
             other_charges: parseFloat(String(order.other_charges)) || 0
         }),
 

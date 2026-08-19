@@ -6,15 +6,15 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .token_blacklist import is_token_blacklisted, blacklist_token
+from ..env import is_production
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-IS_PRODUCTION = os.getenv("ENV", "development").lower() in ("production", "prod")
+IS_PRODUCTION = is_production()
 
 if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     if IS_PRODUCTION:
@@ -26,35 +26,9 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
     SECRET_KEY = "dev-only-insecure-key-never-use-in-production"
 
 ALGORITHM = "HS256"
-_is_prod = os.getenv("ENV", "development").lower() in ("production", "prod")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 if _is_prod else 1440  # 1h prod, 24h dev
-
-# Password hashing
-# Configure bcrypt to avoid 72-byte initialization issues
-# Use 10 rounds for faster authentication (still secure, but 4x faster than 12)
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__default_rounds=10,  # 10 rounds = ~0.7s, 12 rounds = ~2.9s
-    bcrypt__ident="2b"
-)
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash"""
-    # Bcrypt has a 72 byte limit, truncate if needed
-    if isinstance(plain_password, str):
-        plain_password = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    # Bcrypt has a 72 byte limit, truncate if needed
-    if isinstance(password, str):
-        password = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(password)
+TOKEN_ISSUER = "aasopharma-api"
+TOKEN_AUDIENCE = "aasopharma-api"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 if IS_PRODUCTION else 1440  # 1h prod, 24h dev
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
@@ -72,10 +46,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     
     # Add jti (JWT ID) for blacklist support
     jti = str(uuid.uuid4())
+    subject = data.get("auth_user_id") or data.get("user_id")
     to_encode.update({
         "exp": expire,
         "jti": jti,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "sub": str(subject),
+        "iss": TOKEN_ISSUER,
+        "aud": TOKEN_AUDIENCE,
+        "token_use": "access",
     })
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -98,7 +77,16 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
     Raises:
         JWTError: If token is invalid, expired, or blacklisted
     """
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+        audience=TOKEN_AUDIENCE,
+        issuer=TOKEN_ISSUER,
+        options={"require_exp": True, "require_iat": True, "require_sub": True},
+    )
+    if payload.get("token_use") != "access":
+        raise JWTError("Invalid token use")
     
     # Check if token is blacklisted (for logout support)
     if check_blacklist:
@@ -113,7 +101,6 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
 # FASTAPI DEPENDENCIES - For use in route handlers
 # ==============================================================================
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from uuid import UUID
 
 # Bearer token scheme
@@ -201,7 +188,7 @@ def get_user_context_secure(
         )
 
 async def get_current_user_and_org(
-    token: Optional[str] = Depends(oauth2_scheme)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security),
 ):
     """
     Get current user and organization from JWT token.
@@ -210,7 +197,7 @@ async def get_current_user_and_org(
     JWT token is now REQUIRED - prevents client from bypassing auth.
     """
     
-    if not token:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Provide Bearer token.",
@@ -225,7 +212,7 @@ async def get_current_user_and_org(
     )
     
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_jwt(credentials.credentials)
         
         # Handle both old and new token formats
         user_id = payload.get("user_id") or payload.get("sub")

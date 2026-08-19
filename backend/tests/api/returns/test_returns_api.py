@@ -10,11 +10,21 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 from typing import Optional, Dict, Any
 
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
 
 
 class Colors:
@@ -125,17 +135,22 @@ def test_list_sales_returns(limit: int = 10) -> bool:
             print_info("First 3 sales returns:")
             for ret in returns[:3]:
                 print(f"      - {ret.get('return_number')}: {ret.get('party_name')} | ₹{ret.get('total_amount', 0):.2f} | Items: {ret.get('item_count', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Sales returns list endpoint failed")
-        return False
+        return finish_test(False)
 
 
-def test_sales_return_detail(return_id: int) -> bool:
+def test_sales_return_detail(return_id: Optional[int] = None) -> bool:
     """
     Test GET /sale-returns/{return_id}
     Returns detailed sales return
     """
+    if return_id is None:
+        return_id = get_any_sales_return_id()
+    if return_id is None:
+        pytest.skip("No sales return available for detail test")
+
     print_info(f"Testing sales return detail for ID {return_id}...")
     
     success, data = make_request(
@@ -149,10 +164,10 @@ def test_sales_return_detail(return_id: int) -> bool:
         print(f"   Party: {data.get('party_name')}")
         print(f"   Total: ₹{data.get('total_amount', 0):.2f}")
         print(f"   Items: {len(data.get('items', []))}")
-        return True
+        return finish_test(True)
     else:
         print_error("Sales return detail endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_returnable_invoices(customer_id: Optional[int] = None) -> bool:
@@ -181,10 +196,10 @@ def test_returnable_invoices(customer_id: Optional[int] = None) -> bool:
             print_info("First 3 returnable invoices:")
             for inv in invoices[:3]:
                 print(f"      - {inv.get('invoice_number')}: {inv.get('party_name')} | ₹{inv.get('grand_total', 0):.2f}")
-        return True
+        return finish_test(True)
     else:
         print_error("Returnable invoices endpoint failed")
-        return False
+        return finish_test(False)
 
 
 # =============================================================================
@@ -214,17 +229,22 @@ def test_list_purchase_returns(limit: int = 10) -> bool:
             print_info("First 3 purchase returns:")
             for ret in returns[:3]:
                 print(f"      - {ret.get('return_number')}: {ret.get('party_name')} | ₹{ret.get('total_amount', 0):.2f} | Items: {ret.get('item_count', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Purchase returns list endpoint failed")
-        return False
+        return finish_test(False)
 
 
-def test_purchase_return_detail(return_id: int) -> bool:
+def test_purchase_return_detail(return_id: Optional[int] = None) -> bool:
     """
     Test GET /purchase-returns/{return_id}
     Returns detailed purchase return
     """
+    if return_id is None:
+        return_id = get_any_purchase_return_id()
+    if return_id is None:
+        pytest.skip("No purchase return available for detail test")
+
     print_info(f"Testing purchase return detail for ID {return_id}...")
     
     success, data = make_request(
@@ -238,10 +258,10 @@ def test_purchase_return_detail(return_id: int) -> bool:
         print(f"   Supplier: {data.get('party_name')}")
         print(f"   Total: ₹{data.get('total_amount', 0):.2f}")
         print(f"   Items: {len(data.get('items', []))}")
-        return True
+        return finish_test(True)
     else:
         print_error("Purchase return detail endpoint failed")
-        return False
+        return finish_test(False)
 
 
 # =============================================================================

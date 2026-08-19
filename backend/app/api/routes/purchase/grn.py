@@ -16,27 +16,34 @@ from uuid import UUID
 from ....core.auth.tenant_service import TenantAwareSession, get_tenant_aware_db, with_tenant_context
 from ....core.auth.org_context import OrgContext, get_org_context
 from ....core.security.permissions import PermissionChecker
-from ...services.document_number_service import DocumentNumberService
+from ...services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["goods-receipt-notes"])
 
-@router.get("/generate-number")
+@router.post(
+    "/generate-number",
+    operation_id="procurement_reserve_grn_number_v1",
+    summary="Reserve a goods receipt number",
+    openapi_extra=document_number_reservation_openapi("inventory.create"),
+)
 @with_tenant_context
 def generate_grn_number(
-    _: dict = Depends(PermissionChecker("inventory", "view")),  # RBAC
+    _: dict = Depends(PermissionChecker("inventory", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Generate next GRN number using unified service"""
+    """Reserve and commit the next organization-scoped GRN number."""
     try:
-        # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "grn", str(context.org_id))
+        new_number = DocumentNumberService.reserve_number(db, "grn", str(context.org_id))
         return {"grn_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate GRN number: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate GRN number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve GRN number")
 
 @router.post("")
 @with_tenant_context
@@ -54,6 +61,10 @@ async def create_grn(
     try:
         # Import service here to avoid circular imports
         from ...services.purchase import GRNService
+
+        items = grn_data.get("items") or []
+        if not items:
+            raise HTTPException(status_code=400, detail="At least one GRN item is required")
         
         # Get context values
         org_id = str(context.org_id)
@@ -84,6 +95,9 @@ async def create_grn(
     except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to create GRN: {e}")
@@ -91,6 +105,7 @@ async def create_grn(
 
 
 @router.get("")
+@with_tenant_context
 def get_grns(
     skip: int = Query(0, description="Number of records to skip"),
     limit: int = Query(50, description="Number of records to return"),
@@ -190,6 +205,7 @@ def get_grns(
         raise HTTPException(status_code=500, detail=f"Failed to fetch GRNs: {str(e)}")
 
 @router.get("/{grn_id}")
+@with_tenant_context
 def get_grn_details(
     grn_id: int,
     db: TenantAwareSession = Depends(get_tenant_aware_db),
@@ -250,6 +266,7 @@ def get_grn_details(
         raise HTTPException(status_code=500, detail=f"Failed to fetch GRN details: {str(e)}")
 
 @router.put("/{grn_id}")
+@with_tenant_context
 def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
@@ -296,6 +313,7 @@ def update_grn(
         raise HTTPException(status_code=500, detail=f"Failed to update GRN: {str(e)}")
 
 @router.post("/{grn_id}/approve")
+@with_tenant_context
 def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],

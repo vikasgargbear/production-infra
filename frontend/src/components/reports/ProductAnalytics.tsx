@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Package, TrendingUp, Star, BarChart3, Download, Filter, Search, AlertTriangle, Zap, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
-import { Bar, Line, Scatter } from 'react-chartjs-2';
+import { Package, TrendingUp, Star, BarChart3, Download, Search, AlertTriangle, Zap, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,

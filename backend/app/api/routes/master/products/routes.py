@@ -10,15 +10,15 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 import logging
-import random
 import json
 
-from .....core.config import settings
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
+from .....core.money import money_json
 from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
 from ....services.master.product.service import ProductService  # Service layer
+from ....services.document_number_service import DocumentNumberService
 from ....schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 from .....core.utils.constants import (
     ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
@@ -170,8 +170,8 @@ async def search_products_with_batches(
                 product["best_batch"] = {
                     "batch_id": best_batch["batch_id"],
                     "batch_number": best_batch["batch_number"],
-                    "mrp_per_unit": float(best_batch["mrp_per_unit"] or 0),
-                    "sale_price_per_unit": float(best_batch["sale_price_per_unit"] or 0),
+                    "mrp_per_unit": money_json(best_batch["mrp_per_unit"] or 0),
+                    "sale_price_per_unit": money_json(best_batch["sale_price_per_unit"] or 0),
                     "quantity_available": best_batch["quantity_available"],
                     "expiry_date": str(best_batch["expiry_date"]) if best_batch["expiry_date"] else None,
                     "days_to_expiry": best_batch["days_to_expiry"]
@@ -271,10 +271,9 @@ async def get_all_products_with_batches(
             pid = batch["product_id"]
             if pid not in batches_by_product:
                 batches_by_product[pid] = []
-            # Convert decimals to floats for JSON serialization
-            batch["mrp_per_unit"] = float(batch["mrp_per_unit"] or 0)
-            batch["sale_price_per_unit"] = float(batch["sale_price_per_unit"] or 0)
-            batch["cost_per_unit"] = float(batch["cost_per_unit"] or 0)
+            batch["mrp_per_unit"] = money_json(batch["mrp_per_unit"] or 0)
+            batch["sale_price_per_unit"] = money_json(batch["sale_price_per_unit"] or 0)
+            batch["cost_per_unit"] = money_json(batch["cost_per_unit"] or 0)
             batch["expiry_date"] = str(batch["expiry_date"]) if batch["expiry_date"] else None
             batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch.get("manufacturing_date") else None
             batches_by_product[pid].append(batch)
@@ -482,7 +481,7 @@ async def create_product(
 
             # Build batch data with database field names
             batch_data = {
-                "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
+                "batch_number": product.get("batch_number") or DocumentNumberService.generate_batch_number(db, str(org_id)),
                 "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
                 "expiry_date": expiry_date,
                 "quantity": initial_quantity,
@@ -776,11 +775,11 @@ async def get_product_batches(
             include_expired=include_expired
         )
         
-        # Format decimals for JSON
+        # Format money using the exact HTTP response contract.
         for batch in batches:
-            batch["mrp_per_unit"] = float(batch.get("mrp_per_unit") or 0)
-            batch["sale_price_per_unit"] = float(batch.get("sale_price_per_unit") or 0)
-            batch["cost_per_unit"] = float(batch.get("cost_per_unit") or 0)
+            batch["mrp_per_unit"] = money_json(batch.get("mrp_per_unit") or 0)
+            batch["sale_price_per_unit"] = money_json(batch.get("sale_price_per_unit") or 0)
+            batch["cost_per_unit"] = money_json(batch.get("cost_per_unit") or 0)
             batch["expiry_date"] = str(batch["expiry_date"]) if batch.get("expiry_date") else None
             batch["manufacturing_date"] = str(batch["manufacturing_date"]) if batch.get("manufacturing_date") else None
         

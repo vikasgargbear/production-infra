@@ -1,0 +1,299 @@
+{
+  "purchase_entry_direct": {
+    "module": "purchase",
+    "kind": "write",
+    "endpoint": "POST /api/purchases/purchase-entry",
+    "description": "Standalone purchase entry that should create supplier invoice, stock, and GRN records.",
+    "writes": [
+      "procurement.supplier_invoices",
+      "procurement.supplier_invoice_items",
+      "procurement.goods_receipt_notes",
+      "procurement.grn_items",
+      "financial.supplier_outstanding",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "One supplier invoice header is created for the submitted invoice number.",
+      "Exactly one positive supplier_outstanding row exists for the supplier invoice document.",
+      "Invoice item count matches the submitted purchase lines.",
+      "A GRN is auto-created and linked back to the supplier invoice.",
+      "Inventory movements are created with movement_direction=in.",
+      "Batch and location-wise stock increase by the received quantity."
+    ]
+  },
+  "purchase_order_commitment": {
+    "module": "purchase",
+    "kind": "write",
+    "endpoint": "POST /api/purchases/with-items",
+    "description": "Purchase order creation should create commitment records without changing stock.",
+    "writes": [
+      "procurement.purchase_orders",
+      "procurement.purchase_order_items",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "Purchase order header and items are created.",
+      "No inventory batches are created by PO creation alone.",
+      "No inventory movements are created by PO creation alone."
+    ]
+  },
+  "purchase_receipt_from_po": {
+    "module": "purchase",
+    "kind": "write",
+    "endpoint": "POST /api/purchases/purchase-entry (with purchase_order_id)",
+    "description": "Recording receipt against an existing PO should update both procurement and stock tables.",
+    "writes": [
+      "procurement.supplier_invoices",
+      "procurement.supplier_invoice_items",
+      "procurement.goods_receipt_notes",
+      "procurement.grn_items",
+      "procurement.purchase_orders",
+      "procurement.purchase_order_items",
+      "financial.supplier_outstanding",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "The receipt creates a supplier invoice and GRN.",
+      "Exactly one positive supplier_outstanding row exists for the received supplier invoice.",
+      "The linked PO received quantities increase.",
+      "The linked PO status transitions to partial or completed based on remaining quantity.",
+      "Inventory increases only for the received quantity."
+    ]
+  },
+  "sales_invoice_create": {
+    "module": "sales",
+    "kind": "write",
+    "endpoint": "POST /api/invoices/",
+    "description": "Creating a sales invoice should write order, invoice, item, stock, movement, and outstanding rows.",
+    "writes": [
+      "sales.orders",
+      "sales.invoices",
+      "sales.invoice_items",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock",
+      "financial.customer_outstanding",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "Invoice final_amount matches the order final_amount.",
+      "Invoice credit_amount equals final_amount minus paid_amount.",
+      "Exactly one customer_outstanding row exists for the invoice document.",
+      "Order status becomes invoiced for posted invoices.",
+      "Invoice item totals reconcile to invoice taxable and tax totals.",
+      "Batch and location-wise stock decrement by sold quantity.",
+      "Inventory movements are created with movement_direction=out.",
+      "Customer outstanding original_amount matches invoice final_amount."
+    ]
+  },
+  "sales_return_restock": {
+    "module": "returns",
+    "kind": "write",
+    "endpoint": "POST /api/sale-returns/",
+    "description": "A sales return with restock should restore batch stock and produce financial return artifacts.",
+    "writes": [
+      "sales.sales_returns",
+      "sales.sales_return_items",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "financial.credit_notes",
+      "financial.customer_outstanding",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "Sales return header and items are created.",
+      "Batch quantity_available increases for restocked items.",
+      "Inventory movement uses reference_type=SALES_RETURN and movement_direction=in.",
+      "Location-wise stock increases for restocked items.",
+      "Credit note and customer outstanding adjustments are created or updated."
+    ]
+  },
+  "purchase_return_create_cancel": {
+    "module": "returns",
+    "kind": "write",
+    "endpoint": "POST /api/purchase-returns/, DELETE /api/purchase-returns/{id}",
+    "description": "A purchase return should reduce stock, create debit-note liabilities, and fully reverse those effects on cancel.",
+    "writes": [
+      "procurement.purchase_returns",
+      "procurement.purchase_return_items",
+      "procurement.supplier_invoice_items",
+      "procurement.grn_items",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock",
+      "financial.debit_notes",
+      "financial.supplier_outstanding",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "Purchase return totals reconcile from item value and GST.",
+      "Supplier invoice item and GRN item quantity_returned increment on create and reverse on cancel.",
+      "Batch and location-wise stock decrease for return-to-supplier items and restore on cancel.",
+      "A debit note and negative supplier outstanding row are created.",
+      "Cancelling the return voids debit note and supplier outstanding state."
+    ]
+  },
+  "payment_receipt": {
+    "module": "payment",
+    "kind": "write",
+    "endpoint": "POST /api/payments/record",
+    "description": "Recording a payment should update payment, allocation, invoice, and outstanding ledgers.",
+    "writes": [
+      "financial.payments",
+      "financial.allocations",
+      "sales.invoices",
+      "financial.customer_outstanding",
+      "sales.orders",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "A payment record is created.",
+      "An allocation links the payment to the invoice.",
+      "Invoice paid_amount equals the active allocation sum for that invoice.",
+      "Invoice paid_amount and credit_amount change consistently.",
+      "Customer outstanding outstanding_amount matches invoice credit_amount after allocation.",
+      "The invoice still has exactly one outstanding row after allocation."
+    ]
+  },
+  "stock_receive": {
+    "module": "inventory",
+    "kind": "write",
+    "endpoint": "POST /api/stock-movements/receive",
+    "description": "Receiving stock should increment the batch, location-wise stock, and create a movement audit row.",
+    "writes": [
+      "inventory.inventory_movements",
+      "inventory.batches",
+      "inventory.location_wise_stock"
+    ],
+    "invariants": [
+      "Movement type is receive with movement_direction=in.",
+      "Batch quantity_available increases by the received quantity.",
+      "Location-wise stock increases by the received quantity."
+    ]
+  },
+  "stock_issue": {
+    "module": "inventory",
+    "kind": "write",
+    "endpoint": "POST /api/stock-movements/issue",
+    "description": "Issuing stock should decrement the batch, location-wise stock, and create a movement audit row.",
+    "writes": [
+      "inventory.inventory_movements",
+      "inventory.batches",
+      "inventory.location_wise_stock"
+    ],
+    "invariants": [
+      "Movement type is issue with movement_direction=out.",
+      "Batch quantity_available decreases by the issued quantity.",
+      "Location-wise stock decreases by the issued quantity."
+    ]
+  },
+  "stock_transfer": {
+    "module": "inventory",
+    "kind": "write",
+    "endpoint": "POST /api/stock-movements/transfer",
+    "description": "Stock transfer should move quantity between locations with a balanced transfer movement pair.",
+    "writes": [
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock"
+    ],
+    "invariants": [
+      "Two movement rows are created: transfer_out and transfer_in.",
+      "Source location-wise stock decreases by the transfer quantity.",
+      "Destination location-wise stock increases by the transfer quantity.",
+      "Batch quantity_available remains net unchanged."
+    ]
+  },
+  "stock_adjustment": {
+    "module": "inventory",
+    "kind": "write",
+    "endpoint": "POST /api/stock-adjustments/",
+    "description": "Stock adjustment should change batch and location-wise quantities and create a movement audit row.",
+    "writes": [
+      "inventory.inventory_movements",
+      "inventory.batches",
+      "inventory.location_wise_stock"
+    ],
+    "invariants": [
+      "Inventory movement exists for the adjustment reason.",
+      "Batch quantity_available changes by the adjustment amount.",
+      "Location-wise stock changes by the adjustment amount."
+    ]
+  },
+  "stock_writeoff": {
+    "module": "inventory",
+    "kind": "write",
+    "endpoint": "POST /api/stock-writeoff/",
+    "description": "Stock writeoff should reduce stock and create compliance writeoff records.",
+    "writes": [
+      "inventory.stock_writeoffs",
+      "inventory.stock_writeoff_items",
+      "inventory.inventory_movements",
+      "inventory.batches",
+      "inventory.location_wise_stock",
+      "compliance.gst_adjustments",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "Writeoff header and line items are created.",
+      "Inventory movement exists with movement_direction=out.",
+      "Batch and location-wise stock decrease by the written-off quantity.",
+      "GST adjustment is created when ITC reversal applies."
+    ]
+  },
+  "invoice_cancel_reversal": {
+    "module": "sales",
+    "kind": "write",
+    "endpoint": "POST /api/invoices/{id}/cancel",
+    "description": "Cancelling a posted unpaid invoice before filing deadline should reverse stock effects and close the invoice outstanding row.",
+    "writes": [
+      "sales.invoices",
+      "inventory.batches",
+      "inventory.inventory_movements",
+      "inventory.location_wise_stock",
+      "financial.customer_outstanding"
+    ],
+    "invariants": [
+      "Invoice status becomes cancelled.",
+      "Invoice inventory movements are removed after reversal.",
+      "Batch and location-wise stock restore to pre-invoice levels.",
+      "The invoice outstanding row remains singular and becomes cancelled with zero balance."
+    ]
+  },
+  "inventory_read_contracts": {
+    "module": "inventory",
+    "kind": "read",
+    "endpoint": "GET /api/inventory, /api/inventory/stock/current, /api/inventory/valuation, /api/inventory/dashboard",
+    "description": "High-risk inventory read paths used by the frontend dashboard and stock pages.",
+    "reads": [
+      "inventory.products",
+      "inventory.batches",
+      "inventory.location_wise_stock",
+      "inventory.inventory_movements"
+    ],
+    "invariants": [
+      "Overview, current stock, valuation, and dashboard endpoints return HTTP 200 for the test tenant.",
+      "Category filters that pass textual values do not crash the query layer."
+    ]
+  },
+  "grn_read_contracts": {
+    "module": "purchase",
+    "kind": "read",
+    "endpoint": "GET /api/grn/generate-number, /api/grn, /api/grn/{id}",
+    "description": "High-risk GRN read paths used by the purchase module.",
+    "reads": [
+      "procurement.goods_receipt_notes",
+      "procurement.grn_items",
+      "public.document_number_sequences"
+    ],
+    "invariants": [
+      "GRN number generation returns HTTP 200.",
+      "GRN listing and detail endpoints resolve within the tenant context without 500s."
+    ]
+  }
+}

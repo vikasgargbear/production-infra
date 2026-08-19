@@ -3,7 +3,7 @@ Order Service - Orchestrates order operations
 Delegates to repository, validator, and calculator
 """
 from sqlalchemy.orm import Session
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import date
 import logging
 
@@ -22,7 +22,51 @@ class OrderService:
     High-level order operations
     Orchestrates repository, validator, and calculator
     """
-    
+
+    @staticmethod
+    def calculate_order_totals(
+        db: Session,
+        org_id: str,
+        branch_id: Optional[int],
+        order_data: Any,
+    ) -> Dict[str, Any]:
+        """Calculate a sales order using the same rules as the commit path."""
+        context = OrderRepository.get_order_context(
+            db, org_id, order_data.customer_id
+        )
+        actual_branch_id = branch_id or context["branch_id"]
+        gst_type = GSTService.determine_gst_type(
+            db=db,
+            org_id=org_id,
+            branch_id=actual_branch_id,
+            customer_id=order_data.customer_id,
+        )
+        items = []
+        for item in order_data.items:
+            item_data = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+            # Order DTOs call this field tax_percent; the shared calculator uses
+            # gst_percent. Normalize once at the application-service boundary.
+            item_data["gst_percent"] = item_data.get(
+                "gst_percent", item_data.get("tax_percent", 0)
+            )
+            items.append(item_data)
+        totals = InvoiceCalc.calculate_invoice_totals(
+            items=items,
+            gst_type=gst_type,
+            freight_charges=float(getattr(order_data, "delivery_charges", 0) or 0),
+            insurance_charges=0,
+            other_charges=float(getattr(order_data, "other_charges", 0) or 0),
+            discount_type=getattr(order_data, "discount_type", "percentage"),
+            discount_percent=float(getattr(order_data, "discount_percent", 0) or 0),
+            discount_amount=float(getattr(order_data, "discount_amount", 0) or 0),
+        )
+        return {
+            "totals": totals,
+            "gst_type": gst_type,
+            "branch_id": actual_branch_id,
+            "fallback_user_id": context["user_id"],
+        }
+
     @staticmethod
     def create_order_with_items(
         db: Session,
@@ -49,35 +93,23 @@ class OrderService:
             # 1. Validate input
             OrderValidator.validate_order_data(order_data)
             
-            # 2. Get context (customer, org data)
-            context = OrderRepository.get_order_context(
-                db, org_id, order_data.customer_id
+            # 2. Calculate with the same service used by the preview endpoint.
+            calculation = OrderService.calculate_order_totals(
+                db=db,
+                org_id=org_id,
+                branch_id=branch_id,
+                order_data=order_data,
             )
-            
-            # Use JWT values, fallback to context
-            actual_branch_id = branch_id or context["branch_id"]
-            actual_user_id = user_id or context["user_id"]
-            
-            # 3. Determine GST type from GSTIN state codes
-            gst_type = GSTService.determine_gst_type(
-                db=db, org_id=org_id, customer_id=order_data.customer_id
-            )
+            actual_branch_id = calculation["branch_id"]
+            actual_user_id = user_id or calculation["fallback_user_id"]
+            gst_type = calculation["gst_type"]
+            totals = calculation["totals"]
             logger.info(f"GST type determined for order: {gst_type}")
 
-            # Calculate totals
-            items = [item.model_dump() if hasattr(item, 'model_dump') else item
-                    for item in order_data.items]
-
-            totals = InvoiceCalc.calculate_invoice_totals(
-                items=items,
-                gst_type=gst_type,
-                freight_charges=float(getattr(order_data, 'freight_charges', 0) or 0),
-                insurance_charges=float(getattr(order_data, 'insurance_charges', 0) or 0),
-                other_charges=float(getattr(order_data, 'other_charges', 0) or 0),
-                discount_type=getattr(order_data, 'discount_type', 'percentage'),
-                discount_percent=float(getattr(order_data, 'discount_percent', 0) or 0),
-                discount_amount=float(getattr(order_data, 'discount_amount', 0) or 0)
-            )
+            items = [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in order_data.items
+            ]
             
             # 4. Generate order number
             order_number = DocumentNumberService.generate_number(db, "sales_order", org_id)
@@ -146,7 +178,7 @@ class OrderService:
         )
         
         # Get line calculations from totals
-        line_calculations = totals.get("line_calculations", [])
+        line_calculations = totals.get("calculated_items", [])
         
         # Prepare items data
         order_items_data = []

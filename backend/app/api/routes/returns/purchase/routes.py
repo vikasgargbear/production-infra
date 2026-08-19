@@ -22,6 +22,7 @@ from ....services.returns.purchase_return.service import PurchaseReturnService
 from ....services.finance.credit_note.service import CreditNoteService
 from ....schemas.inventory.inventory import StockMovementCreate
 from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
+from .....core.money import money_json
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +100,10 @@ async def get_returnable_items(
 ):
     """Get supplier invoice items with accurate returnable quantities"""
     try:
-        items = PurchaseReturnService.get_returnable_items_from_invoice(db, invoice_id)
+        org_id = str(context.org_id)
+        items = PurchaseReturnService.get_returnable_items_from_invoice(db, invoice_id, org_id)
         if not items:
-            items = PurchaseReturnService.get_returnable_items_from_grn(db, invoice_id)
+            items = PurchaseReturnService.get_returnable_items_from_grn(db, invoice_id, org_id)
         
         result = []
         for item in items:
@@ -111,7 +113,7 @@ async def get_returnable_items(
                 "batch_number": item.get("batch_number"), "invoice_quantity": float(item["invoice_quantity"]),
                 "already_returned": float(item["already_returned"]), "returnable_quantity": float(item["returnable_quantity"]),
                 "max_returnable_qty": float(item["returnable_quantity"]),
-                "unit_price": float(item["unit_price"]) if item.get("unit_price") else 0,
+                "unit_price": money_json(item.get("unit_price") or 0),
                 "discount_percent": float(item["discount_percent"]) if item.get("discount_percent") else 0,
                 "tax_percent": float(item["tax_percent"]) if item.get("tax_percent") else 0,
                 "hsn_code": item.get("hsn_code"), "unit": item.get("unit"),
@@ -155,10 +157,15 @@ async def create_purchase_return(
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="No active branch found for organization")
 
-        supplier = PurchaseReturnService.get_supplier(db, return_dict["supplier_id"])
+        supplier = PurchaseReturnService.get_supplier(db, return_dict["supplier_id"], org_id)
 
         # Determine GST type (intra-state vs inter-state) instead of hardcoding
-        gst_type = GSTService.determine_gst_type(db, context.org_id, supplier_id=return_dict["supplier_id"])
+        gst_type = GSTService.determine_gst_type(
+            db,
+            context.org_id,
+            branch_id=branch_id,
+            supplier_id=return_dict["supplier_id"],
+        )
 
         # Use DRY totals calculation from ReturnService (handles CGST/SGST vs IGST correctly)
         totals = ReturnService.calculate_return_totals(selected_items, gst_type)
@@ -224,6 +231,17 @@ async def create_purchase_return(
                 "unit_price": round(float(unit_price), 2), "return_value": round(float(return_value), 2),
                 "tax_amount": round(float(item_tax_amount), 2), "item_return_reason": item_return_reason, "disposition": disposition
             })
+
+            if invoice_item_id:
+                db.execute(text("""
+                    UPDATE procurement.supplier_invoice_items
+                    SET quantity_returned = COALESCE(quantity_returned, 0) + :return_qty,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE invoice_item_id = :invoice_item_id
+                """), {
+                    "return_qty": round(float(return_qty), 2),
+                    "invoice_item_id": invoice_item_id,
+                })
 
             # Record inventory movement (handles quantity_available via batch update internally)
             # NOTE: Do NOT also call update_batch_stock_for_return -- that would double-deduct

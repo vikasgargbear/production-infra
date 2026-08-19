@@ -3,9 +3,12 @@ Purchase Calculations
 Fast, accurate, reusable calculation logic using Decimal for precision
 Mirrors the InvoiceCalculator pattern from sales module
 """
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
+
+from ....core.money import decimal_value, money, rupees
+from ..compliance.gst_service import GSTService
 
 
 @dataclass
@@ -38,6 +41,7 @@ class PurchaseTotals:
     igst_amount: Decimal
     tax_amount: Decimal
     freight_charges: Decimal
+    insurance_charges: Decimal
     other_charges: Decimal
     round_off_amount: Decimal
     total_amount: Decimal  # For PO
@@ -76,50 +80,69 @@ class PurchaseCalculator:
             CalculatedPurchaseItem with all calculated fields
         """
         # Convert to Decimal for precision
-        quantity = Decimal(str(item.get('quantity', 0) or item.get('ordered_quantity', 0) or 0))
-        unit_price = Decimal(str(item.get('unit_price', 0) or item.get('cost_price', 0) or item.get('rate', 0) or 0))
-        discount_percent = Decimal(str(item.get('discount_percent', 0) or 0))
-        tax_percent = Decimal(str(item.get('tax_percent', 0) or item.get('gst_percent', 0) or 0))
-        mrp = Decimal(str(item.get('mrp', 0) or 0))
+        normalized_gst_type = str(gst_type).strip().upper()
+        if normalized_gst_type not in {"CGST/SGST", "IGST"}:
+            raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'")
+        quantity = decimal_value(
+            item.get('quantity', 0) or item.get('ordered_quantity', 0) or 0,
+            "quantity",
+            minimum=Decimal("0"),
+        )
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than 0")
+        unit_price = decimal_value(
+            item.get('unit_price', 0) or item.get('cost_price', 0) or item.get('rate', 0) or 0,
+            "unit_price",
+            minimum=Decimal("0"),
+        )
+        discount_percent = decimal_value(
+            item.get('discount_percent', 0) or 0,
+            "discount_percent",
+            minimum=Decimal("0"),
+            maximum=Decimal("100"),
+        )
+        tax_percent = decimal_value(
+            item.get('tax_percent', 0) or item.get('gst_percent', 0) or 0,
+            "tax_percent",
+            minimum=Decimal("0"),
+            maximum=Decimal("100"),
+        )
+        mrp = decimal_value(item.get('mrp', 0) or 0, "mrp", minimum=Decimal("0"))
         
         # Step 1: Calculate line total
-        line_total = quantity * unit_price
+        line_total = money(quantity * unit_price)
         
         # Step 2: Calculate discount
-        discount_amount = line_total * discount_percent / Decimal('100')
+        discount_amount = money(line_total * discount_percent / Decimal('100'))
         
         # Step 3: Calculate taxable amount (after discount)
         taxable_amount = line_total - discount_amount
         
         # Step 4: Calculate tax
-        tax_amount = taxable_amount * tax_percent / Decimal('100')
-        
-        # Step 5: Split GST based on type
-        if gst_type == "IGST":
-            cgst_amount = Decimal('0')
-            sgst_amount = Decimal('0')
-            igst_amount = tax_amount
-        else:  # CGST/SGST (intrastate)
-            cgst_amount = tax_amount / Decimal('2')
-            sgst_amount = tax_amount / Decimal('2')
-            igst_amount = Decimal('0')
+        gst = GSTService.calculate_gst_components(
+            taxable_amount, tax_percent, normalized_gst_type
+        )
+        cgst_amount = gst["cgst_amount"]
+        sgst_amount = gst["sgst_amount"]
+        igst_amount = gst["igst_amount"]
+        tax_amount = gst["total_tax_amount"]
         
         # Round to 2 decimal places
         return CalculatedPurchaseItem(
             product_id=item.get('product_id', 0),
             product_name=item.get('product_name', ''),
-            quantity=quantity.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            unit_price=unit_price.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            discount_percent=discount_percent.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            tax_percent=tax_percent.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            mrp=mrp.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            line_total=line_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            discount_amount=discount_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            taxable_amount=taxable_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            cgst_amount=cgst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            sgst_amount=sgst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            igst_amount=igst_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-            tax_amount=tax_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            quantity=quantity,
+            unit_price=unit_price,
+            discount_percent=discount_percent,
+            tax_percent=tax_percent,
+            mrp=mrp,
+            line_total=line_total,
+            discount_amount=discount_amount,
+            taxable_amount=taxable_amount,
+            cgst_amount=cgst_amount,
+            sgst_amount=sgst_amount,
+            igst_amount=igst_amount,
+            tax_amount=tax_amount
         )
     
     @staticmethod
@@ -127,6 +150,7 @@ class PurchaseCalculator:
         items: List[Dict[str, Any]],
         gst_type: str = "CGST/SGST",
         freight_charges: float = 0,
+        insurance_charges: float = 0,
         other_charges: float = 0
     ) -> Dict[str, Any]:
         """
@@ -143,7 +167,10 @@ class PurchaseCalculator:
         Returns:
             Dict with all totals and calculated items
         """
-        # Aggregate with full precision
+        if not isinstance(items, list) or not items:
+            raise ValueError("items must contain at least one purchase line")
+
+        # Aggregate the rounded line snapshots that will be persisted.
         subtotal = Decimal('0')
         discount_total = Decimal('0')
         taxable_total = Decimal('0')
@@ -184,30 +211,32 @@ class PurchaseCalculator:
             })
         
         # Add additional charges
-        freight = Decimal(str(freight_charges))
-        other = Decimal(str(other_charges))
+        freight = money(decimal_value(freight_charges, "freight_charges", minimum=Decimal("0")))
+        insurance = money(decimal_value(insurance_charges, "insurance_charges", minimum=Decimal("0")))
+        other = money(decimal_value(other_charges, "other_charges", minimum=Decimal("0")))
         
         # Calculate final total
-        pre_round_total = taxable_total + tax_total + freight + other
+        pre_round_total = taxable_total + tax_total + freight + insurance + other
         
         # Calculate round-off to nearest rupee
-        rounded_total = pre_round_total.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        rounded_total = rupees(pre_round_total)
         round_off = rounded_total - pre_round_total
         
         final_total = rounded_total
         
         # Return with rounded values
         return {
-            'subtotal_amount': float(subtotal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'discount_amount': float(discount_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'taxable_amount': float(taxable_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'cgst_amount': float(cgst_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'sgst_amount': float(sgst_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'igst_amount': float(igst_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'tax_amount': float(tax_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'freight_charges': float(freight.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'other_charges': float(other.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'round_off_amount': float(round_off.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'subtotal_amount': float(money(subtotal)),
+            'discount_amount': float(money(discount_total)),
+            'taxable_amount': float(money(taxable_total)),
+            'cgst_amount': float(money(cgst_total)),
+            'sgst_amount': float(money(sgst_total)),
+            'igst_amount': float(money(igst_total)),
+            'tax_amount': float(money(tax_total)),
+            'freight_charges': float(freight),
+            'insurance_charges': float(insurance),
+            'other_charges': float(other),
+            'round_off_amount': float(money(round_off)),
             'total_amount': float(final_total),  # For purchase_orders
             'invoice_total': float(final_total),  # For supplier_invoices
             'calculated_items': calculated_items
@@ -264,24 +293,26 @@ class PurchaseCalculator:
             items=items,
             gst_type=gst_type,
             freight_charges=freight_charges,
-            other_charges=other_charges + insurance_charges
+            insurance_charges=insurance_charges,
+            other_charges=other_charges
         )
         
         # Calculate TDS if applicable
-        if tds_percent > 0:
-            tds_amount = Decimal(str(result['taxable_amount'])) * Decimal(str(tds_percent)) / Decimal('100')
-            result['tds_percent'] = tds_percent
-            result['tds_amount'] = float(tds_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        tds_rate = decimal_value(
+            tds_percent, "tds_percent", minimum=Decimal("0"), maximum=Decimal("100")
+        )
+        if tds_rate > 0:
+            tds_amount = money(Decimal(str(result['taxable_amount'])) * tds_rate / Decimal('100'))
+            result['tds_percent'] = float(tds_rate)
+            result['tds_amount'] = float(tds_amount)
             # TDS reduces the payable amount
             result['payable_amount'] = float(
-                Decimal(str(result['invoice_total'])) - tds_amount
+                money(Decimal(str(result['invoice_total'])) - tds_amount)
             )
         else:
             result['tds_percent'] = 0
             result['tds_amount'] = 0
             result['payable_amount'] = result['invoice_total']
-        
-        result['insurance_charges'] = float(insurance_charges)
         
         return result
     

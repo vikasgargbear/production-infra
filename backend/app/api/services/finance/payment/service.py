@@ -13,6 +13,13 @@ import logging
 from uuid import UUID
 
 from ...document_number_service import DocumentNumberService
+from .....core.idempotency import (
+    IdempotencyClaim,
+    IdempotencyStateError,
+    build_idempotency_claim,
+    replay_response,
+)
+from .....core.env import is_production
 from .....core.utils.constants import (
     PaymentStatus, PaymentRecordStatus, PaymentMethod, PaymentType, PartyType
 )
@@ -38,26 +45,119 @@ class PaymentService:
     def generate_receipt_number(db: Session, org_id: Optional[str] = None) -> str:
         """Generate unique receipt number using DocumentNumberService."""
         return DocumentNumberService.generate_number(db, "receipt", org_id)
+
+    @staticmethod
+    def _begin_idempotent_payment(
+        db: Session,
+        *,
+        org_id: str,
+        actor_id: Any,
+        operation: str,
+        idempotency_key: str,
+        request_payload: Dict[str, Any],
+    ) -> tuple[Optional[Dict[str, Any]], IdempotencyClaim]:
+        """Serialize a scoped payment key and replay its committed response."""
+        if is_production():
+            raise IdempotencyStateError(
+                "Temporary payment idempotency backend is disabled in production"
+            )
+        claim = build_idempotency_claim(
+            org_id=org_id,
+            actor_id=actor_id,
+            operation=operation,
+            key=idempotency_key,
+            request_payload=request_payload,
+        )
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": claim.lock_key},
+        )
+        existing = db.execute(text("""
+            SELECT payment_id, internal_notes
+            FROM financial.payments
+            WHERE org_id = :org_id
+              AND internal_notes LIKE :marker_pattern
+            ORDER BY payment_id
+            LIMIT 1
+            FOR UPDATE
+        """), {
+            "org_id": org_id,
+            "marker_pattern": f"{claim.marker_prefix}%",
+        }).first()
+        if not existing:
+            return None, claim
+
+        response = replay_response(existing.internal_notes, claim)
+        response["_idempotency_replayed"] = True
+        return response, claim
+
+    @staticmethod
+    def _complete_idempotent_payment(
+        db: Session,
+        *,
+        org_id: str,
+        payment_id: int,
+        claim: IdempotencyClaim,
+        response: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist the response on the payment row in the same transaction."""
+        public_response = dict(response)
+        public_response.pop("_idempotency_replayed", None)
+        result = db.execute(text("""
+            UPDATE financial.payments
+            SET internal_notes = :completed_marker,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE payment_id = :payment_id
+              AND org_id = :org_id
+              AND internal_notes = :pending_marker
+        """), {
+            "completed_marker": claim.completed_marker(public_response),
+            "payment_id": payment_id,
+            "org_id": org_id,
+            "pending_marker": claim.pending_marker,
+        })
+        if result.rowcount != 1:
+            raise RuntimeError("Failed to finalize payment idempotency record")
+        public_response["_idempotency_replayed"] = False
+        return public_response
     
     @staticmethod
     def record_payment(
         db: Session, 
         invoice_id: int, 
         payment_data: Dict[str, Any],
-        org_id: Optional[str] = None
+        org_id: str,
+        idempotency_key: str,
     ) -> Dict[str, Any]:
         """
         Record a payment against an invoice.
         
         TenantAwareSession auto-filters by org_id.
         """
+        actor_id = payment_data.get("created_by")
+        request_payload = dict(payment_data)
+        request_payload.pop("created_by", None)
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=actor_id,
+            operation="payment.record",
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+        )
+        if replay is not None:
+            return replay
+
         # Get invoice details (TenantAwareSession auto-adds org_id filter)
         invoice = db.execute(text("""
-            SELECT invoice_id, invoice_number, final_amount as total_amount,
+            SELECT invoice_id, invoice_number, customer_id, due_date,
+                   final_amount as total_amount,
                    COALESCE(paid_amount, 0) as paid_amount, payment_status, org_id
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id}).fetchone()
+              AND (:org_id IS NULL OR org_id = :org_id)
+            FOR UPDATE
+        """), {"invoice_id": invoice_id, "org_id": org_id}).fetchone()
         
         if not invoice:
             raise ValueError(f"Invoice {invoice_id} not found or access denied")
@@ -104,7 +204,7 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type,
                 payment_method_id, party_type, party_id, party_name,
-                payment_amount, payment_status, reference_number, created_by
+                payment_amount, payment_status, reference_number, internal_notes, created_by
             )
             SELECT
                 i.org_id,
@@ -112,12 +212,16 @@ class PaymentService:
                 :payment_reference, :payment_date, 'receipt',
                 :payment_method_id, 'customer', i.customer_id,
                 COALESCE((SELECT customer_name FROM parties.customers WHERE customer_id = i.customer_id), 'Unknown'),
-                :payment_amount, 'cleared', :transaction_reference,
+                :payment_amount, 'cleared', :transaction_reference, :idempotency_marker,
                 COALESCE(:created_by, (SELECT user_id FROM master.org_users WHERE org_id = i.org_id LIMIT 1))
             FROM sales.invoices i
             WHERE i.invoice_id = :invoice_id
             RETURNING payment_id
-        """), {**payment_record, "created_by": payment_data.get("created_by")})
+        """), {
+            **payment_record,
+            "created_by": payment_data.get("created_by"),
+            "idempotency_marker": claim.pending_marker,
+        })
         
         payment_id = result.scalar()
 
@@ -177,18 +281,70 @@ class PaymentService:
 
         # Update customer_outstanding (no trigger handles this)
         outstanding_status = "paid" if new_payment_status == PaymentStatus.PAID.value else "partial"
-        db.execute(text("""
-            UPDATE financial.customer_outstanding
-            SET paid_amount = :paid_amount,
-                outstanding_amount = :outstanding_amount,
-                status = :status
-            WHERE document_id = :invoice_id AND document_type = 'invoice'
-        """), {
+        update_params = {
+            "org_id": effective_org_id,
             "invoice_id": invoice_id,
             "paid_amount": new_paid_amount,
             "outstanding_amount": new_credit_amount,
-            "status": outstanding_status
-        })
+            "status": outstanding_status,
+        }
+        uppercase_result = db.execute(text("""
+            UPDATE financial.customer_outstanding
+            SET paid_amount = :paid_amount,
+                outstanding_amount = :outstanding_amount,
+                status = :status,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE org_id = :org_id
+              AND document_id = :invoice_id
+              AND document_type = 'INVOICE'
+        """), update_params)
+
+        if uppercase_result.rowcount == 0:
+            lowercase_result = db.execute(text("""
+                UPDATE financial.customer_outstanding
+                SET document_type = 'INVOICE',
+                    paid_amount = :paid_amount,
+                    outstanding_amount = :outstanding_amount,
+                    status = :status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE org_id = :org_id
+                  AND document_id = :invoice_id
+                  AND document_type = 'invoice'
+            """), update_params)
+
+            if lowercase_result.rowcount == 0:
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount, paid_amount,
+                        due_date, status
+                    ) VALUES (
+                        :org_id, :customer_id, 'INVOICE', :invoice_id, :invoice_number,
+                        :document_date, :original_amount, :outstanding_amount, :paid_amount,
+                        :due_date, :status
+                    )
+                """), {
+                    "org_id": effective_org_id,
+                    "customer_id": invoice.customer_id,
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice.invoice_number,
+                    "document_date": payment_data.get("payment_date", date.today()),
+                    "original_amount": total_amount,
+                    "outstanding_amount": new_credit_amount,
+                    "paid_amount": new_paid_amount,
+                    "due_date": invoice.due_date or payment_data.get("payment_date", date.today()),
+                    "status": outstanding_status,
+                })
+        else:
+            db.execute(text("""
+                DELETE FROM financial.customer_outstanding
+                WHERE org_id = :org_id
+                  AND document_id = :invoice_id
+                  AND document_type = 'invoice'
+            """), {
+                "org_id": effective_org_id,
+                "invoice_id": invoice_id,
+            })
 
         # Update order payment status if fully paid
         if new_payment_status == PaymentStatus.PAID.value:
@@ -202,15 +358,22 @@ class PaymentService:
                     WHERE order_id = :order_id
                 """), {"order_id": order_id})
         
-        return {
+        response = {
             "payment_id": payment_id,
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
-            "amount": payment_amount,
-            "balance_amount": total_amount - new_paid_amount,
+            "amount": float(payment_amount),
+            "balance_amount": float(total_amount - new_paid_amount),
             "payment_status": new_payment_status,
             "message": "Payment recorded successfully"
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=effective_org_id,
+            payment_id=payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_invoice_payments(
@@ -320,48 +483,102 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """
         Cancel a payment and adjust invoice.
-        TenantAwareSession auto-filters by org_id.
+        Reverses active invoice allocations and keeps customer_outstanding in sync.
         """
-        # Get payment details with linked invoice via allocations
+        if not org_id:
+            raise ValueError("org_id is required to cancel payment")
+
+        # Get payment details with every active invoice allocation.
         payment = db.execute(text("""
             SELECT p.payment_id, p.payment_amount, p.payment_status, p.party_type, p.party_id,
-                   a.reference_id as invoice_id
+                   p.payment_number
             FROM financial.payments p
-            LEFT JOIN financial.allocations a ON a.payment_id = p.payment_id
-                AND a.reference_type = 'INVOICE' AND a.allocation_status = 'active'
             WHERE p.payment_id = :payment_id
+                AND p.org_id = :org_id
                 AND p.payment_status NOT IN ('cancelled', 'failed')
-        """), {"payment_id": payment_id}).fetchone()
+            FOR UPDATE
+        """), {"payment_id": payment_id, "org_id": org_id}).fetchone()
         
         if not payment:
             raise ValueError("Payment not found, already cancelled, or access denied")
+
+        allocations = db.execute(text("""
+            SELECT allocation_id, reference_id AS invoice_id, allocated_amount
+            FROM financial.allocations
+            WHERE payment_id = :payment_id
+              AND reference_type = 'INVOICE'
+              AND allocation_status = 'active'
+            ORDER BY allocation_id
+        """), {"payment_id": payment_id}).fetchall()
         
         # Update payment status
         db.execute(text("""
             UPDATE financial.payments
             SET payment_status = :status,
+                is_cancelled = true,
+                cancellation_reason = :reason,
+                cancelled_by = :cancelled_by,
+                cancelled_at = CURRENT_TIMESTAMP,
+                allocated_amount = 0,
+                unallocated_amount = 0,
+                allocation_status = 'cancelled',
                 narration = COALESCE(narration, '') || ' | Cancelled: ' || :reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE payment_id = :payment_id
+              AND org_id = :org_id
         """), {
             "payment_id": payment_id, 
+            "org_id": org_id,
             "reason": reason,
+            "cancelled_by": cancelled_by,
             "status": PaymentRecordStatus.CANCELLED.value
         })
-        
-        # Adjust invoice paid amount if linked
-        if payment.invoice_id:
+
+        if allocations:
+            db.execute(text("""
+                UPDATE financial.allocations
+                SET allocation_status = 'cancelled'
+                WHERE payment_id = :payment_id
+                  AND reference_type = 'INVOICE'
+                  AND allocation_status = 'active'
+            """), {"payment_id": payment_id})
+
+        for allocation in allocations:
+            amount = Decimal(str(allocation.allocated_amount or 0))
+            if amount <= 0:
+                continue
+
             db.execute(text("""
                 UPDATE sales.invoices
-                SET paid_amount = GREATEST(0, paid_amount - :amount),
+                SET paid_amount = GREATEST(0, COALESCE(paid_amount, 0) - :amount),
+                    credit_amount = GREATEST(0, final_amount - GREATEST(0, COALESCE(paid_amount, 0) - :amount)),
                     payment_status = CASE 
-                        WHEN GREATEST(0, paid_amount - :amount) = 0 THEN 'unpaid'
-                        WHEN GREATEST(0, paid_amount - :amount) < final_amount THEN 'partial'
-                        ELSE payment_status
+                        WHEN GREATEST(0, COALESCE(paid_amount, 0) - :amount) = 0 THEN 'pending'
+                        WHEN GREATEST(0, COALESCE(paid_amount, 0) - :amount) < final_amount THEN 'partial'
+                        ELSE 'paid'
                     END,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
-            """), {"invoice_id": payment.invoice_id, "amount": payment.payment_amount})
+                  AND org_id = :org_id
+            """), {"invoice_id": allocation.invoice_id, "amount": amount, "org_id": org_id})
+
+            db.execute(text("""
+                UPDATE financial.customer_outstanding co
+                SET paid_amount = COALESCE(i.paid_amount, 0),
+                    outstanding_amount = COALESCE(i.credit_amount, i.final_amount - COALESCE(i.paid_amount, 0)),
+                    status = CASE
+                        WHEN COALESCE(i.credit_amount, i.final_amount - COALESCE(i.paid_amount, 0)) <= 0 THEN 'paid'
+                        WHEN COALESCE(i.paid_amount, 0) > 0 THEN 'partial'
+                        ELSE 'open'
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                FROM sales.invoices i
+                WHERE co.org_id = :org_id
+                  AND co.document_type = 'INVOICE'
+                  AND co.document_id = :invoice_id
+                  AND i.org_id = co.org_id
+                  AND i.invoice_id = co.document_id
+            """), {"invoice_id": allocation.invoice_id, "org_id": org_id})
         
         logger.info(f"Payment {payment_id} cancelled by user {cancelled_by}. Reason: {reason}")
         
@@ -409,12 +626,32 @@ class PaymentService:
         payment_date: Optional[date] = None,
         reference_number: Optional[str] = None,
         notes: Optional[str] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        idempotency_key: str = "",
     ) -> Dict[str, Any]:
         """
         Create a customer payment receipt.
         TenantAwareSession auto-filters by org_id.
         """
+        effective_date = payment_date or date.today()
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=created_by,
+            operation="payment.customer_receipt",
+            idempotency_key=idempotency_key,
+            request_payload={
+                "customer_id": customer_id,
+                "amount": amount,
+                "payment_mode": payment_mode,
+                "payment_date": effective_date,
+                "reference_number": reference_number,
+                "notes": notes,
+            },
+        )
+        if replay is not None:
+            return replay
+
         # Generate receipt number
         receipt_number = PaymentService.generate_receipt_number(db, org_id)
         
@@ -442,23 +679,24 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type,
                 payment_method_id, party_type, party_id, party_name,
-                payment_amount, reference_number, payment_status, created_by
+                payment_amount, reference_number, payment_status, internal_notes, created_by
             ) VALUES (
                 :org_id,
                 COALESCE((SELECT branch_id FROM master.org_branches WHERE org_id = :org_id::uuid LIMIT 1), 5),
                 :receipt_number, :payment_date, 'receipt',
                 :payment_method_id, 'customer', :customer_id, :customer_name,
-                :amount, :reference_number, 'cleared', :created_by
+                :amount, :reference_number, 'cleared', :idempotency_marker, :created_by
             ) RETURNING payment_id, payment_number, payment_amount
         """), {
             "org_id": org_id,
             "receipt_number": receipt_number,
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "customer_id": customer_id,
             "customer_name": customer_name,
             "amount": amount,
             "payment_method_id": method_id,
             "reference_number": reference_number,
+            "idempotency_marker": claim.pending_marker,
             "created_by": created_by
         })
         
@@ -481,7 +719,7 @@ class PaymentService:
             "customer_id": customer_id,
             "payment_id": payment.payment_id,
             "receipt_number": payment.payment_number,
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "negative_amount": -float(amount)  # Negative to reduce outstanding
         })
         
@@ -492,17 +730,24 @@ class PaymentService:
                 updated_at = CURRENT_TIMESTAMP
             WHERE customer_id = :customer_id
         """), {
-            "payment_date": payment_date or date.today(),
+            "payment_date": effective_date,
             "customer_id": customer_id
         })
         
-        return {
+        response = {
             "success": True,
             "payment_id": payment.payment_id,
             "receipt_number": payment.payment_number,
             "amount": float(payment.payment_amount),
             "message": "Payment receipt created successfully"
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=org_id,
+            payment_id=payment.payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_overview(db: Session) -> Dict[str, Any]:
@@ -727,10 +972,13 @@ class PaymentService:
         """
         # Get payment details
         payment = db.execute(text("""
-            SELECT payment_id, payment_amount, party_id, payment_type
+            SELECT payment_id, payment_amount, party_id, party_type, payment_type
             FROM financial.payments
-            WHERE payment_id = :payment_id AND payment_status IN ('completed', 'cleared')
-        """), {"payment_id": payment_id}).first()
+            WHERE payment_id = :payment_id
+              AND org_id = :org_id
+              AND payment_status IN ('completed', 'cleared')
+            FOR UPDATE
+        """), {"payment_id": payment_id, "org_id": org_id}).first()
 
         if not payment:
             raise ValueError("Payment not found or not in a valid status for allocation")
@@ -746,13 +994,17 @@ class PaymentService:
 
             # Get invoice balance
             invoice = db.execute(text("""
-                SELECT invoice_id, invoice_number, final_amount, paid_amount
+                SELECT invoice_id, invoice_number, customer_id, final_amount, paid_amount
                 FROM sales.invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
+                FOR UPDATE
             """), {"invoice_id": invoice_id, "org_id": org_id}).first()
 
             if not invoice:
                 raise ValueError(f"Invoice {invoice_id} not found")
+
+            if str(payment.party_type).lower() == "customer" and payment.party_id != invoice.customer_id:
+                raise ValueError(f"Invoice {invoice_id} belongs to a different customer")
 
             balance = invoice.final_amount - (invoice.paid_amount or 0)
             actual_allocation = min(allocated_amount, balance)
@@ -898,13 +1150,25 @@ class PaymentService:
         org_id: str,
         branch_id: int,
         payment_data: Dict[str, Any],
-        user_id: int
+        user_id: int,
+        idempotency_key: str,
     ) -> Dict[str, Any]:
         """
         Create a general payment (advance, invoice payment, or adjustment).
         Handles sequence generation and insert.
         """
         from ...document_number_service import DocumentNumberService
+
+        replay, claim = PaymentService._begin_idempotent_payment(
+            db,
+            org_id=org_id,
+            actor_id=user_id,
+            operation="payment.create",
+            idempotency_key=idempotency_key,
+            request_payload=payment_data,
+        )
+        if replay is not None:
+            return replay
         
         # Generate payment number if not provided
         payment_number = payment_data.get("payment_number")
@@ -930,11 +1194,11 @@ class PaymentService:
             INSERT INTO financial.payments (
                 org_id, branch_id, payment_number, payment_date, payment_type, payment_method_id,
                 party_type, party_id, party_name, payment_amount, payment_status,
-                clearance_date, reference_number, narration, created_by
+                clearance_date, reference_number, narration, internal_notes, created_by
             ) VALUES (
                 :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_method_id,
                 :party_type, :party_id, :party_name, :payment_amount, :payment_status,
-                :clearance_date, :reference_number, :narration, :created_by
+                :clearance_date, :reference_number, :narration, :idempotency_marker, :created_by
             ) RETURNING payment_id, payment_number, payment_amount, payment_status
         """), {
             "org_id": org_id,
@@ -951,19 +1215,28 @@ class PaymentService:
             "clearance_date": payment_data.get("cleared_date") or (payment_data.get("payment_date") if payment_data.get("payment_mode") == "cash" else None),
             "reference_number": payment_data.get("reference_number"),
             "narration": payment_data.get("notes"),
+            "idempotency_marker": claim.pending_marker,
             "created_by": user_id
         }).fetchone()
         
-        return {
+        response = {
             "payment_id": result.payment_id,
             "payment_number": result.payment_number,
             "amount": float(result.payment_amount),
             "status": result.payment_status
         }
+        return PaymentService._complete_idempotent_payment(
+            db,
+            org_id=org_id,
+            payment_id=result.payment_id,
+            claim=claim,
+            response=response,
+        )
     
     @staticmethod
     def get_outstanding_invoices(
         db: Session,
+        org_id: Optional[str] = None,
         customer_id: Optional[int] = None,
         overdue_only: bool = False
     ) -> Dict[str, Any]:
@@ -984,11 +1257,11 @@ class PaymentService:
                     ELSE 0 
                 END as days_overdue
             FROM sales.invoices i
-            JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.payment_status IN ('unpaid', 'partial')
+            JOIN parties.customers c ON i.customer_id = c.customer_id AND c.org_id = i.org_id
+            WHERE i.org_id = :org_id AND i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {}
+        params = {"org_id": org_id}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"

@@ -3,7 +3,7 @@ import {
     Search, Calendar, ChevronDown, Download, Printer, MessageCircle,
     Eye, FileText, Filter, RefreshCw, TrendingUp, Package, Users
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 
 // ==================== TYPE DEFINITIONS ====================
 

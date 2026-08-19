@@ -210,8 +210,8 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       // Fetch both sales and purchase returns
       // Using Promise.allSettled to handle if one endpoint fails
       const [salesResult, purchaseResult] = await Promise.allSettled([
-        returnsApi.getCustomerReturns(searchParams),
-        returnsApi.getSupplierReturns(searchParams)
+        returnsApi.getSaleReturns(searchParams),
+        returnsApi.getPurchaseReturns(searchParams)
       ]);
 
       // Handle responses based on their status

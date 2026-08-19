@@ -8,7 +8,7 @@
  * Example: INV-202602080001, PO-202602080023, DC-202602080015
  */
 
-import { apiClient, documentsApi } from '../../api';
+import { documentsApi } from '../../api';
 import { IDBPDatabase, openDB } from 'idb';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -25,21 +25,20 @@ type DocumentType =
     | 'INV'
     | 'PO'
     | 'DC'
-    | 'PR'
-    | 'SR'
     | 'PAY'
-    | 'RCP'
+    | 'RCT'
     | 'QT'
     | 'PI'
     | 'GRN'
     | 'PUR'
+    | 'PINV'
     | 'SO'
     | 'SRN'
     | 'PRN'
     | 'CN'
     | 'DN'
     | 'ADJ'
-    | 'TRF';
+    | 'ST';
 
 // ==================== CONSTANTS ====================
 
@@ -52,10 +51,10 @@ export const DOC_TYPES: Record<string, DocumentType> = {
     INVOICE: 'INV',
     PURCHASE_ORDER: 'PO',
     DELIVERY_CHALLAN: 'DC',
-    PURCHASE_RETURN: 'PR',
-    SALES_RETURN: 'SR',
+    PURCHASE_RETURN: 'PRN',
+    SALES_RETURN: 'SRN',
     PAYMENT: 'PAY',
-    RECEIPT: 'RCP',
+    RECEIPT: 'RCT',
     QUOTATION: 'QT',
     PROFORMA: 'PI',
     GRN: 'GRN',
@@ -66,7 +65,7 @@ export const DOC_TYPES: Record<string, DocumentType> = {
     CREDIT_NOTE: 'CN',
     DEBIT_NOTE: 'DN',
     ADJUSTMENT: 'ADJ',
-    TRANSFER: 'TRF'
+    TRANSFER: 'ST'
 } as const;
 
 // ==================== SERVICE CLASS ====================
@@ -185,7 +184,7 @@ class DocumentNumberGenerator {
     async getNumberFromBackend(docType: DocumentType): Promise<string | null> {
         try {
             // Use centralized API module
-            const response = await documentsApi.generateNumber(docType);
+            const response = await documentsApi.reserveNumber(docType);
 
             if (response.data?.number) {
                 return response.data.number;
@@ -276,27 +275,6 @@ class DocumentNumberGenerator {
     }
 
     /**
-     * Sync local counters with backend
-     * Called when connection is restored
-     */
-    async syncWithBackend(): Promise<void> {
-        if (!navigator.onLine) return;
-
-        await this.initialize();
-
-        for (const docType of Object.values(DOC_TYPES)) {
-            try {
-                const backendNumber = await this.getNumberFromBackend(docType);
-                if (backendNumber) {
-                    await this.reserveNumber(backendNumber);
-                }
-            } catch (error) {
-                // Continue with other types
-            }
-        }
-    }
-
-    /**
      * Clean old counters (older than 30 days)
      */
     async cleanOldCounters(): Promise<void> {
@@ -384,7 +362,7 @@ class DocumentNumberGenerator {
 
     /** Generate Receipt Number */
     async generateReceiptNumber(): Promise<string> {
-        return this.generateNumber('RCP');
+        return this.generateNumber('RCT');
     }
 
     /** Generate Credit Note Number */
@@ -404,7 +382,7 @@ class DocumentNumberGenerator {
 
     /** Generate Stock Transfer Number */
     async generateTransferNumber(): Promise<string> {
-        return this.generateNumber('TRF');
+        return this.generateNumber('ST');
     }
 }
 
@@ -414,12 +392,7 @@ const documentNumberGenerator = new DocumentNumberGenerator();
 // Initialize on load
 documentNumberGenerator.initialize().catch(console.error);
 
-// Sync when online
 if (typeof window !== 'undefined') {
-    window.addEventListener('online', () => {
-        documentNumberGenerator.syncWithBackend().catch(console.error);
-    });
-
     // Clean old counters daily
     setInterval(() => {
         documentNumberGenerator.cleanOldCounters().catch(console.error);

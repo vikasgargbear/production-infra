@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, User, Globe, Banknote } from 'lucide-react';
+import { Building2, MapPin, CreditCard, Save, User, Banknote } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 

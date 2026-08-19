@@ -45,7 +45,7 @@ class SupplierInvoiceService:
     
     @staticmethod
     def list_returnable_invoices(
-        db: Session, supplier_id: int = None, from_date: str = None, to_date: str = None,
+        db: Session, org_id: str, supplier_id: int = None, from_date: str = None, to_date: str = None,
         limit: int = 50, skip: int = 0
     ) -> List[Dict[str, Any]]:
         """Get supplier invoices that have returnable items."""
@@ -53,14 +53,15 @@ class SupplierInvoiceService:
             SELECT si.supplier_invoice_id, si.supplier_invoice_number, si.invoice_date, si.supplier_id,
                    s.supplier_name, s.gst_number as supplier_gst, si.invoice_total as invoice_amount,
                    si.grn_ids,
-                   COALESCE((SELECT COUNT(*) FROM procurement.supplier_invoice_items WHERE supplier_invoice_id = si.supplier_invoice_id),
+                   COALESCE((SELECT COUNT(*) FROM procurement.supplier_invoice_items sii WHERE sii.supplier_invoice_id = si.supplier_invoice_id),
                             (SELECT COUNT(*) FROM procurement.grn_items gi JOIN procurement.goods_receipt_notes grn ON gi.grn_id = grn.grn_id WHERE grn.grn_id = ANY(si.grn_ids))) as total_items,
                    EXISTS (SELECT 1 FROM procurement.purchase_returns pr WHERE pr.supplier_invoice_id = si.supplier_invoice_id) as has_returns,
                    true as can_return
             FROM procurement.supplier_invoices si
-            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id WHERE 1=1
+            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id AND s.org_id = :org_id
+            WHERE si.org_id = :org_id
         """
-        params = {"skip": skip, "limit": limit}
+        params = {"org_id": org_id, "skip": skip, "limit": limit}
         if supplier_id:
             query += " AND si.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id

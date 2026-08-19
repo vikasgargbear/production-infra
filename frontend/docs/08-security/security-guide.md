@@ -22,101 +22,39 @@ Frontend security focuses on:
 sequenceDiagram
     participant User
     participant Frontend
+    participant Supabase
     participant Backend
-    participant Storage
 
     User->>Frontend: Enter credentials
-    Frontend->>Backend: POST /auth/login
-    Backend-->>Frontend: {access_token, refresh_token}
-    Frontend->>Storage: Store tokens securely
+    Frontend->>Supabase: Email/password or Google PKCE
+    Supabase-->>Frontend: Persistent, auto-refreshed session
+    Frontend->>Backend: POST /auth/oauth/supabase/session (Bearer)
+    Backend-->>Frontend: Short-lived tenant ERP access token
     
     Note over Frontend,Backend: Subsequent API calls
     Frontend->>Backend: GET /api/data (Authorization: Bearer token)
     Backend-->>Frontend: Data
     
     Note over Frontend,Backend: Token refresh
-    Frontend->>Backend: POST /auth/refresh
+    Frontend->>Supabase: Refresh persistent Supabase session
+    Frontend->>Backend: POST /auth/oauth/supabase/session
     Backend-->>Frontend: New access_token
 ```
 
-### Token Storage
+### Token Storage And Refresh
 
 ```typescript
-// ✅ Secure: Use httpOnly cookies (backend-managed)
-// or localStorage with short expiry
-
-class TokenService {
-    private readonly ACCESS_TOKEN_KEY = 'access_token';
-    private readonly REFRESH_TOKEN_KEY = 'refresh_token';
-
-    getAccessToken(): string | null {
-        return localStorage.getItem(this.ACCESS_TOKEN_KEY);
-    }
-
-    setTokens(access: string, refresh: string): void {
-        localStorage.setItem(this.ACCESS_TOKEN_KEY, access);
-        localStorage.setItem(this.REFRESH_TOKEN_KEY, refresh);
-    }
-
-    clearTokens(): void {
-        localStorage.removeItem(this.ACCESS_TOKEN_KEY);
-        localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-    }
-
-    isTokenExpired(token: string): boolean {
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            return payload.exp * 1000 < Date.now();
-        } catch {
-            return true;
-        }
-    }
-}
-```
-
-### Auto-Refresh Token
-
-```typescript
-// apiClient.ts
-import axios from 'axios';
-
-const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
+const supabase = createClient(url, anonKey, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+    },
 });
 
-// Add token to requests
-apiClient.interceptors.request.use((config) => {
-    const token = tokenService.getAccessToken();
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-// Handle 401 and refresh token
-apiClient.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-        const originalRequest = error.config;
-        
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            
-            try {
-                const newToken = await refreshToken();
-                originalRequest.headers.Authorization = `Bearer ${newToken}`;
-                return apiClient(originalRequest);
-            } catch (refreshError) {
-                // Refresh failed, logout user
-                tokenService.clearTokens();
-                window.location.href = '/login';
-                throw refreshError;
-            }
-        }
-        
-        throw error;
-    }
-);
+// SIGNED_IN and TOKEN_REFRESHED exchange the verified Supabase bearer for a
+// fresh one-hour ERP token. No ERP refresh token or password is stored.
 ```
 
 ---

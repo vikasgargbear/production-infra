@@ -3,20 +3,19 @@
  * Comprehensive GST and tax analytics dashboard
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Receipt, TrendingUp, TrendingDown, Calendar,
-  Download, Filter, FileText, DollarSign,
-  AlertCircle, CheckCircle, Clock, Info,
-  ChevronDown, ChevronRight, RefreshCw
+  Receipt, TrendingUp, TrendingDown,
+  Download, DollarSign,
+  CheckCircle, Clock, RefreshCw
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import {
-  BarChart, Bar, LineChart, Line, PieChart as RechartsPieChart,
+  PieChart as RechartsPieChart,
   Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Area, AreaChart
 } from 'recharts';

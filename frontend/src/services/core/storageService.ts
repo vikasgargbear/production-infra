@@ -4,9 +4,6 @@
  */
 
 export const STORAGE_KEYS = {
-    AUTH_TOKEN: 'authToken',
-    USER: 'pharma_user', // Aligned with API_CONFIG
-    REFRESH_TOKEN: 'pharma_refresh_token',
     THEME: 'theme',
 
     // Cache Keys

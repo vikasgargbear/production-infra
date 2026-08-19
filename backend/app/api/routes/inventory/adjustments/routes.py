@@ -8,22 +8,16 @@ import logging
 from ....services.document_number_service import DocumentNumberService
 from ....services.inventory.inventory_service import InventoryService
 from ....schemas.inventory.inventory import StockMovementCreate
+from ....schemas.inventory.stock import ADJUSTMENT_TYPE_MAPPING
 from datetime import date, datetime
 from decimal import Decimal
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
+from .....core.utils.branch_utils import resolve_location_id
 
 logger = logging.getLogger(__name__)
-
-ADJUSTMENT_TYPE_MAPPING = {
-    "damage": "stock_damage",
-    "expiry": "stock_expiry",
-    "count": "stock_count",
-    "other": "stock_adjustment"
-}
 
 router = APIRouter(tags=["stock-adjustments"])
 

@@ -1,22 +1,4 @@
 """Auth services module"""
-from .auth_service import AuthService
-from .exceptions import (
-    AuthenticationError,
-    InvalidCredentialsError,
-    AccountDisabledError,
-    OrganizationDisabledError,
-    PasswordNotSetError,
-    InvalidTokenError,
-    RateLimitExceededError
-)
+from .erp_claims import build_erp_token_claims
 
-__all__ = [
-    "AuthService",
-    "AuthenticationError",
-    "InvalidCredentialsError",
-    "AccountDisabledError",
-    "OrganizationDisabledError",
-    "PasswordNotSetError",
-    "InvalidTokenError",
-    "RateLimitExceededError"
-]
+__all__ = ["build_erp_token_claims"]

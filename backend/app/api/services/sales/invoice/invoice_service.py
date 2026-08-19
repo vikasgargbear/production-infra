@@ -18,6 +18,7 @@ from app.core.utils.branch_utils import resolve_location_id
 # Import shared calculator for consistent calculations
 from app.api.shared.calculations import calculate_line_item
 from .....core.utils.constants import PackDefaults
+from .....core.money import decimal_value, money, rupees
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class InvoiceService:
             gst_type = GSTService.determine_gst_type(
                 db=db,
                 org_id=org_id,
+                branch_id=actual_branch_id,
                 customer_id=invoice_data.customer_id,
                 delivery_address_id=getattr(invoice_data, 'shipping_address_id', None),
                 billing_address_id=getattr(invoice_data, 'billing_address_id', None)
@@ -322,9 +324,9 @@ class InvoiceService:
                             "org_id": org_id,
                             "product_id": item_data["product_id"],
                             "batch_id": item_data.get("batch_id"),
-                            "quantity": item_data.get("base_quantity", item_data["quantity"]),
+                            "quantity": item_data["quantity"],
                             "pack_type": item_data.get("pack_type"),
-                            "base_quantity": item_data.get("base_quantity", item_data["quantity"]),
+                            "base_quantity": item_data["quantity"],
                             "unit_cost": item_data.get("unit_price", 0),
                             "total_cost": item_data.get("line_total", 0),
                             "location_id": inv_location_id
@@ -346,6 +348,19 @@ class InvoiceService:
                     due_date=due_date,
                     paid_amount=float(paid_amount)
                 )
+
+                db.execute(text("""
+                    UPDATE sales.orders
+                    SET order_status = 'invoiced',
+                        payment_status = :payment_status,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE org_id = :org_id
+                      AND order_id = :order_id
+                """), {
+                    "org_id": org_id,
+                    "order_id": order_id,
+                    "payment_status": payment_status,
+                })
 
             # 10. Commit transaction
             db.commit()
@@ -516,151 +531,159 @@ class InvoiceService:
         - When scheme discount exists, GST is recalculated per-item on reduced taxable amounts
         - This ensures per-item CGST/SGST match GSTR-1 filing requirements
         """
-        # Calculate each line item
-        pre_tax_subtotal = 0  # Sum of per-item taxable amounts (before GST)
-        item_discount = 0
-        cgst = 0
-        sgst = 0
-        igst = 0
+        if not isinstance(items, list) or not items:
+            raise ValueError("items must contain at least one invoice line")
+
+        normalized_gst_type = str(gst_type).strip().upper()
+        if normalized_gst_type not in {"IGST", "CGST/SGST"}:
+            raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'")
+
+        normalized_discount_type = str(discount_type or "percentage").strip().lower()
+        if normalized_discount_type not in {"percentage", "amount", "fixed"}:
+            raise ValueError("discount_type must be 'percentage', 'amount', or 'fixed'")
+        document_discount_percent = decimal_value(
+            discount_percent, "discount_percent", minimum=Decimal("0"), maximum=Decimal("100")
+        )
+        document_discount_amount = decimal_value(
+            discount_amount, "discount_amount", minimum=Decimal("0")
+        )
+
+        gross_subtotal = Decimal("0")
+        pre_scheme_taxable = Decimal("0")
+        item_discount = Decimal("0")
         calculated_items = []
 
         for item in items:
-            # Check if line_total is pre-calculated (from frontend with full calculation)
-            if item.get('line_total'):
-                item_disc = round(float(item.get('discount_amount', 0) or 0), 2)
-                item_cgst = round(float(item.get('cgst_amount', 0) or 0), 2)
-                item_sgst = round(float(item.get('sgst_amount', 0) or 0), 2)
-                item_igst = round(float(item.get('igst_amount', 0) or 0), 2)
-                item_taxable = round(float(item.get('taxable_amount', 0) or 0), 2)
-                item_tax_total = round(item_cgst + item_sgst + item_igst, 2)
+            quantity = decimal_value(item.get('quantity', 0), "quantity", minimum=Decimal("0"))
+            if quantity <= 0:
+                raise ValueError("quantity must be greater than 0")
+            unit_price = decimal_value(item.get('unit_price', 0), "unit_price", minimum=Decimal("0"))
+            decimal_value(item.get('free_quantity', 0), "free_quantity", minimum=Decimal("0"))
+            discount_pct = decimal_value(
+                item.get('discount_percent', 0),
+                "discount_percent",
+                minimum=Decimal("0"),
+                maximum=Decimal("100"),
+            )
+            gst_pct = decimal_value(
+                item.get('gst_percent', 0), "gst_percent", minimum=Decimal("0"), maximum=Decimal("100")
+            )
 
-                # Derive taxable_amount if frontend didn't send it
-                if item_taxable == 0 and float(item.get('line_total', 0) or 0) > 0:
-                    item_taxable = round(float(item.get('line_total', 0) or 0) - item_tax_total, 2)
+            calculated = calculate_line_item(
+                quantity=quantity,
+                unit_price=unit_price,
+                discount_percent=discount_pct,
+                gst_percent=gst_pct,
+                gst_type=normalized_gst_type,
+            )
+            line_gross = money(quantity * unit_price)
+            line_discount = money(calculated['discount_amount'])
+            line_taxable = money(calculated['taxable_amount'])
 
-                line_total = round(item_taxable + item_tax_total, 2)
+            calculated_items.append({
+                **calculated,
+                'cgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
+                'sgst_percent': float(gst_pct / 2) if normalized_gst_type == "CGST/SGST" else 0.0,
+                'igst_percent': float(gst_pct) if normalized_gst_type == "IGST" else 0.0,
+                'total_tax_amount': calculated['total_tax'],
+                '_taxable_before_scheme': line_taxable,
+                '_gst_percent': gst_pct,
+            })
 
-                calculated_items.append({
-                    'line_total': line_total,
-                    'discount_amount': item_disc,
-                    'taxable_amount': item_taxable,
-                    'cgst_amount': item_cgst,
-                    'sgst_amount': item_sgst,
-                    'igst_amount': item_igst,
-                    'cgst_percent': round(float(item.get('cgst_rate', 0) or item.get('cgst_percent', 0) or 0), 2),
-                    'sgst_percent': round(float(item.get('sgst_rate', 0) or item.get('sgst_percent', 0) or 0), 2),
-                    'igst_percent': round(float(item.get('igst_rate', 0) or item.get('igst_percent', 0) or 0), 2),
-                    'total_tax_amount': item_tax_total
-                })
-
-                pre_tax_subtotal += item_taxable
-            else:
-                # Use shared calculator for consistent calculations
-                quantity = float(item.get('quantity', 0) or 0)
-                unit_price = float(item.get('unit_price', 0) or 0)
-                discount_pct = float(item.get('discount_percent', 0) or 0)
-                gst_pct = float(item.get('gst_percent', 0) or 0)
-
-                calculated = calculate_line_item(
-                    quantity=quantity,
-                    unit_price=unit_price,
-                    discount_percent=discount_pct,
-                    gst_percent=gst_pct,
-                    gst_type=gst_type
-                )
-
-                line_total = calculated['line_total']
-                item_disc = calculated['discount_amount']
-                item_cgst = calculated['cgst_amount']
-                item_sgst = calculated['sgst_amount']
-                item_igst = calculated['igst_amount']
-
-                calculated_items.append({
-                    **calculated,
-                    'cgst_percent': gst_pct / 2 if gst_type == "CGST/SGST" else 0,
-                    'sgst_percent': gst_pct / 2 if gst_type == "CGST/SGST" else 0,
-                    'igst_percent': gst_pct if gst_type == "IGST" else 0,
-                    'total_tax_amount': calculated['total_tax']
-                })
-
-                pre_tax_subtotal += calculated['taxable_amount']
-
-            item_discount += item_disc
-            cgst += item_cgst
-            sgst += item_sgst
-            igst += item_igst
+            gross_subtotal += line_gross
+            pre_scheme_taxable += line_taxable
+            item_discount += line_discount
 
         # Invoice-level discount (scheme_discount)
         # Applied to pre-tax subtotal per GST Section 15 (CGST Act)
-        if discount_type == 'percentage' and discount_percent > 0:
-            scheme_discount = pre_tax_subtotal * (discount_percent / 100)
-            scheme_discount_percent = discount_percent
-        elif discount_type in ('amount', 'fixed') and discount_amount > 0:
-            scheme_discount = discount_amount
-            scheme_discount_percent = (discount_amount / pre_tax_subtotal * 100) if pre_tax_subtotal > 0 else 0
+        if normalized_discount_type == 'percentage' and document_discount_percent > 0:
+            scheme_discount_percent_value = document_discount_percent
+            scheme_discount = money(pre_scheme_taxable * scheme_discount_percent_value / Decimal("100"))
+        elif normalized_discount_type in ('amount', 'fixed') and document_discount_amount > 0:
+            scheme_discount = money(document_discount_amount)
+            scheme_discount_percent_value = (
+                scheme_discount / pre_scheme_taxable * Decimal("100")
+                if pre_scheme_taxable > 0 else Decimal("0")
+            )
         else:
-            scheme_discount = 0
-            scheme_discount_percent = 0
+            scheme_discount = Decimal("0")
+            scheme_discount_percent_value = Decimal("0")
 
-        # If scheme discount exists, apportion across items and recalculate GST
-        # This ensures per-item CGST/SGST amounts match GSTR-1 filing requirements
-        if scheme_discount > 0 and pre_tax_subtotal > 0:
-            cgst = 0
-            sgst = 0
-            igst = 0
+        if scheme_discount > pre_scheme_taxable:
+            raise ValueError("document discount cannot exceed the taxable amount")
 
-            for calc in calculated_items:
-                item_taxable = calc.get('taxable_amount', 0)
-                if item_taxable <= 0:
-                    continue
+        taxable_indexes = [
+            index for index, calc in enumerate(calculated_items)
+            if calc['_taxable_before_scheme'] > 0
+        ]
+        allocated_discount = Decimal("0")
+        cgst = Decimal("0")
+        sgst = Decimal("0")
+        igst = Decimal("0")
+        taxable_amount = Decimal("0")
 
-                proportion = item_taxable / pre_tax_subtotal
-                item_scheme_disc = round(scheme_discount * proportion, 2)
-                adjusted_taxable = item_taxable - item_scheme_disc
+        for index, calc in enumerate(calculated_items):
+            item_taxable = calc.pop('_taxable_before_scheme')
+            item_gst_percent = calc.pop('_gst_percent')
+            item_scheme_discount = Decimal("0")
+            if scheme_discount > 0 and item_taxable > 0:
+                if index == taxable_indexes[-1]:
+                    item_scheme_discount = scheme_discount - allocated_discount
+                else:
+                    item_scheme_discount = money(scheme_discount * item_taxable / pre_scheme_taxable)
+                    allocated_discount += item_scheme_discount
 
-                # Recalculate GST on adjusted taxable amount
-                new_cgst = round(adjusted_taxable * calc.get('cgst_percent', 0) / 100, 2)
-                new_sgst = round(adjusted_taxable * calc.get('sgst_percent', 0) / 100, 2)
-                new_igst = round(adjusted_taxable * calc.get('igst_percent', 0) / 100, 2)
-                new_tax = new_cgst + new_sgst + new_igst
+            adjusted_taxable = money(item_taxable - item_scheme_discount)
+            components = GSTService.calculate_gst_components(
+                adjusted_taxable,
+                item_gst_percent,
+                normalized_gst_type,
+            )
+            new_cgst = components['cgst_amount']
+            new_sgst = components['sgst_amount']
+            new_igst = components['igst_amount']
+            new_tax = components['total_tax_amount']
 
-                calc['taxable_amount'] = adjusted_taxable
-                calc['cgst_amount'] = new_cgst
-                calc['sgst_amount'] = new_sgst
-                calc['igst_amount'] = new_igst
-                calc['total_tax_amount'] = new_tax
-                calc['line_total'] = adjusted_taxable + new_tax
+            calc['scheme_discount'] = float(item_scheme_discount)
+            calc['taxable_amount'] = float(adjusted_taxable)
+            calc['cgst_amount'] = float(new_cgst)
+            calc['sgst_amount'] = float(new_sgst)
+            calc['igst_amount'] = float(new_igst)
+            calc['total_tax'] = float(new_tax)
+            calc['total_tax_amount'] = float(new_tax)
+            calc['line_total'] = float(money(adjusted_taxable + new_tax))
 
-                cgst += new_cgst
-                sgst += new_sgst
-                igst += new_igst
+            taxable_amount += adjusted_taxable
+            cgst += new_cgst
+            sgst += new_sgst
+            igst += new_igst
 
-        # Taxable amount = pre-tax subtotal after scheme discount
-        taxable_amount = pre_tax_subtotal - scheme_discount
         total_tax = cgst + sgst + igst
 
         # Amount before rounding
-        amount_before_round = taxable_amount + total_tax + freight_charges + insurance_charges + other_charges
+        freight_value = money(decimal_value(freight_charges, "freight_charges", minimum=Decimal("0")))
+        insurance_value = money(decimal_value(insurance_charges, "insurance_charges", minimum=Decimal("0")))
+        other_value = money(decimal_value(other_charges, "other_charges", minimum=Decimal("0")))
+        amount_before_round = money(taxable_amount + total_tax + freight_value + insurance_value + other_value)
 
-        # Round to nearest integer (Indian practice)
-        final_amount = round(amount_before_round)
-        round_off_amount = final_amount - amount_before_round
+        final_amount = rupees(amount_before_round)
+        round_off_amount = money(final_amount - amount_before_round)
 
         return {
-            'subtotal_amount': round(pre_tax_subtotal, 2),
-            'discount_amount': round(item_discount, 2),
-            'scheme_discount': round(scheme_discount, 2),
-            'scheme_discount_percent': round(scheme_discount_percent, 2),
-            'taxable_amount': round(taxable_amount, 2),
-            'cgst_amount': round(cgst, 2),
-            'sgst_amount': round(sgst, 2),
-            'igst_amount': round(igst, 2),
-            'total_tax_amount': round(total_tax, 2),
-            'freight_charges': freight_charges,
-            'insurance_charges': insurance_charges,
-            'other_charges': other_charges,
-            'round_off_amount': round(round_off_amount, 2),
-            'final_amount': final_amount,
+            'subtotal_amount': float(money(gross_subtotal)),
+            'discount_amount': float(money(item_discount)),
+            'scheme_discount': float(scheme_discount),
+            'scheme_discount_percent': float(money(scheme_discount_percent_value)),
+            'taxable_amount': float(money(taxable_amount)),
+            'cgst_amount': float(money(cgst)),
+            'sgst_amount': float(money(sgst)),
+            'igst_amount': float(money(igst)),
+            'total_tax_amount': float(money(total_tax)),
+            'freight_charges': float(freight_value),
+            'insurance_charges': float(insurance_value),
+            'other_charges': float(other_value),
+            'round_off_amount': float(round_off_amount),
+            'final_amount': float(final_amount),
             'calculated_items': calculated_items,
         }
     
@@ -886,7 +909,7 @@ class InvoiceService:
             SET invoice_status = :cancelled_status,
                 cancelled_at = CURRENT_TIMESTAMP,
                 cancelled_by = :cancelled_by,
-                cancellation_reason = :reason,
+                cancellation_reason = :cancellation_reason,
                 updated_at = CURRENT_TIMESTAMP
             WHERE invoice_id = :invoice_id AND org_id = :org_id
         """), {
@@ -894,29 +917,78 @@ class InvoiceService:
             "org_id": org_id,
             "cancelled_status": InvoiceStatus.CANCELLED.value,
             "cancelled_by": cancelled_by,
-            "reason": reason or "Cancelled by user"
+            "cancellation_reason": reason,
         })
         
         # Reverse inventory if needed
         if reverse_inventory:
-            items_result = db.execute(text("""
-                SELECT product_id, batch_id, quantity
-                FROM sales.invoice_items
-                WHERE invoice_id = :invoice_id
-            """), {"invoice_id": invoice_id})
+            movement_rows = db.execute(text("""
+                SELECT product_id, batch_id, location_id, COALESCE(SUM(quantity), 0) AS quantity
+                FROM inventory.inventory_movements
+                WHERE reference_id = :invoice_id
+                  AND reference_type = 'invoice'
+                  AND movement_direction = 'out'
+                  AND org_id = :org_id
+                GROUP BY product_id, batch_id, location_id
+            """), {"invoice_id": invoice_id, "org_id": org_id}).fetchall()
 
-            for item in items_result:
-                if item[1]:  # Has batch_id
+            for movement in movement_rows:
+                if movement.batch_id:
                     db.execute(text("""
                         UPDATE inventory.batches
                         SET quantity_available = quantity_available + :quantity,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE batch_id = :batch_id AND org_id = :org_id
                     """), {
-                        "batch_id": item[1],
-                        "quantity": item[2],
+                        "batch_id": movement.batch_id,
+                        "quantity": movement.quantity,
                         "org_id": org_id
                     })
+
+                if movement.batch_id and movement.location_id and movement.product_id:
+                    update_result = db.execute(text("""
+                        UPDATE inventory.location_wise_stock
+                        SET quantity_available = quantity_available + :quantity,
+                            last_movement_date = CURRENT_DATE,
+                            last_updated = CURRENT_TIMESTAMP
+                        WHERE org_id = :org_id
+                          AND product_id = :product_id
+                          AND batch_id = :batch_id
+                          AND location_id = :location_id
+                    """), {
+                        "org_id": org_id,
+                        "product_id": movement.product_id,
+                        "batch_id": movement.batch_id,
+                        "location_id": movement.location_id,
+                        "quantity": movement.quantity,
+                    })
+
+                    if update_result.rowcount == 0:
+                        db.execute(text("""
+                            INSERT INTO inventory.location_wise_stock (
+                                org_id,
+                                location_id,
+                                product_id,
+                                batch_id,
+                                quantity_available,
+                                quantity_reserved,
+                                last_movement_date
+                            ) VALUES (
+                                :org_id,
+                                :location_id,
+                                :product_id,
+                                :batch_id,
+                                :quantity,
+                                0,
+                                CURRENT_DATE
+                            )
+                        """), {
+                            "org_id": org_id,
+                            "location_id": movement.location_id,
+                            "product_id": movement.product_id,
+                            "batch_id": movement.batch_id,
+                            "quantity": movement.quantity,
+                        })
 
             # Remove inventory movements for this invoice (batch qty already restored above)
             db.execute(text("""
@@ -932,7 +1004,7 @@ class InvoiceService:
             SET status = 'cancelled', outstanding_amount = 0,
                 updated_at = CURRENT_TIMESTAMP
             WHERE document_id = :invoice_id
-              AND document_type = 'invoice'
+              AND document_type IN ('INVOICE', 'invoice')
               AND org_id = :org_id
         """), {"invoice_id": invoice_id, "org_id": org_id})
 
@@ -1014,19 +1086,25 @@ class InvoiceService:
             else:
                 status = 'open'
 
-            db.execute(text("""
-                INSERT INTO financial.customer_outstanding (
-                    org_id, customer_id, document_type, document_id, document_number,
-                    document_date, original_amount, outstanding_amount, paid_amount,
-                    due_date, status
-                ) VALUES (
-                    :org_id, :customer_id, 'invoice', :invoice_id, :invoice_number,
-                    :invoice_date, :amount, :outstanding, :paid_amount,
-                    :due_date, :status
-                )
+            canonical_document_type = "INVOICE"
+            update_result = db.execute(text("""
+                UPDATE financial.customer_outstanding
+                SET customer_id = :customer_id,
+                    document_number = :invoice_number,
+                    document_date = :invoice_date,
+                    original_amount = :amount,
+                    outstanding_amount = :outstanding,
+                    paid_amount = :paid_amount,
+                    due_date = :due_date,
+                    status = :status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE org_id = :org_id
+                  AND document_type = :document_type
+                  AND document_id = :invoice_id
             """), {
                 "org_id": org_id,
                 "customer_id": customer_id,
+                "document_type": canonical_document_type,
                 "invoice_id": invoice_id,
                 "invoice_number": invoice_number,
                 "invoice_date": doc_date,
@@ -1035,6 +1113,41 @@ class InvoiceService:
                 "paid_amount": paid_amount,
                 "due_date": payment_due,
                 "status": status
+            })
+
+            if update_result.rowcount == 0:
+                db.execute(text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id, document_number,
+                        document_date, original_amount, outstanding_amount, paid_amount,
+                        due_date, status
+                    ) VALUES (
+                        :org_id, :customer_id, :document_type, :invoice_id, :invoice_number,
+                        :invoice_date, :amount, :outstanding, :paid_amount,
+                        :due_date, :status
+                    )
+                """), {
+                    "org_id": org_id,
+                    "customer_id": customer_id,
+                    "document_type": canonical_document_type,
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice_number,
+                    "invoice_date": doc_date,
+                    "amount": amount,
+                    "outstanding": outstanding,
+                    "paid_amount": paid_amount,
+                    "due_date": payment_due,
+                    "status": status
+                })
+
+            db.execute(text("""
+                DELETE FROM financial.customer_outstanding
+                WHERE org_id = :org_id
+                  AND document_type = 'invoice'
+                  AND document_id = :invoice_id
+            """), {
+                "org_id": org_id,
+                "invoice_id": invoice_id,
             })
 
             logger.info(f"✅ Created outstanding entry for invoice {invoice_number}, customer {customer_id}, amount ₹{amount}, outstanding ₹{outstanding}")

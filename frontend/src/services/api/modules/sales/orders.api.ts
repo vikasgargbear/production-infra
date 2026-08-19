@@ -144,7 +144,4 @@ export const ordersApi = {
   }
 };
 
-// Backward compatibility alias
-export const salesOrdersApi = ordersApi;
-
 export default ordersApi;

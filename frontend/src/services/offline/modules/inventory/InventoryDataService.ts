@@ -214,6 +214,7 @@ class InventoryDataService {
         const tempId = `temp_adj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const adjustment: OfflineStockAdjustment = {
+            temp_id: tempId,
             adjustment_id: tempId,
             adjustment_number: `ADJ-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             adjustment_date: new Date().toISOString().split('T')[0],
@@ -222,7 +223,6 @@ class InventoryDataService {
             items: [],
             reason: '',
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...adjustmentData
         };
@@ -245,6 +245,7 @@ class InventoryDataService {
         const tempId = `temp_transfer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         const transfer: OfflineStockTransfer = {
+            temp_id: tempId,
             transfer_id: tempId,
             transfer_number: `TRF-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
             transfer_date: new Date().toISOString().split('T')[0],
@@ -255,7 +256,6 @@ class InventoryDataService {
             status: 'draft',
             items: [],
             sync_status: 'pending',
-            local_id: tempId,
             created_offline: true,
             ...transferData
         };

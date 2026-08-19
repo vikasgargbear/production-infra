@@ -9,17 +9,16 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { challansApi } from '../../../../services/api';
 import { useSalesTransaction } from '../../hooks/useSalesTransaction';
 
 import { useCompany } from '../../../../contexts/CompanyContext';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useChallanSave } from './useChallanSave';
+import { calculateChallanPreview } from '../../../../services/calculations/challanCalculationService';
 import {
     Challan,
     ChallanItem,
     CustomerDetails,
-    Employee,
     ImportData,
     CreatedChallanData,
     getInitialChallan
@@ -47,8 +46,6 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         employees,
         selectedMR,
         setSelectedMR,
-        loadingEmployees,
-        saving: baseSaving,
         fetchingAddress,
         productSearchRef,
         itemsTableRef,
@@ -57,8 +54,6 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         updateItem,
         removeItem,
         recalculateTotals,
-        fetchCustomerAddress,
-        resetDocument
     } = useSalesTransaction<Challan, CustomerDetails, ChallanItem>({
         getInitialDocument: getInitialChallan,
         documentType: 'challan',
@@ -69,7 +64,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
 
     // ==================== CHALLAN-SPECIFIC STATE ====================
     const [currentStep, setCurrentStep] = useState(1);
-    const [saving, setSaving] = useState(false);
+    const [saving] = useState(false);
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
     const [showCreateProduct, setShowCreateProduct] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
@@ -86,6 +81,67 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
     // ==================== CHALLAN-SPECIFIC REFS ====================
     const customerSearchRef = useRef<HTMLInputElement>(null);
     const challanFormRef = useRef<HTMLFormElement>(null);
+    const calculationRequestRef = useRef(0);
+
+    useEffect(() => {
+        const requestId = ++calculationRequestRef.current;
+        if (!challan.items.length || !challan.customer_id) return;
+
+        void calculateChallanPreview(challan, isOnline)
+            .then(calculation => {
+                if (requestId !== calculationRequestRef.current) return;
+                setChallan(prev => {
+                    let itemsChanged = false;
+                    const items = prev.items.map((item, index) => {
+                        const calculated = calculation.items[index] || {};
+                        const lineTotal = Number(calculated.line_total || 0);
+                        const taxable = Number(calculated.taxable_amount || 0);
+                        const tax = Number(calculated.total_tax_amount || calculated.total_tax || 0);
+                        if (
+                            Number(item.line_total || 0) === lineTotal &&
+                            Number(item.taxable_amount || 0) === taxable &&
+                            Number(item.tax_amount || 0) === tax
+                        ) return item;
+                        itemsChanged = true;
+                        return {
+                            ...item,
+                            ...calculated,
+                            line_total: lineTotal,
+                            total: lineTotal,
+                            taxable_amount: taxable,
+                            tax_amount: tax
+                        } as ChallanItem;
+                    });
+                    const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                    const totalAmount = Number(calculation.totals.final_amount || 0);
+                    const taxableAmount = Number(calculation.totals.taxable_amount || 0);
+                    const totalTaxAmount = Number(calculation.totals.total_tax_amount || 0);
+                    if (
+                        !itemsChanged &&
+                        prev.total_quantity === totalQuantity &&
+                        prev.total_amount === totalAmount &&
+                        prev.taxable_amount === taxableAmount &&
+                        prev.total_tax_amount === totalTaxAmount &&
+                        prev.gst_type === calculation.gst_type
+                    ) return prev;
+                    return {
+                        ...prev,
+                        items: itemsChanged ? items : prev.items,
+                        total_quantity: totalQuantity,
+                        total_amount: totalAmount,
+                        taxable_amount: taxableAmount,
+                        total_tax_amount: totalTaxAmount,
+                        gst_type: calculation.gst_type
+                    };
+                });
+            })
+            .catch(error => {
+                if (requestId === calculationRequestRef.current) {
+                    setMessage(error instanceof Error ? error.message : 'Unable to calculate challan totals');
+                    setMessageType('error');
+                }
+            });
+    }, [challan, isOnline, setChallan]);
 
     // ==================== GENERATE CHALLAN NUMBER ====================
     const generateChallanNumber = useCallback(async () => {

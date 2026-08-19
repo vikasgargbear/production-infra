@@ -14,9 +14,11 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from ..core.env import is_production
+
 logger = logging.getLogger(__name__)
 
-_IS_PRODUCTION = os.getenv("ENV", "development").lower() in ("production", "prod")
+_IS_PRODUCTION = is_production()
 
 
 class ErrorHandlerMiddleware(BaseHTTPMiddleware):

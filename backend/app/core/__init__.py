@@ -8,7 +8,7 @@ New structure:
 """
 # Auth exports (backward compatible)
 from .auth import (
-    decode_jwt, create_access_token, verify_password, get_password_hash,
+    decode_jwt, create_access_token,
     get_org_id_string, get_user_context_secure, get_current_user_and_org,
     BranchScope, OrgContext, get_org_context,
     TenantContext, TenantAwareSession, TenantQueryBuilder, SecurityError,

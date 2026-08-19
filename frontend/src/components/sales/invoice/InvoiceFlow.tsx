@@ -4,7 +4,7 @@ import { useCompany } from '../../../contexts/CompanyContext';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
-import EnterpriseCalculator from '../../../services/enterpriseCalculator';
+import { calculateInvoicePreview } from '../../../services/calculations/invoiceCalculationService';
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
@@ -58,6 +58,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         sameAsShipping,
         setSameAsShipping,
         isLoading,
+        isOnline,
         error,
         setError,
         saving,
@@ -153,9 +154,9 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
 
         // Maximum quality settings for html2pdf
         const options = {
-            margin: [5, 5, 5, 5],  // Smaller margins for more content space
+            margin: [5, 5, 5, 5] as [number, number, number, number],
             filename: `Invoice-${invoiceData.invoiceNumber || 'draft'}.pdf`,
-            image: { type: 'jpeg', quality: 1 },  // JPEG with max quality often renders better
+            image: { type: 'jpeg' as const, quality: 1 },
             html2canvas: {
                 scale: 3,  // Reduced scale - too high can cause blurry output
                 useCORS: true,
@@ -169,7 +170,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             jsPDF: {
                 unit: 'mm',
                 format: 'a4',
-                orientation: 'portrait',
+                orientation: 'portrait' as const,
                 compress: false,  // Disable compression for sharper text
                 precision: 16  // Higher precision
             },
@@ -225,72 +226,37 @@ ${companyInfo?.name || 'Your Company'}`;
             return;
         }
 
-        console.log('🔄 [STEP 1→2] Forcing calculation before continuing...');
-        console.log('🔄 [STEP 1→2] Current items:', invoice.items.map(i => ({ name: i.product_name, qty: i.quantity })));
-
-        // CRITICAL FIX: Force synchronous calculation BEFORE moving to next step
         try {
-            const result = await new Promise<{ totals: { gross_amount: number; final_amount: number }; items: unknown[] }>((resolve, reject) => {
-                EnterpriseCalculator.calculateDebounced(invoice, (error: Error | null, calcResult: unknown) => {
-                    if (error) reject(error);
-                    else resolve(calcResult as { totals: { gross_amount: number; final_amount: number }; items: unknown[] });
-                }, 0, 'invoice');
-            });
-
-            console.log('✅ [STEP 1→2] Calculation complete:', {
-                gross_amount: result.totals.gross_amount,
-                final_amount: result.totals.final_amount
-            });
+            const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with calculated totals
             setInvoice(prev => ({
                 ...prev,
                 totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount
+                final_amount: result.totals.final_amount || 0
             }));
-
-            // Small delay to ensure state updates
-            await new Promise(resolve => setTimeout(resolve, 100));
-
             setCurrentStep(2);
         } catch (calcError) {
-            console.error('❌ [STEP 1→2] Calculation failed:', calcError);
             toast.error('Calculation error. Please try again.');
         }
-    }, [selectedCustomer, invoice, setInvoice]);
+    }, [selectedCustomer, invoice, isOnline, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
-        console.log('🔄 [STEP 2→3] Forcing calculation before preview...');
-
         try {
-            const result = await new Promise<{ totals: { gross_amount: number; final_amount: number }; items: Invoice['items'] }>((resolve, reject) => {
-                EnterpriseCalculator.calculateDebounced(invoice, (error: Error | null, calcResult: unknown) => {
-                    if (error) reject(error);
-                    else resolve(calcResult as { totals: { gross_amount: number; final_amount: number }; items: Invoice['items'] });
-                }, 0, 'invoice');
-            });
-
-            console.log('✅ [STEP 2→3] Calculation complete:', {
-                gross_amount: result.totals.gross_amount,
-                final_amount: result.totals.final_amount
-            });
+            const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with latest totals
             setInvoice(prev => ({
                 ...prev,
                 totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount,
-                items: result.items
+                final_amount: result.totals.final_amount || 0,
+                items: result.items as unknown as Invoice['items']
             }));
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-
             setCurrentStep(3);
         } catch (calcError) {
-            console.error('❌ [STEP 2→3] Calculation failed:', calcError);
             toast.error('Calculation error. Please try again.');
         }
-    }, [invoice, setInvoice]);
+    }, [invoice, isOnline, setInvoice]);
 
     const handleBackFromStep3 = useCallback((targetStep: number | React.MouseEvent = 2) => {
         // CRITICAL FIX: Handle if event object passed instead of number

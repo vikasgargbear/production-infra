@@ -20,17 +20,20 @@ class AllocationService:
         result = db.execute(text("""
             SELECT payment_id, payment_amount, allocated_amount, party_id, party_type
             FROM financial.payments WHERE payment_id = :payment_id AND org_id = :org_id
+            FOR UPDATE
         """), {"payment_id": payment_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
     @staticmethod
-    def get_invoice(db: Session, invoice_id: int) -> Optional[Dict[str, Any]]:
-        """Get invoice with allocation info."""
+    def get_invoice(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
+        """Get and lock an invoice in the payment's organization."""
         result = db.execute(text("""
             SELECT invoice_id, invoice_number, customer_id, final_amount, allocated_amount
-            FROM sales.invoices WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+            FOR UPDATE
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
@@ -84,65 +87,78 @@ class AllocationService:
         return allocation_id
     
     @staticmethod
-    def get_payment_status(db: Session, payment_id: int) -> Optional[Dict[str, Any]]:
+    def get_payment_status(db: Session, org_id: str, payment_id: int) -> Optional[Dict[str, Any]]:
         """Get updated payment status."""
         result = db.execute(text("""
             SELECT allocation_status, allocated_amount, unallocated_amount
-            FROM financial.payments WHERE payment_id = :payment_id
-        """), {"payment_id": payment_id})
+            FROM financial.payments
+            WHERE payment_id = :payment_id AND org_id = :org_id
+        """), {"payment_id": payment_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
     @staticmethod
-    def get_invoice_status(db: Session, invoice_id: int) -> Optional[Dict[str, Any]]:
+    def get_invoice_status(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get updated invoice status."""
         result = db.execute(text("""
             SELECT payment_status, allocated_amount, final_amount - allocated_amount as due_amount
-            FROM sales.invoices WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
     @staticmethod
-    def auto_allocate(db: Session, payment_id: int, method: str) -> List[Dict[str, Any]]:
+    def auto_allocate(db: Session, org_id: str, payment_id: int, method: str) -> List[Dict[str, Any]]:
         """Call auto-allocation function. Returns allocation results."""
+        if AllocationService.get_payment(db, org_id, payment_id) is None:
+            raise ValueError("Payment not found or access denied")
         result = db.execute(text(
             "SELECT * FROM financial.auto_allocate_payment(:payment_id, :method)"
         ), {"payment_id": payment_id, "method": method})
         return [{"invoice_id": row.invoice_id, "allocated_amount": float(row.allocated_amount)} for row in result]
     
     @staticmethod
-    def get_payment_allocations(db: Session, payment_id: int) -> List[Dict[str, Any]]:
+    def get_payment_allocations(db: Session, org_id: str, payment_id: int) -> List[Dict[str, Any]]:
         """Get allocations for a payment."""
         result = db.execute(text("""
-            SELECT allocation_id, reference_id as invoice_id, reference_number as invoice_number,
-                   allocated_amount, created_at as allocation_date
-            FROM financial.payment_allocations
-            WHERE payment_id = :payment_id AND reference_type = 'INVOICE' AND allocation_status = 'active'
-            ORDER BY created_at DESC
-        """), {"payment_id": payment_id})
+            SELECT allocation.allocation_id, allocation.reference_id as invoice_id,
+                   allocation.reference_number as invoice_number,
+                   allocation.allocated_amount, allocation.created_at as allocation_date
+            FROM financial.allocations allocation
+            JOIN financial.payments payment ON payment.payment_id = allocation.payment_id
+            WHERE allocation.payment_id = :payment_id
+              AND payment.org_id = :org_id
+              AND allocation.reference_type = 'INVOICE'
+              AND allocation.allocation_status = 'active'
+            ORDER BY allocation.created_at DESC
+        """), {"payment_id": payment_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
     
     @staticmethod
-    def get_invoice_payments(db: Session, invoice_id: int) -> List[Dict[str, Any]]:
+    def get_invoice_payments(db: Session, org_id: str, invoice_id: int) -> List[Dict[str, Any]]:
         """Get payments allocated to an invoice."""
         result = db.execute(text("""
             SELECT pa.allocation_id, pa.payment_id, p.payment_number, p.payment_date,
                    p.payment_amount, pa.allocated_amount, pa.created_at as allocation_date
-            FROM financial.payment_allocations pa
+            FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
+            JOIN sales.invoices invoice ON invoice.invoice_id = pa.reference_id
             WHERE pa.reference_type = 'INVOICE' AND pa.reference_id = :invoice_id
-            AND pa.allocation_status = 'active' ORDER BY pa.created_at DESC
-        """), {"invoice_id": invoice_id})
+            AND pa.allocation_status = 'active'
+            AND p.org_id = :org_id AND invoice.org_id = :org_id
+            ORDER BY pa.created_at DESC
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         return [dict(row._mapping) for row in result]
     
     @staticmethod
-    def get_invoice_summary(db: Session, invoice_id: int) -> Optional[Dict[str, Any]]:
+    def get_invoice_summary(db: Session, org_id: str, invoice_id: int) -> Optional[Dict[str, Any]]:
         """Get invoice summary for allocation view."""
         result = db.execute(text("""
             SELECT invoice_number, final_amount, allocated_amount, payment_status
-            FROM sales.invoices WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": org_id})
         row = result.first()
         return dict(row._mapping) if row else None
     
@@ -150,7 +166,7 @@ class AllocationService:
     def get_allocation_with_org(db: Session, org_id: str, allocation_id: int) -> Optional[Dict[str, Any]]:
         """Get allocation with org verification."""
         result = db.execute(text("""
-            SELECT pa.*, p.org_id FROM financial.payment_allocations pa
+            SELECT pa.*, p.org_id FROM financial.allocations pa
             JOIN financial.payments p ON pa.payment_id = p.payment_id
             WHERE pa.allocation_id = :allocation_id AND p.org_id = :org_id
         """), {"allocation_id": allocation_id, "org_id": org_id})
@@ -186,7 +202,7 @@ class AllocationService:
     
     @staticmethod
     def get_unpaid_invoices(
-        db: Session, customer_id: int = None,
+        db: Session, org_id: str, customer_id: int = None,
         cancelled_status: str = "cancelled", paid_status: str = "paid"
     ) -> List[Dict[str, Any]]:
         """Get invoices with outstanding amounts."""
@@ -195,9 +211,10 @@ class AllocationService:
                    final_amount, allocated_amount, final_amount - allocated_amount as due_amount,
                    payment_status
             FROM sales.invoices
-            WHERE invoice_status != :cancelled_status AND payment_status != :paid_status
+            WHERE org_id = :org_id
+              AND invoice_status != :cancelled_status AND payment_status != :paid_status
         """
-        params = {"cancelled_status": cancelled_status, "paid_status": paid_status}
+        params = {"org_id": org_id, "cancelled_status": cancelled_status, "paid_status": paid_status}
         if customer_id:
             query += " AND customer_id = :customer_id"
             params["customer_id"] = customer_id

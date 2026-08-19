@@ -60,6 +60,7 @@ export interface Address {
     address_line2?: string;
     city?: string;
     state?: string;
+    state_name?: string;
     pincode?: string;
     country?: string;
 }
@@ -106,6 +107,7 @@ export interface Order {
     round_off: number;
     total_amount: number;
     final_amount?: number;
+    delivery_charges?: number;
     other_charges: number;
     total_quantity: number;
 

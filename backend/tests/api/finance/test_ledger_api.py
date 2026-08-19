@@ -10,11 +10,21 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 from typing import Optional, Dict, Any
 
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
 
 
 class Colors:
@@ -98,11 +108,16 @@ def make_request(
         return False, None
 
 
-def test_ledger_balance(party_id: int, party_type: str = "customer") -> bool:
+def test_ledger_balance(party_id: Optional[int] = None, party_type: str = "customer") -> bool:
     """
     Test GET /ledger/balance/{party_id}
     Returns party balance summary
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger balance test")
+
     print_info(f"Testing ledger balance for {party_type} ID {party_id}...")
     
     success, data = make_request(
@@ -124,14 +139,14 @@ def test_ledger_balance(party_id: int, party_type: str = "customer") -> bool:
             print(f"   Payable: {data.get('payable', 0):.2f}")
             
         print(f"   Pending Invoices: {data.get('pending_invoices', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Balance endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_ledger_statement(
-    party_id: int, 
+    party_id: Optional[int] = None,
     party_type: str = "customer",
     date_from: Optional[str] = None,
     date_to: Optional[str] = None
@@ -140,6 +155,11 @@ def test_ledger_statement(
     Test GET /ledger/statement/{party_id}
     Returns party ledger statement with transactions
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger statement test")
+
     print_info(f"Testing ledger statement for {party_type} ID {party_id}...")
     
     params = {"party_type": party_type}
@@ -179,17 +199,22 @@ def test_ledger_statement(
         else:
             print_warning(f"Response success=false: {data}")
             
-        return True
+        return finish_test(True)
     else:
         print_error("Statement endpoint failed")
-        return False
+        return finish_test(False)
 
 
-def test_ledger_outstanding(party_id: int, party_type: str = "customer") -> bool:
+def test_ledger_outstanding(party_id: Optional[int] = None, party_type: str = "customer") -> bool:
     """
     Test GET /ledger/outstanding/{party_id}
     Returns outstanding bills for a party
     """
+    if party_id is None:
+        party_id = get_any_customer_id() if party_type == "customer" else get_any_supplier_id()
+    if party_id is None:
+        pytest.skip(f"No {party_type} available for ledger outstanding test")
+
     print_info(f"Testing outstanding bills for {party_type} ID {party_id}...")
     
     success, data = make_request(
@@ -210,10 +235,10 @@ def test_ledger_outstanding(party_id: int, party_type: str = "customer") -> bool
             for bill in bills[:3]:
                 print(f"      - {bill.get('invoice_number')}: {bill.get('outstanding_amount', 0):.2f} (due: {bill.get('due_date')}, overdue: {bill.get('days_overdue', 0)} days)")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Outstanding endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_ledger_aging(party_type: str = "customer") -> bool:
@@ -248,10 +273,10 @@ def test_ledger_aging(party_type: str = "customer") -> bool:
                 outstanding = party.get('total_outstanding') or party.get('total_payable', 0)
                 print(f"      - {name}: {outstanding:.2f}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("Aging endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_ledger_summary(party_type: str = "customer") -> bool:
@@ -282,10 +307,10 @@ def test_ledger_summary(party_type: str = "customer") -> bool:
             print(f"   Total Overdue: {data.get('total_overdue', 0):.2f}")
             
         print(f"   Pending Invoices: {data.get('pending_invoices', 0)}")
-        return True
+        return finish_test(True)
     else:
         print_error("Summary endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def get_any_customer_id() -> Optional[int]:

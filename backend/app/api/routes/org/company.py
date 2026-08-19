@@ -430,7 +430,7 @@ async def get_organization_id(
     org_id: str = Depends(get_org_id_string)
 ):
     """Get current organization ID"""
-    return {"org_id": str(context.org_id)}
+    return {"org_id": str(org_id)}
 
 @router.get("/profile")
 @with_tenant_context

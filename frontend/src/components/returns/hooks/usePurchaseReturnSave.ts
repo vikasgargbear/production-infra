@@ -9,6 +9,7 @@ import { useDocumentSave } from '../../global/hooks/useDocumentSave';
 import { returnsApi } from '../../../services/api';
 import { DOC_TYPES } from '../../../services/offline/documents/documentNumberGenerator';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
 
 export interface UsePurchaseReturnSaveProps {
     returnData: any;
@@ -93,6 +94,35 @@ export function usePurchaseReturnSave(props: UsePurchaseReturnSaveProps): UsePur
         onSuccess: () => {
             toast.success('Purchase return created successfully');
             setTimeout(() => onClose(), 1500);
+        },
+
+        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Purchase Return Posted',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'confirmed',
+                impacts: [
+                    'The purchase return is committed to the backend.',
+                    'Supplier debit note and outstanding balances are adjusted.',
+                    'Returned stock is removed from inventory according to the selected disposition.',
+                    'Purchase GST reversal values are available for compliance reporting.'
+                ]
+            });
+        },
+
+        onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Purchase Return Saved Locally',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'queued',
+                impacts: [
+                    'The purchase return is queued for backend posting.',
+                    'Local stock is reduced immediately on this device.',
+                    'Supplier ledger and GST reversal will confirm after sync succeeds.'
+                ]
+            });
         },
     });
 

@@ -1,0 +1,122 @@
+name: Production readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_live_erp:
+        description: Run credential-gated live API and Supabase write tests
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - run: PYTHONPATH=backend pytest -q backend/tests/unit
+      - run: python backend/scripts/schema_readiness.py --validate-claim
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint:critical
+      - run: npm run test:ci -- --runInBand
+      - run: CI=false npm run build
+      - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+
+  frontend-dependency-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=high
+
+  production-blockers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require schema documentation and application queries to agree
+        run: PYTHONPATH=backend python backend/scripts/audit_schema.py
+      - name: Require one safe database migration authority
+        if: always()
+        run: python backend/scripts/schema_readiness.py
+      - name: Require transaction integrity ownership
+        if: always()
+        run: python backend/scripts/audit/transaction_integrity_audit.py
+      - name: Require consistent identifiers and API contracts
+        if: always()
+        run: python backend/scripts/audit/contract_consistency_audit.py
+      - name: Require dedicated payment idempotency readiness
+        if: always()
+        run: python backend/scripts/audit/payment_idempotency_readiness.py
+      - name: Reject placeholder critical-path integration tests
+        if: always()
+        run: |
+          if rg -n "# Implementation|simplified - actual|Actual .* would|^\s+pass\s*$" backend/tests/integration; then
+            echo "Critical-path integration tests still contain placeholders"
+            exit 1
+          fi
+
+  live-erp:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
+    runs-on: ubuntu-latest
+    environment: live-erp-test
+    env:
+      PHARMA_LIVE_API_BASE_URL: ${{ secrets.PHARMA_LIVE_API_BASE_URL }}
+      PHARMA_LIVE_DATABASE_URL: ${{ secrets.PHARMA_LIVE_DATABASE_URL }}
+      PHARMA_LIVE_ACCESS_TOKEN: ${{ secrets.PHARMA_LIVE_ACCESS_TOKEN }}
+      PHARMA_LIVE_TEST_ORG_ID: ${{ secrets.PHARMA_LIVE_TEST_ORG_ID }}
+      PHARMA_LIVE_TEST_BRANCH_ID: ${{ secrets.PHARMA_LIVE_TEST_BRANCH_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Refuse an incompletely configured live run
+        run: |
+          test -n "$PHARMA_LIVE_API_BASE_URL"
+          test -n "$PHARMA_LIVE_DATABASE_URL"
+          test -n "$PHARMA_LIVE_ACCESS_TOKEN"
+          test -n "$PHARMA_LIVE_TEST_ORG_ID"
+          test -n "$PHARMA_LIVE_TEST_BRANCH_ID"
+      - run: PYTHONPATH=backend pytest -q backend/tests/live_erp

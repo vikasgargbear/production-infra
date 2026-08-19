@@ -244,11 +244,6 @@ export const ledgerApi = {
             responseType: 'blob'
         });
     },
-
-    // Get bank accounts for reconciliation
-    getBankAccounts: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/bank-accounts');
-    }
 };
 
 export const partyLedgerApi = ledgerApi;

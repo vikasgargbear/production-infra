@@ -14,7 +14,10 @@ from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_conte
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from .....core.utils.constants import OrderStatus, PaymentStatus
-from ....services.document_number_service import DocumentNumberService
+from ....services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
 from ....services.compliance.gst_service import GSTService
 from ....schemas.sales.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
@@ -28,20 +31,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
 
-@router.get("/generate-number")
+@router.post(
+    "/generate-number",
+    operation_id="sales_reserve_order_number_v1",
+    summary="Reserve a sales order number",
+    openapi_extra=document_number_reservation_openapi("sales.create"),
+)
 @with_tenant_context
 async def generate_sales_order_number(
+    _: dict = Depends(PermissionChecker("sales", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
-    """Generate next sales order number using unified service"""
+    """Reserve and commit the next organization-scoped sales order number."""
     try:
-        # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "sales_order", str(context.org_id))
+        new_number = DocumentNumberService.reserve_number(
+            db, "sales_order", str(context.org_id)
+        )
         return {"order_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate sales order number: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate order number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve sales order number")
 
 @router.get("/employees")
 @with_tenant_context

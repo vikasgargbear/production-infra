@@ -11,18 +11,6 @@ import { createCrudApi } from '../../utils/createCrudApi';
 // ============================================================================
 // TYPES
 // ============================================================================
-
-export interface BankAccountParams {
-    limit?: number;
-    offset?: number;
-    search?: string;
-    is_active?: boolean;
-}
-
-// ============================================================================
-// API
-// ============================================================================
-
 const crud = createCrudApi({ basePath: '/bank-accounts' });
 
 export const bankAccountsApi = {
@@ -50,22 +38,12 @@ export const bankAccountsApi = {
         return apiHelpers.get(`/bank-accounts/${accountId}/statement`, { params });
     },
 
-    // Helpers
     getActive: () => {
         return apiHelpers.get('/bank-accounts', { params: { is_active: true } });
     },
 
     search: (query: string) => {
         return apiHelpers.get('/bank-accounts', { params: { search: query } });
-    },
-
-    // Aliases (backward compatibility)
-    getBankAccounts: (params: BankAccountParams = {}) => {
-        return apiHelpers.get('/bank-accounts', { params });
-    },
-
-    deleteBankAccount: (id: number | string) => {
-        return apiHelpers.delete(`/bank-accounts/${id}`);
     },
 
     setDefaultAccount: (id: number | string) => {

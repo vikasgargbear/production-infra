@@ -31,7 +31,7 @@ class TestPurchaseReturnsAPI:
     def returns_api(self, api_client, api_base_url):
         """Returns API test helper"""
         api = ReturnsTestBase(api_client, api_base_url)
-        api.BASE_PATH = "/api/returns/purchase"
+        api.BASE_PATH = "/api/purchase-returns"
         return api
     
     @pytest.fixture
@@ -98,7 +98,7 @@ class TestPurchaseReturnsAPI:
                 assert field in item, f"Missing field: {field}"
     
     # =========================================================================
-    # ENDPOINT: POST /api/returns/purchase/
+    # ENDPOINT: POST /api/purchase-returns/
     # =========================================================================
     
     def test_create_purchase_return_validation_no_items(self, returns_api, sample_supplier):

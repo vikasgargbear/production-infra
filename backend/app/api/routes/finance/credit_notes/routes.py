@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 import uuid
 
@@ -76,7 +76,7 @@ async def get_notes(
 @with_tenant_context
 async def create_credit_note(
     note_data: dict,
-    _: dict = Depends(PermissionChecker("finance", "view")),
+    _: dict = Depends(PermissionChecker("finance", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -93,6 +93,9 @@ async def create_credit_note(
                     detail=f"Missing required field: {field}"
                 )
         
+        note_data = dict(note_data)
+        note_data["branch_id"] = context.primary_branch_id
+
         # Use CreditNoteService for centralized creation logic
         result = CreditNoteService.create_credit_note(
             db=db,
@@ -101,6 +104,7 @@ async def create_credit_note(
             note_data=note_data
         )
         
+        db.commit()
         return {
             "status": "success",
             "note_id": result["note_id"],
@@ -123,7 +127,7 @@ async def create_credit_note(
 @with_tenant_context
 async def create_debit_note(
     note_data: dict,
-    _: dict = Depends(PermissionChecker("finance", "view")),
+    _: dict = Depends(PermissionChecker("finance", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -140,6 +144,9 @@ async def create_debit_note(
                     detail=f"Missing required field: {field}"
                 )
         
+        note_data = dict(note_data)
+        note_data["branch_id"] = context.primary_branch_id
+
         # Use CreditNoteService for centralized creation logic
         result = CreditNoteService.create_debit_note(
             db=db,
@@ -148,6 +155,7 @@ async def create_debit_note(
             note_data=note_data
         )
         
+        db.commit()
         return {
             "status": "success",
             "note_id": result["note_id"],
@@ -212,13 +220,20 @@ async def get_note_print_data(
         organization = CreditNoteService.get_organization_details(db, str(context.org_id))
         
         # Get note with all details
-        note_data = await get_note_detail(note_id, db)
+        note_data = CreditNoteService.get_note_detail(
+            db=db,
+            org_id=str(context.org_id),
+            note_id=note_id
+        )
+
+        if not note_data:
+            raise HTTPException(status_code=404, detail="Note not found")
         
         # Format for printing
         print_data = {
             "organization": organization if organization else {},
             "note": note_data,
-            "print_date": datetime.now().isoformat(),
+            "print_date": datetime.now(timezone.utc).isoformat(),
             "document_type": "CREDIT NOTE" if note_data["note_type"] == "credit" else "DEBIT NOTE"
         }
         
@@ -248,7 +263,8 @@ async def cancel_note(
             db=db,
             org_id=str(context.org_id),
             note_id=note_id,
-            cancellation_reason=cancellation_reason
+            reason=cancellation_reason,
+            user_id=context.user_id
         )
         
         return {

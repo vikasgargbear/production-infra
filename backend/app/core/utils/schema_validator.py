@@ -14,7 +14,7 @@ Usage:
 """
 
 import re
-from typing import Dict, Set, List, Tuple, Optional
+from typing import Dict, Iterable, Set, List, Tuple, Optional
 from pathlib import Path
 import logging
 
@@ -24,7 +24,55 @@ logger = logging.getLogger(__name__)
 _SCHEMA_CACHE: Optional[Dict[str, Set[str]]] = None
 
 
-def parse_schema_doc() -> Dict[str, Set[str]]:
+def _default_schema_doc_paths() -> List[Path]:
+    """Return checked-in schema documents in deterministic order."""
+    repository_root = Path(__file__).resolve().parents[4]
+    schema_directory = repository_root / "docs" / "backend" / "database" / "schemas"
+    return sorted(schema_directory.glob("*.md"))
+
+
+def _parse_schema_docs(paths: Iterable[Path]) -> Dict[str, Set[str]]:
+    """Parse schema-qualified Markdown table headings and their column tables."""
+    schema_map: Dict[str, Set[str]] = {}
+    table_heading = re.compile(r"^###\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*$")
+
+    for schema_path in paths:
+        current_table = None
+
+        with schema_path.open("r", encoding="utf-8") as schema_file:
+            for raw_line in schema_file:
+                line = raw_line.strip()
+                heading_match = table_heading.match(line)
+                if heading_match:
+                    current_table = heading_match.group(1)
+                    schema_map.setdefault(current_table, set())
+                    continue
+
+                if line.startswith("### ") or line.startswith("---"):
+                    current_table = None
+                    continue
+
+                if current_table is None or not line.startswith("|"):
+                    continue
+
+                parts = [part.strip() for part in line.split("|")]
+                if len(parts) < 3:
+                    continue
+
+                column_name = parts[1].strip("`")
+                if (
+                    not column_name
+                    or column_name.lower() in {"column", "field"}
+                    or set(column_name) <= {"-", ":"}
+                ):
+                    continue
+
+                schema_map[current_table].add(column_name)
+
+    return {table: columns for table, columns in schema_map.items() if columns}
+
+
+def parse_schema_doc(required: bool = False) -> Dict[str, Set[str]]:
     """
     Parse the 07-DATABASE-SCHEMA.md file to extract all table columns.
     
@@ -36,43 +84,24 @@ def parse_schema_doc() -> Dict[str, Set[str]]:
     if _SCHEMA_CACHE is not None:
         return _SCHEMA_CACHE
     
-    # Find schema doc
-    schema_path = Path(__file__).parent.parent.parent.parent.parent / "Architecture Documentation" / "07-DATABASE-SCHEMA.md"
-    
-    if not schema_path.exists():
-        logger.warning(f"Schema doc not found at {schema_path}. Skipping validation.")
+    schema_paths = _default_schema_doc_paths()
+    if not schema_paths:
+        message = "No schema documentation found under docs/backend/database/schemas"
+        if required:
+            raise FileNotFoundError(message)
+        logger.warning("%s. Skipping validation.", message)
+        return {}
+
+    schema_map = _parse_schema_docs(schema_paths)
+    if not schema_map:
+        message = "Schema documentation contains no usable table definitions"
+        if required:
+            raise ValueError(message)
+        logger.warning("%s. Skipping validation.", message)
         return {}
     
-    schema_map: Dict[str, Set[str]] = {}
-    current_table = None
-    in_table_section = False
-    
-    with open(schema_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            
-            # Detect table headers (e.g., "### parties.customers")
-            if line.startswith('### ') and '.' in line:
-                table_name = line[4:].strip()  # Remove "### "
-                current_table = table_name
-                schema_map[current_table] = set()
-                in_table_section = True
-                continue
-            
-            # Parse column rows in table (e.g., "| customer_name | text | ✗ |")
-            if in_table_section and line.startswith('|') and '|' in line[1:]:
-                parts = [p.strip() for p in line.split('|')]
-                if len(parts) >= 3 and parts[1] and parts[1] not in ['Column', '--------']:
-                    column_name = parts[1]
-                    if current_table:
-                        schema_map[current_table].add(column_name)
-            
-            # End of table section
-            if line.startswith('###') or line.startswith('---'):
-                in_table_section = False
-    
     _SCHEMA_CACHE = schema_map
-    logger.info(f"✅ Parsed schema doc: {len(schema_map)} tables")
+    logger.info("Parsed schema docs: %s tables", len(schema_map))
     return schema_map
 
 

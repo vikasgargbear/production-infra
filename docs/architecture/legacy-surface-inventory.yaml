@@ -1,0 +1,103 @@
+schema_version: 1
+snapshot_date: "2026-08-19"
+canonical_repository: vikasgargbear/production-infra
+
+retired:
+  - id: backend.erp_password_login
+    surface: /api/auth/login and /api/auth/check-user
+    kind: backend_authentication_stack
+    reason: Production returned 410, the frontend exclusively uses Supabase Auth exchange, and the repository queried an unbaselined password_hash column.
+    evidence:
+      frontend_callers: 0
+      production_enabled: false
+      checked_schema_has_password_hash: false
+      openapi_password_flow_removed: true
+    replacement: /api/auth/oauth/supabase/session with immutable auth_user_id membership lookup
+
+  - id: backend.initial_setup_router
+    surface: backend/app/api/routes/org/initial_setup.py
+    kind: backend_route_module
+    reason: The mounted route mixed Supabase identity creation with unbaselined ERP writes, referenced an undefined tenant context, and could leave orphan identities.
+    evidence:
+      frontend_callers: 0
+      transactional_identity_and_membership_creation: false
+      idempotent_invitation_contract: false
+    replacement: reviewed invitation and organization-onboarding workflow after the live schema baseline
+
+  - id: backend.fail_open_rls_middleware
+    surface: backend/app/middleware/rls_middleware.py
+    kind: backend_middleware
+    reason: It was unregistered, trusted an unsigned organization header, and set RLS context on a database session unrelated to the request transaction.
+    evidence:
+      middleware_registered: false
+      unsigned_tenant_fallback: true
+      request_transaction_scoped: false
+    replacement: JWT-derived tenant context plus baselined database RLS policies
+
+  - id: backend.fail_open_auth_dependencies
+    surface: backend/app/core/auth/dependencies.py
+    kind: backend_dependency_module
+    reason: Unused helpers silently substituted a default organization and could create a synthetic system user.
+    evidence:
+      source_callers: 0
+      fails_closed: false
+    replacement: backend/app/core/auth/jwt_auth.py and backend/app/core/auth/org_context.py
+
+  - id: frontend.quick_sale_api
+    surface: frontend/src/services/api/modules/sales/quickSale.api.ts
+    kind: frontend_api_client
+    reason: Targeted an unregistered /quick-sale route and had no source callers.
+    evidence:
+      backend_route_registered: false
+      source_callers: 0
+    replacement: sales invoice application flow
+
+  - id: frontend.schemes_discounts_api
+    surface: frontend/src/services/api/modules/sales/schemesDiscounts.api.ts
+    kind: frontend_api_client
+    reason: Targeted an explicitly removed /schemes-discounts router and had no source callers beyond the API barrel.
+    evidence:
+      backend_route_registered: false
+      source_callers: 0
+    replacement: backend-owned pricing and discount calculation services
+
+  - id: backend.order_items_router
+    surface: backend/app/api/routes/order_items.py
+    kind: backend_route_module
+    reason: Router was not mounted and duplicated order aggregate ownership with unsafe item-level mutation semantics.
+    evidence:
+      backend_route_registered: false
+      backend_importers: 0
+      frontend_callers: 0
+    replacement: sales order aggregate routes and services
+
+  - id: frontend.order_items_api
+    surface: frontend/src/services/api/modules/sales/orderItems.api.ts
+    kind: frontend_api_client
+    reason: Targeted the unmounted order-items router and had no source callers.
+    evidence:
+      backend_route_registered: false
+      source_callers: 0
+    replacement: sales order aggregate API
+
+  - id: frontend.invoice_calculate_live
+    surface: frontend/src/services/api/modules/sales/invoices.api.ts
+    kind: frontend_api_client_methods
+    reason: calculateLive and validate targeted invoice routes absent from OpenAPI and had no source callers.
+    evidence:
+      backend_route_registered: false
+      source_callers: 0
+    replacement: /api/calculations/invoice through invoiceCalculationService
+
+pending_review:
+  - id: loyalty.route_contract
+    backend_surface: backend/app/api/routes/loyalty/routes.py
+    frontend_surface: frontend/src/services/api/modules/sales/loyaltyPoints.api.ts
+    reason: Backend is mounted with duplicate /loyalty prefixes while the frontend targets incompatible /loyalty-points paths.
+    action: Measure production consumers and choose one versioned canonical contract before changing or deleting either surface.
+
+  - id: invoice.calculation_preview
+    backend_surface: /api/calculations/invoice
+    frontend_surface: frontend/src/services/api/modules/sales/calculations.api.ts
+    reason: Canonical read-only calculation boundary is active but uses POST and is intentionally excluded from the MCP allowlist.
+    action: Keep authenticated and contract-tested; do not export to MCP without a separate review.

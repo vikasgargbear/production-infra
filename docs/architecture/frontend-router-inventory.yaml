@@ -1,0 +1,45 @@
+schema_version: 1
+snapshot_date: "2026-08-19"
+scope: frontend React Router 7.18.2 security migration assessment
+
+application_baseline:
+  react: "18.2"
+  react_dom: "18.2"
+  build_tool: Create React App 5 through CRACO 7
+  requested_router_target: "react-router-dom 7.18.2"
+  prior_declared_router: "react-router-dom 6.30.6"
+
+inventory:
+  source_imports: 0
+  router_providers: 0
+  route_components: 0
+  data_router_apis: 0
+  navigation_hooks: 0
+  active_navigation_owner: frontend/src/App.tsx
+  active_navigation_model: guarded activeTab state plus custom navigation events
+
+compatibility_assessment:
+  react_router_v7_minimum_react: "18"
+  react_router_v7_minimum_node: "20"
+  react_18_compatible: true
+  cra_declarative_library_mode_possible: true
+  behavioral_migration_required: false
+  rationale: The application has no React Router call sites to migrate or exercise.
+  official_sources:
+    - https://reactrouter.com/home/changelog
+    - https://www.npmjs.com/package/react-router-dom/v/7.18.2
+
+decision:
+  action: retire_unused_dependency
+  upgrade_to_7_18_2: false
+  reason: Installing a new major version with no consumers adds supply-chain and maintenance surface without changing application behavior.
+  manifest: frontend/package.json
+  lockfile: frontend/package-lock.json
+  guard: frontend/src/tests/routerDependency.test.js
+
+future_router_adoption_gates:
+  - Define URL, refresh, history, deep-link, and permission-denial behavior.
+  - Choose declarative or data mode explicitly; do not introduce framework mode into CRA implicitly.
+  - Add route-level authorization and navigation regression tests before replacing activeTab.
+  - Require Node 20 or newer in build and CI if React Router 7 is introduced.
+  - Run typecheck, Jest, and a production build before release.

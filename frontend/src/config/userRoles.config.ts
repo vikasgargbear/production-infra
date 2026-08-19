@@ -188,7 +188,7 @@ export const getRoleDefaults = (role: UserRole): RoleConfig => {
     return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS[USER_ROLES.READONLY];
 };
 
-export default {
+const userRolesConfig = {
     USER_ROLES,
     MODULES,
     PERMISSIONS,
@@ -199,3 +199,5 @@ export default {
     hasModuleAccess,
     getRoleDefaults
 };
+
+export default userRolesConfig;

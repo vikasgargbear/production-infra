@@ -59,28 +59,28 @@ export const returnsApi = {
 
     /** Get all purchase returns */
     getPurchaseReturns: (params: ReturnParams = {}) => {
-        return apiHelpers.get(ENDPOINTS.PURCHASES, { params });
+        return apiHelpers.get(ENDPOINTS.PURCHASE, { params });
     },
 
     /** Create purchase return */
     createPurchaseReturn: (data: any) => {
         const cleanedData = cleanData(data);
-        return apiHelpers.post(ENDPOINTS.PURCHASES, cleanedData);
+        return apiHelpers.post(ENDPOINTS.PURCHASE, cleanedData);
     },
 
     /** Get returnable purchases */
     getReturnablePurchases: (params: ReturnParams = {}) => {
-        return apiHelpers.get(`${ENDPOINTS.PURCHASES}returnable-purchases/`, { params });
+        return apiHelpers.get(`${ENDPOINTS.PURCHASE}returnable-purchases/`, { params });
     },
 
     /** Get purchase items for return */
     getPurchaseItems: (purchaseId: number | string) => {
-        return apiHelpers.get(`${ENDPOINTS.PURCHASES}purchase/${purchaseId}/items`);
+        return apiHelpers.get(`${ENDPOINTS.PURCHASE}purchase/${purchaseId}/items`);
     },
 
     /** Get supplier invoice items for return */
     getSupplierInvoiceReturnableItems: (invoiceId: number | string) => {
-        return apiHelpers.get(`${ENDPOINTS.PURCHASES}supplier-invoice/${invoiceId}/returnable-items`);
+        return apiHelpers.get(`${ENDPOINTS.PURCHASE}supplier-invoice/${invoiceId}/returnable-items`);
     },
 
     // =========================================================================
@@ -118,26 +118,6 @@ export const returnsApi = {
         return apiHelpers.post(ENDPOINTS.REJECT(id), { reason });
     },
 
-    // =========================================================================
-    // CUSTOMER/SUPPLIER RETURNS (Legacy)
-    // =========================================================================
-
-    /** Get customer returns */
-    getCustomerReturns: (params: ReturnParams = {}) => {
-        return apiHelpers.get(ENDPOINTS.CUSTOMER_RETURNS, { params });
-    },
-
-    /** Get supplier returns */
-    getSupplierReturns: (params: ReturnParams = {}) => {
-        return apiHelpers.get(ENDPOINTS.SUPPLIER_RETURNS, { params });
-    },
-
-    /** Get returnable items for a document */
-    getReturnableItems: (documentType: string, documentId: number | string) => {
-        return apiHelpers.get(ENDPOINTS.RETURNABLE_ITEMS, {
-            params: { document_type: documentType, document_id: documentId }
-        });
-    }
 };
 
 export default returnsApi;

@@ -860,7 +860,7 @@ All conversions use `challans`/`challan_items` (public schema) instead of `sales
 |-------|---------|---------|
 | `financial.credit_notes` | Return-based credit notes, ledger statements | Dedicated credit note table |
 | `financial.debit_notes` | Purchase return debit notes, customer debit notes, ledger | Dedicated debit note table (now supports supplier_id) |
-| `financial.credit_debit_notes` | Manual create/cancel UI | Unified legacy table |
+| `sales.credit_notes` / `sales.debit_notes` | Legacy migration source only | Deprecated pre-financial-schema note tables |
 
 ### Credit Note from Sales Return (Primary Path)
 ```

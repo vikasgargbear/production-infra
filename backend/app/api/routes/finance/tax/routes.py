@@ -11,6 +11,7 @@ from decimal import Decimal
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 from ....services.compliance.gst_service import GSTService
 from ....services.finance.tax.service import TaxService
 
@@ -78,11 +79,11 @@ async def calculate_tax(
         total_amount = taxable_amount + gst["total_tax_amount"]
         
         return {
-            "taxable_amount": float(taxable_amount), "cgst_rate": float(gst["cgst_percent"]),
-            "cgst_amount": float(gst["cgst_amount"]), "sgst_rate": float(gst["sgst_percent"]),
-            "sgst_amount": float(gst["sgst_amount"]), "igst_rate": float(gst["igst_percent"]),
-            "igst_amount": float(gst["igst_amount"]), "total_tax": float(gst["total_tax_amount"]),
-            "total_amount": float(total_amount)
+            "taxable_amount": money_json(taxable_amount), "cgst_rate": float(gst["cgst_percent"]),
+            "cgst_amount": money_json(gst["cgst_amount"]), "sgst_rate": float(gst["sgst_percent"]),
+            "sgst_amount": money_json(gst["sgst_amount"]), "igst_rate": float(gst["igst_percent"]),
+            "igst_amount": money_json(gst["igst_amount"]), "total_tax": money_json(gst["total_tax_amount"]),
+            "total_amount": money_json(total_amount)
         }
     except Exception as e:
         logger.error(f"Error calculating tax: {str(e)}")
@@ -125,7 +126,10 @@ async def get_tax_analytics(
     """Get tax analytics and summary"""
     try:
         analytics = TaxService.get_tax_analytics(db, str(context.org_id), start_date, end_date)
-        analytics["net_tax_liability"] = float((analytics.get("total_output_tax") or 0) - (analytics.get("total_input_tax") or 0))
+        analytics["net_tax_liability"] = money_json(
+            (analytics.get("total_output_tax") or 0)
+            - (analytics.get("total_input_tax") or 0)
+        )
         return analytics
     except Exception as e:
         logger.error(f"Error fetching tax analytics: {str(e)}")

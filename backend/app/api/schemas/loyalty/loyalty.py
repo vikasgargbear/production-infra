@@ -5,7 +5,7 @@ Centralized from inline route definitions
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # =============================================================================
@@ -22,6 +22,15 @@ class LoyaltyProgramCreate(BaseModel):
     max_discount_percent: Decimal = Field(default=Decimal("10.0"))
     validity_months: int = Field(default=12)
     is_active: bool = True
+
+
+class LoyaltyProgramCreateResponse(BaseModel):
+    """Identifier returned after a loyalty program is created."""
+
+    program_id: int
+    message: str
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class CustomerTier(BaseModel):

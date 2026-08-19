@@ -1,6 +1,5 @@
 """
 Enterprise Authentication API
-Clean, layered architecture with offline support for India's network conditions
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
@@ -8,186 +7,12 @@ from sqlalchemy import text
 from typing import Dict, Any
 import logging
 
-from ....core.database import get_db  # Regular session for auth (no tenant context yet)
+from ....core.database import get_db
 from ....core.auth.tenant_service import get_tenant_aware_db, TenantAwareSession
-from ....core.rate_limiting import rate_limit
-from ...services.auth import (
-    AuthService,
-    InvalidCredentialsError,
-    AccountDisabledError,
-    PasswordNotSetError,
-    OrganizationDisabledError,
-    RateLimitExceededError
-)
-from ...schemas.auth.auth_schemas import (
-    LoginRequest,
-    LoginResponse,
-    RefreshTokenRequest,
-    AuthError
-)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-def _mask_email(email: str) -> str:
-    """Mask email for safe logging: 'user@example.com' -> 'u***@e***.com'"""
-    if not email or "@" not in email:
-        return "***"
-    local, domain = email.split("@", 1)
-    return f"{local[0]}***@{domain[0]}***"
-
-
-@router.post("/login")  # response_model removed - works without validation
-@rate_limit(requests=5, window=60)  # 5 login attempts per minute per IP
-async def login(
-    request_data: LoginRequest,
-    req: Request,
-    db = Depends(get_db)  # Regular session - no tenant context before auth
-):
-    """
-    Authenticate user and return JWT tokens
-    
-    **Features**:
-    - Email/password authentication
-    - JWT token generation
-    - Offline mode support (hash provided)
-    - Remember me option (7-day tokens)
-    - Rate limiting (5 attempts/minute)
-    
-    **For Offline Mode**:
-    Response includes `offline_auth_hash` that frontend can store in IndexedDB.
-    When offline, frontend can verify credentials locally using this hash.
-    
-    **Returns**:
-    - access_token: Short-lived JWT (1 hour or 7 days if remember_me)
-    - refresh_token: Long-lived token for renewal (30 days)
-    - user: User profile information
-    - offline_auth_hash: Hash for offline authentication
-    """
-    try:
-        # Authenticate using service layer
-        result = await AuthService.authenticate(
-            email=request_data.email,
-            password=request_data.password,
-            db=db,
-            remember_me=request_data.remember_me
-        )
-        
-        # Add offline auth hash for India's poor connectivity
-        user_data = result["user"]
-        offline_hash = AuthService.create_offline_auth_hash(
-            email=request_data.email,
-            password=request_data.password,
-            user_data=user_data
-        )
-        
-        result["offline_auth_hash"] = offline_hash
-        
-        # Log successful authentication
-        logger.info(
-            f"Login successful: user_id={user_data['id']}, "
-            f"org_id={user_data['org_id']}, "
-            f"ip={req.client.host}"
-        )
-
-        # Write login to audit trail
-        try:
-            db.execute(text("""
-                INSERT INTO system_config.audit_logs
-                (org_id, activity_type, entity_type, entity_id, action_performed,
-                 user_id, user_name, ip_address, result_status)
-                VALUES (:org_id, 'login', 'user', :user_id, 'User logged in',
-                        :user_id, :user_name, :ip::inet, 'success')
-            """), {
-                "org_id": user_data['org_id'],
-                "user_id": user_data['id'],
-                "user_name": user_data.get('username', user_data.get('email', 'unknown')),
-                "ip": req.client.host if req.client else '0.0.0.0',
-            })
-            db.commit()
-        except Exception as audit_err:
-            logger.warning(f"Failed to write login audit log: {audit_err}")
-
-        return result
-        
-    except InvalidCredentialsError as e:
-        # SECURITY: Don't log full email — mask it
-        masked = _mask_email(request_data.email)
-        logger.warning(f"Login failed: Invalid credentials for {masked}, ip={req.client.host}")
-
-        # Write failed login to audit trail (best-effort, no org_id available)
-        try:
-            db.execute(text("""
-                INSERT INTO system_config.audit_logs
-                (org_id, activity_type, entity_type, entity_id, action_performed,
-                 user_id, user_name, ip_address, result_status, error_message)
-                SELECT u.org_id, 'login', 'user', u.user_id::text, 'Login failed - invalid credentials',
-                       u.user_id, u.username, :ip::inet, 'failure', 'Invalid credentials'
-                FROM master.org_users u WHERE u.email = :email LIMIT 1
-            """), {"email": request_data.email, "ip": req.client.host if req.client else '0.0.0.0'})
-            db.commit()
-        except Exception:
-            pass  # Best-effort audit logging for failed logins
-
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "invalid_credentials",
-                "error_description": str(e),
-                "error_code": e.error_code
-            }
-        )
-
-    except AccountDisabledError as e:
-        masked = _mask_email(request_data.email)
-        logger.warning(f"Login failed: Account disabled - {masked}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "account_disabled",
-                "error_description": str(e),
-                "error_code": e.error_code
-            }
-        )
-
-    except OrganizationDisabledError as e:
-        masked = _mask_email(request_data.email)
-        logger.warning(f"Login failed: Organization disabled - {masked}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "organization_disabled",
-                "error_description": str(e),
-                "error_code": e.error_code
-            }
-        )
-
-    except PasswordNotSetError as e:
-        masked = _mask_email(request_data.email)
-        logger.error(f"Login failed: No password set - {masked}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "password_not_set",
-                "error_description": str(e),
-                "error_code": e.error_code,
-                "action": "contact_administrator"
-            }
-        )
-
-    except Exception as e:
-        masked = _mask_email(request_data.email)
-        logger.error(f"Login failed: Unexpected error - {masked}: {type(e).__name__}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "internal_error",
-                "error_description": "An unexpected error occurred",
-                "error_code": 9999
-            }
-        )
 
 
 @router.post("/logout")
@@ -349,22 +174,3 @@ async def auth_health_check(db: TenantAwareSession = Depends(get_tenant_aware_db
                 "error": str(e)
             }
         )
-
-
-@router.post("/check-user")
-async def check_user_exists(
-    email: str,
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-) -> Dict[str, bool]:
-    """
-    Check if user exists (for registration flow)
-    
-    **Privacy Note**: Returns generic message to prevent email enumeration
-    """
-    from ....repositories.user_repository import UserRepository
-    
-    user = UserRepository.find_by_email(email, db)
-    
-    # Don't reveal if user exists (security best practice)
-    # Always return same response time
-    return {"message": "If account exists, you will receive an email"}

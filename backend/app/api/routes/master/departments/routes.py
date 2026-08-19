@@ -13,6 +13,12 @@ from .....core.security.permissions import PermissionChecker
 
 # Service layer
 from ....services.master.department_branch_service import DepartmentService
+from ....services.document_number_service import DocumentNumberService
+from ....schemas.master.mutations import (
+    DepartmentCreateResponse,
+    DepartmentUpdateResponse,
+    MasterDeleteResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -60,7 +66,7 @@ async def get_department(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/", response_model=Dict[str, Any])
+@router.post("/", response_model=DepartmentCreateResponse)
 @with_tenant_context
 async def create_department(
     department_data: Dict[str, Any],
@@ -75,8 +81,7 @@ async def create_department(
         # Generate code if not provided
         department_code = department_data.get("department_code")
         if not department_code:
-            count = DepartmentService.count_departments(db, org_id)
-            department_code = f"DEPT{count + 1:03d}"
+            department_code = DocumentNumberService.generate_number(db, "department", org_id)
         
         data = {
             "department_code": department_code,
@@ -96,7 +101,7 @@ async def create_department(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{department_id}", response_model=Dict[str, Any])
+@router.put("/{department_id}", response_model=DepartmentUpdateResponse)
 @with_tenant_context
 async def update_department(
     department_id: int,
@@ -144,7 +149,7 @@ async def update_department(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{department_id}", response_model=Dict[str, Any])
+@router.delete("/{department_id}", response_model=MasterDeleteResponse)
 @with_tenant_context
 async def delete_department(
     department_id: int,

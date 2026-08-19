@@ -16,7 +16,7 @@
 | Analytics | 7 | `04-triggers/08_analytics_triggers.sql` |
 | System | 7 | `04-triggers/09_system_triggers.sql` |
 | Pricing | 7 | `04-triggers/10_pricing_triggers.sql` |
-| Core Operations | 8 | `04-triggers/11_core_operations_triggers.sql` |
+| Core Operations | 9 | `04-triggers/11_core_operations_triggers.sql` |
 | Quality Validation | 3 | `04-triggers/12_quality_validation_triggers.sql` |
 | **Migration Triggers** | 2 | See below |
 

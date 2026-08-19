@@ -41,7 +41,6 @@ import { paymentAllocationApi } from './modules/finance/paymentAllocation.api';
 import { journalApi } from './modules/finance/journal.api';
 import { expensesApi } from './modules/finance/expenses.api';
 import { notesApi } from './modules/finance/notes.api';
-import { calculationsApi } from './modules/finance/calculations.api';
 
 // =========================================================================
 // INVENTORY
@@ -92,8 +91,8 @@ import { invoicesApi } from './modules/sales/invoices.api';
 import { ordersApi } from './modules/sales/orders.api';
 import { challansApi } from './modules/sales/challans.api';
 import { returnsApi } from './modules/sales/returns.api';
+import { challanCalculationsApi, invoiceCalculationsApi, salesOrderCalculationsApi } from './modules/sales/calculations.api';
 import { loyaltyPointsApi } from './modules/sales/loyaltyPoints.api';
-import { schemesDiscountsApi } from './modules/sales/schemesDiscounts.api';
 
 // =========================================================================
 // SETTINGS
@@ -108,11 +107,6 @@ import utilsApi from './modules/settings/utils.api';
 // =========================================================================
 import { syncApi } from './modules/system/sync.api';
 import { documentsApi } from './modules/system/documents.api';
-
-// =========================================================================
-// ALIASES (for backward compatibility)
-// =========================================================================
-const salesOrdersApi = ordersApi;
 
 // =========================================================================
 // EXPORTS
@@ -150,7 +144,6 @@ export {
   journalApi,
   expensesApi,
   notesApi,
-  calculationsApi,
 
   // Inventory
   stockApi,
@@ -187,11 +180,12 @@ export {
   // Sales
   invoicesApi,
   ordersApi,
-  salesOrdersApi,
   challansApi,
   returnsApi,
+  invoiceCalculationsApi,
+  salesOrderCalculationsApi,
+  challanCalculationsApi,
   loyaltyPointsApi,
-  schemesDiscountsApi,
 
   // Settings
   settingsApi,
@@ -213,14 +207,6 @@ export {
 // See docs/API_METHOD_NAMING_DICTIONARY.md for naming conventions
 // =========================================================================
 
-// Utility functions for backward compatibility
-export const clearGSTCache = (): void => {
-  // Cache handling moved to service layer - this is a no-op for compatibility
-  console.debug('GST cache cleared (no-op in new architecture)');
-};
-
-// Singular name aliases removed - use purchasesApi and invoicesApi
-
 // API object with all modules grouped by domain
 const apiModules = {
   // Analytics
@@ -236,7 +222,7 @@ const apiModules = {
   compliance: { gst: gstApi, taxEntries: taxEntriesApi, compliance: complianceApi },
 
   // Finance
-  finance: { ledger: ledgerApi, partyLedger: partyLedgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, journal: journalApi, expenses: expensesApi, notes: notesApi, calculations: calculationsApi },
+  finance: { ledger: ledgerApi, partyLedger: partyLedgerApi, payments: paymentsApi, paymentAllocation: paymentAllocationApi, journal: journalApi, expenses: expensesApi, notes: notesApi },
 
   // Inventory
   inventory: { stock: stockApi, batches: batchesApi, movements: inventoryMovementsApi, conversions: conversionsApi },
@@ -254,7 +240,7 @@ const apiModules = {
   purchase: { purchases: purchasesApi, grn: grnApi, supplierInvoices: supplierInvoicesApi },
 
   // Sales
-  sales: { invoices: invoicesApi, orders: ordersApi, salesOrders: salesOrdersApi, challans: challansApi, returns: returnsApi, loyaltyPoints: loyaltyPointsApi, schemesDiscounts: schemesDiscountsApi },
+  sales: { invoices: invoicesApi, calculations: invoiceCalculationsApi, orderCalculations: salesOrderCalculationsApi, orders: ordersApi, challans: challansApi, returns: returnsApi, loyaltyPoints: loyaltyPointsApi },
 
   // Settings
   settings: { settings: settingsApi, metadata: metadataApi, setup: setupApi, utils: utilsApi },

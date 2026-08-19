@@ -10,16 +10,17 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, Download, AlertCircle, User } from 'lucide-react';
+import { RotateCcw, User } from 'lucide-react';
 import {
-  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, NotesSection, CustomerSearch, CustomerCreation
+  ModuleHeader, StandardDatePicker, Select, useToast, ProceedToReviewComponent, CustomerSearch, CustomerCreation
 } from '../global';
 import GenericSuccessModal from '../global/modals/GenericSuccessModal';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { returnsApi, customersApi, invoicesApi, metadataApi } from '../../services/api';
-import { getApiBaseUrl } from '../../config/apiBase';
 import documentNumberGenerator from '../../services/offline/documents/documentNumberGenerator';
 import offlineStorage from '../../services/offlineStorage';
+import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useCompany } from '../../contexts/CompanyContext';
 import html2pdf from 'html2pdf.js';
 import { toast } from 'react-toastify';
@@ -31,13 +32,12 @@ import { ReturnReviewPanel } from './components/ReturnReviewPanel';
 
 // Import hooks and types
 import { useSalesReturnState } from './hooks/useSalesReturnState';
-import type { SalesReturnFlowProps, ReturnFormData, ReturnFormItem, ReturnReason } from './types/return.types';
+import type { SalesReturnFlowProps, ReturnFormItem, ReturnReason } from './types/return.types';
 import type { Customer, Invoice } from '../../types/api.types';
 
 // Import offline-first helpers
 import { saveReturnOffline, type OfflineSalesReturnData } from './utils/offlineReturnSaveHelpers';
-
-const API_BASE_URL = getApiBaseUrl();
+import { showFinancialEntryNotification } from '../../utils/financialEntryNotifier';
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Use centralized state management (replaces 14 useState!)
@@ -86,6 +86,10 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
   const firstInputRef = useRef<any>(null);
+  const calculationRequestRef = useRef(0);
+  const returnDataRef = useRef(returnData);
+  returnDataRef.current = returnData;
+  const { isOnline } = useNetworkStatus();
 
   const toastHook = useToast();
 
@@ -332,33 +336,6 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     });
   }, [dispatch]);
 
-  // Fetch batches
-  const fetchBatchesForProduct = useCallback(async (productId: number) => {
-    try {
-      const token = localStorage.getItem('pharma_token') || sessionStorage.getItem('pharma_token') || '';
-      const response = await fetch(
-        `${API_BASE_URL}/api/stock-movements/product/${productId}/batches`,
-        {
-          headers: {
-            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id') || '',
-            'Authorization': token ? `Bearer ${token}` : ''
-          }
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const batches = data.batches || data || [];
-        dispatch({
-          type: 'SET_AVAILABLE_BATCHES',
-          productId,
-          batches: Array.isArray(batches) ? batches.filter((b: any) => b.quantity_available > 0) : []
-        });
-      }
-    } catch (error) {
-      // Silent fail
-    }
-  }, [dispatch]);
-
   // Add manual item
   const handleAddManualItem = useCallback((product: any) => {
     if (!product) return;
@@ -439,44 +416,47 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Calculate totals whenever items or GST setting changes
   useEffect(() => {
-    let subtotal = 0;
-    let taxAmount = 0;
+    const requestId = ++calculationRequestRef.current;
+    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
 
-    returnData.items.forEach(item => {
-      if (item.selected && item.return_quantity > 0) {
-        const returnQty = parseFloat(String(item.return_quantity || 0));
-        const paidQty = Math.max(0, parseFloat(String(item.paid_quantity || 0)));
-        const paidReturnQty = Math.min(returnQty, paidQty);
-
-        if (paidReturnQty <= 0) return;
-
-        const unitPrice = parseFloat(String(item.unit_price || 0));
-        const discountPercent = parseFloat(String(item.discount_percent || 0));
-
-        const baseAmount = paidReturnQty * unitPrice;
-        const discountAmount = (baseAmount * discountPercent) / 100;
-        const afterDiscount = baseAmount - discountAmount;
-
-        // CRITICAL: If withhold_gst is true for B2B, do NOT add GST to credit amount
-        // GST stays with the company when goods are returned from GST customer
-        const shouldIncludeGst = !returnData.withhold_gst && selectedCustomer?.gst_number;
-        const taxPercent = shouldIncludeGst
-          ? parseFloat(String(item.tax_percent || 0))
-          : 0;
-        const itemTax = (afterDiscount * taxPercent) / 100;
-
-        subtotal += afterDiscount;
-        taxAmount += itemTax;
+    const calculate = async () => {
+      try {
+        const calculation = await calculateReturnPreview(returnDataRef.current, 'sales', isOnline);
+        if (requestId !== calculationRequestRef.current) return;
+        const totals = calculation.totals;
+        let calculatedIndex = 0;
+        let itemValuesChanged = false;
+        const items = returnDataRef.current.items.map(item => {
+          if (!item.selected || item.return_quantity <= 0) return item;
+          const calculated = calculation.items[calculatedIndex++] || {};
+          const totalAmount = Number(calculated.total_amount || 0);
+          const taxableAmount = Number(calculated.taxable_amount || 0);
+          const taxAmount = Number(calculated.tax_amount || 0);
+          if (
+            Number((item as any).total_amount || 0) === totalAmount &&
+            Number((item as any).taxable_amount || 0) === taxableAmount &&
+            Number((item as any).tax_amount || 0) === taxAmount
+          ) return item;
+          itemValuesChanged = true;
+          return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
+        });
+        dispatch({
+          type: 'SET_RETURN_DATA',
+          data: {
+            ...(itemValuesChanged ? { items } : {}),
+            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
+            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
+            total_amount: totals.total_amount || totals.final_amount || 0
+          }
+        });
+      } catch (error) {
+        if (requestId === calculationRequestRef.current) {
+          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
+        }
       }
-    });
-
-    const total = subtotal + taxAmount;
-
-    dispatch({
-      type: 'SET_RETURN_DATA',
-      data: { subtotal_amount: subtotal, tax_amount: taxAmount, total_amount: total }
-    });
-  }, [returnData.items, selectedCustomer, returnData.withhold_gst, dispatch]);
+    };
+    void calculate();
+  }, [returnData.items, returnData.withhold_gst, returnData.customer_id, isOnline, dispatch]);
 
   // Validate return
   const validateReturn = (): boolean => {
@@ -596,12 +576,35 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
       });
       setShowSuccessModal(true);
+      showFinancialEntryNotification({
+        title: 'Sales Return Saved Locally',
+        reference: offlineResult.credit_note_number || offlineResult.return_number,
+        amount: returnData.total_amount || 0,
+        status: 'queued',
+        impacts: [
+          'The return is stored locally and queued for backend posting.',
+          'Returned stock is updated on this device immediately.',
+          'Customer credit and GST reversal will confirm after sync succeeds.'
+        ]
+      });
 
       // STEP 3: Sync to server in background (non-blocking)
       returnsApi.createSaleReturn(returnData)
         .then(response => {
           if (response.data) {
             console.log('[SalesReturnFlow] ✅ Return synced to server:', response.data.return_no);
+            showFinancialEntryNotification({
+              title: 'Sales Return Posted',
+              reference: response.data.credit_note_no || response.data.return_no || offlineResult.credit_note_number || offlineResult.return_number,
+              amount: response.data.total_amount || returnData.total_amount || 0,
+              status: 'confirmed',
+              impacts: [
+                'The sales return is committed to the backend.',
+                'Inventory and batch balances are adjusted for the returned quantities.',
+                'Customer credit or outstanding balances are updated.',
+                'Sales GST reversal values are available for compliance reporting.'
+              ]
+            });
             // TODO: Update local record with server IDs
           }
         })
@@ -629,6 +632,18 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
             items: returnData.items.filter(item => item.selected && item.return_quantity > 0)
           });
           setShowSuccessModal(true);
+          showFinancialEntryNotification({
+            title: 'Sales Return Posted',
+            reference: credit_note_no || return_no || returnData.return_no,
+            amount: response.data.total_amount || returnData.total_amount || 0,
+            status: 'confirmed',
+            impacts: [
+              'The sales return is committed to the backend.',
+              'Inventory and batch balances are adjusted for the returned quantities.',
+              'Customer credit or outstanding balances are updated.',
+              'Sales GST reversal values are available for compliance reporting.'
+            ]
+          });
         }
       } catch (serverError: any) {
         const errorMessage = Array.isArray(serverError.message)
@@ -659,9 +674,9 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     }
 
     const options = {
-      margin: [5, 5, 5, 5],  // Smaller margins for more content space
+      margin: [5, 5, 5, 5] as [number, number, number, number],
       filename: `CreditNote-${createdReturnData.creditNoteNumber || createdReturnData.returnNumber}.pdf`,
-      image: { type: 'jpeg', quality: 1 },  // JPEG with max quality often renders better
+      image: { type: 'jpeg' as const, quality: 1 },
       html2canvas: {
         scale: 3,  // Reduced scale - too high can cause blurry output
         useCORS: true,
@@ -675,7 +690,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       jsPDF: {
         unit: 'mm',
         format: 'a4',
-        orientation: 'portrait',
+        orientation: 'portrait' as const,
         compress: false,  // Disable compression for sharper text
         precision: 16  // Higher precision
       },

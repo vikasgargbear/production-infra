@@ -14,6 +14,12 @@ from .....core.security.permissions import PermissionChecker
 
 # Service layer
 from ....services.master.department_branch_service import BranchService
+from ....services.document_number_service import DocumentNumberService
+from ....schemas.master.mutations import (
+    BranchCreateResponse,
+    BranchUpdateResponse,
+    MasterDeleteResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,7 +67,7 @@ async def get_branch(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/", response_model=Dict[str, Any])
+@router.post("/", response_model=BranchCreateResponse)
 @with_tenant_context
 async def create_branch(
     branch_data: Dict[str, Any],
@@ -76,8 +82,7 @@ async def create_branch(
         # Generate code if not provided
         branch_code = branch_data.get("branch_code")
         if not branch_code:
-            count = BranchService.count_branches(db, org_id)
-            branch_code = f"BR{count + 1:03d}"
+            branch_code = DocumentNumberService.generate_number(db, "branch", org_id)
         
         # Build address JSONB
         address_data = branch_data.get("address", {})
@@ -113,7 +118,7 @@ async def create_branch(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{branch_id}", response_model=Dict[str, Any])
+@router.put("/{branch_id}", response_model=BranchUpdateResponse)
 @with_tenant_context
 async def update_branch(
     branch_id: int,
@@ -181,7 +186,7 @@ async def update_branch(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{branch_id}", response_model=Dict[str, Any])
+@router.delete("/{branch_id}", response_model=MasterDeleteResponse)
 @with_tenant_context
 async def delete_branch(
     branch_id: int,

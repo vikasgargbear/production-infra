@@ -375,56 +375,9 @@ BEGIN
     
     NEW.cost_details := v_cost_details;
     
-    -- Update location stock
-    IF NEW.movement_direction = 'in' THEN
-        INSERT INTO inventory.location_wise_stock (
-            product_id,
-            batch_id,
-            location_id,
-            org_id,
-            quantity_available,
-            unit_cost,
-            stock_in_date
-        ) VALUES (
-            NEW.product_id,
-            NEW.batch_id,
-            NEW.location_id,
-            NEW.org_id,
-            NEW.base_quantity,
-            NEW.unit_cost,
-            CURRENT_DATE
-        )
-        ON CONFLICT (product_id, batch_id, location_id) DO UPDATE
-        SET 
-            quantity_available = inventory.location_wise_stock.quantity_available + NEW.base_quantity,
-            unit_cost = (
-                (inventory.location_wise_stock.quantity_available * inventory.location_wise_stock.unit_cost) +
-                (NEW.base_quantity * NEW.unit_cost)
-            ) / (inventory.location_wise_stock.quantity_available + NEW.base_quantity),
-            last_updated = CURRENT_TIMESTAMP;
-            
-    ELSIF NEW.movement_direction = 'out' THEN
-        -- Deduct stock using FIFO
-        WITH stock_deduction AS (
-            UPDATE inventory.location_wise_stock lws
-            SET 
-                quantity_available = GREATEST(0, 
-                    quantity_available - NEW.base_quantity),
-                last_movement_date = CURRENT_TIMESTAMP,
-                last_updated = CURRENT_TIMESTAMP
-            WHERE lws.product_id = NEW.product_id
-            AND lws.location_id = NEW.location_id
-            AND (NEW.batch_id IS NULL OR lws.batch_id = NEW.batch_id)
-            AND lws.quantity_available > 0
-            RETURNING lws.*
-        )
-        SELECT COUNT(*) INTO v_current_stock
-        FROM stock_deduction;
-        
-        IF v_current_stock IS NULL OR v_current_stock = 0 THEN
-            RAISE EXCEPTION 'No stock found for deduction';
-        END IF;
-    END IF;
+    -- Balance ownership stays in the application transaction. This trigger
+    -- validates and enriches the immutable movement only; mutating the stock
+    -- projection here would apply the same movement a second time.
     
     RETURN NEW;
 END;

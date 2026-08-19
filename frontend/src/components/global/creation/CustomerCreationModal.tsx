@@ -112,10 +112,7 @@ const CustomerCreationModal: React.FC<CustomerCreationModalProps> = ({ show, onC
         setSaving(true);
         setErrors([]);
         try {
-            const customerData = prepareCustomerForAPI({
-                ...newCustomer,
-                org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
-            });
+            const customerData = prepareCustomerForAPI(newCustomer);
 
             const response = await customersApi.create(customerData);
 

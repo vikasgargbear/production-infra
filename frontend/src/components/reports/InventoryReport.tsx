@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Package, AlertTriangle, TrendingDown, BarChart3, Download, Search, Filter, Calendar, Activity, Box, AlertCircle } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, BarChart3, Download, Search, Calendar, Activity, Box, AlertCircle } from 'lucide-react';
 import { Line, Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -16,7 +16,6 @@ import {
 } from 'chart.js';
 import apiClient from '../../services/api/apiClient';
 import { format, subDays } from 'date-fns';
-import { formatCurrency } from '../../utils/formatters';
 
 ChartJS.register(
   CategoryScale,

@@ -25,7 +25,7 @@ from .grn import (
 
 from .supplier_invoice import (
     # Enums
-    SupplierInvoiceStatus, PaymentStatus,
+    SupplierInvoiceStatus, SupplierInvoicePaymentStatus,
     # Invoice Item
     SupplierInvoiceItemBase, SupplierInvoiceItemCreate, SupplierInvoiceItemResponse,
     # Invoice
@@ -56,7 +56,7 @@ __all__ = [
     "GRNResponse", "GRNSummary", "GRNListResponse",
     "QCUpdateRequest", "BulkQCUpdate",
     # Invoice Enums
-    "SupplierInvoiceStatus", "PaymentStatus",
+    "SupplierInvoiceStatus", "SupplierInvoicePaymentStatus",
     # Invoice Item
     "SupplierInvoiceItemBase", "SupplierInvoiceItemCreate", "SupplierInvoiceItemResponse",
     # Invoice

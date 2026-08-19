@@ -4,13 +4,10 @@
  * Optimized with React.memo
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
     Eye,
     Edit2,
-    Printer,
-    Download,
-    MessageCircle,
     AlertTriangle,
     CheckCircle,
     TrendingDown

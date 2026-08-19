@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DollarSign, TrendingUp, CreditCard, PiggyBank, Download, Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
+import { DollarSign, TrendingUp, CreditCard, Download, Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -15,7 +15,7 @@ import {
   Filler
 } from 'chart.js';
 import apiClient from '../../services/api/apiClient';
-import { format, subDays, startOfWeek, startOfMonth, startOfQuarter, startOfYear } from 'date-fns';
+import { format, startOfWeek, startOfMonth, startOfQuarter, startOfYear } from 'date-fns';
 
 ChartJS.register(
   CategoryScale,

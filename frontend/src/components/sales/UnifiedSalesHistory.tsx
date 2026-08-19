@@ -10,7 +10,7 @@ import {
     LucideIcon
 } from 'lucide-react';
 import { invoicesApi } from '../../services/api';
-import { salesOrdersApi } from '../../services/api';
+import { ordersApi } from '../../services/api';
 import { challansApi } from '../../services/api';
 import { Pagination, StatusBadge, useToast } from '../global';
 import { format } from 'date-fns';
@@ -144,7 +144,7 @@ const UnifiedSalesHistory: React.FC<UnifiedSalesHistoryProps> = ({ onClose, onSe
 
             if (activeTab === 'all' || activeTab === 'sales_order') {
                 requests.push(
-                    salesOrdersApi.getAll({
+                    ordersApi.getAll({
                         skip: 0,
                         limit: 100,
                         from_date: dateFrom || undefined,

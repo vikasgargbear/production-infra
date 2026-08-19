@@ -31,7 +31,7 @@ class TestGRNAPI:
     def grn_api(self, api_client, api_base_url):
         """GRN API test helper"""
         api = PurchaseTestBase(api_client, api_base_url)
-        api.BASE_PATH = "/api/purchase/grn"
+        api.BASE_PATH = "/api/grn"
         return api
     
     @pytest.fixture
@@ -44,12 +44,12 @@ class TestGRNAPI:
         return {"supplier_id": 1, "supplier_name": "Test Supplier"}
     
     # =========================================================================
-    # ENDPOINT: GET /api/purchase/grn/generate-number
+    # ENDPOINT: POST /api/grn/generate-number
     # =========================================================================
     
     def test_generate_grn_number(self, grn_api):
         """Test GRN number generation"""
-        response = grn_api.get("/generate-number")
+        response = grn_api.post("/generate-number", {})
         
         grn_api.assert_has_fields(response, ["grn_number"])
         assert response["grn_number"], "GRN number should not be empty"
@@ -57,7 +57,7 @@ class TestGRNAPI:
     
     def test_generate_grn_number_format(self, grn_api):
         """Test GRN number follows expected format"""
-        response = grn_api.get("/generate-number")
+        response = grn_api.post("/generate-number", {})
         grn_number = response.get("grn_number", "")
         
         # GRN numbers typically have a prefix
@@ -67,7 +67,7 @@ class TestGRNAPI:
         """Test that generated numbers are unique"""
         numbers = set()
         for _ in range(3):
-            response = grn_api.get("/generate-number")
+            response = grn_api.post("/generate-number", {})
             number = response.get("grn_number")
             assert number not in numbers, "Duplicate GRN number generated"
             numbers.add(number)

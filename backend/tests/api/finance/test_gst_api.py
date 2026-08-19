@@ -13,6 +13,15 @@ from typing import Optional, Any
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
+
+
 class Colors:
     GREEN = '\033[92m'
     RED = '\033[91m'
@@ -81,10 +90,10 @@ def test_gst_dashboard() -> bool:
         print(f"   Input Tax: ₹{summary.get('total_input_tax', 0):,.2f}")
         print(f"   Net Payable: ₹{summary.get('net_payable', 0):,.2f}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("GST Dashboard endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_gst_returns_status() -> bool:
@@ -102,10 +111,10 @@ def test_gst_returns_status() -> bool:
         for ret in returns[:3]:
             print(f"      - {ret.get('return_type')}: {ret.get('status')} (Due: {ret.get('due_date')})")
         
-        return True
+        return finish_test(True)
     else:
         print_error("GST Returns Status endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_gst_compliance() -> bool:
@@ -121,10 +130,10 @@ def test_gst_compliance() -> bool:
         print(f"   Score: {data.get('compliance_score', 0)}%")
         print(f"   Pending Returns: {data.get('pending_returns', 0)}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("GST Compliance Status endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_gst_metrics() -> bool:
@@ -141,10 +150,10 @@ def test_gst_metrics() -> bool:
         print(f"   Output GST: ₹{data.get('output_gst', 0):,.2f}")
         print(f"   Input GST: ₹{data.get('input_gst', 0):,.2f}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("GST Metrics endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def test_gst_settings() -> bool:
@@ -160,10 +169,10 @@ def test_gst_settings() -> bool:
         print(f"   State Code: {data.get('state_code', 'N/A')}")
         print(f"   Registration Type: {data.get('registration_type', 'N/A')}")
         
-        return True
+        return finish_test(True)
     else:
         print_error("GST Settings endpoint failed")
-        return False
+        return finish_test(False)
 
 
 def run_all_tests():

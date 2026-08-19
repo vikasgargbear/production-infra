@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, Ref } from 'react';
-import { Search, FileText, Calendar, Package, User, ChevronRight, AlertCircle, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import { Search, FileText, Package, AlertCircle, ExternalLink } from 'lucide-react';
 import { invoicesApi } from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { format } from 'date-fns';
@@ -8,8 +8,7 @@ import { format } from 'date-fns';
 import type {
   Invoice,
   InvoiceFilters,
-  DateRange,
-  InvoiceDisplay
+  DateRange
 } from '../../sales/invoice/types/invoiceTypes';
 
 // ==================== COMPONENT PROPS ====================

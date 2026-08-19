@@ -4,9 +4,10 @@ import {
   X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
-import { customersApi, invoicesApi, apiClient } from '../../../services/api';
-// Payment API not yet implemented - will use direct apiClient when ready
-// import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
+import { customersApi, invoicesApi } from '../../../services/api';
+import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
+import { submitCustomerPayment } from '../../../services/api/modules/finance/payments.api';
+import { paymentsDataService } from '../../../services/offline/modules/payments/PaymentsDataService';
 import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
 import PaymentSummary from '../shared/PaymentSummary';
@@ -16,6 +17,8 @@ import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
 // Import global components
 import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
+import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 
 
 interface PaymentEntryContentProps {
@@ -59,6 +62,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Manual invoice selection state
   const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
   const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
+  const { isOnline } = useNetworkStatus();
 
   // Generate receipt number on component mount (local-only, instant)
   React.useEffect(() => {
@@ -211,27 +215,23 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
       // Make the actual API call to create payment
       // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
+      const customerPaymentData = {
+        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
+        customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
+        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
+        amount: parseFloat(payment.amount || '0'),
+        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
+        reference_number: payment.reference_number || `PMT-${Date.now()}`,
+        notes: payment.remarks || 'Direct payment received',
+        allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
+      };
+      const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
+
       try {
-        // Use the customer payment endpoint with all required fields
-        const customerPaymentData = {
-          customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-          customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
-          payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-          amount: parseFloat(payment.amount || '0'),
-          payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-          reference_number: payment.reference_number || `PMT-${Date.now()}`,
-          notes: payment.remarks || 'Direct payment received',
-          // Match backend schema field name
-          allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
-        };
+        const paymentResult = await submitCustomerPayment(customerId, customerPaymentData);
 
-        const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
-        const response = await apiClient.post(`/customers/${customerId}/payment`, customerPaymentData);
-
-        if (response.data) {
-          // Backend returns payment details
-          const paymentId = response.data.payment_id;
-          const paymentNumber = response.data.payment_reference || response.data.reference_number || payment.reference_number;
+        if (paymentResult.raw) {
+          const paymentNumber = paymentResult.paymentReference || payment.reference_number;
 
           setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
 
@@ -241,22 +241,53 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           if (payment.allocations && payment.allocations.length > 0) {
           }
 
+          showFinancialEntryNotification({
+            title: 'Payment Receipt Posted',
+            reference: paymentNumber || payment.receipt_no,
+            amount: paymentData.amount,
+            status: 'confirmed',
+            impacts: [
+              'This money is now marked as received.',
+              'The customer now owes less by this amount.',
+              'If you linked invoices, this payment is used against those bills.'
+            ]
+          });
           setMessage('Payment saved successfully!', 'success');
           setCurrentStep(3);
         } else {
           throw new Error('Failed to save payment');
         }
       } catch (apiError: any) {
+        if (!isOnline || apiError.code === 'ERR_NETWORK') {
+          const offlineId = await paymentsDataService.saveReceipt({
+            receipt_number: payment.receipt_no || `RCPT-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
+            receipt_date: customerPaymentData.payment_date,
+            customer_id: String(customerId),
+            customer_name: selectedCustomer?.customer_name || selectedCustomer?.name || '',
+            amount: customerPaymentData.amount,
+            payment_method: customerPaymentData.payment_mode as any,
+            notes: customerPaymentData.notes,
+            allocated_invoices: (payment.allocations || []).map((allocation: any) => ({
+              invoice_id: String(allocation.invoice_id),
+              invoice_number: String(allocation.invoice_number || allocation.invoice_id),
+              allocated_amount: Number(allocation.amount || allocation.allocated_amount || 0)
+            }))
+          });
 
-        // If backend returns 405, simulate success for now
-        // TODO: Fix backend payment endpoint
-        if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
-          const simulatedReceiptNo = `RCT-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-          setPaymentField('receipt_no', simulatedReceiptNo);
-          setMessage('Payment recorded locally (backend pending)', 'info');
+          setPaymentField('receipt_no', payment.receipt_no || offlineId);
+          showFinancialEntryNotification({
+            title: 'Payment Receipt Queued',
+            reference: payment.receipt_no || offlineId,
+            amount: paymentData.amount,
+            status: 'queued',
+            impacts: [
+              'The payment is saved on this device for now.',
+              'It will be sent to the main system when the connection works again.',
+              'The customer balance will change in the main system after that sync.'
+            ]
+          });
+          setMessage('Payment saved offline and queued for sync.', 'info');
           setCurrentStep(3);
-
-          // Log for debugging
         } else {
           throw apiError;
         }
@@ -423,8 +454,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           invoices.map(async (inv: any) => {
             try {
               // Fetch existing payment allocations for this invoice
-              const allocResponse = await apiClient.get(`/payment-allocation/invoice/${inv.invoice_id}/payments`);
-              const existingAllocations = allocResponse.data?.allocations || [];
+              const allocResponse = await paymentAllocationApi.getInvoicePayments(inv.invoice_id);
+              const existingAllocations = allocResponse.data?.payments || [];
               const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
                 sum + (alloc.allocated_amount || 0), 0);
 

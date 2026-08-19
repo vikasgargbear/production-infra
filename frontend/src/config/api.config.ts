@@ -11,11 +11,6 @@ export interface APIConfig {
   RETRY_ATTEMPTS: number;
   RETRY_DELAY: number;
   DEFAULT_HEADERS: Record<string, string>;
-  AUTH: {
-    TOKEN_KEY: string;
-    USER_KEY: string;
-    REFRESH_TOKEN_KEY: string;
-  };
   ENDPOINTS: Record<string, any>;
   ERROR_MESSAGES: Record<string, string>;
   SUCCESS_MESSAGES: Record<string, string>;
@@ -41,24 +36,8 @@ export const API_CONFIG: APIConfig = {
     'Accept': 'application/json',
   },
 
-  // Auth configuration
-  AUTH: {
-    TOKEN_KEY: 'authToken',
-    USER_KEY: 'pharma_user',  // Must match AuthContext.js
-    REFRESH_TOKEN_KEY: 'refreshToken',
-  },
-
   // API Endpoints organized by domain
   ENDPOINTS: {
-    // Authentication
-    AUTH: {
-      LOGIN: '/auth/login',
-      LOGOUT: '/auth/logout',
-      REFRESH: '/auth/refresh',
-      VERIFY: '/auth/verify',
-      REGISTER: '/auth/register',
-    },
-
     // Products
     PRODUCTS: {
       BASE: '/products/',  // Added trailing slash to prevent 307 redirects
@@ -106,8 +85,6 @@ export const API_CONFIG: APIConfig = {
       UPDATE: (id) => `invoices/${id}/`,
       DELETE: (id) => `invoices/${id}/`,
       DETAILS: (id) => `invoices/${id}`,
-      CALCULATE: 'invoices/calculate-live/',
-      VALIDATE: 'invoices/validate/',
       GENERATE_NUMBER: 'invoices/generate-number/',
       DRAFTS: 'invoices/drafts/',
       PDF: (id) => `invoices/${id}/pdf/`,
@@ -133,7 +110,6 @@ export const API_CONFIG: APIConfig = {
       CONFIRM: (id) => `/orders/${id}/confirm/`,  // Added trailing slash
       CANCEL: (id) => `/orders/${id}/cancel/`,  // Added trailing slash
       GENERATE_INVOICE: (id) => `/orders/${id}/generate-invoice/`,  // Added trailing slash
-      ITEMS: '/order-items/',  // Added trailing slash
     },
 
     // Sales Orders (enterprise-grade API)
@@ -178,11 +154,7 @@ export const API_CONFIG: APIConfig = {
       // Purchase returns (to suppliers)
       PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
       PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
-      // Legacy aliases for backward compatibility
-      CUSTOMER_RETURNS: '/sale-returns/',  // Alias for SALES
-      SUPPLIER_RETURNS: '/purchase-returns/',  // Alias for PURCHASE
       REASONS: '/metadata/return-reasons/',  // Use metadata endpoint
-      RETURNABLE_ITEMS: '/sale-returns/returnable-invoices/',  // Redirect to correct endpoint
     },
 
     // Party Ledger
@@ -264,25 +236,6 @@ export const API_CONFIG: APIConfig = {
 // Helper function to build full URL
 export const buildUrl = (endpoint) => {
   return `${API_CONFIG.BASE_URL}${API_CONFIG.API_VERSION}${endpoint}`;
-};
-
-// Helper function to get auth token
-export const getAuthToken = () => {
-  return localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
-};
-
-// Helper function to set auth token
-export const setAuthToken = (token) => {
-  if (token) {
-    localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
-  }
-};
-
-// Helper function to check if user is authenticated
-export const isAuthenticated = () => {
-  return !!getAuthToken();
 };
 
 export default API_CONFIG;

@@ -16,7 +16,7 @@ from .returns import (
 )
 
 from .billing import (
-    InvoiceStatus, PaymentMode, GSTType,
+    InvoiceStatus, PaymentMode, BillingGSTCode,
     InvoiceItemBase, InvoiceItemCreate,
     InvoiceBase, InvoiceCreate, InvoiceCreateRequest,
     InvoiceUpdate, InvoiceFilter, InvoiceCancelRequest,
@@ -49,7 +49,7 @@ __all__ = [
     "PurchaseReturnItem", "PurchaseReturnCreate", "PurchaseReturnResponse",
     "ReturnListResponse", "ReturnSummary",
     # Billing
-    "InvoiceStatus", "PaymentMode", "GSTType",
+    "InvoiceStatus", "PaymentMode", "BillingGSTCode",
     "InvoiceItemBase", "InvoiceItemCreate",
     "InvoiceBase", "InvoiceCreate", "InvoiceCreateRequest",
     "InvoiceUpdate", "InvoiceFilter", "InvoiceCancelRequest",

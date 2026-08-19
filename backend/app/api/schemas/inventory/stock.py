@@ -13,8 +13,8 @@ from enum import Enum
 # ENUMS
 # ============================================================================
 
-class StockMovementType(str, Enum):
-    """Types of stock movements"""
+class StockOperationMovementType(str, Enum):
+    """Detailed movement codes emitted by stock-operation endpoints."""
     SALE = "sale"
     PURCHASE = "purchase"
     STOCK_RECEIVE = "stock_receive"
@@ -28,8 +28,8 @@ class StockMovementType(str, Enum):
     WRITEOFF = "writeoff"
 
 
-class AdjustmentType(str, Enum):
-    """Types of stock adjustments"""
+class StockAdjustmentReason(str, Enum):
+    """Adjustment reasons accepted by stock-operation requests."""
     DAMAGE = "damage"
     EXPIRY = "expiry"
     COUNT = "count"
@@ -133,14 +133,14 @@ class StockAdjustmentItem(BaseModel):
     product_id: int
     batch_id: Optional[int] = None
     quantity: int = Field(..., gt=0)
-    adjustment_type: AdjustmentType
+    adjustment_type: StockAdjustmentReason
     reason: Optional[str] = None
 
 
 class StockAdjustmentRequest(BaseModel):
     """Request to create stock adjustment"""
     adjustment_date: date
-    adjustment_type: AdjustmentType
+    adjustment_type: StockAdjustmentReason
     reason: Optional[str] = None
     items: List[StockAdjustmentItem] = Field(..., min_length=1)
 

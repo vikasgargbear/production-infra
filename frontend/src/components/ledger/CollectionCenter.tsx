@@ -5,42 +5,23 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Users,
-  Phone,
   Mail,
   MessageSquare,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
   AlertCircle,
-  CheckCircle,
   Clock,
   Target,
-  Activity,
-  FileText,
-  Download,
-  Filter,
   Search,
-  ChevronRight,
-  UserCheck,
-  MapPin,
   Bell,
-  Send,
-  MessageCircle,
   PhoneCall,
   Zap,
-  ArrowUp,
-  ArrowDown,
   ExternalLink,
-  RefreshCw
 } from 'lucide-react';
-import { format, parseISO, differenceInDays, addDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
-import { DataTable, StatusBadge, Select, DatePicker, ModuleHeader } from '../global';
-import { formatCurrency } from '../../utils/formatters';
+import { ModuleHeader } from '../global';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
 
 interface CollectionCenterProps {

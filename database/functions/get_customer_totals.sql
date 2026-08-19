@@ -51,13 +51,13 @@ BEGIN
     
     -- Get total credit notes (reduce what customer owes)
     SELECT COALESCE(SUM(credit_amount), 0) INTO v_total_credit_notes
-    FROM sales.credit_notes
+    FROM financial.credit_notes
     WHERE customer_id = p_customer_id
     AND status = 'approved';
     
     -- Get total debit notes (increase what customer owes)
     SELECT COALESCE(SUM(debit_amount), 0) INTO v_total_debit_notes
-    FROM sales.debit_notes
+    FROM financial.debit_notes
     WHERE customer_id = p_customer_id
     AND status = 'approved';
     

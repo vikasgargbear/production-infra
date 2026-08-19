@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Wallet, TrendingUp, CreditCard, Clock, DollarSign, CheckCircle,
-  XCircle, AlertCircle, Download, RefreshCw, Loader2, Filter, Calendar,
-  PieChart, BarChart3
+  XCircle, AlertCircle, Download, RefreshCw, Loader2
 } from 'lucide-react';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
@@ -18,7 +17,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
 

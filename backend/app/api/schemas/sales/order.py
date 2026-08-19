@@ -9,22 +9,12 @@ from decimal import Decimal
 from uuid import UUID
 from enum import Enum
 
+from ....core.utils.constants import OrderStatus
+
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-class OrderStatus(str, Enum):
-    """Order status lifecycle"""
-    DRAFT = "draft"
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    PROCESSING = "processing"
-    PACKED = "packed"
-    SHIPPED = "shipped"
-    DELIVERED = "delivered"
-    CANCELLED = "cancelled"
-
 
 class OrderType(str, Enum):
     """Order types"""
@@ -149,7 +139,7 @@ class OrderBase(BaseModel):
 class OrderCreate(OrderBase):
     """Schema for creating an order"""
     
-    items: List[OrderItemCreate] = Field(..., min_length=1)
+    items: List[OrderItemCreate] = Field(..., min_length=1, max_length=200)
 
     @field_validator("delivery_date")
     @classmethod

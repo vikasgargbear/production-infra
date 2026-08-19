@@ -9,6 +9,7 @@ import logging
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ...services.payroll.leave_service import LeaveService
+from ...schemas.payroll import LeaveApplicationMutationResponse, PayrollCountResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,7 +33,7 @@ async def get_leave_balances(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/balances/initialize", response_model=Dict[str, Any])
+@router.post("/balances/initialize", response_model=PayrollCountResponse)
 @with_tenant_context
 async def initialize_leave_balances(
     payload: Dict[str, Any],
@@ -77,7 +78,7 @@ async def list_leave_applications(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/applications", response_model=Dict[str, Any])
+@router.post("/applications", response_model=LeaveApplicationMutationResponse)
 @with_tenant_context
 async def apply_for_leave(
     payload: Dict[str, Any],
@@ -101,7 +102,7 @@ async def apply_for_leave(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/applications/{application_id}/approve", response_model=Dict[str, Any])
+@router.post("/applications/{application_id}/approve", response_model=LeaveApplicationMutationResponse)
 @with_tenant_context
 async def approve_leave_application(
     application_id: int,
@@ -125,7 +126,7 @@ async def approve_leave_application(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/applications/{application_id}/reject", response_model=Dict[str, Any])
+@router.post("/applications/{application_id}/reject", response_model=LeaveApplicationMutationResponse)
 @with_tenant_context
 async def reject_leave_application(
     application_id: int,

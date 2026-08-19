@@ -48,7 +48,15 @@ async def get_returnable_invoices(
 ):
     """Get supplier invoices that have returnable items"""
     try:
-        invoices = SupplierInvoiceService.list_returnable_invoices(db, supplier_id, from_date, to_date, limit, skip)
+        invoices = SupplierInvoiceService.list_returnable_invoices(
+            db,
+            str(context.org_id),
+            supplier_id,
+            from_date,
+            to_date,
+            limit,
+            skip,
+        )
         result = []
         for invoice in invoices:
             invoice["invoice_type"] = "supplier"

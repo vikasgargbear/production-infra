@@ -8,7 +8,10 @@ Comprehensive code quality and schema validation tools.
 scripts/
 ├── audit/
 │   ├── comprehensive_schema_audit.py  # Full schema validation
+│   ├── payment_idempotency_readiness.py # Dedicated payment replay store gate
 │   ├── validate_constants.py          # Constants usage checker
+│   ├── transaction_integrity_audit.py # Stock and finance release blockers
+│   ├── contract_consistency_audit.py  # Identifier and API contract blockers
 │   └── README.md                       # This file
 ├── audit_schema.py                     # Legacy schema audit
 ├── audit_sales_schema.py               # Sales module specific
@@ -55,6 +58,48 @@ python scripts/audit/validate_constants.py --show-all
 - Use `OrderStatus.PENDING.value`
 - Use `InvoiceStatus.GENERATED.value`
 - Import from `app.core.utils.constants`
+
+### 3. Transaction Integrity Audit
+
+**Purpose**: Fails the release when inventory or finance has competing mutation
+owners, missing payment idempotency, mutable posted journals, unreproducible
+allocation triggers, or duplicated calculation ownership.
+
+```bash
+python scripts/audit/transaction_integrity_audit.py
+```
+
+This audit is intentionally fail-closed. A non-zero exit identifies production
+blockers that require an implemented invariant, not an allowlist entry.
+
+### 4. Contract Consistency Audit
+
+**Purpose**: Fails the release for competing document-number authorities,
+divergent status enums, untrusted GST rate inputs, tenant/branch identifier
+conflicts, lossy money or timestamp serialization, and untyped mutation
+responses.
+
+```bash
+python scripts/audit/contract_consistency_audit.py
+```
+
+This audit reports checked-in conflicts without assuming which unbaselined SQL
+definition is deployed. Resolve an issue by establishing and testing one
+authority; do not suppress the code with an allowlist.
+
+### 5. Payment Idempotency Readiness
+
+**Purpose**: Prevents promotion while payment replay relies on a temporary
+payment-note field, the live schema is unbaselined, or payment mutations remain
+uncovered.
+
+```bash
+python scripts/audit/payment_idempotency_readiness.py
+```
+
+The audit consumes `docs/architecture/payment-idempotency-store.json`. That
+contract is migration-neutral and must not be marked implemented until the live
+schema baseline and reviewed Alembic migration exist.
 
 ## Best Practices
 
@@ -111,6 +156,15 @@ Add to your CI pipeline:
   
 - name: Schema Audit
   run: python scripts/audit/comprehensive_schema_audit.py
+
+- name: Transaction Integrity Audit
+  run: python scripts/audit/transaction_integrity_audit.py
+
+- name: Payment Idempotency Readiness
+  run: python scripts/audit/payment_idempotency_readiness.py
+
+- name: Contract Consistency Audit
+  run: python scripts/audit/contract_consistency_audit.py
 ```
 
 ### IDE Integration

@@ -18,7 +18,6 @@ interface OrderFormData {
   discount?: string;
   final_amount?: string;
   notes?: string;
-  org_id?: string;
 }
 
 interface OrderFormElements extends HTMLFormControlsCollection {
@@ -52,9 +51,6 @@ interface GeneratingInvoiceState {
 interface OrderInvoicesState {
   [orderId: number]: InvoiceDetails;
 }
-
-// Get org_id from auth storage (set during login/setup)
-const ORG_ID = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || '';
 
 // Define the Orders component with uncontrolled inputs for better typing performance
 const Orders: React.FC = () => {
@@ -139,9 +135,6 @@ const Orders: React.FC = () => {
       for (let [key, value] of formData.entries()) {
         (orderData as any)[key] = value;
       }
-
-      // Add organization ID
-      orderData.org_id = ORG_ID;
 
       // Ensure required fields are present
       if (!orderData.customer_id) {

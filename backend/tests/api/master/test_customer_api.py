@@ -10,12 +10,22 @@ import os
 import sys
 import json
 import requests
+import pytest
 from datetime import date, timedelta
 import random
 import string
 
 # Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+
+def finish_test(value, predicate=None):
+    """Assert under pytest, preserve return values for script-mode runs."""
+    ok = predicate(value) if predicate else bool(value)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        assert ok
+        return None
+    return value
 
 
 def generate_random_phone():
@@ -167,15 +177,36 @@ def test_create_customer():
         print(f"   Customer Code: {result.get('customer_code')}")
         print(f"   Name: {result.get('customer_name')}")
         
-        return customer_id
+        return finish_test(customer_id)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
+        return finish_test(None)
+
+
+def get_any_customer_id():
+    """Get any customer ID for standalone pytest execution."""
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/customers/?limit=1", headers=headers, timeout=30)
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        customers = result if isinstance(result, list) else result.get("data", [])
+        if customers:
+            return customers[0].get("customer_id") or customers[0].get("id")
+    except requests.RequestException:
         return None
+    return None
 
 
-def test_create_address(customer_id):
+def test_create_address(customer_id=None):
     """Test address creation for existing customer"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for address creation test")
+
     print("\n" + "=" * 70)
     print("TEST 2: CREATE CUSTOMER ADDRESS")
     print("=" * 70)
@@ -212,15 +243,20 @@ def test_create_address(customer_id):
         print(f"   Address ID: {result.get('address_id')}")
         print(f"   Customer ID: {result.get('customer_id')}")
         
-        return result.get('address_id')
+        return finish_test(result.get('address_id'))
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return None
+        return finish_test(None)
 
 
-def test_list_addresses(customer_id):
+def test_list_addresses(customer_id=None):
     """Test listing addresses for a customer"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for address listing test")
+
     print("\n" + "=" * 70)
     print("TEST 3: LIST CUSTOMER ADDRESSES")
     print("=" * 70)
@@ -255,15 +291,20 @@ def test_list_addresses(customer_id):
             print(f"     Pincode: {addr.get('pincode')}")
             print(f"     Is Default: {addr.get('is_default')}")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
-def test_get_customer(customer_id):
+def test_get_customer(customer_id=None):
     """Test getting customer details with addresses"""
+    if customer_id is None:
+        customer_id = get_any_customer_id()
+    if customer_id is None:
+        pytest.skip("No customer available for customer detail test")
+
     print("\n" + "=" * 70)
     print("TEST 4: GET CUSTOMER DETAILS")
     print("=" * 70)
@@ -294,11 +335,11 @@ def test_get_customer(customer_id):
         print(f"   Credit Limit: ₹{result.get('credit_limit')}")
         print(f"   Addresses: {len(result.get('addresses', []))} found")
         
-        return True
+        return finish_test(True)
         
     except requests.RequestException as e:
         print(f"❌ Request failed: {e}")
-        return False
+        return finish_test(False)
 
 
 def print_verification_queries(customer_id, address_id):

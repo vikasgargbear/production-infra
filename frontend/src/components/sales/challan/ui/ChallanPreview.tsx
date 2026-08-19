@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatCurrency } from '../../../../utils/formatters';
-import type { Challan, ChallanItem, CustomerDetails, CompanyInfo } from '../types/challanTypes';
+import type { Challan, CompanyInfo } from '../types/challanTypes';
 
 // Use canonical types from types/challanTypes - DO NOT define duplicates
 
@@ -22,25 +22,12 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
         });
     };
 
-    // Calculate totals
-    const calculateTaxableAmount = () => {
-        return challan.items.reduce((sum, item) => {
-            const price = item.unit_price || item.unit_price || item.sale_price || 0;
-            return sum + ((parseFloat(String(item.quantity)) || 0) * price);
-        }, 0);
-    };
-
-    const calculateTotalGst = () => {
-        return challan.items.reduce((sum, item) => {
-            const price = item.unit_price || item.unit_price || item.sale_price || 0;
-            const taxableAmount = (parseFloat(String(item.quantity)) || 0) * price;
-            const gstPercent = item.gst_percent || item.tax_percent || 0;
-            return sum + ((taxableAmount * gstPercent) / 100);
-        }, 0);
-    };
-
-    const calculateGrandTotal = () => {
-        return calculateTaxableAmount() + calculateTotalGst() + (parseFloat(String(challan.freight_charges)) || 0);
+    const totals = {
+        taxable_amount: challan.taxable_amount || 0,
+        total_tax_amount: challan.total_tax_amount || 0,
+        total_tax: challan.total_tax_amount || 0,
+        total_amount: challan.total_amount,
+        final_amount: challan.total_amount
     };
 
     return (
@@ -233,11 +220,9 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                         </thead>
                         <tbody>
                             {challan.items.map((item, index) => {
-                                const price = item.unit_price || item.unit_price || item.sale_price || 0;
-                                const taxableAmount = (parseFloat(String(item.quantity)) || 0) * price;
+                                const price = item.unit_price || item.sale_price || 0;
                                 const gstPercent = item.gst_percent || item.tax_percent || 0;
-                                const gstAmount = (taxableAmount * gstPercent) / 100;
-                                const totalAmount = taxableAmount + gstAmount;
+                                const totalAmount = item.line_total || item.total || 0;
                                 return (
                                     <tr key={index} className="border-b border-gray-200">
                                         <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
@@ -285,11 +270,11 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                             <div className="p-3 space-y-1">
                                 <div className="flex justify-between text-xs">
                                     <span className="text-gray-600">Taxable Amount:</span>
-                                    <span className="font-medium">{formatCurrency(calculateTaxableAmount())}</span>
+                                    <span className="font-medium">{formatCurrency(totals.taxable_amount || 0)}</span>
                                 </div>
                                 <div className="flex justify-between text-xs">
                                     <span className="text-gray-600">Total GST:</span>
-                                    <span className="font-medium">{formatCurrency(calculateTotalGst())}</span>
+                                    <span className="font-medium">{formatCurrency(totals.total_tax_amount || totals.total_tax || 0)}</span>
                                 </div>
                                 {(challan.freight_charges ?? 0) > 0 && (
                                     <div className="flex justify-between text-xs">
@@ -299,7 +284,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                                 )}
                                 <div className="flex justify-between pt-1 border-t border-gray-300">
                                     <span className="text-sm font-bold text-gray-900">Grand Total:</span>
-                                    <span className="text-sm font-bold text-blue-600">{formatCurrency(calculateGrandTotal())}</span>
+                                    <span className="text-sm font-bold text-blue-600">{formatCurrency(totals.final_amount || totals.total_amount || 0)}</span>
                                 </div>
                             </div>
                         </div>

@@ -13,6 +13,7 @@ from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_contex
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ...services.loyalty.service import LoyaltyService
+from ...schemas.loyalty.loyalty import LoyaltyProgramCreateResponse
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class PointsRedemption(BaseModel):
     invoice_id: int
     points_to_redeem: int
 
-@router.post("/programs", response_model=dict)
+@router.post("/programs", response_model=LoyaltyProgramCreateResponse)
 @with_tenant_context
 async def create_loyalty_program(
     program: LoyaltyProgramCreate,

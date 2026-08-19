@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Package, Search, CheckCircle, AlertCircle, ChevronLeft,
-  ChevronRight, Calendar, Hash, DollarSign, Percent, Info,
-  SkipForward, Save, AlertTriangle, Plus, Trash2
+  Package, CheckCircle, AlertCircle, ChevronLeft,
+  Calendar, DollarSign, Percent, Info,
+  Save, AlertTriangle, Plus, Trash2
 } from 'lucide-react';
-import { purchasesApi } from '../../../services/api';
-import { debounce } from 'lodash';
 import { PurchaseProductSearch } from '../../global';
 
 /**

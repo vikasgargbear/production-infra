@@ -17,6 +17,7 @@ import { storageService, STORAGE_KEYS } from '../../../../services/core/storageS
 import { deductStockLocally } from '../../utils/offlineSaveHelpers';
 import type { Invoice, InvoiceItem } from './useInvoiceLogic';
 import type { CreatedInvoiceData } from '../types/invoiceTypes';
+import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
 
 export interface UseInvoiceSaveProps {
     invoice: Invoice;
@@ -132,6 +133,35 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             setShowSuccessModal(true);
             storageService.removeItem(STORAGE_KEYS.INVOICE_DRAFT);
             localStorage.removeItem('invoice_draft');
+        },
+
+        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Sales Invoice Posted',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'confirmed',
+                impacts: [
+                    'The invoice is committed to the backend sales ledger.',
+                    'Inventory is reduced against the selected batches.',
+                    'Customer receivable and outstanding balances are refreshed.',
+                    'Output GST values are recorded for compliance reporting.'
+                ]
+            });
+        },
+
+        onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Sales Invoice Saved Locally',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'queued',
+                impacts: [
+                    'The invoice is stored locally and queued for backend posting.',
+                    'Stock is reserved on this device immediately.',
+                    'Receivable and GST confirmation will appear after sync succeeds.'
+                ]
+            });
         },
     });
 

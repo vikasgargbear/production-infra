@@ -252,13 +252,7 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const sellingPrice = parseFloat(String(item.selling_price)) || 0;
                   const discountPercent = parseFloat(String(item.discount_percent)) || 0;
                   const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-
-                  // Calculate amounts
-                  const baseAmount = quantity * cost;
-                  const discountAmount = (baseAmount * discountPercent) / 100;
-                  const discountedAmount = baseAmount - discountAmount;
-                  const taxAmount = (discountedAmount * taxPercent) / 100;
-                  const totalAmount = discountedAmount + taxAmount;
+                  const totalAmount = Number(item.total_amount || 0);
 
                   // Format expiry date if exists
                   const expiryDisplay = (() => {
@@ -501,15 +495,10 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                 const cost = parseFloat(String(item.unit_price)) || parseFloat(String(item.unit_price)) || 0;
                 const mrp = parseFloat(String(item.mrp)) || 0;
                 const sellingPrice = parseFloat(String(item.selling_price)) || 0;
-                const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-
-                // Calculate amounts
-                const baseAmount = quantity * cost;
-                const discountAmount = (baseAmount * discountPercent) / 100;
-                const discountedAmount = baseAmount - discountAmount;
-                const taxAmount = (discountedAmount * taxPercent) / 100;
-                const totalWithTax = discountedAmount + taxAmount;
+                const discountPercent = parseFloat(String(item.discount_percent || 0));
+                const taxPercent = parseFloat(String(item.tax_percent || 0));
+                const taxAmount = Number(item.tax_amount || 0);
+                const totalWithTax = Number(item.total_amount || 0);
 
                 // Format expiry date if exists
                 const expiryDisplay = (() => {
@@ -577,21 +566,12 @@ const PurchaseEntryFlow: React.FC<PurchaseEntryFlowProps> = ({ onClose, prefille
                   const gstBreakdown = {};
                   (purchase.items || []).forEach(item => {
                     const taxPercent = parseFloat(String(item.tax_percent)) || 0;
-                    const quantity = parseFloat(String(item.quantity)) || 0;
-                    const cost = parseFloat(String(item.unit_price)) || parseFloat(String(item.unit_price)) || 0;
-                    const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-
-                    const baseAmount = quantity * cost;
-                    const discountAmount = (baseAmount * discountPercent) / 100;
-                    const discountedAmount = baseAmount - discountAmount;
-                    const taxAmount = (discountedAmount * taxPercent) / 100;
-
                     if (taxPercent > 0) {
                       if (!gstBreakdown[taxPercent]) {
                         gstBreakdown[taxPercent] = { taxable: 0, tax: 0 };
                       }
-                      gstBreakdown[taxPercent].taxable += discountedAmount;
-                      gstBreakdown[taxPercent].tax += taxAmount;
+                      gstBreakdown[taxPercent].taxable += Number(item.taxable_amount || 0);
+                      gstBreakdown[taxPercent].tax += Number(item.tax_amount || 0);
                     }
                   });
 

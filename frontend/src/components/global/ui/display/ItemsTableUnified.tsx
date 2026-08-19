@@ -145,16 +145,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     };
 
     const calculateItemTotal = (item: ItemsTableItem): number => {
-        const baseQuantity = parseFloat(String(item.quantity)) || 0;
-        const unit_price = parseFloat(String(item.unit_price || item.unit_price)) || 0;
-        const discount = parseFloat(String(item.discount_percent || item.discount || 0)) || 0;
-        const gstPercent = parseFloat(String(item.gst_percent || item.tax_rate || 0)) || 0;
-
-        const subtotal = baseQuantity * unit_price;
-        const discountAmount = (subtotal * discount) / 100;
-        const taxableAmount = subtotal - discountAmount;
-        const gstAmount = (taxableAmount * gstPercent) / 100;
-        return taxableAmount + gstAmount;
+        return Number(item.line_total ?? item.total ?? 0);
     };
 
     useEffect(() => {
@@ -169,7 +160,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 }
             }
         }
-    }, [items.length, readOnly]);
+    }, [items, readOnly]);
 
     return (
         <div className={`overflow-x-auto ${className}`}>

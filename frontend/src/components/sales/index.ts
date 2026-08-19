@@ -19,12 +19,6 @@ export interface InvoiceData {
     [key: string]: unknown;
 }
 
-export interface InvoiceTotals {
-    subtotal: number;
-    taxAmount: number;
-    total: number;
-}
-
 export interface ValidationResult {
     isValid: boolean;
     errors: Record<string, string>;
@@ -87,30 +81,6 @@ export const INVOICE_STATUS = {
     PAID: 'paid',
     CANCELLED: 'cancelled'
 } as const;
-
-// Sales utilities
-export const calculateInvoiceTotal = (
-    items: InvoiceItem[],
-    discountAmount: number = 0,
-    otherCharges: number = 0
-): InvoiceTotals => {
-    const subtotal = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
-        return sum + amount;
-    }, 0);
-
-    const taxAmount = items.reduce((sum, item) => {
-        const amount = parseFloat(String(item.quantity)) * parseFloat(String(item.unit_price || 0));
-        const taxRate = parseFloat(String(item.tax_rate || item.tax_percent || 0));
-        return sum + (amount * taxRate / 100);
-    }, 0);
-
-    return {
-        subtotal,
-        taxAmount,
-        total: subtotal + taxAmount - discountAmount + otherCharges
-    };
-};
 
 export const validateInvoiceData = (invoiceData: InvoiceData): ValidationResult => {
     const errors: Record<string, string> = {};

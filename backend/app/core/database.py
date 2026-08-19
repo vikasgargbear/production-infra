@@ -4,16 +4,24 @@ Database Configuration
 import os
 import socket
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import Generator
 from urllib.parse import urlparse, urlunparse
 
-# Get database URL from environment or use default
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/pharma"
-).strip()  # Remove leading/trailing whitespace
+from .env import is_production
+
+_configured_database_url = os.getenv("DATABASE_URL", "").strip()
+if is_production() and (
+    not _configured_database_url
+    or "[YOUR-" in _configured_database_url
+    or _configured_database_url == "postgresql://postgres:password@localhost:5432/pharma"
+):
+    raise RuntimeError("DATABASE_URL must be explicitly configured in production")
+
+DATABASE_URL = (
+    _configured_database_url
+    or "postgresql://postgres:password@localhost:5432/pharma"
+)
 
 # Force IPv4 by adding target_session_attrs to connection string for Supabase
 if "supabase.co" in DATABASE_URL and "target_session_attrs" not in DATABASE_URL:

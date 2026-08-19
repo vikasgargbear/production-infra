@@ -17,6 +17,7 @@ from ..inventory.inventory_service import InventoryService
 from ...schemas.inventory.inventory import StockMovementCreate
 from ....core.utils.constants import ReturnStatus, DispositionType
 from ....core.utils.branch_utils import resolve_location_id
+from ....core.money import decimal_value, money, rupees
 
 logger = logging.getLogger(__name__)
 
@@ -206,11 +207,19 @@ class ReturnService:
         Returns:
             Dict with base_value, discount_amount, return_value, tax_amount, total
         """
-        base_value = round(quantity * unit_price, 2)
-        discount_amount = round(base_value * discount_percent / 100, 2)
-        return_value = round(base_value - discount_amount, 2)
-        tax_amount = round(return_value * tax_percent / 100, 2)
-        total = round(return_value + tax_amount, 2)
+        quantity_value = decimal_value(quantity, "quantity", minimum=Decimal("0"))
+        unit_price_value = decimal_value(unit_price, "unit_price", minimum=Decimal("0"))
+        discount_rate = decimal_value(
+            discount_percent, "discount_percent", minimum=Decimal("0"), maximum=Decimal("100")
+        )
+        tax_rate = decimal_value(
+            tax_percent, "tax_percent", minimum=Decimal("0"), maximum=Decimal("100")
+        )
+        base_value = money(quantity_value * unit_price_value)
+        discount_amount = money(base_value * discount_rate / Decimal("100"))
+        return_value = base_value - discount_amount
+        tax_amount = money(return_value * tax_rate / Decimal("100"))
+        total = money(return_value + tax_amount)
 
         return {
             "base_value": base_value,
@@ -284,7 +293,10 @@ class ReturnService:
     @staticmethod
     def calculate_return_totals(
         items: list,
-        gst_type: str = "CGST/SGST"
+        gst_type: str = "CGST/SGST",
+        include_gst: bool = True,
+        cap_to_paid_quantity: bool = False,
+        exclude_free_quantity_from_taxable: bool = False
     ) -> Dict[str, Any]:
         """
         Calculate all return totals from items list.
@@ -298,6 +310,13 @@ class ReturnService:
         """
         from ..compliance.gst_service import GSTService
         
+        if not isinstance(items, list) or not items:
+            raise ValueError("items must contain at least one return line")
+
+        normalized_gst_type = str(gst_type).strip().upper()
+        if normalized_gst_type not in {"CGST/SGST", "IGST"}:
+            raise ValueError("gst_type must be 'IGST' or 'CGST/SGST'")
+
         subtotal = Decimal("0")
         tax_amount = Decimal("0")
         cgst_amount = Decimal("0")
@@ -305,21 +324,54 @@ class ReturnService:
         igst_amount = Decimal("0")
         total_amount = Decimal("0")
         total_return_quantity = Decimal("0")
+        calculated_items = []
         
         for item in items:
             # Handle both return_quantity and quantity field names
-            qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
-            rate = Decimal(str(item.get("unit_price") or item.get("rate", 0)))
-            discount_percent = Decimal(str(item.get("discount_percent", 0)))
-            tax_percent = Decimal(str(item.get("tax_percent", 0)))
+            requested_qty = decimal_value(
+                item.get("return_quantity") or item.get("quantity", 0),
+                "return_quantity",
+                minimum=Decimal("0"),
+            )
+            if requested_qty <= 0:
+                raise ValueError("return_quantity must be greater than 0")
+            paid_qty = decimal_value(item.get("paid_quantity", 0) or 0, "paid_quantity", minimum=Decimal("0"))
+            free_qty = decimal_value(item.get("free_quantity", 0) or 0, "free_quantity", minimum=Decimal("0"))
+            rate = decimal_value(
+                item.get("unit_price") or item.get("rate", 0), "unit_price", minimum=Decimal("0")
+            )
+            discount_percent = decimal_value(
+                item.get("discount_percent", 0),
+                "discount_percent",
+                minimum=Decimal("0"),
+                maximum=Decimal("100"),
+            )
+            tax_percent = (
+                decimal_value(
+                    item.get("tax_percent", item.get("gst_percent", 0)),
+                    "tax_percent",
+                    minimum=Decimal("0"),
+                    maximum=Decimal("100"),
+                )
+                if include_gst else Decimal("0")
+            )
+
+            qty = requested_qty
+
+            if cap_to_paid_quantity and paid_qty > 0:
+                qty = min(qty, paid_qty)
+            elif exclude_free_quantity_from_taxable and free_qty > 0:
+                qty = max(Decimal("0"), qty - free_qty)
             
             # Calculate with discount
-            base_amount = qty * rate
-            discount_amount = (base_amount * discount_percent) / 100
+            base_amount = money(qty * rate)
+            discount_amount = money(base_amount * discount_percent / Decimal("100"))
             taxable_amount = base_amount - discount_amount
             
             # Use GSTService for consistent tax calculations
-            gst_components = GSTService.calculate_gst_components(taxable_amount, tax_percent, gst_type)
+            gst_components = GSTService.calculate_gst_components(
+                taxable_amount, tax_percent, normalized_gst_type
+            )
             item_tax = gst_components["total_tax_amount"]
             item_cgst = gst_components["cgst_amount"]
             item_sgst = gst_components["sgst_amount"]
@@ -331,16 +383,35 @@ class ReturnService:
             sgst_amount += item_sgst
             igst_amount += item_igst
             total_amount += taxable_amount + item_tax
-            total_return_quantity += qty
+            total_return_quantity += requested_qty
+            calculated_items.append({
+                "product_id": item.get("product_id"),
+                "return_quantity": requested_qty,
+                "taxable_quantity": qty,
+                "unit_price": rate,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+                "tax_percent": tax_percent,
+                "taxable_amount": taxable_amount,
+                "cgst_amount": item_cgst,
+                "sgst_amount": item_sgst,
+                "igst_amount": item_igst,
+                "tax_amount": item_tax,
+                "total_amount": taxable_amount + item_tax,
+            })
+
+        rounded_total = rupees(total_amount)
         
         return {
-            "subtotal": round(subtotal, 2),
-            "tax_amount": round(tax_amount, 2),
-            "cgst_amount": round(cgst_amount, 2),
-            "sgst_amount": round(sgst_amount, 2),
-            "igst_amount": round(igst_amount, 2),
-            "total_amount": round(total_amount, 2),
-            "total_return_quantity": round(total_return_quantity, 2)
+            "subtotal": money(subtotal),
+            "tax_amount": money(tax_amount),
+            "cgst_amount": money(cgst_amount),
+            "sgst_amount": money(sgst_amount),
+            "igst_amount": money(igst_amount),
+            "round_off_amount": money(rounded_total - total_amount),
+            "total_amount": rounded_total,
+            "total_return_quantity": total_return_quantity,
+            "calculated_items": calculated_items,
         }
     
     # ==================== READ OPERATIONS ====================
@@ -1269,6 +1340,7 @@ class ReturnService:
         location_id = resolve_location_id(db, org_id, branch_id)
 
         values_list = []
+        location_updates = []
         params = {
             "org_id": org_id,
             "movement_date": date.today(),
@@ -1307,6 +1379,14 @@ class ReturnService:
             params[f"quantity_{idx}"] = item["return_quantity"]  # already rounded to 2 decimals
             params[f"reason_{idx}"] = item.get("item_return_reason", "Customer Return")
             params[f"notes_{idx}"] = f"Return #{return_number}"
+            if saleable_qty > 0:
+                location_updates.append({
+                    "org_id": org_id,
+                    "product_id": item["product_id"],
+                    "batch_id": item.get("batch_id"),
+                    "quantity": item["return_quantity"],
+                    "location_id": location_id,
+                })
         
         if not values_list:
             return
@@ -1321,4 +1401,9 @@ class ReturnService:
         
         db.execute(text(sql), params)
         logger.info(f"Bulk recorded {len(values_list)} stock movements for return_id={return_id}")
-
+        if location_updates:
+            InventoryService.bulk_update_location_wise_stock(
+                db,
+                location_updates,
+                direction="in",
+            )

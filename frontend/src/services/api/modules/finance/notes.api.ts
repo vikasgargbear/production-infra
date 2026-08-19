@@ -46,11 +46,23 @@ export interface NoteItem {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/notes',
-    CREDIT: '/notes/credit',
-    DEBIT: '/notes/debit',
-    REASONS: '/notes/reasons'
+    BASE: '/credit-debit-notes',
+    CREDIT: '/credit-debit-notes/credit-note',
+    DEBIT: '/credit-debit-notes/debit-note',
+    CREDIT_REASONS: '/credit-debit-notes/credit-note-reasons',
+    DEBIT_REASONS: '/credit-debit-notes/debit-note-reasons',
+    REASONS: '/credit-debit-notes/reasons/list'
 } as const;
+
+const SETTLEMENT_TYPES = [
+    { value: 'adjust_future', label: 'Adjust in Future Invoices' },
+    { value: 'account_credit', label: 'Account Credit Balance' },
+    { value: 'cash_refund', label: 'Cash Refund' },
+    { value: 'bank_transfer', label: 'Bank Transfer/NEFT/RTGS' },
+    { value: 'cheque_refund', label: 'Cheque Refund' },
+    { value: 'upi_refund', label: 'UPI/Digital Payment Refund' },
+    { value: 'manual_adjustment', label: 'Manual Journal Adjustment' }
+];
 
 // ============================================
 // API Module
@@ -61,56 +73,55 @@ export const notesApi = {
         return apiHelpers.get(ENDPOINTS.BASE, { params });
     },
 
-    getById: (noteId: number): Promise<AxiosResponse> => {
+    getById: (noteId: number | string): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}`);
     },
 
     create: (data: NoteData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
+        return apiHelpers.post(
+            data.note_type === 'debit' ? ENDPOINTS.DEBIT : ENDPOINTS.CREDIT,
+            data
+        );
     },
 
-    update: (noteId: number, data: Partial<NoteData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${noteId}`, data);
-    },
-
-    delete: (noteId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${noteId}`);
-    },
-
-    getCreditNotes: (params: NoteParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.CREDIT, { params });
-    },
-
-    getDebitNotes: (params: NoteParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.DEBIT, { params });
+    delete: (noteId: number | string, cancellationReason: string = 'Cancelled'): Promise<AxiosResponse> => {
+        return apiHelpers.delete(`${ENDPOINTS.BASE}/${noteId}`, {
+            params: { cancellation_reason: cancellationReason }
+        });
     },
 
     getReasons: (noteType?: 'credit' | 'debit'): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.REASONS, { params: { note_type: noteType } });
+        if (noteType === 'credit') {
+            return apiHelpers.get(ENDPOINTS.CREDIT_REASONS);
+        }
+        if (noteType === 'debit') {
+            return apiHelpers.get(ENDPOINTS.DEBIT_REASONS);
+        }
+        return apiHelpers.get(ENDPOINTS.REASONS);
     },
 
-    print: (noteId: number): Promise<AxiosResponse> => {
+    print: (noteId: number | string): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}/print`, { responseType: 'blob' });
     },
 
-    // Additional methods for compatibility
-    getCreditNoteReasons: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.REASONS, { params: { note_type: 'credit' } });
-    },
-
     getSettlementTypes: (): Promise<AxiosResponse> => {
-        return apiHelpers.get('/notes/settlement-types');
+        return Promise.resolve({
+            data: SETTLEMENT_TYPES,
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: {}
+        } as AxiosResponse);
     },
 
-    getLinkedInvoices: (noteId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${noteId}/invoices`);
+    getLinkedInvoices: (partyId: number, invoiceType: 'sales' | 'purchase' = 'sales'): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/linked-invoices/${partyId}`, {
+            params: { invoice_type: invoiceType }
+        });
     },
 
     getInvoiceItems: (invoiceId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`/invoices/${invoiceId}/items`);
+        return apiHelpers.get(`${ENDPOINTS.BASE}/invoice-items/${invoiceId}`);
     },
 
-    createCreditDebitNote: (data: NoteData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    }
 };

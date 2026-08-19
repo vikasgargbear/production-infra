@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Building2, QrCode } from 'lucide-react';
 import { useToast } from '../../global/ui/feedback/Toast';
-import { organizationsApi, companyApi } from '../../../services/api';
+import { companyApi } from '../../../services/api';
 import { useCompany } from '../../../contexts/CompanyContext';
 
 const CompanySettings = ({ open = true, onClose }: { open?: boolean; onClose?: () => void }) => {
   const toast = useToast();
-  const { companyInfo, updateCompanyInfo, getOrgId } = useCompany();
+  const { companyInfo, updateCompanyInfo } = useCompany();
   const [isLoading, setIsLoading] = useState(false);
 
   // Safe access to companyInfo with defaults

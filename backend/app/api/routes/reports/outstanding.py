@@ -6,11 +6,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import text
 import logging
+from decimal import Decimal
 
 from ....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker  # RBAC
 from ....core.utils.constants import InvoiceStatus, PaymentRecordStatus, PartyType
+from ....core.money import money_json
 
 logger = logging.getLogger(__name__)
 
@@ -95,20 +97,20 @@ async def get_customer_net_position(
                     "phone": result.primary_phone,
                     "invoices": {
                         "count": result.invoice_count,
-                        "total": float(result.total_invoiced),
-                        "paid": float(result.total_paid),
-                        "outstanding": float(result.outstanding_amount),
+                        "total": money_json(result.total_invoiced),
+                        "paid": money_json(result.total_paid),
+                        "outstanding": money_json(result.outstanding_amount),
                         "unpaid_count": result.unpaid_invoice_count
                     },
                     "payments": {
                         "count": result.payment_count,
-                        "total": float(result.total_payments),
-                        "advance": float(result.advance_amount)
+                        "total": money_json(result.total_payments),
+                        "advance": money_json(result.advance_amount)
                     },
                     "net_position": {
-                        "amount": float(result.net_balance),
+                        "amount": money_json(result.net_balance),
                         "type": "credit" if result.net_balance >= 0 else "debit",
-                        "display": f"₹{abs(float(result.net_balance)):,.2f} {'Advance' if result.net_balance >= 0 else 'Outstanding'}"
+                        "display": f"₹{abs(Decimal(str(result.net_balance))):,.2f} {'Advance' if result.net_balance >= 0 else 'Outstanding'}"
                     }
                 }
 
@@ -157,30 +159,36 @@ async def get_customer_net_position(
 
             customers = []
             for row in results:
-                net = float(row.net_balance)
+                net = Decimal(str(row.net_balance or 0))
+                outstanding = Decimal(str(row.outstanding or 0))
+                advance = Decimal(str(row.advance or 0))
                 customers.append({
                     "customer_id": row.customer_id,
                     "customer_name": row.customer_name,
                     "phone": row.primary_phone,
-                    "outstanding": float(row.outstanding),
-                    "advance": float(row.advance),
-                    "net_balance": net,
+                    "outstanding": money_json(outstanding),
+                    "advance": money_json(advance),
+                    "net_balance": money_json(net),
                     "net_type": "credit" if net >= 0 else "debit",
                     "unpaid_invoices": row.unpaid_invoices
                 })
 
             # Calculate totals
-            total_outstanding = sum(c["outstanding"] for c in customers)
-            total_advance = sum(c["advance"] for c in customers)
+            total_outstanding = sum(
+                (Decimal(c["outstanding"]) for c in customers), Decimal("0")
+            )
+            total_advance = sum(
+                (Decimal(c["advance"]) for c in customers), Decimal("0")
+            )
             net_total = total_advance - total_outstanding
 
             return {
                 "customers": customers,
                 "summary": {
                     "customer_count": len(customers),
-                    "total_outstanding": total_outstanding,
-                    "total_advance": total_advance,
-                    "net_position": net_total,
+                    "total_outstanding": money_json(total_outstanding),
+                    "total_advance": money_json(total_advance),
+                    "net_position": money_json(net_total),
                     "net_type": "credit" if net_total >= 0 else "debit"
                 }
             }
@@ -209,6 +217,7 @@ async def get_collection_metrics(
         from datetime import datetime, date, timedelta
         import uuid
 
+        org_id = str(context.org_id)
         today = date.today()
         month_start = date(today.year, today.month, 1)
         thirty_days_ago = today - timedelta(days=30)
@@ -415,17 +424,17 @@ async def get_collection_metrics(
         return {
             "success": True,
             "metrics": {
-                "daily_revenue": float(daily_revenue_result.daily_revenue if daily_revenue_result else 0),
-                "mtd_collections": float(mtd_collections_result.mtd_collections if mtd_collections_result else 0),
-                "pipeline_value": float(pipeline_result.pipeline_value if pipeline_result else 0),
+                "daily_revenue": money_json(daily_revenue_result.daily_revenue if daily_revenue_result else 0),
+                "mtd_collections": money_json(mtd_collections_result.mtd_collections if mtd_collections_result else 0),
+                "pipeline_value": money_json(pipeline_result.pipeline_value if pipeline_result else 0),
                 "promised_customers": int(pipeline_result.promised_customers if pipeline_result else 0),
                 "high_risk_accounts": int(risk_exposure_result.high_risk_accounts if risk_exposure_result else 0),
-                "risk_amount": float(risk_exposure_result.risk_amount if risk_exposure_result else 0),
+                "risk_amount": money_json(risk_exposure_result.risk_amount if risk_exposure_result else 0),
                 "dso_days": int(dso_result.dso_days if dso_result else 0),
                 "collection_efficiency": float(dso_result.collection_efficiency if dso_result else 0),
                 "collection_change": collection_change,
-                "total_outstanding": float(outstanding_result.total_outstanding if outstanding_result else 0),
-                "total_overdue": float(outstanding_result.total_overdue if outstanding_result else 0),
+                "total_outstanding": money_json(outstanding_result.total_outstanding if outstanding_result else 0),
+                "total_overdue": money_json(outstanding_result.total_overdue if outstanding_result else 0),
                 "customers_with_outstanding": int(outstanding_result.customers_with_outstanding if outstanding_result else 0),
                 "customers_with_overdue": int(outstanding_result.customers_with_overdue if outstanding_result else 0)
             }

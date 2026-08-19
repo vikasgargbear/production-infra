@@ -9,6 +9,7 @@ import { useDocumentSave } from '../../../global/hooks/useDocumentSave';
 import { purchasesApi } from '../../../../services/api';
 import { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
 import offlineDB from '../../../../services/offline/core/offlineDatabase';
+import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
 
 export interface UsePurchaseEntrySaveProps {
     purchase: any;
@@ -150,6 +151,35 @@ export function usePurchaseEntrySave(props: UsePurchaseEntrySaveProps): UsePurch
                 totalAmount: purchase.total_amount
             });
             setShowSuccessModal(true);
+        },
+
+        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Purchase Entry Posted',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'confirmed',
+                impacts: [
+                    'GRN and supplier invoice are committed to the backend.',
+                    'Inventory batches and on-hand stock are increased from the received quantities.',
+                    'Supplier payable is updated so the finance ledger reflects the new outstanding.',
+                    'Purchase GST values are captured for downstream compliance reporting.'
+                ]
+            });
+        },
+
+        onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
+            showFinancialEntryNotification({
+                title: 'Purchase Entry Saved Locally',
+                reference: docNo,
+                amount: payload.total_amount,
+                status: 'queued',
+                impacts: [
+                    'The purchase is stored locally and queued for backend posting.',
+                    'Inventory is updated on this device immediately for continuity.',
+                    'Supplier payable and GST posting will confirm after sync completes.'
+                ]
+            });
         },
     });
 

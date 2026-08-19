@@ -75,16 +75,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
 
     // Calculate totals for an item
     const calculateItemTotal = (item: any): number => {
-        const paidQty = parseFloat(String(item.return_paid_qty || item.return_quantity || 0));
-        const rate = parseFloat(String(item.unit_price || 0));
-        const discPercent = parseFloat(String(item.discount_percent || 0));
-        const taxPercent = parseFloat(String(item.tax_percent || 0));
-
-        const grossAmount = paidQty * rate;
-        const discountAmount = (grossAmount * discPercent) / 100;
-        const taxableAmount = grossAmount - discountAmount;
-        const taxAmount = (taxableAmount * taxPercent) / 100;
-        return taxableAmount + taxAmount;
+        return Number(item.total_amount || item.line_total || 0);
     };
 
     const formatExpiry = (dateStr: string | undefined): string => {

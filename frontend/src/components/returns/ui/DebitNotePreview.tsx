@@ -16,6 +16,13 @@ interface ReturnItem {
   unit_price: number;
   discount_percent?: number;
   tax_percent?: number;
+  discount_amount?: number;
+  taxable_amount?: number;
+  cgst_amount?: number;
+  sgst_amount?: number;
+  igst_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
 }
 
 interface Supplier {
@@ -97,13 +104,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
     const gstBreakup: Record<number, { taxableAmount: number; cgst: number; sgst: number; igst: number; totalTax: number }> = {};
 
     returnItems.forEach(item => {
-      const price = parseFloat(String(item.unit_price || 0));
-      const discountPercent = parseFloat(String(item.discount_percent || 0));
-      const returnAmount = item.return_quantity * price;
-      const discountAmount = (returnAmount * discountPercent) / 100;
-      const afterDiscount = returnAmount - discountAmount;
-      const taxPercent = item.tax_percent || 0;
-      const taxAmount = (afterDiscount * taxPercent) / 100;
+      const taxPercent = Number(item.tax_percent || 0);
 
       if (!gstBreakup[taxPercent]) {
         gstBreakup[taxPercent] = {
@@ -115,14 +116,14 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
         };
       }
 
-      gstBreakup[taxPercent].taxableAmount += afterDiscount;
+      gstBreakup[taxPercent].taxableAmount += Number(item.taxable_amount || 0);
       if (isIGST) {
-        gstBreakup[taxPercent].igst += taxAmount;
+        gstBreakup[taxPercent].igst += Number(item.igst_amount || item.tax_amount || 0);
       } else {
-        gstBreakup[taxPercent].cgst += taxAmount / 2;
-        gstBreakup[taxPercent].sgst += taxAmount / 2;
+        gstBreakup[taxPercent].cgst += Number(item.cgst_amount || 0);
+        gstBreakup[taxPercent].sgst += Number(item.sgst_amount || 0);
       }
-      gstBreakup[taxPercent].totalTax += taxAmount;
+      gstBreakup[taxPercent].totalTax += Number(item.tax_amount || 0);
     });
 
     return gstBreakup;
@@ -321,11 +322,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
               <tbody>
                 {returnItems.map((item, index) => {
                   const price = item.unit_price || item.unit_price || item.unit_price || 0;
-                  const returnAmount = item.return_quantity * price;
-                  const discountAmount = (returnAmount * (item.discount_percent || 0)) / 100;
-                  const afterDiscount = returnAmount - discountAmount;
-                  const taxAmount = (afterDiscount * (item.tax_percent || 0)) / 100;
-                  const totalAmount = afterDiscount + taxAmount;
+                  const totalAmount = Number(item.total_amount || 0);
 
                   return (
                     <tr key={item.id} className="border-b border-gray-200">
@@ -338,7 +335,7 @@ const DebitNotePreview: React.FC<DebitNotePreviewProps> = ({ returnData, supplie
                       </td>
                       <td className="py-3 px-2 text-sm text-center">{item.return_quantity}</td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(price)}</td>
-                      <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>
+                      <td className="py-3 px-2 text-sm text-center">{Number(item.tax_percent || 0)}%</td>
                       <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                     </tr>
                   );

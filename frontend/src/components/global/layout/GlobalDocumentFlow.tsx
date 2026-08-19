@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, ReactNode, SetStateAction, Dispatch } from 'react';
+import React, { useState, useEffect, ReactNode, SetStateAction, Dispatch } from 'react';
 import { LucideIcon } from 'lucide-react';
 import ModuleHeader, { ModuleHeaderAction } from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
@@ -16,7 +16,8 @@ type DocumentType =
     | 'grn'
     | 'sales-return'
     | 'purchase-return'
-    | 'stock-adjustment';
+    | 'stock-adjustment'
+    | 'stock-transfer';
 
 interface DocumentConfig {
     title: string;
@@ -244,6 +245,15 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
             serviceMethod: 'generateAdjustmentNumber',
             saveLabel: 'Generate Adjustment',
             historyType: 'stock-adjustment'
+        },
+        'stock-transfer': {
+            title: 'Stock Transfer',
+            icon: 'Package',
+            color: 'indigo',
+            prefix: 'ST',
+            serviceMethod: 'generateTransferNumber',
+            saveLabel: 'Save Transfer',
+            historyType: 'stock-transfer'
         }
     };
 

@@ -19,6 +19,7 @@ from jose import JWTError
 import logging
 
 from .jwt_auth import decode_jwt  # Single source of truth
+from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
@@ -43,7 +44,7 @@ class OrgContext:
         org_id: Organization UUID (always required, always filtered)
         user_id: User identifier (int or UUID)
         branch_scope: Level of branch access (SINGLE, MULTI, ALL)
-        branch_ids: List of accessible branch UUIDs
+        branch_ids: List of accessible integer branch IDs
         permissions: User's permission set
     """
     def __init__(
@@ -51,7 +52,7 @@ class OrgContext:
         org_id: UUID, 
         user_id: Optional[any] = None,
         branch_scope: BranchScope = BranchScope.ALL,
-        branch_ids: Optional[List[UUID]] = None
+        branch_ids: Optional[List[int]] = None
     ):
         self.org_id = org_id
         self.user_id = user_id
@@ -65,7 +66,7 @@ class OrgContext:
         return self.branch_ids[0] if self.branch_ids else None
 
     @property
-    def primary_branch_id(self) -> Optional[UUID]:
+    def primary_branch_id(self) -> Optional[int]:
         """Get user's primary branch (first in list)"""
         return self.branch_ids[0] if self.branch_ids else None
     
@@ -74,7 +75,7 @@ class OrgContext:
         """Check if user can see all branches"""
         return self.branch_scope == BranchScope.ALL
     
-    def can_access_branch(self, branch_id: UUID) -> bool:
+    def can_access_branch(self, branch_id: int) -> bool:
         """Check if user can access a specific branch"""
         if self.branch_scope == BranchScope.ALL:
             return True
@@ -99,8 +100,8 @@ async def get_org_context(
     
     # TEST MODE: Bypass auth for automated testing
     # SECURITY: Block TEST_MODE in production
-    if os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
-        if os.getenv("ENV", "development").lower() in ("production", "prod"):
+    if is_test_mode_enabled():
+        if is_production():
             logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
             raise HTTPException(
                 status_code=503,
@@ -163,9 +164,10 @@ async def get_org_context(
         # Extract branch scope from token - REQUIRED field
         branch_scope_str = payload.get("branch_scope")
         if not branch_scope_str:
-            # Old token without branch_scope - treat as ALL for safety
-            # New tokens will always have branch_scope set from data_access_level
-            branch_scope = BranchScope.ALL
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: missing branch_scope",
+            )
         else:
             try:
                 branch_scope = BranchScope(branch_scope_str)
@@ -181,7 +183,7 @@ async def get_org_context(
         for bid in branch_ids_raw:
             if bid:
                 try:
-                    branch_ids.append(UUID(bid) if isinstance(bid, str) else bid)
+                    branch_ids.append(int(bid))
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid branch_id in token: {bid}")
         

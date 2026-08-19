@@ -19,6 +19,7 @@
 import offlineDB from '../core/offlineDatabase';
 import { productsApi, customersApi, invoicesApi } from '../../api';
 import { employeesApi } from '../../api/modules/master/employees.api';
+import { getErpAccessToken } from '../../auth/erpSessionStorage';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -88,10 +89,9 @@ class SyncPullService {
 
     /**
      * Check if user is authenticated (has token)
-     * Note: AuthContext stores token as 'authToken'
      */
     private isAuthenticated(): boolean {
-        return !!localStorage.getItem('authToken');
+        return Boolean(getErpAccessToken());
     }
 
     // ==================== PRODUCT SYNC ====================

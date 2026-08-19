@@ -5,15 +5,15 @@ REFACTORED: Uses InventoryService for database operations
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 import logging
-import uuid
 from ....services.document_number_service import DocumentNumberService
 from ....services.inventory.inventory_service import InventoryService
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
-from .....core.utils.branch_utils import get_default_branch_id, resolve_location_id
+from .....core.utils.branch_utils import resolve_location_id
 from .....core.utils.feature_flags import check_negative_stock_allowed
+from .....core.money import money_json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stock-movements"])
@@ -62,8 +62,8 @@ async def get_inventory_movements(
                 "batch_id": m.get("batch_id"),
                 "batch_number": m.get("batch_number"),
                 "quantity": float(m.get("quantity")) if m.get("quantity") else 0,
-                "unit_price": float(m.get("unit_price")) if m.get("unit_price") else 0,
-                "total_value": float(m.get("total_value")) if m.get("total_value") else 0,
+                "unit_price": money_json(m.get("unit_price") or 0),
+                "total_value": money_json(m.get("total_value") or 0),
                 "reference_type": m.get("reference_type"),
                 "reference_number": m.get("reference_number"),
                 "from_location_id": m.get("from_location_id"),
@@ -120,8 +120,6 @@ async def create_stock_receive(
     """Create a stock receive entry — creates inventory_movement + updates batches + location_wise_stock"""
     try:
         from ....schemas.inventory.inventory import StockMovementCreate
-        from datetime import date as date_type
-
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
         for field in required_fields:
             if field not in receive_data:
@@ -280,7 +278,8 @@ async def create_stock_transfer(
             destination_location_id=transfer_data["destination_location"],
             movement_date=transfer_data["movement_date"],
             reason=transfer_data.get("reason", "Stock transfer"),
-            created_by=context.user_id
+            created_by=context.user_id,
+            reference_number=movement_number,
         )
         db.commit()
 

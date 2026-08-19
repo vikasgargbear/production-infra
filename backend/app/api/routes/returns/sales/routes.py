@@ -18,7 +18,10 @@ from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_conte
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import ReturnStatus, StockMovementType
-from ....services.document_number_service import DocumentNumberService
+from ....services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
 from ....services.compliance.gst_service import GSTService
 from ....services.inventory.inventory_service import InventoryService
 from ....services.returns.return_service import ReturnService
@@ -26,6 +29,8 @@ from ....services.finance.credit_note.service import CreditNoteService  # Financ
 from ....schemas.inventory.inventory import StockMovementCreate
 from ....schemas.sales.returns import SalesReturnItem as ReturnItem, SalesReturnCreate as SaleReturnCreate
 from .....core.utils.branch_utils import get_default_branch_id
+from .....core.money import money_json
+from .....core.money import money, rupees
 from datetime import date
 
 # Note: Schema classes moved to schemas/returns.py
@@ -53,22 +58,26 @@ def _map_return_category_to_reason_code(category: str) -> str:
 
 router = APIRouter(tags=["sale-returns"])
 
-@router.get("/generate-number")
+@router.post(
+    "/generate-number",
+    operation_id="sales_reserve_return_number_v1",
+    summary="Reserve a sales return number",
+    openapi_extra=document_number_reservation_openapi("sales_returns.create"),
+)
 @with_tenant_context
 async def generate_sales_return_number(
-    _: dict = Depends(PermissionChecker("sales_returns", "view")),  # RBAC
+    _: dict = Depends(PermissionChecker("sales_returns", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Generate next sales return number using unified service"""
+    """Reserve and commit the next organization-scoped sales return number."""
     try:
         org_id = str(context.org_id)
-        # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
+        new_number = DocumentNumberService.reserve_number(db, "sales_return", org_id)
         return {"return_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate sales return number: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate return number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve sales return number")
 
 @router.get("/")
 @with_tenant_context
@@ -237,9 +246,16 @@ async def create_sale_return(
         gst_type = GSTService.determine_gst_type(
             db=db,
             org_id=context.org_id,
+            branch_id=context.branch_id,
             customer_id=return_dict["customer_id"]
         )
-        totals = ReturnService.calculate_return_totals(return_dict["items"], gst_type)
+        totals = ReturnService.calculate_return_totals(
+            return_dict["items"],
+            gst_type,
+            include_gst=not return_dict.get("withhold_gst", False),
+            cap_to_paid_quantity=True,
+            exclude_free_quantity_from_taxable=True,
+        )
         
         subtotal = totals["subtotal"]
         tax_amount = totals["tax_amount"]
@@ -317,21 +333,24 @@ async def create_sale_return(
             # Calculate item values
             return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
             free_qty = Decimal(str(item.get("free_quantity", 0)))
+            paid_qty = Decimal(str(item.get("paid_quantity", 0) or 0))
             unit_price = Decimal(str(item.get("unit_price", item.get("rate", 0))))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
 
-            # Calculate creditable quantity (only paid items get credit, not free items)
-            creditable_qty = max(Decimal("0"), return_qty - free_qty)
-
-            # Calculate return value - check for manual override first
-            if "return_value" in item and item["return_value"] is not None:
-                return_value = Decimal(str(item["return_value"]))
+            # Calculate creditable quantity (only paid items get credit, not free items).
+            # When the frontend sends paid_quantity, cap against that. Otherwise fall back
+            # to the legacy free-quantity subtraction.
+            if paid_qty > 0:
+                creditable_qty = min(return_qty, paid_qty)
             else:
-                return_calc = ReturnService.calculate_return_value(
-                    creditable_qty, unit_price, discount_percent, tax_percent
-                )
-                return_value = return_calc["return_value"]
+                creditable_qty = max(Decimal("0"), return_qty - free_qty)
+
+            # Client-calculated credit values are never authoritative.
+            return_calc = ReturnService.calculate_return_value(
+                creditable_qty, unit_price, discount_percent, tax_percent
+            )
+            return_value = return_calc["return_value"]
 
             # Calculate tax using GSTService for consistency
             gst = GSTService.calculate_gst_components(return_value, tax_percent, gst_type)
@@ -383,18 +402,23 @@ async def create_sale_return(
         # Recompute header totals from prepared items (RET-11)
         # calculate_return_totals uses full return_quantity, but per-item values use
         # creditable_qty (excluding free items). Header must match sum of items.
-        subtotal = round(sum(item["return_value"] for item in prepared_items), 2)
-        tax_amount = round(sum(item["tax_amount"] for item in prepared_items), 2)
-        total_amount = round(subtotal + tax_amount, 2)
-        cgst_amount = round(sum(item["cgst_amount"] for item in prepared_items), 2)
-        sgst_amount = round(sum(item["sgst_amount"] for item in prepared_items), 2)
-        igst_amount = round(sum(item["igst_amount"] for item in prepared_items), 2)
-        total_return_quantity = round(sum(item["return_quantity"] for item in prepared_items), 2)
+        subtotal = money(sum(Decimal(str(item["return_value"])) for item in prepared_items))
+        tax_amount = money(sum(Decimal(str(item["tax_amount"])) for item in prepared_items))
+        pre_round_total = subtotal + tax_amount
+        total_amount = rupees(pre_round_total)
+        round_off_amount = money(total_amount - pre_round_total)
+        cgst_amount = money(sum(Decimal(str(item["cgst_amount"])) for item in prepared_items))
+        sgst_amount = money(sum(Decimal(str(item["sgst_amount"])) for item in prepared_items))
+        igst_amount = money(sum(Decimal(str(item["igst_amount"])) for item in prepared_items))
+        total_return_quantity = sum(
+            Decimal(str(item["return_quantity"])) for item in prepared_items
+        )
 
         totals = {
             "subtotal": subtotal,
             "tax_amount": tax_amount,
             "total_amount": total_amount,
+            "round_off_amount": round_off_amount,
             "cgst_amount": cgst_amount,
             "sgst_amount": sgst_amount,
             "igst_amount": igst_amount,
@@ -407,13 +431,13 @@ async def create_sale_return(
             SET return_amount = :subtotal, tax_amount = :tax_amount,
                 total_amount = :total_amount, pending_amount = :total_amount,
                 cgst_amount = :cgst_amount, sgst_amount = :sgst_amount,
-                igst_amount = :igst_amount, return_quantity = :return_quantity
+                igst_amount = :igst_amount
             WHERE return_id = :return_id
         """), {
             "subtotal": subtotal, "tax_amount": tax_amount,
             "total_amount": total_amount, "cgst_amount": cgst_amount,
             "sgst_amount": sgst_amount, "igst_amount": igst_amount,
-            "return_quantity": total_return_quantity, "return_id": return_id
+            "return_id": return_id
         })
 
         # Step 2: Execute bulk operations (3 DB queries instead of ~48)
@@ -479,7 +503,7 @@ async def create_sale_return(
             "return_method": return_method,
             "credit_note_no": credit_note_no,
             "credit_note_id": ledger_result.get("credit_note_id"),
-            "total_amount": float(total_amount),
+            "total_amount": money_json(total_amount),
             "has_gst": bool(customer.get("gst_number")),
             "ledger_action": ledger_result.get("action"),
             "previous_outstanding": ledger_result.get("previous_outstanding"),

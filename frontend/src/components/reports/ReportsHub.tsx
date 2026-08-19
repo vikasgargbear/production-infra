@@ -1,10 +1,10 @@
 import React from 'react';
 import {
   BarChart3, TrendingUp, FileText, PieChart,
-  Calendar, DollarSign, Package, Users,
-  ShoppingCart, CreditCard, TrendingDown,
+  DollarSign, Package, Users,
+  ShoppingCart,
   Activity, BookOpen, Receipt, Wallet,
-  Target, FileSpreadsheet, Calculator
+  FileSpreadsheet, Calculator
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 

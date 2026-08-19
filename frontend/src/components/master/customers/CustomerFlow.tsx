@@ -253,7 +253,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                 // Notes
                 internal_notes: formData.internal_notes || null,
                 // Address
-                org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id'),
                 address_line1: formData.address.address_line1,
                 address_line2: formData.address.address_line2 || '',
                 city: formData.address.city,

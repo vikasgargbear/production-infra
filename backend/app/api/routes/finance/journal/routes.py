@@ -3,17 +3,22 @@ Journal Entry management endpoints
 REFACTORED: Uses JournalService for database operations
 """
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import logging
-from ....services.document_number_service import DocumentNumberService
+from ....services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
 from ....services.finance.journal.service import JournalService
+from ....schemas.finance.mutations import JournalEntryCreateResponse
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
+from .....core.money import money_json
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +35,10 @@ class JournalEntryCreate(BaseModel):
     journal_date: date = Field(default_factory=date.today)
     reference_number: Optional[str] = None
     narration: str
-    lines: List[JournalLineCreate] = Field(..., min_items=2)
-    created_by: Optional[int] = None
+    lines: List[JournalLineCreate] = Field(..., min_length=2)
     
-    @validator('lines')
+    @field_validator('lines')
+    @classmethod
     def validate_balanced_entry(cls, v):
         total_debit = sum(line.debit_amount for line in v)
         total_credit = sum(line.credit_amount for line in v)
@@ -43,19 +48,32 @@ class JournalEntryCreate(BaseModel):
             raise ValueError('Entry cannot have zero amounts')
         return v
 
-@router.get("/generate-journal-number")
+
+class JournalReversalCreate(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
+    reversal_date: date = Field(default_factory=date.today)
+
+@router.post(
+    "/generate-journal-number",
+    operation_id="finance_reserve_journal_number_v1",
+    summary="Reserve a journal entry number",
+    openapi_extra=document_number_reservation_openapi("finance.create"),
+)
 @with_tenant_context
 async def generate_journal_number(
+    _: dict = Depends(PermissionChecker("finance", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Generate unique journal entry number"""
+    """Reserve and commit the next organization-scoped journal entry number."""
     try:
-        journal_number = DocumentNumberService.generate_number(db.session, "journal_entry", str(context.org_id))
-        return {"journal_number": journal_number, "generated_at": datetime.now().isoformat()}
+        journal_number = DocumentNumberService.reserve_number(
+            db, "journal_entry", str(context.org_id)
+        )
+        return {"journal_number": journal_number, "generated_at": datetime.now(timezone.utc).isoformat()}
     except Exception as e:
         logger.error(f"Error generating journal number: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate journal number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve journal number")
 
 @router.get("/chart-of-accounts")
 @with_tenant_context
@@ -63,6 +81,7 @@ async def get_chart_of_accounts(
     search: Optional[str] = Query(None),
     account_type: Optional[str] = Query(None),
     active_only: bool = Query(True),
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -74,47 +93,63 @@ async def get_chart_of_accounts(
         logger.error(f"Error getting chart of accounts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get chart of accounts: {str(e)}")
 
-@router.post("", response_model=dict)
+@router.post("", response_model=JournalEntryCreateResponse)
 @with_tenant_context
 async def create_journal_entry(
     journal_entry: JournalEntryCreate,
+    _: dict = Depends(PermissionChecker("finance", "create")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Create a new journal entry"""
     try:
         org_id = str(context.org_id)
+        branch_id = context.primary_branch_id
+        if branch_id is None:
+            raise HTTPException(status_code=400, detail="An active branch is required")
         journal_number = DocumentNumberService.generate_number(db.session, "journal_entry", org_id)
         
-        if not journal_entry.created_by:
-            journal_entry.created_by = JournalService.get_active_user(db, org_id)
-            if not journal_entry.created_by:
-                raise HTTPException(status_code=400, detail="Unable to determine user")
+        created_by = context.user_id
         
         total_debit = sum(line.debit_amount for line in journal_entry.lines)
         total_credit = sum(line.credit_amount for line in journal_entry.lines)
         
         journal_id = JournalService.insert_journal_entry(db, org_id, {
             "journal_number": journal_number, "journal_date": journal_entry.journal_date,
+            "branch_id": branch_id, "journal_type": "manual",
             "reference_number": journal_entry.reference_number, "narration": journal_entry.narration,
-            "created_by": journal_entry.created_by
+            "created_by": created_by
         })
         
         for line in journal_entry.lines:
-            account_id = JournalService.get_or_create_account(db, org_id, line.account_code, line.account_name)
+            account = JournalService.get_account(
+                db, org_id, line.account_code, line.account_name
+            )
             JournalService.insert_journal_line(db, {
-                "journal_id": journal_id, "account_id": account_id,
-                "account_code": line.account_code, "account_name": line.account_name,
+                "journal_id": journal_id,
+                "account_code": account["account_code"],
+                "account_name": account["account_name"],
                 "debit_amount": line.debit_amount, "credit_amount": line.credit_amount,
                 "line_narration": line.narration
             })
+
+        JournalService.post_journal_entry(
+            db, org_id, journal_id, created_by
+        )
+        db.commit()
         
         return {
             "message": "Journal entry created successfully",
             "data": {"journal_id": journal_id, "journal_number": journal_number,
-                     "total_debit": float(total_debit), "total_credit": float(total_credit),
+                     "total_debit": money_json(total_debit), "total_credit": money_json(total_credit),
                      "lines_count": len(journal_entry.lines)}
         }
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating journal entry: {str(e)}")
@@ -128,6 +163,7 @@ async def get_journal_entries(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -145,6 +181,7 @@ async def get_journal_entries(
 @with_tenant_context
 async def get_journal_entry_details(
     journal_id: int,
+    _: dict = Depends(PermissionChecker("finance", "view")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
@@ -169,23 +206,37 @@ async def get_journal_entry_details(
 @with_tenant_context
 async def reverse_journal_entry(
     journal_id: int,
-    reversal_data: dict,
+    reversal_data: JournalReversalCreate,
+    _: dict = Depends(PermissionChecker("finance", "approve")),
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
     """Reverse a journal entry"""
     try:
-        header = JournalService.get_journal_entry(db, str(context.org_id), journal_id)
-        if not header:
-            raise HTTPException(status_code=404, detail="Journal entry not found")
-        if header.get("entry_status") == "reversed":
-            raise HTTPException(status_code=400, detail="Entry already reversed")
-        
-        JournalService.reverse_journal_entry(db, journal_id, reversal_data.get("reason", ""))
-        return {"message": "Journal entry reversed successfully", "journal_id": journal_id}
-    except HTTPException:
-        raise
+        org_id = str(context.org_id)
+        reversal_number = DocumentNumberService.generate_number(
+            db.session, "journal_entry", org_id
+        )
+        reversal_id = JournalService.reverse_journal_entry(
+            db=db,
+            org_id=org_id,
+            journal_id=journal_id,
+            journal_number=reversal_number,
+            reversal_date=reversal_data.reversal_date,
+            reason=reversal_data.reason,
+            created_by=context.user_id,
+        )
+        db.commit()
+        return {
+            "message": "Compensating journal posted successfully",
+            "original_journal_id": journal_id,
+            "reversal_journal_id": reversal_id,
+            "reversal_journal_number": reversal_number,
+        }
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         db.rollback()
-        logger.error(f"Error reversing journal entry: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to reverse journal entry")
+        logger.error("Error reversing journal entry: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to reverse journal entry") from e

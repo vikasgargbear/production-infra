@@ -8,7 +8,7 @@ import { Loader2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
     const { login, loginWithGoogle, isOnline } = useAuth();
-    const [email, setEmail] = useState('admin@pharma.com');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -95,7 +95,7 @@ const LoginPage: React.FC = () => {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="admin@pharma.com"
+                            placeholder="name@company.com"
                             required
                             disabled={loading}
                         />
@@ -160,7 +160,7 @@ const LoginPage: React.FC = () => {
                 {/* Footer */}
                 <div className="mt-6 text-center text-sm text-gray-500">
                     {!isOnline && (
-                        <p>Offline login available after first online login</p>
+                        <p>An internet connection is required to sign in</p>
                     )}
                 </div>
             </div>

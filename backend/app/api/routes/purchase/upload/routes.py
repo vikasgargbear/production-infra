@@ -5,7 +5,7 @@ REFACTORED: Uses UploadService for database operations
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import logging
-from datetime import datetime
+from datetime import datetime, date
 import os
 import tempfile
 import shutil
@@ -19,6 +19,7 @@ from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_conte
 from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker
 from .....core.utils.file_validation import validate_upload, sanitize_filename
+from .....core.money import money_json
 
 try:
     from bill_parser import parse_pdf
@@ -152,15 +153,15 @@ async def parse_purchase_invoice_safe(
                 response_data = {
                     "success": items_found, "extracted_data": {
                         "invoice_number": getattr(invoice_data, 'invoice_number', ''),
-                        "invoice_date": getattr(invoice_data, 'invoice_date', datetime.now()).isoformat() if hasattr(invoice_data, 'invoice_date') and invoice_data.invoice_date else datetime.now().isoformat()[:10],
+                        "invoice_date": invoice_data.invoice_date.isoformat() if hasattr(invoice_data, 'invoice_date') and invoice_data.invoice_date else date.today().isoformat(),
                         "supplier_name": getattr(invoice_data, 'supplier_name', ''),
                         "supplier_gstin": getattr(invoice_data, 'supplier_gstin', ''),
                         "supplier_address": getattr(invoice_data, 'supplier_address', ''),
                         "drug_license": getattr(invoice_data, 'drug_license_number', ''),
-                        "subtotal": float(getattr(invoice_data, 'subtotal', 0) or 0),
-                        "tax_amount": float(getattr(invoice_data, 'tax_amount', 0) or 0),
-                        "discount_amount": float(getattr(invoice_data, 'discount_amount', 0) or 0),
-                        "grand_total": float(getattr(invoice_data, 'grand_total', 0) or 0),
+                        "subtotal": money_json(getattr(invoice_data, 'subtotal', 0) or 0),
+                        "tax_amount": money_json(getattr(invoice_data, 'tax_amount', 0) or 0),
+                        "discount_amount": money_json(getattr(invoice_data, 'discount_amount', 0) or 0),
+                        "grand_total": money_json(getattr(invoice_data, 'grand_total', 0) or 0),
                         "items": []
                     }, "confidence_score": getattr(invoice_data, 'confidence', 0.5), "manual_review_required": True
                 }
@@ -172,10 +173,10 @@ async def parse_purchase_invoice_safe(
                                 "product_name": getattr(item, 'description', ''), "hsn_code": getattr(item, 'hsn_code', ''),
                                 "batch_number": getattr(item, 'batch_number', ''), "expiry_date": getattr(item, 'expiry_date', ''),
                                 "quantity": int(getattr(item, 'quantity', 0) or 0), "unit": getattr(item, 'unit', ''),
-                                "cost_price": float(getattr(item, 'rate', 0) or 0), "mrp": float(getattr(item, 'mrp', 0) or 0),
+                                "cost_price": money_json(getattr(item, 'rate', 0) or 0), "mrp": money_json(getattr(item, 'mrp', 0) or 0),
                                 "discount_percent": float(getattr(item, 'discount_percent', 0) or 0),
                                 "tax_percent": float(getattr(item, 'tax_percent', 12) or 12),
-                                "amount": float(getattr(item, 'amount', 0) or 0)
+                                "amount": money_json(getattr(item, 'amount', 0) or 0)
                             })
                         except Exception as e:
                             logger.warning(f"Error processing item: {e}")
@@ -225,7 +226,7 @@ async def parse_purchase_invoice_safe(
                         pass
                 return {
                     "success": False, "message": "Could not extract data automatically.",
-                    "extracted_data": {"invoice_number": "", "invoice_date": datetime.now().isoformat()[:10],
+                    "extracted_data": {"invoice_number": "", "invoice_date": date.today().isoformat(),
                                       "supplier_name": "", "supplier_gstin": "", "items": []},
                     "confidence_score": 0, "manual_review_required": True
                 }
@@ -268,8 +269,8 @@ async def parse_purchase_invoice(
                     "invoice_date": invoice_data.invoice_date.isoformat() if invoice_data.invoice_date else None,
                     "supplier_name": invoice_data.supplier_name, "supplier_gstin": invoice_data.supplier_gstin,
                     "supplier_address": invoice_data.supplier_address, "drug_license": invoice_data.drug_license_number,
-                    "subtotal": float(invoice_data.subtotal or 0), "tax_amount": float(invoice_data.tax_amount or 0),
-                    "discount_amount": float(invoice_data.discount_amount or 0), "grand_total": float(invoice_data.grand_total or 0),
+                    "subtotal": money_json(invoice_data.subtotal or 0), "tax_amount": money_json(invoice_data.tax_amount or 0),
+                    "discount_amount": money_json(invoice_data.discount_amount or 0), "grand_total": money_json(invoice_data.grand_total or 0),
                     "items": []
                 }, "manual_review_required": False
             }
@@ -278,9 +279,9 @@ async def parse_purchase_invoice(
                 response_data["extracted_data"]["items"].append({
                     "description": item.description, "hsn_code": item.hsn_code, "batch_number": item.batch_number,
                     "expiry_date": item.expiry_date, "quantity": item.quantity, "unit": item.unit,
-                    "rate": float(item.rate or 0), "mrp": float(item.mrp or 0),
+                    "rate": money_json(item.rate or 0), "mrp": money_json(item.mrp or 0),
                     "discount_percent": float(item.discount_percent or 0), "tax_percent": float(item.tax_percent or 0),
-                    "amount": float(item.amount or 0)
+                    "amount": money_json(item.amount or 0)
                 })
             
             if getattr(invoice_data, 'confidence_score', 0) < 0.8:
@@ -334,7 +335,7 @@ async def create_purchase_from_parsed(
             supplier_data = purchase_data.get("supplier", {})
             if not supplier_data.get("supplier_name"):
                 raise HTTPException(status_code=400, detail="Supplier name is required")
-            supplier_code = f"SUP{datetime.now().strftime('%Y%m%d%H%M')}"
+            supplier_code = DocumentNumberService.generate_number(db, "supplier", str(context.org_id))
             supplier_id = UploadService.create_supplier(db, {
                 "org_id": str(context.org_id), "code": supplier_code,
                 "name": supplier_data.get("supplier_name"),

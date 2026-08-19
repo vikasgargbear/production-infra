@@ -679,13 +679,6 @@ class PurchaseOrderRepository:
         return result.scalar()
     
     @staticmethod
-    def generate_batch_number(db: Session) -> str:
-        """Generate a random batch number."""
-        from datetime import datetime
-        random_part = db.execute(text("SELECT floor(random() * 10000)::int")).scalar()
-        return f"BATCH{datetime.now().strftime('%y%m')}{str(random_part).zfill(4)}"
-    
-    @staticmethod
     def check_po_item_exists(
         db: Session, item_id: int, purchase_id: int
     ) -> bool:

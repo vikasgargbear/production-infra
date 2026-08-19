@@ -26,6 +26,8 @@ export interface UseDocumentSaveConfig {
     stockOperation?: () => Promise<void>;  // caller handles deduct/add
     onSuccess: (tempId: string, docNo: string) => void;  // called after local save + stock op
     onSaveComplete?: () => void;
+    onServerSuccess?: (response: any, tempId: string, docNo: string, payload: any) => void | Promise<void>;
+    onSyncQueued?: (tempId: string, docNo: string, payload: any, reason: 'offline' | 'sync_failed') => void | Promise<void>;
     isOnline: boolean;
 
     // Invoice-specific
@@ -95,6 +97,7 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
                         if (serverId) {
                             await offlineDB.updateLocalId(cfg.idbStoreName, tempId, serverId);
                         }
+                        await cfg.onServerSuccess?.(response, tempId, docNo, payload);
                     } catch (syncError: any) {
                         // Invoice-specific: handle conflict
                         if (cfg.handleConflict && syncError.response?.status === 409) {
@@ -112,10 +115,12 @@ export function useDocumentSave(config: UseDocumentSaveConfig): UseDocumentSaveR
                         }
 
                         await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                        await cfg.onSyncQueued?.(tempId, docNo, payload, 'sync_failed');
                     }
                 })();
             } else {
                 await offlineDB.addToSyncQueue(cfg.entityType, tempId, 'create', localDoc);
+                await cfg.onSyncQueued?.(tempId, docNo, payload, 'offline');
             }
 
             cfg.onSaveComplete?.();

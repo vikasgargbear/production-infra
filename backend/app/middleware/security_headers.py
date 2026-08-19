@@ -13,6 +13,8 @@ import os
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 
+from ..core.env import is_production
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all HTTP responses."""
@@ -27,8 +29,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
         # HSTS only in production (breaks local dev over HTTP)
-        env = os.getenv("ENV", "development").lower()
-        if env in ("production", "prod"):
+        if is_production():
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains"
             )

@@ -4,10 +4,10 @@ Handles invoice payments, tracking, and reconciliation
 
 MODERNIZED: Uses centralized schemas from schemas/billing.py
 """
-from typing import Optional, List
-from datetime import date, datetime
+from typing import Literal, Optional, List
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
@@ -20,16 +20,47 @@ from .....core.auth.org_context import get_org_context, OrgContext
 from .....core.security.permissions import PermissionChecker  # RBAC
 from .....core.utils.constants import PaymentStatus, PaymentRecordStatus, PaymentMethod, PartyType
 from ....services.finance.payment.service import PaymentService
-from ....services.document_number_service import DocumentNumberService
+from ....services.document_number_service import (
+    DocumentNumberService,
+    document_number_reservation_openapi,
+)
+from .....core.idempotency import IdempotencyConflictError, IdempotencyStateError
 from ....schemas.sales.billing import (
     GeneralPaymentCreate, InvoicePaymentCreate, 
     PaymentListResponse, PaymentSummaryResponse, PaymentResponse
+)
+from ....schemas.finance.mutations import (
+    CustomerReceiptCreateResponse,
+    GeneralPaymentCreateResponse,
 )
 
 logger = logging.getLogger(__name__)
 # Fixed notification trigger issues - Jan 15, 2025
 
 router = APIRouter(tags=["payments"])
+
+
+def _payment_response(
+    result: dict,
+    response: Response,
+    idempotency_key: str,
+) -> dict:
+    replayed = bool(result.pop("_idempotency_replayed", False))
+    response.headers["X-Idempotency-Key"] = idempotency_key
+    response.headers["X-Idempotency-Replayed"] = str(replayed).lower()
+    return result
+
+
+def _idempotency_http_error(error: Exception) -> HTTPException:
+    if isinstance(error, IdempotencyConflictError):
+        return HTTPException(status_code=409, detail={
+            "code": "IDEMPOTENCY_KEY_MISMATCH",
+            "message": str(error),
+        })
+    return HTTPException(status_code=409, detail={
+        "code": "IDEMPOTENCY_STATE_UNAVAILABLE",
+        "message": str(error),
+    })
 
 @router.get("/")
 @with_tenant_context
@@ -134,52 +165,70 @@ async def get_payment_methods(
         ]}
 
 
-@router.get("/{payment_id}")
+@router.get("/outstanding")
 @with_tenant_context
-async def get_payment_by_id(
-    payment_id: int,
-    _: dict = Depends(PermissionChecker("sales", "view")),
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """Get single payment by ID"""
-    try:
-        # Use PaymentService instead of inline SQL
-        payment = PaymentService.get_payment_by_id(db, payment_id, str(context.org_id))
-        if not payment:
-            raise HTTPException(status_code=404, detail="Payment not found")
-        return payment
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting payment {payment_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get payment")
-
-@router.get("/generate-receipt-number")
-@with_tenant_context
-async def generate_receipt_number(
-    payment_type: str = Query("receipt", description="Type: receipt or payment"),
+async def get_outstanding_invoices(
+    customer_id: Optional[int] = None,
+    overdue_only: bool = False,
     _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
-    Generate unique receipt/payment number
-    
-    Uses atomic sequence to prevent duplicates
-    Format: RCT-YYYYMMDD-NNNN or PAY-YYYYMMDD-NNNN
+    Get list of outstanding invoices
+
+    - Filter by customer
+    - Option to show only overdue invoices
+    - Includes aging analysis
     """
     try:
-        # Use centralized DocumentNumberService via service method
-        return PaymentService.generate_receipt_sequence(
+        # Use service method for all outstanding invoice logic
+        return PaymentService.get_outstanding_invoices(
             db=db,
-            payment_type=payment_type,
-            org_id=str(context.org_id)
+            org_id=str(context.org_id),
+            customer_id=customer_id,
+            overdue_only=overdue_only
         )
+
+    except Exception as e:
+        logger.error(f"Error getting outstanding invoices: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
+
+
+@router.post(
+    "/generate-receipt-number",
+    operation_id="finance_reserve_payment_number_v1",
+    summary="Reserve a receipt or payment number",
+    openapi_extra=document_number_reservation_openapi("finance.create"),
+)
+@with_tenant_context
+async def generate_receipt_number(
+    payment_type: Literal["receipt", "payment"] = Query(
+        "receipt", description="Type of number to reserve"
+    ),
+    _: dict = Depends(PermissionChecker("finance", "create")),  # RBAC
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """
+    Reserve and commit a unique receipt/payment number.
+    
+    Uses atomic sequence to prevent duplicates
+    Format: RCT-YYYYMMDDNNNN or PAY-YYYYMMDDNNNN
+    """
+    try:
+        reserved_number = DocumentNumberService.reserve_number(
+            db, payment_type, str(context.org_id)
+        )
+        return {
+            "receipt_number": reserved_number,
+            "payment_type": payment_type,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
         
     except Exception as e:
         logger.error(f"Error generating receipt number: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate receipt number: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to reserve payment number")
 
 # Note: Schema classes moved to schemas/billing.py
 # - GeneralPaymentCreate
@@ -188,10 +237,17 @@ async def generate_receipt_number(
 # - PaymentSummaryResponse
 # - PaymentResponse
 
-@router.post("/", response_model=dict)
+@router.post("/", response_model=GeneralPaymentCreateResponse)
 @with_tenant_context
 async def create_payment(
     payment: GeneralPaymentCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -227,16 +283,19 @@ async def create_payment(
             org_id=org_id,
             branch_id=branch_id,
             payment_data=payment_data,
-            user_id=context.user_id
+            user_id=context.user_id,
+            idempotency_key=idempotency_key,
         )
         
         db.commit()
         
         return {
             "message": "Payment created successfully",
-            "data": result
+            "data": _payment_response(result, response, idempotency_key),
         }
-        
+    except (IdempotencyConflictError, IdempotencyStateError) as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating payment: {str(e)}")
@@ -246,6 +305,13 @@ async def create_payment(
 @with_tenant_context
 async def record_payment(
     payment: InvoicePaymentCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -260,9 +326,18 @@ async def record_payment(
     try:
         payment_data = payment.dict()
         payment_data["created_by"] = context.user_id
-        result = PaymentService.record_payment(db, payment.invoice_id, payment_data)
+        result = PaymentService.record_payment(
+            db,
+            payment.invoice_id,
+            payment_data,
+            org_id=str(context.org_id),
+            idempotency_key=idempotency_key,
+        )
         db.commit()
-        return result
+        return _payment_response(result, response, idempotency_key)
+    except (IdempotencyConflictError, IdempotencyStateError) as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -344,10 +419,17 @@ async def cancel_payment(
         logger.error(f"Error cancelling payment: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to cancel payment")
 
-@router.post("/customer-receipt", response_model=dict)
+@router.post("/customer-receipt", response_model=CustomerReceiptCreateResponse)
 @with_tenant_context
 async def create_customer_receipt(
     receipt_data: dict,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=255,
+    ),
     _: dict = Depends(PermissionChecker("sales", "create")),  # RBAC
     context: OrgContext = Depends(get_org_context),
     db: TenantAwareSession = Depends(get_tenant_aware_db)
@@ -368,44 +450,20 @@ async def create_customer_receipt(
             payment_date=receipt_data.get("payment_date"),
             reference_number=receipt_data.get("reference_number"),
             notes=receipt_data.get("notes"),
-            created_by=context.user_id
+            created_by=context.user_id,
+            idempotency_key=idempotency_key,
         )
         db.commit()
-        return result
+        return _payment_response(result, response, idempotency_key)
+    except (IdempotencyConflictError, IdempotencyStateError) as e:
+        db.rollback()
+        raise _idempotency_http_error(e)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating customer receipt: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create receipt: {str(e)}")
-
-@router.get("/outstanding")
-@with_tenant_context
-async def get_outstanding_invoices(
-    customer_id: Optional[int] = None,
-    overdue_only: bool = False,
-    _: dict = Depends(PermissionChecker("sales", "view")),  # RBAC
-    context: OrgContext = Depends(get_org_context),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """
-    Get list of outstanding invoices
-    
-    - Filter by customer
-    - Option to show only overdue invoices
-    - Includes aging analysis
-    """
-    try:
-        # Use service method for all outstanding invoice logic
-        return PaymentService.get_outstanding_invoices(
-            db=db,
-            customer_id=customer_id,
-            overdue_only=overdue_only
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting outstanding invoices: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
 
 @router.post("/bank-reconciliation")
 @with_tenant_context
@@ -518,3 +576,26 @@ async def get_aging_report(
     except Exception as e:
         logger.error(f"Error generating aging report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate aging report: {str(e)}")
+
+
+# NOTE: /{payment_id} MUST be the last GET route to avoid shadowing
+# static paths like /outstanding, /generate-receipt-number, /aging-report.
+@router.get("/{payment_id}")
+@with_tenant_context
+async def get_payment_by_id(
+    payment_id: int,
+    _: dict = Depends(PermissionChecker("sales", "view")),
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
+    """Get single payment by ID"""
+    try:
+        payment = PaymentService.get_payment_by_id(db, payment_id, str(context.org_id))
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        return payment
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting payment {payment_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get payment")

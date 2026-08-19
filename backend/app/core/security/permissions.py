@@ -12,6 +12,7 @@ import logging
 
 from ..database import get_db
 from ..auth.jwt_auth import decode_jwt  # Single source of truth
+from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,8 @@ class PermissionChecker:
         
         # TEST MODE: Bypass permission checks for automated testing
         # SECURITY: Block TEST_MODE in production
-        if os.getenv("TEST_MODE", "").lower() in ("true", "1", "yes"):
-            if os.getenv("ENV", "development").lower() in ("production", "prod"):
+        if is_test_mode_enabled():
+            if is_production():
                 logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

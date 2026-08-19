@@ -14,6 +14,7 @@ from sqlalchemy.sql import Select
 from uuid import UUID
 import logging
 import re
+import inspect
 from functools import wraps
 from fastapi import Depends
 import contextvars
@@ -30,7 +31,7 @@ _bypass_filter_context: contextvars.ContextVar[bool] = contextvars.ContextVar('b
 
 # Branch-aware context variables
 _branch_scope_context: contextvars.ContextVar[BranchScope] = contextvars.ContextVar('branch_scope', default=BranchScope.ALL)
-_branch_ids_context: contextvars.ContextVar[List[UUID]] = contextvars.ContextVar('branch_ids', default=[])
+_branch_ids_context: contextvars.ContextVar[List[int]] = contextvars.ContextVar('branch_ids', default=[])
 
 
 class TenantContext:
@@ -54,7 +55,7 @@ class TenantContext:
         org_id: UUID, 
         user_id: Optional[UUID] = None,
         branch_scope: BranchScope = BranchScope.ALL,
-        branch_ids: Optional[List[UUID]] = None
+        branch_ids: Optional[List[int]] = None
     ):
         """Set tenant + branch context for current request (thread-safe)"""
         _org_id_context.set(org_id)
@@ -86,7 +87,7 @@ class TenantContext:
         return _branch_scope_context.get()
     
     @classmethod
-    def get_branch_ids(cls) -> List[UUID]:
+    def get_branch_ids(cls) -> List[int]:
         """Get list of accessible branch IDs (thread-safe)"""
         return _branch_ids_context.get()
     
@@ -406,19 +407,17 @@ class TenantQueryBuilder:
             # User has no branches assigned - this is a security issue
             logger.error("[SECURITY] User has non-ALL scope but no branch_ids assigned!")
             # For safety, filter to impossible condition
-            params['_tenant_branch_id'] = '00000000-0000-0000-0000-000000000000'
+            params['_tenant_branch_id'] = -1
             return cls._add_branch_condition(query, 'branch_id = :_tenant_branch_id')
         
         if branch_scope == BranchScope.SINGLE:
             # Single branch filter
-            params['_tenant_branch_id'] = str(branch_ids[0])
+            params['_tenant_branch_id'] = branch_ids[0]
             return cls._add_branch_condition(query, 'branch_id = :_tenant_branch_id')
         
         elif branch_scope == BranchScope.MULTI:
             # Multiple branches filter - use IN clause
-            # Convert UUIDs to string for SQL
-            branch_id_strs = [str(bid) for bid in branch_ids]
-            params['_tenant_branch_ids'] = tuple(branch_id_strs)
+            params['_tenant_branch_ids'] = tuple(branch_ids)
             return cls._add_branch_condition(query, 'branch_id IN :_tenant_branch_ids')
         
         return query
@@ -648,14 +647,19 @@ def with_tenant_context(func):
                 branch_ids=getattr(context, 'branch_ids', [])
             )
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                if inspect.isawaitable(result):
+                    result = await result
                 return result
             finally:
                 TenantContext.clear_context()
         else:
             # No context found - execute without tenant filtering (risky!)
             logger.warning("No tenant context found in function arguments")
-            return await func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+            return result
     
     return wrapper
 
