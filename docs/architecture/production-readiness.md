@@ -11,7 +11,7 @@ override the database, transaction, browser, or live-environment gates below.
 ## Implemented evidence
 
 - The complete hermetic backend unit suite passes 183 tests; frontend
-  type-checking and all 33 Jest tests pass. The frontend production build also
+  type-checking and all 41 Jest tests pass. The frontend production build also
   completes, and the changed auth/API/calculation boundary passes a strict
   zero-warning lint gate.
 - Money and GST calculations use validated `Decimal` inputs and commercial
@@ -70,8 +70,9 @@ override the database, transaction, browser, or live-environment gates below.
    login alone does not provide the isolated test organization, deployed API,
    database URL, and user access token required by the harness. The full suite
    performs real writes and must never be pointed at a production organization.
-8. Playwright discovers the browser tests, but this managed workspace prevents
-   Chrome/listener execution. A normal CI runner must execute them.
+8. GitHub CI executes all four Playwright tests with system Chrome. The managed
+   local workspace still prevents Chrome/listener execution, so browser evidence
+   comes from the clean pull-request runner.
 9. The frontend production build completes but carries a large legacy
    lint-warning debt (452 warnings after this pass) and a 1.1 MB gzip main
    bundle. The changed critical boundary is linted with zero warnings; the
@@ -80,12 +81,12 @@ override the database, transaction, browser, or live-environment gates below.
 10. Create React App 5 declares a TypeScript 4 peer range while this application
     is validated on TypeScript 5. Clean installs therefore use a repository
     scoped `legacy-peer-deps` policy until the frontend is migrated off CRA.
-11. The 2026-08-19 GitHub clean install reported 66 npm advisories including
-    development tooling. The production-only audit was separated into its own
-    gate and non-breaking remediation reduced it from 12 findings to 5: two
-    moderate, one high, and two critical. The remaining findings require a
-    tested React Router 7 migration, PDF library major upgrades, and replacement
-    of `xlsx`, for which npm reports no fixed release.
+11. The 2026-08-19 clean GitHub production-only audit reports zero
+    vulnerabilities after retiring the unused router, upgrading the PDF stack,
+    and pinning SheetJS CE 0.20.3 from its official distribution with integrity
+    verification. The full install still reports 56 advisories confined to the
+    legacy CRA/development toolchain; removing that debt requires the planned
+    frontend build-system migration.
 
 ## Required commands
 
