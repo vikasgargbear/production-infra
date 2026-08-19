@@ -17,7 +17,7 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure'
+    video: browserChannel ? 'off' : 'retain-on-failure'
   },
   webServer: process.env.PLAYWRIGHT_SKIP_WEB_SERVER === 'true'
     ? undefined
