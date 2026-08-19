@@ -53,6 +53,7 @@ htmlcov/
 *.sqlite3
 *.db
 database/backups/
+artifacts/live-schema-captures/
 
 # Temporary
 *.tmp

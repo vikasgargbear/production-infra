@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, ReactNode, SetStateAction, Dispatch } from 'react';
+import React, { useState, useEffect, ReactNode, SetStateAction, Dispatch } from 'react';
 import { LucideIcon } from 'lucide-react';
 import ModuleHeader, { ModuleHeaderAction } from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';

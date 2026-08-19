@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowDownToLine, Search, Filter, Download, Eye, Printer, MessageCircle,
-  ArrowUpFromLine, ArrowRightLeft, Package, ChevronDown, ChevronRight,
-  Calendar, AlertCircle, CheckCircle, Clock, RefreshCw, Loader2
+  ArrowUpFromLine, ArrowRightLeft, Package,
+  RefreshCw, Loader2
 } from 'lucide-react';
 import { stockApi } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';

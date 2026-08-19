@@ -31,73 +31,6 @@ class SessionStatus(str, Enum):
 
 
 # =============================================================================
-# LOGIN SCHEMAS
-# =============================================================================
-
-class LoginRequest(BaseModel):
-    """Login request with validation"""
-    
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., min_length=6, max_length=128, description="User password")
-    remember_me: bool = Field(False, description="Extended session duration")
-
-    @field_validator("email")
-    @classmethod
-    def email_lowercase(cls, v):
-        """Normalize email to lowercase"""
-        return v.lower().strip()
-
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        json_schema_extra={
-            "example": {
-                "email": "user@example.com",
-                "password": "your_password_here",
-                "remember_me": False
-            }
-        }
-    )
-
-
-class UserSummary(BaseModel):
-    """User information summary"""
-    
-    id: int = Field(..., description="User ID")
-    email: EmailStr
-    full_name: Optional[str] = None
-    username: str
-    org_id: str = Field(..., description="Organization ID")
-    org_name: str
-    role_id: Optional[int] = None
-    role_name: Optional[str] = None
-    branch_id: Optional[int] = None
-    branch_name: Optional[str] = None
-    permissions: Dict = Field(default_factory=dict)
-    is_active: bool = True
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class LoginResponse(BaseModel):
-    """Successful login response"""
-    
-    access_token: str = Field(..., description="JWT access token")
-    token_type: str = Field("bearer")
-    expires_in: int = Field(..., description="Token expiry in seconds")
-    user: UserSummary
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                "token_type": "bearer",
-                "expires_in": 3600
-            }
-        }
-    )
-
-
-# =============================================================================
 # PASSWORD SCHEMAS
 # =============================================================================
 
@@ -157,25 +90,6 @@ class PasswordResetConfirm(BaseModel):
 # =============================================================================
 # ERROR & SESSION SCHEMAS
 # =============================================================================
-
-class AuthError(BaseModel):
-    """Structured error response"""
-    
-    error: str = Field(..., description="Error code")
-    error_description: str = Field(..., description="Human-readable message")
-    error_code: int = Field(..., description="Internal error code")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "error": "invalid_credentials",
-                "error_description": "The email or password is incorrect",
-                "error_code": 1001
-            }
-        }
-    )
-
 
 class SessionInfo(BaseModel):
     """Active session information"""

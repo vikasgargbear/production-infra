@@ -6,9 +6,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .token_blacklist import is_token_blacklisted, blacklist_token
 from ..env import is_production
@@ -30,33 +29,6 @@ ALGORITHM = "HS256"
 TOKEN_ISSUER = "aasopharma-api"
 TOKEN_AUDIENCE = "aasopharma-api"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 if IS_PRODUCTION else 1440  # 1h prod, 24h dev
-
-# Password hashing
-# Configure bcrypt to avoid 72-byte initialization issues
-# Use 10 rounds for faster authentication (still secure, but 4x faster than 12)
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__default_rounds=10,  # 10 rounds = ~0.7s, 12 rounds = ~2.9s
-    bcrypt__ident="2b"
-)
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash"""
-    # Bcrypt has a 72 byte limit, truncate if needed
-    if isinstance(plain_password, str):
-        plain_password = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    # Bcrypt has a 72 byte limit, truncate if needed
-    if isinstance(password, str):
-        password = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
@@ -129,7 +101,6 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
 # FASTAPI DEPENDENCIES - For use in route handlers
 # ==============================================================================
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from uuid import UUID
 
 # Bearer token scheme
@@ -217,7 +188,7 @@ def get_user_context_secure(
         )
 
 async def get_current_user_and_org(
-    token: Optional[str] = Depends(oauth2_scheme)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security),
 ):
     """
     Get current user and organization from JWT token.
@@ -226,7 +197,7 @@ async def get_current_user_and_org(
     JWT token is now REQUIRED - prevents client from bypassing auth.
     """
     
-    if not token:
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Provide Bearer token.",
@@ -241,7 +212,7 @@ async def get_current_user_and_org(
     )
     
     try:
-        payload = decode_jwt(token)
+        payload = decode_jwt(credentials.credentials)
         
         # Handle both old and new token formats
         user_id = payload.get("user_id") or payload.get("sub")

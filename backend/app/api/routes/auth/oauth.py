@@ -13,7 +13,7 @@ from ....core.auth.jwt_auth import create_access_token
 from ....core.auth.supabase_auth import supabase_auth
 from ....core.database import get_db
 from ....repositories.user_repository import UserRepository
-from ...services.auth.auth_service import AuthService
+from ...services.auth import build_erp_token_claims
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ async def exchange_supabase_session(
     if str(user_data["email"]).lower() != str(identity["email"]).lower():
         raise HTTPException(status_code=403, detail="ERP membership email does not match identity")
 
-    token_data = AuthService._prepare_token_data(user_data)
+    token_data = build_erp_token_claims(user_data)
     token_data["auth_user_id"] = str(auth_user_id)
     token_data["auth_provider"] = identity.get("app_metadata", {}).get("provider")
     access_token = create_access_token(token_data, expires_delta=timedelta(hours=1))

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Search, FileText, X, Check, ChevronDown, Calendar, Filter,
-  Eye, Printer, MessageCircle, RefreshCw
+  Search, FileText, X, Check, ChevronDown,
+  Eye, RefreshCw
 } from 'lucide-react';
 import Button from '../ui/Button';
 import { StatusBadge, DataTable } from '../ui';

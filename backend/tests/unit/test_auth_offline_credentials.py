@@ -8,12 +8,20 @@ def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_login_response_never_contains_password_derived_offline_auth_material():
-    route = _read("backend/app/api/routes/auth/enterprise.py")
-    service = _read("backend/app/api/services/auth/auth_service.py")
+def test_backend_password_login_stack_is_retired():
+    enterprise_route = _read("backend/app/api/routes/auth/enterprise.py")
+    repository = _read("backend/app/repositories/user_repository.py")
+    jwt_auth = _read("backend/app/core/auth/jwt_auth.py")
 
-    assert "offline_auth_hash" not in route
-    assert "create_offline_auth_hash" not in service
+    assert '@router.post("/login")' not in enterprise_route
+    assert '@router.post("/check-user")' not in enterprise_route
+    assert "password_hash" not in repository
+    assert "find_by_email" not in repository
+    assert "verify_password" not in jwt_auth
+    assert "get_password_hash" not in jwt_auth
+    assert "OAuth2PasswordBearer" not in jwt_auth
+    assert not (ROOT / "backend/app/api/services/auth/auth_service.py").exists()
+    assert not (ROOT / "backend/app/api/services/auth/exceptions.py").exists()
 
 
 def test_frontend_does_not_authenticate_with_cached_passwords():

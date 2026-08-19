@@ -2,12 +2,10 @@
 from .auth_schemas import (
     # Enums
     UserRole, SessionStatus,
-    # Login
-    LoginRequest, LoginResponse, UserSummary,
     # Password
     PasswordChangeRequest, PasswordResetRequest, PasswordResetConfirm,
     # Error & Session
-    AuthError, SessionInfo, SessionListResponse,
+    SessionInfo, SessionListResponse,
     # User Management
     UserCreate, UserUpdate, UserResponse,
 )
@@ -15,12 +13,10 @@ from .auth_schemas import (
 __all__ = [
     # Enums
     "UserRole", "SessionStatus",
-    # Login
-    "LoginRequest", "LoginResponse", "UserSummary",
     # Password
     "PasswordChangeRequest", "PasswordResetRequest", "PasswordResetConfirm",
     # Error & Session
-    "AuthError", "SessionInfo", "SessionListResponse",
+    "SessionInfo", "SessionListResponse",
     # User Management
     "UserCreate", "UserUpdate", "UserResponse",
 ]

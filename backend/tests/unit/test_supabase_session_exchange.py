@@ -65,10 +65,16 @@ def test_exchange_requires_bearer_credentials():
 
 
 def test_exchange_openapi_accepts_bearer_token_not_identity_body():
-    operation = app.openapi()["paths"]["/api/auth/oauth/supabase/session"]["post"]
+    schema = app.openapi()
+    operation = schema["paths"]["/api/auth/oauth/supabase/session"]["post"]
 
     assert operation["security"] == [{"HTTPBearer": []}]
     assert "requestBody" not in operation
+    assert "/api/auth/login" not in schema["paths"]
+    assert "/api/auth/check-user" not in schema["paths"]
+    assert "/api/auth/logout" in schema["paths"]
+    assert "/api/auth/verify-token" in schema["paths"]
+    assert "OAuth2PasswordBearer" not in schema["components"]["securitySchemes"]
 
 
 @pytest.mark.parametrize(
@@ -112,11 +118,6 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
         "find_by_auth_user_id",
         lambda auth_user_id, _db: looked_up.append(auth_user_id),
     )
-    monkeypatch.setattr(
-        oauth.UserRepository,
-        "find_by_email",
-        lambda *_args: pytest.fail("email-only membership lookup is unsafe"),
-    )
 
     with pytest.raises(HTTPException) as exc_info:
         _run(oauth.exchange_supabase_session(_credentials(), db=object()))
@@ -124,6 +125,7 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "erp_membership_required"
     assert looked_up == [UUID(AUTH_USER_ID)]
+    assert not hasattr(oauth.UserRepository, "find_by_email")
 
 
 @pytest.mark.parametrize(

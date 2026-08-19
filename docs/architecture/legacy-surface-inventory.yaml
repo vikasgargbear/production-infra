@@ -3,6 +3,17 @@ snapshot_date: "2026-08-19"
 canonical_repository: vikasgargbear/production-infra
 
 retired:
+  - id: backend.erp_password_login
+    surface: /api/auth/login and /api/auth/check-user
+    kind: backend_authentication_stack
+    reason: Production returned 410, the frontend exclusively uses Supabase Auth exchange, and the repository queried an unbaselined password_hash column.
+    evidence:
+      frontend_callers: 0
+      production_enabled: false
+      checked_schema_has_password_hash: false
+      openapi_password_flow_removed: true
+    replacement: /api/auth/oauth/supabase/session with immutable auth_user_id membership lookup
+
   - id: backend.initial_setup_router
     surface: backend/app/api/routes/org/initial_setup.py
     kind: backend_route_module

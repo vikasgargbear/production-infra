@@ -81,9 +81,8 @@ from .inventory.inventory import (
 # Auth schemas
 from .auth.auth_schemas import (
     UserRole, SessionStatus,
-    LoginRequest, LoginResponse, UserSummary,
     PasswordChangeRequest, PasswordResetRequest,
-    AuthError, SessionInfo, SessionListResponse,
+    SessionInfo, SessionListResponse,
     UserCreate, UserUpdate, UserResponse
 )
 

@@ -10,7 +10,7 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Implemented evidence
 
-- The complete hermetic backend unit suite passes 175 tests; frontend
+- The complete hermetic backend unit suite passes 183 tests; frontend
   type-checking and all 33 Jest tests pass. The frontend production build also
   completes, and the changed auth/API/calculation boundary passes a strict
   zero-warning lint gate.
@@ -73,7 +73,7 @@ override the database, transaction, browser, or live-environment gates below.
 8. Playwright discovers the browser tests, but this managed workspace prevents
    Chrome/listener execution. A normal CI runner must execute them.
 9. The frontend production build completes but carries a large legacy
-   lint-warning debt (529 warnings after this pass) and a 1.1 MB gzip main
+   lint-warning debt (452 warnings after this pass) and a 1.1 MB gzip main
    bundle. The changed critical boundary is linted with zero warnings; the
    remaining application warning and performance debt still requires staged
    remediation.

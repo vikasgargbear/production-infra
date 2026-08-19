@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ArrowRightLeft, Package, MapPin, Save, AlertCircle,
-  X, Loader2, CheckCircle, ArrowRight
+  ArrowRightLeft, Package, MapPin, AlertCircle,
+  X, ArrowRight
 } from 'lucide-react';
 import {
   GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
-  NumberInput, NotesSection, useToast, ModuleHeader
+  NotesSection, useToast
 } from '../../global';
-import { stockApi, branchesApi, settingsApi } from '../../../services/api';
+import { branchesApi, settingsApi } from '../../../services/api';
 import offlineDB from '../../../services/offline/core/offlineDatabase';
 import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import syncEngine from '../../../services/offline/sync/syncEngine';

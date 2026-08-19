@@ -20,6 +20,25 @@ validate `iss`, `aud`, `sub`, `exp`, `iat`, `jti`, and `token_use=access` on
 every protected path. Refresh-like tokens, unsigned organization headers,
 default tenant fallbacks, and email-only account linking are prohibited.
 
+## API Boundary
+
+The former ERP password endpoints `POST /api/auth/login` and
+`POST /api/auth/check-user` are retired. They had no frontend callers, exposed
+an OAuth2 password-flow contract that production rejected, and queried a
+`master.org_users.password_hash` column absent from the checked schema. Password
+verification and recovery remain Supabase responsibilities.
+
+The supported ERP authentication endpoints are:
+
+- `POST /api/auth/oauth/supabase/session`: exchange a verified Supabase bearer
+  token for a one-hour, tenant-scoped ERP token.
+- `POST /api/auth/logout`: revoke the ERP token by `jti` and clear local state.
+- `GET /api/auth/verify-token`: validate an ERP bearer token and its revocation
+  state.
+
+OpenAPI advertises HTTP Bearer authentication only. It must not contain an
+OAuth2 password grant or a token URL pointing to the retired login endpoint.
+
 ## Target Data Model
 
 The live schema baseline must be reviewed before migrations are authored. The
@@ -40,10 +59,11 @@ auto-link by email.
 
 ## Operator Gates
 
-1. Authenticate the CLI for project `jfrairkkzxwkhbtqejnz` using an
-   operator-owned Supabase session; never commit or share the access token.
-2. Pull a read-only schema dump and reconcile it with the checked-in bootstrap
-   before any identity or membership DDL.
+1. Capture project `jfrairkkzxwkhbtqejnz` with the fail-closed read-only command
+   in `docs/operations/supabase-live-schema-capture.md`; do not use CLI `db pull`
+   or `db push`, and never commit or share operator credentials.
+2. Reconcile the reviewed capture with the checked-in bootstrap before any
+   identity or membership DDL.
 3. Enable email confirmation and Google in Supabase. Google redirects to
    `https://jfrairkkzxwkhbtqejnz.supabase.co/auth/v1/callback`; Supabase redirects
    back to the exact Render frontend origin.

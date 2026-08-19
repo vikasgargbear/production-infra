@@ -32,6 +32,8 @@ Set these public values in the Blueprint prompt or Render dashboard:
 
 - Backend `CORS_ORIGINS`: the exact static-site origin, with no wildcard
 - Backend `APP_URL`: the same exact static-site origin used in invitations
+- Backend `SUPABASE_URL`: the project URL
+- Backend `SUPABASE_ANON_KEY`: the Supabase publishable/anon key
 - Frontend `REACT_APP_API_BASE_URL`: the exact backend origin, without `/api`
 - Frontend `REACT_APP_SUPABASE_URL`: the same project URL as backend `SUPABASE_URL`
 - Frontend `REACT_APP_SUPABASE_ANON_KEY`: the Supabase publishable/anon key
@@ -42,8 +44,6 @@ Docker build arguments, or frontend variables:
 
 - `DATABASE_URL`
 - `JWT_SECRET_KEY`
-- `SECRET_KEY` only while legacy fallback consumers remain
-- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SMTP_USER`
 - `SMTP_PASSWORD`
