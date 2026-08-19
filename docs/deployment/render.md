@@ -1,77 +1,108 @@
 # Render Deployment
 
-This repo includes a Render Blueprint at the repository root: `render.yaml`.
+The canonical Render configuration is the repository-root `render.yaml`. It
+defines the internal pilot only; it does not represent a production-readiness
+claim.
 
-## What It Deploys
+## Service Boundaries
 
-- Backend service: `production-infra-backend`
-- Runtime: Docker
-- Dockerfile: `backend/Dockerfile`
-- Docker context: `backend`
-- Health check: `/health`
-- Region: `singapore`
-- Plan: `free`
+- `aasopharma-api-pilot`: FastAPI Docker service in Singapore, exposing
+  `/health` and `/api`.
+- `aasopharma-erp-pilot`: compiled React static site.
+- Supabase project `jfrairkkzxwkhbtqejnz`: PostgreSQL and Supabase Auth.
 
-The database remains Supabase/Postgres. Do not create a separate Render Postgres database unless you are intentionally migrating data.
+Do not create a Render database. Do not advertise `/mcp`; the MCP transport and
+hosted OAuth grant flow are not implemented yet.
 
-## Required Secret Values
+Automatic Render deployments are disabled. Every Blueprint sync and deployment
+must follow a reviewed commit and current readiness report.
 
-Render prompts for these because they are marked `sync: false` in `render.yaml`:
+## Required Render Values
 
-- `DATABASE_URL`
-- `JWT_SECRET_KEY`
-- `SECRET_KEY`
-- `CORS_ORIGINS`
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER`
-- `SMTP_PASSWORD`
+Enter these operator-supplied values when creating or syncing the Blueprint:
 
-Production safeguards are set directly in the blueprint:
+Backend public configuration:
 
-- `APP_ENV=production`
-- `ENV=production`
-- `DEBUG=false`
-- `PORT=10000`
+- `CORS_ORIGINS`: exact Render frontend origin, without a wildcard.
+- `APP_URL`: the same frontend origin.
+- `SUPABASE_URL`: `https://jfrairkkzxwkhbtqejnz.supabase.co`.
+- `SUPABASE_ANON_KEY`: Supabase publishable/anon key.
+- `SMTP_HOST` and `SMTP_PORT` when email is enabled.
 
-Do not set `TEST_MODE` on Render. The backend is designed to fail closed if test mode is enabled in production.
+Backend secrets:
 
-## Deploy Steps
+- `DATABASE_URL`: Supabase PostgreSQL connection URL.
+- `JWT_SECRET_KEY`: independently generated ERP signing secret.
+- `SUPABASE_SERVICE_ROLE_KEY`: backend only.
+- `SMTP_USER` and `SMTP_PASSWORD` when email is enabled.
 
-1. Push the branch containing `render.yaml`.
-2. In Render, create a new Blueprint from the GitHub repository.
-3. Select the branch you want Render to deploy.
-4. Fill the prompted secret values.
-5. Wait for deploy success.
-6. Open the generated `https://*.onrender.com` URL and verify `/health`.
-7. Add the Render backend URL to the frontend API configuration.
-8. Set `CORS_ORIGINS` to the actual frontend origin.
-9. Run the live ERP verification suite against the Render URL.
+Frontend public build values:
 
-## Post-Deploy Verification
+- `REACT_APP_API_BASE_URL`: exact Render backend origin, without `/api`.
+- `REACT_APP_SUPABASE_URL`: the Supabase project URL.
+- `REACT_APP_SUPABASE_ANON_KEY`: Supabase publishable/anon key.
 
-From `backend/`:
+Never place `DATABASE_URL`, `JWT_SECRET_KEY`, the service-role key, or SMTP
+credentials in `REACT_APP_*`. The `sbp_` Supabase management access token is
+not a runtime application credential and must not be entered in Render.
+
+## Deployment Sequence
+
+1. Merge a reviewed revision containing `render.yaml`.
+2. Sign in to Render using the business-owned account and connect
+   `vikasgargbear/production-infra`.
+3. Create or sync the Blueprint from `main`.
+4. Enter every prompted value above directly in Render.
+5. Deploy the API and wait for `/health` to pass.
+6. Set the generated API origin as `REACT_APP_API_BASE_URL`.
+7. Set the generated frontend origin as `CORS_ORIGINS` and `APP_URL`.
+8. Deploy the static frontend.
+9. Configure the exact frontend origin in Supabase Auth URL settings.
+10. Run the non-destructive pilot checks below.
+
+The detailed authentication redirects and preflight checks are documented in
+`docs/deployment/render-pilot.md`.
+
+## Non-Destructive Pilot Verification
+
+Check both services:
 
 ```bash
-PHARMA_LIVE_API_BASE_URL="https://your-render-service.onrender.com" \
+curl --fail --silent --show-error https://your-backend.onrender.com/health
+curl --fail --silent --show-error https://your-frontend.onrender.com/
+```
+
+Then run only the read-only finance/GST audit:
+
+```bash
+cd backend
+PHARMA_LIVE_API_BASE_URL="https://your-backend.onrender.com" \
 PHARMA_LIVE_DATABASE_URL="postgresql://..." \
-PHARMA_LIVE_JWT_SECRET_KEY="..." \
-PHARMA_LIVE_TEST_ORG_ID="e78d6777-35f6-4b19-994f-caaede2f021a" \
-PHARMA_LIVE_TEST_USER_ID="8" \
-PHARMA_LIVE_TEST_BRANCH_ID="5" \
-PHARMA_LIVE_TEST_EMAIL="aasopharmaceuticals@gmail.com" \
-./venv/bin/python -m pytest tests/live_erp -q
+PHARMA_LIVE_ACCESS_TOKEN="short-lived-erp-access-token" \
+PHARMA_LIVE_TEST_ORG_ID="dedicated-test-org-uuid" \
+PHARMA_LIVE_TEST_BRANCH_ID="dedicated-test-branch-id" \
+./venv/bin/pytest -q tests/live_erp/test_live_finance_gst_audit.py
 ```
 
-Expected current result:
+`PHARMA_LIVE_ACCESS_TOKEN` is the short-lived ERP bearer returned after the
+Supabase session exchange. It is not the `sbp_` management token, the Supabase
+anon key, or the service-role key.
 
-```text
-26 passed, 1 skipped
+## Mutating Live Verification
+
+The rest of `tests/live_erp` creates, cancels, allocates, adjusts, and reverses
+business records. It uses compensating cleanup rather than a transaction-wide
+rollback. Run it only against a dedicated disposable organization and branch in
+a staging Supabase project or an explicitly isolated test tenant. Never run it
+against the real operating organization.
+
+No fixed pass count is documented because the collected matrix changes with
+the application. Verify collection and the exact target before every run:
+
+```bash
+cd backend
+./venv/bin/pytest --collect-only -q tests/live_erp
 ```
 
-## Free Plan Caveat
-
-Render free services are useful for staging or preview. They should not be treated as final production infrastructure for real users because free instances have platform limitations such as sleeping and resource constraints.
+Render free services are suitable for this internal pilot, with accepted cold
+starts. They are not the final production hosting tier for real ERP traffic.

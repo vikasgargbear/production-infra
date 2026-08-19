@@ -11,17 +11,28 @@ This runbook captures the live catalog needed to baseline project
 - The passwordless connection URL must identify `jfrairkkzxwkhbtqejnz` in its
   database hostname or pooler username. Other project refs are rejected.
 - The command forces `default_transaction_read_only=on`, opens an explicit
-  repeatable-read read-only transaction, disables `.psqlrc`, disables `.pgpass`,
-  and refuses to write an artifact unless PostgreSQL reports read-only mode.
+  repeatable-read read-only transaction, and refuses to write an artifact unless
+  PostgreSQL reports read-only mode. The `psql` path also disables `.psqlrc` and
+  `.pgpass`; the driver path separately sets the session to read-only and rolls
+  the transaction back after the catalog query.
 - Output is written with mode `0600` under the ignored
   `artifacts/live-schema-captures/` directory.
 
 ## Prerequisites
 
-Install PostgreSQL client tools so `psql` is available. Obtain a database role
-that can read PostgreSQL catalogs and `supabase_migrations.schema_migrations`.
-The command does not require or read `SUPABASE_ACCESS_TOKEN`, anon keys, service
-role keys, or any repository `.env` file.
+Use either of these local clients:
+
+- PostgreSQL client tools with `psql` available. This path is preferred when
+  both clients are installed.
+- The pinned `psycopg2-binary` dependency from `backend/requirements.txt`. This
+  is used automatically when `psql` is unavailable and does not require a
+  separate PostgreSQL client installation.
+
+Obtain a database role that can read PostgreSQL catalogs and
+`supabase_migrations.schema_migrations`. The command does not require or read
+`SUPABASE_ACCESS_TOKEN`, anon keys, service role keys, or any repository `.env`
+file. Both client paths pass the password separately from the validated URL and
+suppress remote error details.
 
 ## Validate Without Connecting
 
@@ -52,6 +63,12 @@ The command prints three repository-relative paths:
 - its SHA-256 checksum file
 - metadata containing the project ref, SQL checksum, read-only proof, and row
   counts for each catalog section
+
+When `psql` is absent, the psycopg2 fallback executes only the validated final
+catalog `WITH ... SELECT` statement. Connection options force
+`default_transaction_read_only=on`, `set_session` enforces repeatable-read and
+read-only mode, and the returned JSON must still prove
+`transaction_read_only = 'on'` before any artifact is written.
 
 Immediately remove the password from the shell environment:
 

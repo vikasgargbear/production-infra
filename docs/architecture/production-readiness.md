@@ -10,7 +10,7 @@ override the database, transaction, browser, or live-environment gates below.
 
 ## Implemented evidence
 
-- The complete hermetic backend unit suite passes 194 tests; frontend
+- The complete hermetic backend unit suite passes 198 tests; frontend
   type-checking and all 41 Jest tests pass. The frontend production build also
   completes, and the changed auth/API/calculation boundary passes a strict
   zero-warning lint gate.

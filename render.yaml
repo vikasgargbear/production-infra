@@ -45,7 +45,6 @@ services:
   - type: web
     name: aasopharma-erp-pilot
     runtime: static
-    plan: free
     buildCommand: cd frontend && npm ci && npm run typecheck && npm run lint:critical && npm run test:ci -- --runInBand && CI=false npm run build
     staticPublishPath: ./frontend/build
     autoDeployTrigger: "off"

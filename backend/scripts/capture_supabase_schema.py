@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 from urllib.parse import unquote, urlparse
 
 
@@ -66,8 +66,7 @@ def validate_connection_url(raw_url: str, project_ref: str) -> str:
     return raw_url
 
 
-def validate_capture_sql(path: Path = CAPTURE_SQL) -> str:
-    sql = path.read_text(encoding="utf-8")
+def _validate_capture_sql_text(sql: str) -> str:
     if "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;" not in sql:
         raise CaptureError("Capture SQL must begin an explicit read-only transaction")
     if "current_setting('transaction_read_only')" not in sql:
@@ -84,6 +83,27 @@ def validate_capture_sql(path: Path = CAPTURE_SQL) -> str:
         line = sql.count("\n", 0, match.start()) + 1
         raise CaptureError(f"Capture SQL contains forbidden statement at line {line}")
     return sql
+
+
+def validate_capture_sql(path: Path = CAPTURE_SQL) -> str:
+    return _validate_capture_sql_text(path.read_text(encoding="utf-8"))
+
+
+def extract_catalog_query(sql: str) -> str:
+    """Return the single catalog CTE query, excluding transaction control."""
+    validated_sql = _validate_capture_sql_text(sql)
+    query_start = validated_sql.find("WITH selected_schemas AS (")
+    query_end = validated_sql.rfind("\n\nCOMMIT;")
+    if query_start < 0 or query_end < 0 or query_end <= query_start:
+        raise CaptureError("Capture SQL must contain one final catalog CTE query")
+    query = validated_sql[query_start:query_end].strip()
+    if (
+        not query.startswith("WITH selected_schemas AS (")
+        or not query.endswith(";")
+        or query.count(";") != 1
+    ):
+        raise CaptureError("Capture SQL final catalog query has an unexpected shape")
+    return query
 
 
 def _minimal_psql_environment(
@@ -106,6 +126,21 @@ def _minimal_psql_environment(
     if source.get("HOME"):
         environment["HOME"] = source["HOME"]
     return environment
+
+
+def _validate_payload(raw_payload: Any) -> dict:
+    if isinstance(raw_payload, dict):
+        payload = raw_payload
+    else:
+        try:
+            payload = json.loads(raw_payload)
+        except (json.JSONDecodeError, TypeError) as error:
+            raise CaptureError("Capture did not return one valid JSON document") from error
+    if payload.get("transaction_read_only") != "on":
+        raise CaptureError("Remote transaction did not prove read-only mode; artifact discarded")
+    if payload.get("capture_format_version") != CAPTURE_FORMAT_VERSION:
+        raise CaptureError("Unexpected live capture format version")
+    return payload
 
 
 def run_capture(
@@ -136,16 +171,70 @@ def run_capture(
         raise CaptureError(
             "Read-only psql capture failed; remote error output is suppressed to protect credentials"
         )
-    output = result.stdout.strip()
+    return _validate_payload(result.stdout.strip())
+
+
+def _load_psycopg2() -> Any:
     try:
-        payload = json.loads(output)
-    except json.JSONDecodeError as error:
-        raise CaptureError("Capture did not return one valid JSON document") from error
-    if payload.get("transaction_read_only") != "on":
-        raise CaptureError("Remote transaction did not prove read-only mode; artifact discarded")
-    if payload.get("capture_format_version") != CAPTURE_FORMAT_VERSION:
-        raise CaptureError("Unexpected live capture format version")
-    return payload
+        import psycopg2
+    except ImportError:
+        raise CaptureError("psql or the pinned psycopg2 driver is required") from None
+    return psycopg2
+
+
+def run_psycopg2_capture(
+    *,
+    psycopg2_module: Any,
+    connection_url: str,
+    password: str,
+) -> dict:
+    """Run the validated catalog query through a read-only psycopg2 session."""
+    catalog_query = extract_catalog_query(validate_capture_sql())
+    connection = None
+    cursor = None
+    try:
+        connection = psycopg2_module.connect(
+            connection_url,
+            password=password,
+            sslmode="require",
+            connect_timeout=15,
+            options=(
+                "-c default_transaction_read_only=on "
+                "-c statement_timeout=120000 -c lock_timeout=5000"
+            ),
+        )
+        connection.set_session(
+            readonly=True,
+            autocommit=False,
+            isolation_level="REPEATABLE READ",
+        )
+        cursor = connection.cursor()
+        cursor.execute(catalog_query)
+        row = cursor.fetchone()
+        if not row or len(row) != 1:
+            raise CaptureError("Capture did not return one valid JSON document")
+        return _validate_payload(row[0])
+    except CaptureError:
+        raise
+    except Exception:
+        raise CaptureError(
+            "Read-only psycopg2 capture failed; remote error output is suppressed to protect credentials"
+        ) from None
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if connection is not None:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+            try:
+                connection.close()
+            except Exception:
+                pass
 
 
 def write_artifacts(payload: dict, project_ref: str, output_root: Path) -> tuple[Path, Path, Path]:
@@ -213,20 +302,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         connection_url = validate_connection_url(raw_url, args.project_ref)
         if PASSWORD_ENV not in os.environ or not os.environ[PASSWORD_ENV]:
             raise CaptureError(f"{PASSWORD_ENV} is required and must be operator-supplied")
-        psql = shutil.which("psql")
-        if not psql:
-            raise CaptureError("psql is required")
         if args.validate_only:
             print(
                 f"Validated read-only capture for project {args.project_ref}; no connection opened"
             )
             return 0
 
-        payload = run_capture(
-            psql=psql,
-            connection_url=connection_url,
-            password=os.environ[PASSWORD_ENV],
-        )
+        psql = shutil.which("psql")
+        psycopg2_module = None if psql else _load_psycopg2()
+        if psql:
+            payload = run_capture(
+                psql=psql,
+                connection_url=connection_url,
+                password=os.environ[PASSWORD_ENV],
+            )
+        else:
+            payload = run_psycopg2_capture(
+                psycopg2_module=psycopg2_module,
+                connection_url=connection_url,
+                password=os.environ[PASSWORD_ENV],
+            )
         paths = write_artifacts(payload, args.project_ref, DEFAULT_OUTPUT_ROOT)
     except (CaptureError, OSError) as error:
         print(f"Schema capture blocked: {error}", file=sys.stderr)

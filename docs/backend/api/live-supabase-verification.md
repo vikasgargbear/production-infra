@@ -1,6 +1,9 @@
 # Live Supabase Verification
 
-This document records the current live-verification setup for Pharma ERP and the latest results against the actual Supabase database.
+This document contains historical live-verification evidence and the current
+test layout. It is not evidence that the present revision is production-ready.
+Use `backend/tests/live_erp/README.md` for the executable environment contract
+and `docs/deployment/render.md` for the current hosted pilot procedure.
 
 ## Scope
 
@@ -55,11 +58,9 @@ Required env:
 ```bash
 export PHARMA_LIVE_API_BASE_URL="http://127.0.0.1:8000"
 export PHARMA_LIVE_DATABASE_URL="postgresql://..."
-export PHARMA_LIVE_JWT_SECRET_KEY="..."
-export PHARMA_LIVE_TEST_ORG_ID="e78d6777-35f6-4b19-994f-caaede2f021a"
-export PHARMA_LIVE_TEST_USER_ID="8"
-export PHARMA_LIVE_TEST_BRANCH_ID="5"
-export PHARMA_LIVE_TEST_EMAIL="aasopharmaceuticals@gmail.com"
+export PHARMA_LIVE_ACCESS_TOKEN="short-lived-erp-access-token"
+export PHARMA_LIVE_TEST_ORG_ID="dedicated-test-org-uuid"
+export PHARMA_LIVE_TEST_BRANCH_ID="dedicated-test-branch-id"
 
 # Optional when the DB hostname resolves unreliably from the shell:
 # export PHARMA_LIVE_DATABASE_HOSTADDR="x.x.x.x"
@@ -103,9 +104,9 @@ PORT=8000 \
 
 This is the fallback validation path when the public Railway hostname is not reachable from the shell but the real database is reachable.
 
-## Current Verified State
+## Historical Verified State
 
-Verified on April 14, 2026 against:
+The results below were recorded on April 14, 2026 against an earlier revision:
 
 - Supabase project: `jfrairkkzxwkhbtqejnz`
 - org: `e78d6777-35f6-4b19-994f-caaede2f021a`
