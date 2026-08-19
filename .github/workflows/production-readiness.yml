@@ -79,6 +79,84 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=high
 
+  deploy-render-pilot:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - backend-unit
+      - frontend
+      - frontend-dependency-audit
+      - mcp-sdk-compatibility
+    runs-on: ubuntu-latest
+    env:
+      RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+      RENDER_FRONTEND_SERVICE_ID: ${{ vars.RENDER_FRONTEND_SERVICE_ID }}
+      RENDER_API_URL: ${{ vars.RENDER_API_URL }}
+      RENDER_FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL }}
+    steps:
+      - name: Refuse incomplete Render configuration
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          test -n "$RENDER_API_KEY"
+          test -n "$RENDER_API_SERVICE_ID"
+          test -n "$RENDER_FRONTEND_SERVICE_ID"
+          test -n "$RENDER_API_URL"
+          test -n "$RENDER_FRONTEND_URL"
+
+      - name: Deploy API and wait for readiness
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          deploy_id=$(curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_API_SERVICE_ID/deploys" \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"$GITHUB_SHA\"}" \
+            | jq -er '.id')
+          for attempt in $(seq 1 60); do
+            status=$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_API_SERVICE_ID/deploys/$deploy_id" \
+              | jq -er '.status')
+            case "$status" in
+              live) break ;;
+              build_failed|update_failed|canceled|deactivated) exit 1 ;;
+            esac
+            test "$attempt" -lt 60
+            sleep 10
+          done
+          curl --fail --silent --show-error "$RENDER_API_URL/health" >/dev/null
+          curl --fail --silent --show-error "$RENDER_API_URL/ready" >/dev/null
+
+      - name: Deploy frontend and verify the SPA
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          deploy_id=$(curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_FRONTEND_SERVICE_ID/deploys" \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"$GITHUB_SHA\"}" \
+            | jq -er '.id')
+          for attempt in $(seq 1 60); do
+            status=$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_FRONTEND_SERVICE_ID/deploys/$deploy_id" \
+              | jq -er '.status')
+            case "$status" in
+              live) break ;;
+              build_failed|update_failed|canceled|deactivated) exit 1 ;;
+            esac
+            test "$attempt" -lt 60
+            sleep 10
+          done
+          curl --fail --silent --show-error "$RENDER_FRONTEND_URL/" \
+            | grep -F '<div id="root"></div>' >/dev/null
+
   production-blockers:
     runs-on: ubuntu-latest
     steps:

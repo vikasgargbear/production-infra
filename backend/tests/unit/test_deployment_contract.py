@@ -126,6 +126,30 @@ def test_render_readiness_requires_database_without_replacing_liveness():
     assert provisioner.count('"healthCheckPath": "/ready"') == 2
 
 
+def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    job = workflow.split("  deploy-render-pilot:", 1)[1].split(
+        "  production-blockers:", 1
+    )[0]
+
+    assert "github.event_name == 'push'" in job
+    assert "github.ref == 'refs/heads/main'" in job
+    for dependency in (
+        "backend-unit",
+        "frontend",
+        "frontend-dependency-audit",
+        "mcp-sdk-compatibility",
+    ):
+        assert f"- {dependency}" in job
+    assert "production-blockers" not in job
+    assert 'commitId' in job
+    assert "$GITHUB_SHA" in job
+    assert '"$RENDER_API_URL/ready"' in job
+    assert "secrets.RENDER_API_KEY" in job
+    assert "vars.RENDER_API_SERVICE_ID" in job
+    assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
+
+
 def test_production_database_configuration_fails_closed():
     database = _read("backend/app/core/database.py")
 
