@@ -161,6 +161,120 @@ def test_capture_is_discarded_without_remote_read_only_proof(monkeypatch):
         )
 
 
+def test_psycopg2_fallback_is_read_only_and_executes_only_catalog_select(capsys):
+    project = capture.EXPECTED_PROJECT_REF
+    connection_url = f"postgresql://postgres@db.{project}.supabase.co/postgres"
+    password = "database-password-must-not-be-logged"
+    observed = {"queries": []}
+
+    class FakeCursor:
+        def execute(self, query):
+            observed["queries"].append(query)
+
+        def fetchone(self):
+            return (_payload(),)
+
+        def close(self):
+            observed["cursor_closed"] = True
+
+    class FakeConnection:
+        def set_session(self, **kwargs):
+            observed["session"] = kwargs
+
+        def cursor(self):
+            return FakeCursor()
+
+        def rollback(self):
+            observed["rolled_back"] = True
+
+        def close(self):
+            observed["connection_closed"] = True
+
+    def fake_connect(dsn, **kwargs):
+        observed["dsn"] = dsn
+        observed["connect_kwargs"] = kwargs
+        return FakeConnection()
+
+    result = capture.run_psycopg2_capture(
+        psycopg2_module=SimpleNamespace(connect=fake_connect),
+        connection_url=connection_url,
+        password=password,
+    )
+
+    expected_query = capture.extract_catalog_query(capture.validate_capture_sql())
+    assert result["transaction_read_only"] == "on"
+    assert observed["dsn"] == connection_url
+    assert password not in observed["dsn"]
+    assert observed["connect_kwargs"]["password"] == password
+    assert observed["connect_kwargs"]["sslmode"] == "require"
+    assert "default_transaction_read_only=on" in observed["connect_kwargs"]["options"]
+    assert observed["session"] == {
+        "readonly": True,
+        "autocommit": False,
+        "isolation_level": "REPEATABLE READ",
+    }
+    assert observed["queries"] == [expected_query]
+    assert expected_query.startswith("WITH selected_schemas AS (")
+    assert "BEGIN TRANSACTION" not in expected_query
+    assert "SET LOCAL" not in expected_query
+    assert "COMMIT" not in expected_query
+    assert observed["rolled_back"] is True
+    assert observed["cursor_closed"] is True
+    assert observed["connection_closed"] is True
+    captured = capsys.readouterr()
+    assert password not in captured.out
+    assert password not in captured.err
+
+
+def test_psycopg2_error_output_is_suppressed():
+    password = "database-password-must-not-escape"
+
+    def fail_connect(*_args, **_kwargs):
+        raise RuntimeError(f"remote error echoed {password}")
+
+    with pytest.raises(capture.CaptureError) as error:
+        capture.run_psycopg2_capture(
+            psycopg2_module=SimpleNamespace(connect=fail_connect),
+            connection_url=(
+                "postgresql://postgres@db."
+                f"{capture.EXPECTED_PROJECT_REF}.supabase.co/postgres"
+            ),
+            password=password,
+        )
+
+    assert password not in str(error.value)
+    assert "remote error output is suppressed" in str(error.value)
+
+
+def test_psycopg2_capture_is_discarded_without_remote_read_only_proof():
+    class FakeCursor:
+        def execute(self, _query):
+            pass
+
+        def fetchone(self):
+            return (_payload(transaction_read_only="off"),)
+
+        def close(self):
+            pass
+
+    connection = SimpleNamespace(
+        set_session=lambda **_kwargs: None,
+        cursor=lambda: FakeCursor(),
+        rollback=lambda: None,
+        close=lambda: None,
+    )
+
+    with pytest.raises(capture.CaptureError, match="did not prove read-only"):
+        capture.run_psycopg2_capture(
+            psycopg2_module=SimpleNamespace(connect=lambda *_args, **_kwargs: connection),
+            connection_url=(
+                "postgresql://postgres@db."
+                f"{capture.EXPECTED_PROJECT_REF}.supabase.co/postgres"
+            ),
+            password="secret",
+        )
+
+
 def test_artifact_checksum_and_metadata_contain_no_credentials(tmp_path: Path):
     payload = _payload(tables=[{"table_schema": "sales", "table_name": "invoices"}])
     artifact, checksum, metadata = capture.write_artifacts(
@@ -192,6 +306,25 @@ def test_validate_only_never_opens_a_connection(monkeypatch, capsys):
         capture.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("validate-only must not invoke psql"),
+    )
+
+    assert capture.main(["--project-ref", project, "--validate-only"]) == 0
+    assert "no connection opened" in capsys.readouterr().out
+
+
+def test_validate_only_with_psycopg2_fallback_never_opens_connection(monkeypatch, capsys):
+    project = capture.EXPECTED_PROJECT_REF
+    monkeypatch.setenv(
+        capture.CONNECTION_ENV,
+        f"postgresql://postgres@db.{project}.supabase.co/postgres",
+    )
+    monkeypatch.setenv(capture.PASSWORD_ENV, "secret")
+    monkeypatch.setattr(capture.shutil, "which", lambda _name: None)
+
+    monkeypatch.setattr(
+        capture,
+        "_load_psycopg2",
+        lambda: pytest.fail("validate-only must not load psycopg2"),
     )
 
     assert capture.main(["--project-ref", project, "--validate-only"]) == 0
