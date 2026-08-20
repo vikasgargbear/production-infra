@@ -17705,7 +17705,7 @@ REVOKE ALL ON FUNCTION "erp_trade_commands_v2"."assert_landed_cost_document"(uui
 CREATE FUNCTION "erp_trade_commands_v2"."guard_posted_landed_allocation"()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ''
 AS $function$
 DECLARE target_org uuid; target_document uuid; target_status text; target_type text;
@@ -17903,7 +17903,7 @@ REVOKE ALL ON FUNCTION "erp_trade_commands_v2"."assert_source_inventory_ownershi
 CREATE FUNCTION "erp_trade_commands_v2"."guard_source_inventory_ownership"()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ''
 AS $function$
 DECLARE source_org uuid; source_id uuid; source_status text; original inventory.inventory_documents%ROWTYPE;

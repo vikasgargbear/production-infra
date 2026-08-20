@@ -379,7 +379,6 @@ BEGIN
     RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
 END
 """,
-            security_definer=False,
         ),
         'CREATE CONSTRAINT TRIGGER "landed_cost_allocations_exact_ct" AFTER INSERT OR UPDATE OR DELETE ON "inventory"."inventory_document_lines" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "erp_trade_commands_v2"."guard_posted_landed_allocation"()',
     ]
@@ -516,7 +515,6 @@ BEGIN
     RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
 END
 """,
-            security_definer=False,
         ),
         'CREATE CONSTRAINT TRIGGER "inventory_documents_source_owner_v2_ct" AFTER INSERT OR UPDATE OR DELETE ON "inventory"."inventory_documents" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "erp_trade_commands_v2"."guard_source_inventory_ownership"()',
         'CREATE CONSTRAINT TRIGGER "dispatch_inventory_owner_v2_ct" AFTER INSERT OR UPDATE OR DELETE ON "sales"."dispatches" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "erp_trade_commands_v2"."guard_source_inventory_ownership"(\'sales_dispatch\')',

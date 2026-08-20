@@ -115,6 +115,13 @@ def test_source_ownership_is_deferred_and_covers_every_typed_source() -> None:
         assert token in text
     assert text.count("DEFERRABLE INITIALLY DEFERRED") >= 9
     assert "reverses_document_id=owned_id AND status='posted'" in text
+    for function_name in (
+        "guard_source_inventory_ownership",
+        "guard_posted_landed_allocation",
+    ):
+        start = text.index(f'CREATE FUNCTION \\"erp_trade_commands_v2\\".\\"{function_name}\\"')
+        end = text.index("$function$", start)
+        assert "SECURITY DEFINER" in text[start:end]
 
 
 def test_mwa_adjustment_and_reversal_are_exact_zero_quantity_entries() -> None:
