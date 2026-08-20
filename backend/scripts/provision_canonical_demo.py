@@ -1507,7 +1507,7 @@ def reconcile_purchase_order(connection, resource_id: str) -> dict[str, Any]:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
             """
-            SELECT purchase_order.id,purchase_order.order_number,purchase_order.status,
+            SELECT purchase_order.id,purchase_order.purchase_order_number,purchase_order.status,
                    purchase_order.subtotal,purchase_order.gst_taxable_total,
                    purchase_order.cgst_total,purchase_order.sgst_total,
                    purchase_order.igst_total,purchase_order.grand_total,
@@ -1815,12 +1815,12 @@ def reconcile_goods_receipt(connection, resource_id: str) -> dict[str, Any]:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute(
             """
-            SELECT receipt.id,receipt.receipt_number,receipt.status,
+            SELECT receipt.id,receipt.goods_receipt_number,receipt.status,
                    line.id AS goods_receipt_line_id,line.batch_id,
                    line.base_accepted_quantity,line.base_free_quantity,
                    line.extended_cost,document.id AS inventory_document_id,
                    balance.on_hand_quantity,balance.inventory_value,
-                   balance.moving_weighted_average
+                   balance.average_unit_cost AS moving_weighted_average
               FROM procurement.goods_receipts AS receipt
               JOIN procurement.goods_receipt_lines AS line
                 ON line.org_id=receipt.org_id AND line.goods_receipt_id=receipt.id
@@ -1854,7 +1854,14 @@ def reconcile_supplier_invoice(connection, resource_id: str) -> dict[str, Any]:
                    invoice.net_value_total,invoice.cgst_total,invoice.sgst_total,
                    invoice.grand_total,line.id AS supplier_invoice_line_id,
                    allocation.id AS receipt_allocation_id,
-                   item.id AS open_item_id,item.original_amount,item.outstanding_amount,
+                   item.id AS open_item_id,item.principal_amount AS original_amount,
+                   item.principal_amount-coalesce((
+                     SELECT sum(posted_allocation.amount)
+                       FROM finance.allocations posted_allocation
+                      WHERE posted_allocation.org_id=item.org_id
+                        AND posted_allocation.open_item_id=item.id
+                        AND posted_allocation.status='posted'
+                   ),0) AS outstanding_amount,
                    count(DISTINCT tax_document.id) AS tax_document_count,
                    count(DISTINCT event.id) AS accounting_event_count
               FROM procurement.supplier_invoices AS invoice
@@ -2260,7 +2267,14 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
                    invoice.rounding_adjustment,invoice.grand_total,
                    line.id AS invoice_line_id,
                    allocation.id AS invoice_dispatch_allocation_id,
-                   item.id AS open_item_id,item.outstanding_amount,
+                   item.id AS open_item_id,
+                   item.principal_amount-coalesce((
+                     SELECT sum(posted_allocation.amount)
+                       FROM finance.allocations posted_allocation
+                      WHERE posted_allocation.org_id=item.org_id
+                        AND posted_allocation.open_item_id=item.id
+                        AND posted_allocation.status='posted'
+                   ),0) AS outstanding_amount,
                    count(DISTINCT tax_document.id) AS tax_document_count,
                    count(DISTINCT event.id) AS accounting_event_count
               FROM sales.invoices AS invoice

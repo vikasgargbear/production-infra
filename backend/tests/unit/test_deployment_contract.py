@@ -371,6 +371,16 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "supplier_challan_number" in provisioner
     assert "dispatch_delivery_challan_number" in provisioner
     assert "purchase_return_delivery_challan_number" in provisioner
+    assert "purchase_order.purchase_order_number" in provisioner
+    assert "receipt.goods_receipt_number" in provisioner
+    assert "balance.average_unit_cost AS moving_weighted_average" in provisioner
+    assert "item.principal_amount AS original_amount" in provisioner
+    assert "posted_allocation.open_item_id=item.id" in provisioner
+    assert "purchase_order.order_number" not in provisioner
+    assert "receipt.receipt_number" not in provisioner
+    assert "balance.moving_weighted_average" not in provisioner
+    assert "item.original_amount" not in provisioner
+    assert "item.outstanding_amount" not in provisioner
     assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
     assert provisioner.count("DEMOB1234C") == 1
     assert provisioner.count("DEMOC5678D") == 4
