@@ -229,7 +229,7 @@ def mcp_create_payload(
             "runtime": "docker",
             "plan": "free",
             "region": "singapore",
-            "healthCheckPath": "/ready",
+            "healthCheckPath": "/health",
             "envSpecificDetails": {
                 "dockerContext": "./backend/mcp_runtime",
                 "dockerfilePath": "./backend/mcp_runtime/Dockerfile",
@@ -385,7 +385,9 @@ class RenderClient:
             desired = {
                 "runtime": "docker",
                 "plan": "free",
-                "healthCheckPath": "/ready",
+                "healthCheckPath": (
+                    "/ready" if service.name == API_NAME else "/health"
+                ),
                 "envSpecificDetails": docker,
             }
         else:

@@ -1,8 +1,8 @@
 # Render MCP Service Contract
 
 `aasopharma-mcp-pilot` is a separate Python 3.11 Docker service declared by
-`render.yaml`. Auto-deploy is off and `/ready` is the health gate. This change
-does not deploy or mutate a live service.
+`render.yaml`. Auto-deploy is off. Render probes `/health` for process liveness;
+`/ready` remains the separate release-readiness gate.
 
 Use the six required variables in
 `backend/mcp_runtime/service-contract.json`. The REST and MCP services share
@@ -21,7 +21,8 @@ Current stop-ship blockers:
 3. The canonical schema and internal read endpoints are not deployment-verified.
 4. MCP Inspector and real ChatGPT/Claude staging verification are incomplete.
 
-`/ready` therefore returns `503`; `/health` alone is not readiness. Claude's
+`/ready` therefore returns `503`; a healthy `/health` response does not make the
+service ready for operator use. Claude's
 DCR-disabled path uses a pre-registered client and callback
 `https://claude.ai/api/mcp/auth_callback`. ChatGPT rollout additionally requires
 `offline_access`, admin/developer-mode review, and a frozen tool snapshot.

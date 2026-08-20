@@ -260,7 +260,7 @@ jobs:
             --branch "$GITHUB_REF_NAME" \
             > staging-evidence/render-pilot.json
 
-      - name: Wait for free API and frontend smoke readiness
+      - name: Wait for free service smoke readiness
         run: |
           set -euo pipefail
           api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
@@ -272,6 +272,7 @@ jobs:
 
           api_ready=false
           frontend_ready=false
+          mcp_healthy=false
           for _attempt in $(seq 1 90); do
             if curl --fail --silent --show-error --max-time 20 "$api_url/health" >/dev/null \
               && curl --fail --silent --show-error --max-time 20 "$api_url/ready" >/dev/null; then
@@ -280,13 +281,18 @@ jobs:
             if curl --fail --silent --show-error --max-time 20 "$frontend_url/" >/dev/null; then
               frontend_ready=true
             fi
-            if [ "$api_ready" = true ] && [ "$frontend_ready" = true ]; then
+            if curl --fail --silent --show-error --max-time 20 "$mcp_url/health" >/dev/null; then
+              mcp_healthy=true
+            fi
+            if [ "$api_ready" = true ] && [ "$frontend_ready" = true ] \
+              && [ "$mcp_healthy" = true ]; then
               break
             fi
             sleep 10
           done
           test "$api_ready" = true
           test "$frontend_ready" = true
+          test "$mcp_healthy" = true
 
           mcp_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --max-time 20 "$mcp_url/ready" || true)
@@ -301,6 +307,7 @@ jobs:
                  frontend_url: $frontend,
                  frontend_ready: true,
                  mcp_url: $mcp,
+                 mcp_healthy: true,
                  mcp_readiness_http_status: $mcp_status,
                  mcp_advertised: false
                }

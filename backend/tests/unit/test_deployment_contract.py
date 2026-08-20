@@ -86,7 +86,7 @@ def test_render_mcp_service_is_isolated_minimal_and_fail_closed():
 
     assert "dockerfilePath: ./backend/mcp_runtime/Dockerfile" in service
     assert "dockerContext: ./backend/mcp_runtime" in service
-    assert "healthCheckPath: /ready" in service
+    assert "healthCheckPath: /health" in service
     assert 'autoDeployTrigger: "off"' in service
     for name in (
         "SUPABASE_OAUTH_ISSUER",
@@ -149,8 +149,16 @@ def test_render_readiness_requires_database_without_replacing_liveness():
     assert "READINESS_TIMEOUT_SECONDS = 5.0" in main
     assert 'content={"status": "not_ready"}' in main
     assert "/health" in dockerfile
-    assert "healthCheckPath: /ready" in blueprint
-    assert provisioner.count('"healthCheckPath": "/ready"') == 3
+    api_service = blueprint.split("name: aasopharma-api-pilot", 1)[1].split(
+        "  - type: web", 1
+    )[0]
+    mcp_service = blueprint.split("name: aasopharma-mcp-pilot", 1)[1].split(
+        "  - type: web", 1
+    )[0]
+    assert "healthCheckPath: /ready" in api_service
+    assert "healthCheckPath: /health" in mcp_service
+    assert provisioner.count('"healthCheckPath": "/ready"') == 1
+    assert provisioner.count('"healthCheckPath": "/health"') == 1
 
 
 def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():

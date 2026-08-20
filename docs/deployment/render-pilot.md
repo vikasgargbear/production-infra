@@ -18,12 +18,13 @@ have been reviewed.
 
 ## Backend
 
-The Docker service builds with context `backend/`, runs as a non-root user,
+The API Docker service builds with context `backend/`, runs as a non-root user,
 binds the platform `PORT`, and exposes `GET /health` for process liveness and
-`GET /ready` for Render's database-backed health gate. REST lives under `/api`.
-The MCP transport is isolated from legacy FastAPI dependency pins in its own
-Python 3.11 service. Do not advertise it to ChatGPT or Claude while `/ready`
-reports the blockers documented in `render-mcp.md`.
+`GET /ready` for its database-backed Render health gate. REST lives under
+`/api`. The isolated Python 3.11 MCP service uses `GET /health` as Render's
+liveness check and keeps `GET /ready` as a stricter release gate. Do not
+advertise it to ChatGPT or Claude while `/ready` reports the blockers documented
+in `render-mcp.md`.
 
 ## Configuration
 

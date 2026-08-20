@@ -66,7 +66,7 @@ def test_dry_run_payloads_match_reviewed_render_contract(capsys):
     assert all(item["value"].startswith("${") for item in api["envVars"])
     assert mcp["type"] == "web_service"
     assert mcp["autoDeploy"] == "no"
-    assert mcp["serviceDetails"]["healthCheckPath"] == "/ready"
+    assert mcp["serviceDetails"]["healthCheckPath"] == "/health"
     assert mcp["serviceDetails"]["envSpecificDetails"] == {
         "dockerContext": "./backend/mcp_runtime",
         "dockerfilePath": "./backend/mcp_runtime/Dockerfile",

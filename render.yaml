@@ -55,7 +55,7 @@ services:
     region: singapore
     dockerfilePath: ./backend/mcp_runtime/Dockerfile
     dockerContext: ./backend/mcp_runtime
-    healthCheckPath: /ready
+    healthCheckPath: /health
     autoDeployTrigger: "off"
     envVars:
       - key: SUPABASE_OAUTH_ISSUER
