@@ -645,7 +645,6 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     ]
 
     with psycopg2.connect(required("ERP_CALCULATOR_DATABASE_URL")) as calculator:
-        calculator.set_session(readonly=True)
         with calculator.cursor() as cursor:
             cursor.execute(
                 """
@@ -664,6 +663,7 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
                 ),
             )
             resolution = cursor.fetchone()[0]
+        calculator.rollback()
 
     backend_root = str(Path(__file__).resolve().parents[1])
     if backend_root not in sys.path:

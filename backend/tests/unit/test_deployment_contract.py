@@ -238,7 +238,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "\ndef exercise_sales_order", 1
     )[0]
     assert 'required("ERP_CALCULATOR_DATABASE_URL")' in preflight
-    assert "calculator.set_session(readonly=True)" in preflight
+    assert "calculator.rollback()" in preflight
     assert "resolve_sales_order_prepare" in preflight
     assert "calculation_documents" in preflight
 
