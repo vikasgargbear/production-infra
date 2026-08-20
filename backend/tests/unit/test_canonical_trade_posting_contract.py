@@ -77,6 +77,8 @@ def test_followup_exactly_partitions_the_seventeen_prior_blockers() -> None:
 
 def test_landed_cost_uses_persisted_pools_and_deterministic_residuals() -> None:
     text = (ROOT / "baseline-trade-posting-enforcements.json").read_text()
+    assert "SELECT line.* INTO source" in text
+    assert "SELECT line, invoice.status INTO source" not in text
     assert "inventory_cost_treatment<>'capitalize'" in text
     assert "source.net_value_amount-receipt_cost" in text
     assert "cost_allocation_basis_quantity" in text

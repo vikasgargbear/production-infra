@@ -17350,12 +17350,15 @@ DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
         allocated_free numeric(20,6);
         receipt_cost numeric;
 BEGIN
-    SELECT line, invoice.status INTO source, invoice_status
+    SELECT line.* INTO source
       FROM procurement.supplier_invoice_lines AS line
       JOIN procurement.supplier_invoices AS invoice
         ON invoice.org_id=line.org_id AND invoice.id=line.supplier_invoice_id
      WHERE line.org_id=p_org_id AND line.id=p_supplier_invoice_line_id
      FOR SHARE OF line, invoice;
+    SELECT invoice.status INTO invoice_status
+      FROM procurement.supplier_invoices AS invoice
+     WHERE invoice.org_id=p_org_id AND invoice.id=source.supplier_invoice_id;
     IF source.id IS NULL OR invoice_status<>'posted' THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed cost requires a posted supplier invoice line';
     END IF;
@@ -19761,9 +19764,11 @@ BEGIN
     END IF;
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::text || ':supplier_invoice:' || NEW.supplier_invoice_line_id::text, 630195401));
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::text || ':receipt:' || NEW.goods_receipt_line_id::text, 630195401));
-    SELECT line, invoice.status INTO invoice_line, invoice_status FROM procurement.supplier_invoice_lines line
+    SELECT line.* INTO invoice_line FROM procurement.supplier_invoice_lines line
     JOIN procurement.supplier_invoices invoice ON invoice.org_id=line.org_id AND invoice.id=line.supplier_invoice_id
     WHERE line.org_id=NEW.org_id AND line.id=NEW.supplier_invoice_line_id FOR SHARE OF line, invoice;
+    SELECT invoice.status INTO invoice_status FROM procurement.supplier_invoices invoice
+    WHERE invoice.org_id=NEW.org_id AND invoice.id=invoice_line.supplier_invoice_id;
     SELECT * INTO receipt_line FROM procurement.goods_receipt_lines WHERE org_id=NEW.org_id AND id=NEW.goods_receipt_line_id FOR SHARE;
     IF invoice_status IN ('posted','reversed')
        AND (TG_OP = 'INSERT' OR NEW IS DISTINCT FROM OLD) THEN
@@ -20262,9 +20267,11 @@ BEGIN
     END IF;
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::text || ':invoice:' || NEW.invoice_line_id::text, 81957013));
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::text || ':dispatch:' || NEW.dispatch_line_id::text, 81957013));
-    SELECT line, invoice.status INTO invoice_line, invoice_status FROM sales.invoice_lines line
+    SELECT line.* INTO invoice_line FROM sales.invoice_lines line
     JOIN sales.invoices invoice ON invoice.org_id=line.org_id AND invoice.id=line.invoice_id
     WHERE line.org_id=NEW.org_id AND line.id=NEW.invoice_line_id FOR SHARE OF line, invoice;
+    SELECT invoice.status INTO invoice_status FROM sales.invoices invoice
+    WHERE invoice.org_id=NEW.org_id AND invoice.id=invoice_line.invoice_id;
     SELECT * INTO dispatch_line FROM sales.dispatch_lines WHERE org_id=NEW.org_id AND id=NEW.dispatch_line_id FOR SHARE;
     IF invoice_status IN ('posted','reversed')
        AND (TG_OP = 'INSERT' OR NEW IS DISTINCT FROM OLD) THEN

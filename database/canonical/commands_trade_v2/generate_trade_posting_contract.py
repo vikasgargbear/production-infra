@@ -117,12 +117,15 @@ DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
         allocated_free numeric(20,6);
         receipt_cost numeric;
 BEGIN
-    SELECT line, invoice.status INTO source, invoice_status
+    SELECT line.* INTO source
       FROM procurement.supplier_invoice_lines AS line
       JOIN procurement.supplier_invoices AS invoice
         ON invoice.org_id=line.org_id AND invoice.id=line.supplier_invoice_id
      WHERE line.org_id=p_org_id AND line.id=p_supplier_invoice_line_id
      FOR SHARE OF line, invoice;
+    SELECT invoice.status INTO invoice_status
+      FROM procurement.supplier_invoices AS invoice
+     WHERE invoice.org_id=p_org_id AND invoice.id=source.supplier_invoice_id;
     IF source.id IS NULL OR invoice_status<>'posted' THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed cost requires a posted supplier invoice line';
     END IF;

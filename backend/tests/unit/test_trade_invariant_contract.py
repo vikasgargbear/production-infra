@@ -163,6 +163,8 @@ def test_billed_free_dispatch_receipt_and_allocation_caps_are_separate() -> None
         assert "allocated_base_free_quantity" in sql
         assert "pg_advisory_xact_lock" in sql
         assert "posted" in sql and "immutable" in sql
+        assert "SELECT line.* INTO invoice_line" in sql
+        assert "SELECT line, invoice.status INTO invoice_line" not in sql
 
 
 def test_direct_invoice_issue_is_exclusive_and_idempotency_gaps_stay_blocked() -> None:
