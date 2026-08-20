@@ -105,11 +105,29 @@ jobs:
           package_hash=$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)
           test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
           log_file=$(mktemp)
-          (
-            cd backend
-            alembic -c alembic.ini upgrade head
-            alembic -c alembic.ini upgrade head
-          ) 2>&1 | tee "$log_file" || {
+          baseline_applied=false
+          for attempt in $(seq 1 8); do
+            if (
+              cd backend
+              alembic -c alembic.ini upgrade head
+              alembic -c alembic.ini upgrade head
+            ) >"$log_file" 2>&1; then
+              baseline_applied=true
+              cat "$log_file"
+              break
+            fi
+            cat "$log_file"
+            if ! grep -Eqi \
+              'OperationalError|econnrefused|connection refused|server closed the connection unexpectedly' \
+              "$log_file"; then
+              break
+            fi
+            if [ "$attempt" -lt 8 ]; then
+              echo "Supabase pooler unavailable; retrying baseline connection ($attempt/8)"
+              sleep 10
+            fi
+          done
+          if [ "$baseline_applied" != true ]; then
             {
               echo
               echo "--- rollback-safe psql statement diagnostic ---"
@@ -125,7 +143,7 @@ jobs:
           print(f"::error title=Canonical free staging baseline failure::{text}")
           PY
             exit 1
-          }
+          fi
 
       - name: Provision isolated staging login credentials
         run: |

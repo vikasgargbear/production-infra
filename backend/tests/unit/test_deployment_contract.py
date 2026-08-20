@@ -189,6 +189,15 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
 
 
+def test_free_staging_retries_only_transient_pooler_baseline_failures():
+    workflow = _read(".github/workflows/canonical-staging.yml")
+
+    assert "for attempt in $(seq 1 8)" in workflow
+    assert "Supabase pooler unavailable; retrying baseline connection" in workflow
+    assert "OperationalError|econnrefused|connection refused" in workflow
+    assert 'if [ "$baseline_applied" != true ]' in workflow
+
+
 def test_frontend_builds_use_the_reviewed_node_runtime():
     workflow = _read(".github/workflows/production-readiness.yml")
     blueprint = _read("render.yaml")
