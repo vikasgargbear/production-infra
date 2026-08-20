@@ -121,7 +121,7 @@ def test_document_allocation_is_locked_idempotent_monotonic_and_replayable() -> 
     assert "NEW.next_value<>OLD.next_value+1" in sql
     assert "claim.status='succeeded'" in sql
     assert "claim.response_body" in sql
-    assert "pg_catalog.greatest(sequence.padding" in sql
+    assert "pg_catalog.greatest(sequence.padding::integer" in sql
     assert "document-sequence identity and format are immutable" in sql
     assert "new document sequence must start active" in sql
 

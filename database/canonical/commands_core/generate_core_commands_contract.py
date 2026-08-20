@@ -324,7 +324,7 @@ BEGIN
     END IF;
     allocated_number := sequence.prefix || pg_catalog.lpad(
         sequence.next_value::text,
-        pg_catalog.greatest(sequence.padding,pg_catalog.length(sequence.next_value::text)),
+        pg_catalog.greatest(sequence.padding::integer,pg_catalog.length(sequence.next_value::text)),
         '0'
     ) || sequence.suffix;
     INSERT INTO "{SCHEMA}"."command_scopes" VALUES
