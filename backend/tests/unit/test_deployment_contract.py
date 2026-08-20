@@ -207,7 +207,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
-    assert workflow.count("connect_timeout=15") == 7
+    assert workflow.count("connect_timeout=15") == 6
     assert "application_name=canonical_staging_ci" in workflow
     assert "application_name=canonical_staging_verify" in workflow
     assert "for attempt in $(seq 1 30)" in workflow
@@ -219,14 +219,24 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
     assert "inputs.provision_demo_data == true" in workflow
+    assert "ROTATE_ROLE_PASSWORDS: ${{ inputs.rotate_role_passwords || inputs.reset_disposable_data }}" in workflow
+    assert 'rotate_passwords = os.environ["ROTATE_ROLE_PASSWORDS"].lower() == "true"' in workflow
+    assert "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s" in workflow
+    assert "if rotate_passwords" in workflow
     assert 'sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s")' in workflow
+    assert 'sql.SQL("ALTER ROLE {} LOGIN")' in workflow
+    assert "elif posture[0] is not True" in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
     assert "for attempt in range(1, 6)" in workflow
     assert "range(1, 61)" not in workflow
+    assert "range(1, 19)" not in workflow
     assert 'os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5' in workflow
     assert "if attempt < 5" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
+    assert "pending_roles = dict(expected_roles)" in workflow
+    assert "if not pending_roles" in workflow
+    assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
     assert "/database/query\"" not in workflow
     reconciliation = workflow.split(
         "Reconcile reviewed command definitions on pre-cutover staging", 1
