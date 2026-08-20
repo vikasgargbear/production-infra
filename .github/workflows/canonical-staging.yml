@@ -421,6 +421,8 @@ jobs:
       - name: Run canonical rollback fixtures on live free staging
         run: |
           set -euo pipefail
+          export PGCONNECT_TIMEOUT=15
+          export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
           cleanup_role_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
               -c 'REVOKE erp_migration_owner, erp_runtime FROM postgres' \
