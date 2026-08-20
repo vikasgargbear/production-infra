@@ -5918,13 +5918,25 @@ BEGIN
        OR preview_document->>'branch_id' IS DISTINCT FROM NEW.branch_id::text
        OR NULLIF(preview_document->>'destination_branch_id','')::uuid IS DISTINCT FROM NEW.destination_branch_id
        OR preview_document->>'request_hash' IS DISTINCT FROM pg_catalog.encode(NEW.request_hash,'hex')
-       OR (NEW.capability_code='sales.order.prepare' AND
+       OR (NEW.capability_code IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare'
+           ) AND
            NULLIF(preview_document->>'calculation_artifact_id','')::uuid IS NULL)
-       OR (NEW.capability_code='sales.order.prepare' AND
+       OR (NEW.capability_code IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare'
+           ) AND
            NEW.aggregate_version_hash IS DISTINCT FROM "erp_automation_commands"."aggregate_version_hash"(
-               'sales_order',NEW.target_resource_id,NEW.target_row_version
+               NEW.target_resource_type,NEW.target_resource_id,NEW.target_row_version
            ))
-       OR (NEW.capability_code<>'sales.order.prepare' AND
+       OR (NEW.capability_code NOT IN (
+             'sales.order.prepare','procurement.purchase_order.prepare',
+             'sales.invoice.prepare','procurement.supplier_invoice.prepare',
+             'sales.return.prepare','procurement.purchase_return.prepare'
+           ) AND
            NEW.aggregate_version_hash IS DISTINCT FROM extensions.digest(
                pg_catalog.convert_to(source_versions::text,'UTF8'),'sha256'
            ))

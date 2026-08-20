@@ -428,6 +428,17 @@ def test_calculated_prepares_bind_commands_to_persisted_document_versions() -> N
         assert function_sql.index('"prepare_operator_command"') < function_sql.index(
             "erp_calculation_authority.issue_artifact"
         )
+    capability_list = (
+        "'sales.order.prepare','procurement.purchase_order.prepare',\n"
+        "             'sales.invoice.prepare','procurement.supplier_invoice.prepare',\n"
+        "             'sales.return.prepare','procurement.purchase_return.prepare'"
+    )
+    assert mapping.count(f"NEW.capability_code IN (\n             {capability_list}") == 2
+    assert mapping.count(f"NEW.capability_code NOT IN (\n             {capability_list}") == 1
+    assert (
+        '"aggregate_version_hash"(\n               NEW.target_resource_type,'
+        "NEW.target_resource_id,NEW.target_row_version"
+    ) in mapping
 
 
 def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() -> None:
