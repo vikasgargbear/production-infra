@@ -468,8 +468,8 @@ jobs:
           definition_query=$(cat <<'SQL'
           SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0 AS core_current,
                  position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0 AS automation_current,
-                 position('response_status=200' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
-                 position('response_status=200' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS compliance_current
+                 position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
+                 position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS compliance_current
           SQL
           )
           if curl --fail --silent --show-error \
@@ -537,7 +537,7 @@ jobs:
           psql -X --single-transaction -v ON_ERROR_STOP=1 \
             "$PSYCOPG_DATABASE_URL" -f "$reconciliation_sql" >/dev/null
           test "$(psql -X -Atqc \
-            "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0, position('response_status=200' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('response_status=200' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0" \
+            "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0" \
             "$PSYCOPG_DATABASE_URL")" = "t|t|t|t"
           cleanup_migration_membership
           trap - EXIT

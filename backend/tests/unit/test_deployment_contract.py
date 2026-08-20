@@ -265,6 +265,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
+    assert "terminal_response_body" in reconciliation
     assert '"t|t|t|t"' in reconciliation
     assert "SET ROLE erp_migration_owner" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
