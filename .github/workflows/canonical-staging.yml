@@ -7,12 +7,22 @@ on:
         description: Type DEPLOY_FREE_CANONICAL_STAGING
         required: true
         type: string
+      rotate_role_passwords:
+        description: Explicitly rotate isolated database role passwords
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       confirmation:
         description: Exact free-staging deployment confirmation
         required: true
         type: string
+      rotate_role_passwords:
+        description: Explicit isolated-role credential rotation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -159,6 +169,7 @@ jobs:
           fi
 
       - name: Provision isolated staging login credentials
+        if: inputs.rotate_role_passwords == true
         run: |
           python3 - <<'PY'
           import os

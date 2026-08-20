@@ -201,6 +201,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
+    assert "rotate_role_passwords:" in workflow
+    assert "if: inputs.rotate_role_passwords == true" in workflow
 
 
 def test_frontend_builds_use_the_reviewed_node_runtime():
