@@ -708,14 +708,25 @@ jobs:
           git cat-file -e "$deploy_sha^{commit}"
           git merge-base --is-ancestor "$deploy_sha" "$GITHUB_SHA"
           echo "CANONICAL_RENDER_DEPLOY_SHA=$deploy_sha" >> "$GITHUB_ENV"
-          python3 backend/scripts/provision_render_pilot.py \
-            --apply \
-            --deploy \
-            --deploy-service aasopharma-api-pilot \
-            --cancel-stale-deploys \
-            --branch "$GITHUB_REF_NAME" \
-            --commit-id "$deploy_sha" \
-            > staging-evidence/render-pilot.json
+          provision_log=$(mktemp)
+          if ! python3 backend/scripts/provision_render_pilot.py \
+              --apply \
+              --deploy \
+              --deploy-service aasopharma-api-pilot \
+              --cancel-stale-deploys \
+              --branch "$GITHUB_REF_NAME" \
+              --commit-id "$deploy_sha" \
+              > staging-evidence/render-pilot.json 2>"$provision_log"; then
+            python3 - "$provision_log" <<'PY'
+          import pathlib
+          import sys
+
+          detail = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-2000:]
+          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Render reconciliation blocked::{detail}")
+          PY
+            exit 1
+          fi
 
           for attempt in 1 2 3 4 5; do
             all_live=true
