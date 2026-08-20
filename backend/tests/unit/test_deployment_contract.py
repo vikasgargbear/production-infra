@@ -193,6 +193,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     workflow = _read(".github/workflows/canonical-staging.yml")
 
     assert "/config/database/pooler" in workflow
+    assert "/database/query/read-only" in workflow
+    assert "Control plane verified exact canonical revision and topology" in workflow
     assert 'test "$pooler_port" = 6543' in workflow
     assert "SUPABASE_SESSION_POOLER_PORT" not in workflow
     assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres" in workflow
