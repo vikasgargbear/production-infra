@@ -117,6 +117,9 @@ def test_revision_is_static_and_downgrade_is_fail_closed() -> None:
     assert "connection.connection.cursor()" in revision
     assert "execute_packaged_sql(cursor, sql)" in revision
     assert "cursor.close()" in revision
+    assert "ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY" in revision
+    assert "ALTER TABLE public.alembic_version FORCE ROW LEVEL SECURITY" in revision
+    assert "REVOKE ALL ON TABLE public.alembic_version FROM PUBLIC" in revision
     assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
     assert "COPY . ." in dockerfile
     assert (

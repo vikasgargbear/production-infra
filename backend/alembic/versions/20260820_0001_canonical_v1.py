@@ -37,6 +37,15 @@ def upgrade() -> None:
         execute_packaged_sql(cursor, sql)
     finally:
         cursor.close()
+    connection.exec_driver_sql(
+        "ALTER TABLE public.alembic_version ENABLE ROW LEVEL SECURITY"
+    )
+    connection.exec_driver_sql(
+        "ALTER TABLE public.alembic_version FORCE ROW LEVEL SECURITY"
+    )
+    connection.exec_driver_sql(
+        "REVOKE ALL ON TABLE public.alembic_version FROM PUBLIC"
+    )
 
 
 def downgrade() -> None:
