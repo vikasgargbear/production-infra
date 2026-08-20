@@ -181,6 +181,9 @@ def test_postgres15_fixture_is_rollback_only_and_wired_after_the_clean_baseline(
     assert "EXCEPTION WHEN exclusion_violation" in fixture
     assert "employee reporting cycle was accepted" in fixture
     assert "revoked agent grant executed a command" in fixture
+    assert "set_config('app.request_id'" in fixture
+    assert "ALTER TABLE core.organizations DISABLE TRIGGER USER" in fixture
+    assert fixture.index("INSERT INTO core.organizations") < fixture.index("INSERT INTO core.users")
     assert "find database/canonical -type f -name 'test_*.sql'" in gate
     assert 'psql -X -v ON_ERROR_STOP=1 -f "$fixture"' in gate
     assert gate.index('psql -X -v ON_ERROR_STOP=1 -f "$tmpdir/canonical-baseline.sql"') < gate.index(

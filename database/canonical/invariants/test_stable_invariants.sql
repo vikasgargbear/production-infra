@@ -5,14 +5,15 @@
 BEGIN;
 
 INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-000000000001');
-INSERT INTO core.users (id, auth_user_id, display_name)
-VALUES (
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000001',
-    'Invariant Fixture'
-);
 
 SET CONSTRAINTS ALL DEFERRED;
+SELECT set_config('app.org_id', '00000000-0000-0000-0000-000000000010', true);
+SELECT set_config('app.request_id', '00000000-0000-0000-0000-000000000011', true);
+
+-- The first organization and its actor membership form a deferred FK cycle.
+-- This fixture rolls back, so suppress only the foundational organization's
+-- user triggers while leaving every tested mutation fully guarded.
+ALTER TABLE core.organizations DISABLE TRIGGER USER;
 INSERT INTO core.organizations (
     id, legal_name, registered_address_line1, registered_city,
     registered_state_code, registered_postal_code, status,
@@ -23,6 +24,14 @@ INSERT INTO core.organizations (
     '00000000-0000-0000-0000-000000000003',
     '00000000-0000-0000-0000-000000000003'
 );
+
+INSERT INTO core.users (id, auth_user_id, display_name)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000001',
+    'Invariant Fixture'
+);
+
 INSERT INTO core.memberships (
     org_id, id, user_id, status, joined_at,
     created_by_membership_id, updated_by_membership_id
@@ -36,7 +45,6 @@ INSERT INTO core.memberships (
 );
 SET CONSTRAINTS ALL IMMEDIATE;
 
-SELECT set_config('app.org_id', '00000000-0000-0000-0000-000000000010', true);
 SELECT set_config('app.membership_id', '00000000-0000-0000-0000-000000000003', true);
 
 INSERT INTO core.branches (
