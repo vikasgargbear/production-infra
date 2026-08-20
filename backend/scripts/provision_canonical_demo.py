@@ -1587,10 +1587,12 @@ def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -
 
 def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
     supplier_invoice_number = f"DEMO-SUP-{os.getenv('GITHUB_RUN_ID', 'local')}"
+    supplier_credit_note_number = f"DEMO-SUP-CN-{os.getenv('GITHUB_RUN_ID', 'local')}"
     source_attachment_id = demo_run_uuid("gstr2b-source-attachment")
     return_period_id = demo_run_uuid("gstr2b-return-period")
     portal_document_id = demo_run_uuid("gstr2b-portal-document")
     portal_line_id = demo_run_uuid("gstr2b-invoice-line")
+    portal_credit_note_line_id = demo_run_uuid("gstr2b-credit-note-line")
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
@@ -1641,10 +1643,10 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
             INSERT INTO tax.portal_documents (
                 org_id,id,registration_id,return_period_id,portal_document_type,
                 portal_generation_date,source_attachment_id,source_sha256,status,
-                parsed_at,created_by_membership_id
+                created_by_membership_id
             ) VALUES (
                 %s,%s,%s,%s,'gstr2b',%s,%s,
-                extensions.digest(%s,'sha256'),'parsed',transaction_timestamp(),%s
+                extensions.digest(%s,'sha256'),'imported',%s
             ) ON CONFLICT (org_id,id) DO NOTHING
             """,
             (
@@ -1655,24 +1657,57 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
         )
         cursor.execute(
             """
-            INSERT INTO tax.portal_document_lines (
-                org_id,id,portal_document_id,line_number,supplier_gstin,
-                counterparty_name,invoice_number,invoice_date,document_type,
-                place_of_supply_state_code,taxable_amount,cgst_amount,sgst_amount,
-                igst_amount,cess_amount,total_amount,portal_reference,source_row_hash,
-                created_by_membership_id
-            ) VALUES (
-                %s,%s,%s,1,'27DEMOC5678D1Z5',
-                'Synthetic Medicines Distributor Private Limited',%s,%s,'invoice',
-                '27',5000.00,300.00,300.00,0,0,5600.00,%s,
-                extensions.digest(%s,'sha256'),%s
-            ) ON CONFLICT (org_id,id) DO NOTHING
+            SELECT erp_finance_commands.parse_portal_document(%s,%s,%s::jsonb)
             """,
             (
-                IDS["org"], portal_line_id, portal_document_id,
-                supplier_invoice_number, SOURCE_RETRIEVED_ON,
-                f"GSTR2B-DEMO-{os.getenv('GITHUB_RUN_ID', 'local')}",
-                f"synthetic-gstr2b-row:{supplier_invoice_number}", IDS["reviewer_membership"],
+                IDS["org"],
+                portal_document_id,
+                json.dumps(
+                    [
+                        {
+                            "id": portal_line_id,
+                            "line_number": 1,
+                            "supplier_gstin": "27DEMOC5678D1Z5",
+                            "counterparty_name": "Synthetic Medicines Distributor Private Limited",
+                            "invoice_number": supplier_invoice_number,
+                            "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+                            "document_type": "invoice",
+                            "place_of_supply_state_code": "27",
+                            "taxable_amount": "5000.00",
+                            "cgst_amount": "300.00",
+                            "sgst_amount": "300.00",
+                            "igst_amount": "0.00",
+                            "cess_amount": "0.00",
+                            "total_amount": "5600.00",
+                            "portal_reference": f"GSTR2B-DEMO-{os.getenv('GITHUB_RUN_ID', 'local')}",
+                            "source_row_hash": hashlib.sha256(
+                                f"synthetic-gstr2b-row:{supplier_invoice_number}".encode()
+                            ).hexdigest(),
+                        },
+                        {
+                            "id": portal_credit_note_line_id,
+                            "line_number": 2,
+                            "supplier_gstin": "27DEMOC5678D1Z5",
+                            "counterparty_name": "Synthetic Medicines Distributor Private Limited",
+                            "invoice_number": supplier_credit_note_number,
+                            "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+                            "document_type": "credit_note",
+                            "place_of_supply_state_code": "27",
+                            "taxable_amount": "1000.00",
+                            "cgst_amount": "60.00",
+                            "sgst_amount": "60.00",
+                            "igst_amount": "0.00",
+                            "cess_amount": "0.00",
+                            "total_amount": "1120.00",
+                            "portal_reference": f"GSTR2B-DEMO-CN-{os.getenv('GITHUB_RUN_ID', 'local')}",
+                            "source_row_hash": hashlib.sha256(
+                                f"synthetic-gstr2b-credit-note:{supplier_credit_note_number}".encode()
+                            ).hexdigest(),
+                        },
+                    ],
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
             ),
         )
     return {
@@ -1682,45 +1717,26 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
 
 
 def seed_purchase_return_portal_evidence(connection) -> dict[str, str]:
-    """Add one synthetic parsed GSTR-2B supplier credit note to the demo import."""
+    """Verify and return the credit note parsed with the demo GSTR-2B import."""
 
     portal_document_id = demo_run_uuid("gstr2b-portal-document")
     portal_line_id = demo_run_uuid("gstr2b-credit-note-line")
     credit_note_number = f"DEMO-SUP-CN-{os.getenv('GITHUB_RUN_ID', 'local')}"
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
-        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-        for setting, value in (
-            ("app.org_id", IDS["org"]),
-            ("app.membership_id", IDS["reviewer_membership"]),
-            ("app.user_id", IDS["reviewer_user"]),
-            ("app.auth_user_id", IDS["reviewer_auth_user"]),
-            ("app.request_id", IDS["request"]),
-        ):
-            cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
         cursor.execute(
             """
-            INSERT INTO tax.portal_document_lines (
-                org_id,id,portal_document_id,line_number,supplier_gstin,
-                counterparty_name,invoice_number,invoice_date,document_type,
-                place_of_supply_state_code,taxable_amount,cgst_amount,sgst_amount,
-                igst_amount,cess_amount,total_amount,portal_reference,source_row_hash,
-                created_by_membership_id
-            ) VALUES (
-                %s,%s,%s,2,'27DEMOC5678D1Z5',
-                'Synthetic Medicines Distributor Private Limited',%s,%s,'credit_note',
-                '27',1000.00,60.00,60.00,0,0,1120.00,%s,
-                extensions.digest(%s,'sha256'),%s
-            ) ON CONFLICT (org_id,id) DO NOTHING
+            SELECT 1
+              FROM tax.portal_document_lines
+             WHERE org_id=%s AND id=%s AND portal_document_id=%s
+               AND document_type='credit_note' AND invoice_number=%s
             """,
             (
-                IDS["org"], portal_line_id, portal_document_id,
-                credit_note_number, SOURCE_RETRIEVED_ON,
-                f"GSTR2B-DEMO-CN-{os.getenv('GITHUB_RUN_ID', 'local')}",
-                f"synthetic-gstr2b-credit-note:{credit_note_number}",
-                IDS["reviewer_membership"],
+                IDS["org"], portal_line_id, portal_document_id, credit_note_number,
             ),
         )
+        if cursor.fetchone() is None:
+            raise RuntimeError("parsed demo GSTR-2B credit note is missing")
     return {
         "supplier_credit_note_number": credit_note_number,
         "supplier_credit_note_portal_line_id": portal_line_id,

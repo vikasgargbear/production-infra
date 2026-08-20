@@ -360,6 +360,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
+    assert "erp_finance_commands.parse_portal_document" in provisioner
+    assert "'imported'" in provisioner
+    assert "portal lines require parser command provenance" not in provisioner
     for operation in (
         "sales.dispatch.prepare",
         "sales.invoice.prepare",
@@ -413,7 +416,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
     assert provisioner.count("DEMOB1234C") == 1
     assert provisioner.count("DEMOC5678D") == 4
-    assert provisioner.count("'27DEMOC5678D1Z5'") == 3
+    assert provisioner.count("27DEMOC5678D1Z5") == 3
     assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     assert "verify_organization_fiscal_tax_fact" in provisioner
     assert "2026::smallint" in provisioner
