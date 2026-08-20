@@ -15638,7 +15638,7 @@ BEGIN
         PERFORM erp_commercial_commands.assert_adjustment_note_artifact(NEW.org_id,NEW.id,input_doc,output_doc);
       END IF;
       SELECT count(*) INTO companion_count FROM tax.documents WHERE org_id=NEW.org_id AND adjustment_note_id=NEW.id AND document_class='adjustment_note';
-      IF companion_count<>CASE WHEN NEW.gst_tax_treatment='statutory' THEN 1 ELSE 0 END THEN
+      IF companion_count<>(CASE WHEN NEW.gst_tax_treatment='statutory' THEN 1 ELSE 0 END) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted adjustment tax-document ownership differs'; END IF;
       SELECT count(*),(pg_catalog.array_agg(event.id))[1] INTO companion_count,event_id FROM finance.accounting_events event
        JOIN finance.journal_entries journal ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id AND journal.status='posted'

@@ -28,6 +28,8 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert manifest == (ROOT / "commercial-command-manifest.json").read_text()
     assert "pg_catalog.extract(" not in mapping
     assert "pg_catalog.date_part('year'" in mapping
+    assert "companion_count<>(CASE WHEN NEW.gst_tax_treatment='statutory'" in mapping
+    assert "companion_count<>CASE WHEN NEW.gst_tax_treatment='statutory'" not in mapping
     parsed = json.loads(manifest)
     assert parsed["mapping_sha256"] == hashlib.sha256(mapping.encode()).hexdigest()
     assert parsed["implementation_status"] == "implemented"
