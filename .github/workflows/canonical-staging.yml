@@ -95,11 +95,22 @@ jobs:
           set -euo pipefail
           package_hash=$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)
           test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
+          log_file=$(mktemp)
           (
             cd backend
             alembic -c alembic.ini upgrade head
             alembic -c alembic.ini upgrade head
-          )
+          ) 2>&1 | tee "$log_file" || {
+            python3 - "$log_file" <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical free staging baseline failure::{text}")
+          PY
+            exit 1
+          }
 
       - name: Provision isolated staging login credentials
         run: |
