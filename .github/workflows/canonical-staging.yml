@@ -34,6 +34,15 @@ jobs:
       ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
       ERP_CALCULATOR_PASSWORD: ${{ secrets.ERP_CALCULATOR_PASSWORD }}
       ERP_TAX_PROVIDER_PASSWORD: ${{ secrets.ERP_TAX_PROVIDER_PASSWORD }}
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+      MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+      MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
+      TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -199,6 +208,84 @@ jobs:
                       assert cursor.fetchone() == (role, False, False)
           PY
 
+      - name: Build and mask isolated service connections
+        run: |
+          set -euo pipefail
+          host="aws-0-ap-south-1.pooler.supabase.com"
+          runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
+          provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${host}:5432/postgres?sslmode=require"
+          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:${calculator_password}@${host}:5432/postgres?sslmode=require"
+          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:${provider_password}@${host}:5432/postgres?sslmode=require"
+          echo "::add-mask::$runtime_url"
+          echo "::add-mask::$calculator_url"
+          echo "::add-mask::$provider_url"
+          echo "DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+          echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url" >> "$GITHUB_ENV"
+          echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
+
+      - name: Reconcile and deploy the free Render pilot
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          test -n "$JWT_SECRET_KEY"
+          test -n "$SUPABASE_ANON_KEY"
+          test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" = disabled-unissued-canonical-staging
+          mkdir -p staging-evidence
+          python3 backend/scripts/provision_render_pilot.py \
+            --apply \
+            --deploy \
+            --branch "$GITHUB_REF_NAME" \
+            > staging-evidence/render-pilot.json
+
+      - name: Wait for free API and frontend smoke readiness
+        run: |
+          set -euo pipefail
+          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot.json)
+          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot.json)
+          for url in "$api_url" "$frontend_url" "$mcp_url"; do
+            echo "::add-mask::$url"
+          done
+
+          api_ready=false
+          frontend_ready=false
+          for _attempt in $(seq 1 90); do
+            if curl --fail --silent --show-error --max-time 20 "$api_url/health" >/dev/null \
+              && curl --fail --silent --show-error --max-time 20 "$api_url/ready" >/dev/null; then
+              api_ready=true
+            fi
+            if curl --fail --silent --show-error --max-time 20 "$frontend_url/" >/dev/null; then
+              frontend_ready=true
+            fi
+            if [ "$api_ready" = true ] && [ "$frontend_ready" = true ]; then
+              break
+            fi
+            sleep 10
+          done
+          test "$api_ready" = true
+          test "$frontend_ready" = true
+
+          mcp_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --max-time 20 "$mcp_url/ready" || true)
+          jq --arg api "$api_url" \
+             --arg frontend "$frontend_url" \
+             --arg mcp "$mcp_url" \
+             --arg mcp_status "$mcp_status" \
+             '. + {
+               smoke: {
+                 api_url: $api,
+                 api_ready: true,
+                 frontend_url: $frontend,
+                 frontend_ready: true,
+                 mcp_url: $mcp,
+                 mcp_readiness_http_status: $mcp_status,
+                 mcp_advertised: false
+               }
+             }' staging-evidence/render-pilot.json \
+             > staging-evidence/render-pilot-smoke.json
+
       - name: Publish staging baseline evidence
         run: |
           mkdir -p staging-evidence
@@ -219,6 +306,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: canonical-staging-baseline-${{ github.run_id }}
-          path: staging-evidence/canonical-staging-baseline.json
+          path: staging-evidence/*.json
           if-no-files-found: error
           retention-days: 14
