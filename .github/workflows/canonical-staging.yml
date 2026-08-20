@@ -386,8 +386,51 @@ jobs:
             exit 1
           fi
 
+      - name: Reconcile reviewed document sequence allocator on existing staging
+        run: |
+          set -euo pipefail
+          cleanup_reconcile_membership() {
+            psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+              -c 'REVOKE erp_migration_owner FROM postgres' \
+              >/dev/null 2>&1 || true
+          }
+          trap cleanup_reconcile_membership EXIT
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres' >/dev/null
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          mapping = json.loads(pathlib.Path(
+              "database/canonical/commands_core/baseline-core-command-enforcements.json"
+          ).read_text())
+          statements = [
+              statement
+              for enforcement in mapping["enforcements"]
+              for statement in enforcement["statements"]
+              if statement.startswith(
+                  'CREATE FUNCTION "erp_core_commands"."allocate_document_number"'
+              )
+          ]
+          if len(statements) != 1:
+              raise SystemExit("reviewed document allocator definition is not exact")
+          definition = statements[0]
+          if "pg_catalog.greatest(sequence.padding::integer" not in definition:
+              raise SystemExit("reviewed document allocator lacks the PostgreSQL type correction")
+          upgrade = definition.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+          pathlib.Path("/tmp/reconcile_document_allocator.sql").write_text(
+              "BEGIN;\nSET LOCAL ROLE erp_migration_owner;\n"
+              + upgrade
+              + ";\nCOMMIT;\n"
+          )
+          PY
+          psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -f /tmp/reconcile_document_allocator.sql
+          cleanup_reconcile_membership
+          trap - EXIT
+
       - name: Provision isolated staging login credentials
-        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
+        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true || inputs.provision_demo_data == true
         run: |
           python3 - <<'PY'
           import os
@@ -405,7 +448,7 @@ jobs:
               with connection.cursor() as cursor:
                   for role, password in roles.items():
                       cursor.execute(
-                          sql.SQL("ALTER ROLE {} PASSWORD %s").format(sql.Identifier(role)),
+                          sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
                           (password,),
                       )
           PY

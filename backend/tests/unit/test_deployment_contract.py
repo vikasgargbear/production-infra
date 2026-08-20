@@ -210,8 +210,13 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert "canceling statement due to (lock|statement) timeout" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
+    assert "Reconcile reviewed document sequence allocator on existing staging" in workflow
+    assert "baseline-core-command-enforcements.json" in workflow
+    assert 'definition.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)' in workflow
+    assert "pg_catalog.greatest(sequence.padding::integer" in workflow
     assert "rotate_role_passwords:" in workflow
-    assert "if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in workflow
+    assert "inputs.provision_demo_data == true" in workflow
+    assert 'sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s")' in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
     assert "isolated_role_count" in workflow
     assert "unsafe_role_count" in workflow
