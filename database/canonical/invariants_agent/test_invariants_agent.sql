@@ -167,6 +167,13 @@ VALUES (
 -- Regulated references are importer-only in production. This rolled-back
 -- fixture seeds the minimum FK authority without claiming an official import.
 ALTER TABLE core.reference_data_releases DISABLE TRIGGER USER;
+-- A repeatable live fixture may run after staging has imported reviewed
+-- authority. Temporarily retire any active rows that would occupy the same
+-- partial-unique slots; the outer rollback restores them unchanged.
+UPDATE core.reference_data_releases
+   SET status = 'superseded'
+ WHERE dataset_kind IN ('ingredient_classification', 'hsn_sac_tax')
+   AND status = 'active';
 INSERT INTO core.reference_data_releases (
     id, dataset_kind, ruleset_version, source_authority, source_uri,
     source_storage_bucket, source_storage_object_path, source_media_type,
