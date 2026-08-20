@@ -365,6 +365,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert provisioner.count("DEMOB1234C") == 1
     assert provisioner.count("DEMOC5678D") == 4
     assert provisioner.count("'27DEMOC5678D1Z5'") == 3
+    assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     reconciliation = provisioner.split("def reconcile", 1)[1].split("\ndef main", 1)[0]
     assert "order_row.subtotal" in reconciliation
     assert "order_row.gst_taxable_total" in reconciliation

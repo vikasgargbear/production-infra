@@ -1066,7 +1066,7 @@ def seed_end_to_end_master(connection) -> None:
                 org_id,registration_id,branch_id,place_of_business_kind,
                 effective_from,status,created_by_membership_id
             ) VALUES (%s,%s,%s,'principal',%s,'active',%s)
-            ON CONFLICT (org_id,registration_id,branch_id) DO NOTHING
+            ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING
             """,
             (
                 IDS["org"], IDS["org_gst_registration"], IDS["branch"],
