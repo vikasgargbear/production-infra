@@ -3126,6 +3126,8 @@ def test_approval_calls_only_reviewed_command_in_one_transaction():
     sql = "\n".join(statement for statement, _ in session.executions)
     assert "erp_automation_commands.approve_operator_command" in sql
     assert "INSERT INTO automation.command_approvals" not in sql
+    assert "FOR SHARE OF request" in sql
+    assert "FOR SHARE OF request, approval" not in sql
     approve_parameters = session.executions[4][1]
     assert approve_parameters["org_id"] == context.organization_id
     assert approve_parameters["command_request_id"] == command_request_id

@@ -249,7 +249,7 @@ _APPROVAL_RESULT_SQL = text(
        AND approval.idempotency_key_hash=:idempotency_key_hash
        AND approval.decision='approved'
        AND approval.preview_hash=request.preview_hash
-     FOR SHARE OF request, approval
+     FOR SHARE OF request
     """
 )
 
