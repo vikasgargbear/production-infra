@@ -62,7 +62,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-stable-enforcements.json",
-  "mapping_sha256": "b6203d9742fb64cf5e286963345424310b997cb28456f20b2b409dc6a4896c42",
+  "mapping_sha256": "0b8e2a57f1079fdcbcd609172b623a0fede4bc9c6a97a9f2196c6fae348dee29",
   "postgresql": "15+",
   "resolved_count": 14,
   "resolved_invariants": [

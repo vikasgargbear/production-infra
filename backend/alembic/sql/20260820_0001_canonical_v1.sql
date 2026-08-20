@@ -4677,7 +4677,7 @@ DECLARE
     grant_row automation.agent_grants%ROWTYPE;
 BEGIN
     IF NEW.status = 'executing'
-       AND CASE WHEN TG_OP = 'INSERT' THEN true ELSE OLD.status IS DISTINCT FROM 'executing' END THEN
+       AND (CASE WHEN TG_OP = 'INSERT' THEN true ELSE OLD.status IS DISTINCT FROM 'executing' END) THEN
         SELECT * INTO grant_row
           FROM automation.agent_grants AS agent_grant
          WHERE agent_grant.org_id = NEW.org_id

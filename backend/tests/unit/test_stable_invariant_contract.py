@@ -148,6 +148,7 @@ def test_temporal_employee_and_mcp_guards_are_not_placeholder_sql() -> None:
     grant = by_key["automation.agent_grants:agent_grants_state_expiry_and_revocation"]
     assert "consented agent grant scope is immutable" in grant
     assert "NEW.status = 'executing'" in grant
+    assert "AND (CASE WHEN TG_OP = 'INSERT'" in grant
     assert "grant_row.expires_at <= pg_catalog.transaction_timestamp()" in grant
 
     approval = by_key["automation.command_approvals:command_approval_exact_preview"]
