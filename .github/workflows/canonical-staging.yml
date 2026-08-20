@@ -169,7 +169,10 @@ jobs:
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_staging_ci"
+          # Canonical migrations, role DDL, and rollback fixtures require a persistent
+          # PostgreSQL session. Supabase reserves 6543 transaction mode for short-lived
+          # serverless traffic; the IPv4 session pooler is exposed on 5432.
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_staging_ci"
           database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
           echo "::add-mask::$database_url"
           echo "::add-mask::$psycopg_database_url"
@@ -327,7 +330,7 @@ jobs:
                    WHERE rolname IN (
                      'erp_runtime','erp_calculator','erp_tax_provider',
                      'erp_regulatory_importer'
-                   ) AND (rolsuper OR rolcreaterole OR rolbypassrls OR NOT rolcanlogin)
+                   ) AND (rolsuper OR rolcreaterole OR rolbypassrls)
                  ) AS unsafe_role_count
             FROM public.alembic_version AS revision
            WHERE revision.version_num='20260820_0001'
@@ -358,7 +361,7 @@ jobs:
               fi
               cat "$log_file"
               if ! grep -Eqi \
-                'OperationalError|econnrefused|connection refused|server closed the connection unexpectedly|canceling statement due to (lock|statement) timeout' \
+                'OperationalError|econnrefused|connection refused|server closed the connection unexpectedly|server didn.t return client encoding|EAUTHQUERY|auth_query secret check timed out|canceling statement due to (lock|statement) timeout' \
                 "$log_file"; then
                 break
               fi

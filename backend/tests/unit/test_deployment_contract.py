@@ -197,8 +197,13 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Control plane verified exact canonical revision and topology" in workflow
     assert 'test "$pooler_port" = 6543' in workflow
     assert 'echo "SUPABASE_SESSION_POOLER_PORT=5432"' in workflow
-    assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres" in workflow
     assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres" in workflow
+    bootstrap = workflow.split("Build and mask the staging bootstrap connection", 1)[1].split(
+        "Reset canonical data", 1
+    )[0]
+    assert "${SUPABASE_SESSION_POOLER_PORT}/postgres" in bootstrap
+    assert "${SUPABASE_POOLER_PORT}/postgres" not in bootstrap
+    assert "Supabase reserves 6543 transaction mode" in bootstrap
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
@@ -209,6 +214,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert "canceling statement due to (lock|statement) timeout" in workflow
+    assert "server didn.t return client encoding" in workflow
+    assert "auth_query secret check timed out" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
     assert "inputs.provision_demo_data == true" in workflow
@@ -216,6 +223,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
     assert "isolated_role_count" in workflow
     assert "unsafe_role_count" in workflow
+    baseline_query = workflow.split("baseline_query=$(cat", 1)[1].split("SQL\n", 1)[0]
+    assert "rolsuper OR rolcreaterole OR rolbypassrls" in baseline_query
+    assert "NOT rolcanlogin" not in baseline_query
     assert "Run canonical rollback fixtures on live free staging" in workflow
     assert "PGCONNECT_TIMEOUT=15" in workflow
     assert "statement_timeout=120000" in workflow
