@@ -5111,6 +5111,7 @@ BEGIN
     END IF;
     preview_document:=pg_catalog.convert_from(request_row.preview_bytes,'UTF8')::jsonb;
     request_document:=pg_catalog.convert_from(request_row.request_bytes,'UTF8')::jsonb;
+    -- aggregate authority: exact_execute_aggregate_bindings_v2
     IF request_row.operation='automation.agent_grant.revoke' THEN
         IF request_row.aggregate_version_hash IS DISTINCT FROM "erp_automation_commands"."aggregate_version_hash"(
                 request_row.target_resource_type,request_row.target_resource_id,grant_row.row_version

@@ -263,6 +263,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "/database/query/read-only" in reconciliation
     assert "Control plane verified reviewed command definitions are already current" in reconciliation
     assert "purchase_order.id,purchase_order.row_version" in reconciliation
+    assert "exact_execute_aggregate_bindings_v2" in reconciliation
     assert "supplier_invoice.id,supplier_invoice.row_version" in reconciliation
     assert "sales_invoice.id,sales_invoice.row_version" in reconciliation
     assert "sales_return.id,sales_return.row_version" in reconciliation
