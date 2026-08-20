@@ -198,6 +198,8 @@ def test_postgres15_fixture_is_rollback_only_and_wired_after_the_clean_baseline(
     assert "DISABLE TRIGGER command_requests_execution_guard" in fixture
     assert "DISABLE TRIGGER command_approvals_reviewed_write_guard" in fixture
     assert "aggregate_version_hash" in fixture
+    assert "'automation.command.approve'" in fixture
+    assert fixture.count("'00000000-0000-0000-0000-000000000007', 'approved'") == 2
     assert "find database/canonical -type f -name 'test_*.sql'" in gate
     assert 'psql -X -v ON_ERROR_STOP=1 -f "$fixture"' in gate
     assert gate.index('psql -X -v ON_ERROR_STOP=1 -f "$tmpdir/canonical-baseline.sql"') < gate.index(

@@ -5,6 +5,7 @@
 BEGIN;
 
 INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-000000000001');
+INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-000000000005');
 
 SET CONSTRAINTS ALL DEFERRED;
 SELECT set_config('app.org_id', '00000000-0000-0000-0000-000000000010', true);
@@ -31,6 +32,12 @@ VALUES (
     '00000000-0000-0000-0000-000000000001',
     'Invariant Fixture'
 );
+INSERT INTO core.users (id, auth_user_id, display_name)
+VALUES (
+    '00000000-0000-0000-0000-000000000006',
+    '00000000-0000-0000-0000-000000000005',
+    'Invariant Approver'
+);
 
 INSERT INTO core.memberships (
     org_id, id, user_id, status, joined_at,
@@ -43,9 +50,42 @@ INSERT INTO core.memberships (
     '00000000-0000-0000-0000-000000000003',
     '00000000-0000-0000-0000-000000000003'
 );
+INSERT INTO core.memberships (
+    org_id, id, user_id, status, joined_at,
+    created_by_membership_id, updated_by_membership_id
+) VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    '00000000-0000-0000-0000-000000000007',
+    '00000000-0000-0000-0000-000000000006',
+    'active', transaction_timestamp(),
+    '00000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000003'
+);
 SET CONSTRAINTS ALL IMMEDIATE;
 
 SELECT set_config('app.membership_id', '00000000-0000-0000-0000-000000000003', true);
+
+INSERT INTO core.roles (org_id, id, code, name, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    '00000000-0000-0000-0000-000000000008',
+    'fixture_approver', 'Fixture Approver', 'active'
+);
+INSERT INTO core.role_permissions (org_id, role_id, permission_code)
+VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    '00000000-0000-0000-0000-000000000008',
+    'automation.command.approve'
+);
+INSERT INTO core.access_grants (
+    org_id, id, membership_id, role_id, scope_kind, valid_from_at, status
+) VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    '00000000-0000-0000-0000-000000000009',
+    '00000000-0000-0000-0000-000000000007',
+    '00000000-0000-0000-0000-000000000008',
+    'organization', transaction_timestamp(), 'active'
+);
 
 INSERT INTO core.branches (
     org_id, id, code, name, address_line1, city, state_code, postal_code, status
@@ -429,7 +469,7 @@ BEGIN
         ) VALUES (
             '00000000-0000-0000-0000-000000000010',
             '00000000-0000-0000-0000-000000000071',
-            '00000000-0000-0000-0000-000000000003', 'approved',
+            '00000000-0000-0000-0000-000000000007', 'approved',
             decode(repeat('84', 32), 'hex'), decode(repeat('86', 32), 'hex'),
             'reauthenticated', decode(repeat('87', 32), 'hex'),
             transaction_timestamp() + interval '15 minutes'
@@ -448,7 +488,7 @@ INSERT INTO automation.command_approvals (
     '00000000-0000-0000-0000-000000000010',
     '00000000-0000-0000-0000-000000000072',
     '00000000-0000-0000-0000-000000000071',
-    '00000000-0000-0000-0000-000000000003', 'approved',
+    '00000000-0000-0000-0000-000000000007', 'approved',
     decode(repeat('83', 32), 'hex'), decode(repeat('86', 32), 'hex'),
     'reauthenticated', decode(repeat('88', 32), 'hex'),
     transaction_timestamp() + interval '15 minutes'
