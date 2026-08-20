@@ -142,3 +142,25 @@ def require_bootstrap_migration_principal(connection: Any) -> str:
             "first canonical baseline requires a reviewed bootstrap principal with CREATEROLE"
         )
     return str(role_name)
+
+
+def execute_packaged_sql(cursor: Any, sql: str) -> None:
+    """Execute the static package and identify a failed generated statement."""
+    try:
+        cursor.execute(sql)
+    except Exception as exc:
+        position_text = getattr(getattr(exc, "diag", None), "statement_position", None)
+        try:
+            position = int(position_text)
+        except (TypeError, ValueError):
+            raise
+        offset = max(position - 1, 0)
+        line_number = sql.count("\n", 0, offset) + 1
+        statement_start = sql.rfind(";", 0, offset) + 1
+        statement_end = sql.find(";", offset)
+        if statement_end < 0:
+            statement_end = min(len(sql), offset + 700)
+        statement = " ".join(sql[statement_start:statement_end].split())[:700]
+        raise CanonicalBaselineError(
+            f"canonical baseline SQL failed at generated line {line_number}: {statement}"
+        ) from exc

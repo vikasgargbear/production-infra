@@ -10,6 +10,7 @@ from alembic import context, op
 
 from migration_support.canonical_baseline import (
     CanonicalBaselineError,
+    execute_packaged_sql,
     load_packaged_baseline,
     require_approved_hash,
     require_bootstrap_migration_principal,
@@ -33,7 +34,7 @@ def upgrade() -> None:
     require_bootstrap_migration_principal(connection)
     cursor = connection.connection.cursor()
     try:
-        cursor.execute(sql)
+        execute_packaged_sql(cursor, sql)
     finally:
         cursor.close()
 

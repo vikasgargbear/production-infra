@@ -115,7 +115,7 @@ def test_revision_is_static_and_downgrade_is_fail_closed() -> None:
     assert 'revision = "20260820_0001"' in revision
     assert "down_revision = None" in revision
     assert "connection.connection.cursor()" in revision
-    assert "cursor.execute(sql)" in revision
+    assert "execute_packaged_sql(cursor, sql)" in revision
     assert "cursor.close()" in revision
     assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
     assert "COPY . ." in dockerfile
@@ -123,6 +123,24 @@ def test_revision_is_static_and_downgrade_is_fail_closed() -> None:
         "RUN python scripts/package_canonical_baseline_migration.py --verify-package"
         in dockerfile
     )
+
+
+def test_revision_reports_the_generated_statement_location() -> None:
+    class Diagnostic:
+        statement_position = "20"
+
+    class DatabaseError(Exception):
+        diag = Diagnostic()
+
+    class Cursor:
+        def execute(self, _sql):
+            raise DatabaseError("permission denied")
+
+    with pytest.raises(
+        package.CanonicalBaselineError,
+        match=r"generated line 2: SELECT forbidden",
+    ):
+        package.execute_packaged_sql(Cursor(), "SELECT 1;\nSELECT forbidden;")
 
 
 def test_disposable_postgres_bootstrap_matches_supabase_crypto_prerequisite() -> None:
