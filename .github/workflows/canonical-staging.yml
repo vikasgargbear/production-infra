@@ -22,6 +22,11 @@ on:
         required: false
         default: false
         type: boolean
+      restart_staging_database:
+        description: Restart the pinned free staging project before database verification
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       confirmation:
@@ -40,6 +45,11 @@ on:
         type: boolean
       reset_disposable_data:
         description: Reset only canonical schemas and roles on the pinned disposable project
+        required: false
+        default: false
+        type: boolean
+      restart_staging_database:
+        description: Restart the pinned free staging project before database verification
         required: false
         default: false
         type: boolean
@@ -120,6 +130,28 @@ jobs:
           echo "SUPABASE_POOLER_HOST=$pooler_host" >> "$GITHUB_ENV"
           echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
           echo "SUPABASE_SESSION_POOLER_PORT=5432" >> "$GITHUB_ENV"
+
+      - name: Restart the pinned free staging database
+        if: inputs.restart_staging_database == true
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart" \
+            >/dev/null
+          for attempt in $(seq 1 60); do
+            status=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF" \
+              | jq -er .status)
+            if [ "$status" = ACTIVE_HEALTHY ]; then
+              sleep 20
+              break
+            fi
+            test "$attempt" -lt 60
+            sleep 10
+          done
 
       - name: Install the reviewed migration toolchain
         run: pip install -r backend/requirements.txt

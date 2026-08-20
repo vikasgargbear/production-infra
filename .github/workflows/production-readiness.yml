@@ -26,6 +26,11 @@ on:
         required: true
         default: false
         type: boolean
+      restart_canonical_staging:
+        description: Restart the pinned free-staging database before verification
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+      restart_staging_database: ${{ inputs.restart_canonical_staging }}
     secrets: inherit
 
   mcp-sdk-compatibility:

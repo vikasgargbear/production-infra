@@ -227,6 +227,11 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "DROP SCHEMA storage" not in workflow
     assert "reset_canonical_staging:" in production_workflow
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
+    assert "restart_staging_database:" in workflow
+    assert "if: inputs.restart_staging_database == true" in workflow
+    assert '"https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart"' in workflow
+    assert "restart_canonical_staging:" in production_workflow
+    assert "restart_staging_database: ${{ inputs.restart_canonical_staging }}" in production_workflow
 
 
 def test_frontend_builds_use_the_reviewed_node_runtime():
