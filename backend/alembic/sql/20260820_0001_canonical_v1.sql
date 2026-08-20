@@ -184,6 +184,7 @@ CREATE ROLE "erp_runtime" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBY
 GRANT "erp_app" TO "erp_runtime";
 -- Reviewed platform enforcement: role:migration_owner
 CREATE ROLE "erp_migration_owner" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT BYPASSRLS;
+GRANT "erp_migration_owner" TO CURRENT_USER;
 REVOKE CREATE ON SCHEMA "public" FROM PUBLIC;
 GRANT USAGE ON SCHEMA "extensions" TO "erp_migration_owner";
 CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";
@@ -191,9 +192,6 @@ REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;
 CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE "erp_regulatory_importer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE "erp_tax_provider" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
-
--- Temporary bootstrap ownership authority
-GRANT "erp_migration_owner" TO CURRENT_USER;
 
 -- Reviewed extension provisioning
 CREATE EXTENSION "btree_gist" WITH SCHEMA "public";

@@ -785,19 +785,29 @@ def generate_baseline(
         auxiliary_schemas,
         resolved_invariants,
     ) = _partition_auxiliary_prerequisites(resolved_invariants)
+    role_statements = [*platform_statements("roles"), *auxiliary_roles]
+    migration_owner_create = (
+        'CREATE ROLE "erp_migration_owner" NOLOGIN NOSUPERUSER NOCREATEDB '
+        'NOCREATEROLE INHERIT BYPASSRLS;'
+    )
+    bootstrap_membership_granted = migration_owner_create in role_statements
+    if bootstrap_membership_granted:
+        migration_owner_index = role_statements.index(migration_owner_create)
+        role_statements.insert(
+            migration_owner_index + 1,
+            'GRANT "erp_migration_owner" TO CURRENT_USER;',
+        )
+    elif deployable:
+        raise GenerationError(
+            "reviewed role authority does not create the exact migration owner"
+        )
     lines.extend(
         _section("Reviewed deployment preflight", platform_statements("preflight"))
     )
     lines.extend(
         _section(
             "Reviewed role provisioning",
-            (*platform_statements("roles"), *auxiliary_roles),
-        )
-    )
-    lines.extend(
-        _section(
-            "Temporary bootstrap ownership authority",
-            ('GRANT "erp_migration_owner" TO CURRENT_USER;',),
+            role_statements,
         )
     )
     lines.extend(
@@ -860,12 +870,13 @@ def generate_baseline(
     lines.extend(_section("Reviewed RLS policies", platform_statements("rls_policies")))
     lines.extend(_section("Reviewed global reference seeds", platform_statements("seeds")))
     lines.extend(_section("Reviewed runtime grants", platform_statements("grants")))
-    lines.extend(
-        _section(
-            "Remove temporary bootstrap ownership authority",
-            ('REVOKE "erp_migration_owner" FROM CURRENT_USER;',),
+    if bootstrap_membership_granted:
+        lines.extend(
+            _section(
+                "Remove temporary bootstrap ownership authority",
+                ('REVOKE "erp_migration_owner" FROM CURRENT_USER;',),
+            )
         )
-    )
     lines.extend(["COMMIT;", ""])
     sql = "\n".join(lines)
     return GenerationResult(
