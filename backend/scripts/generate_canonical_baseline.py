@@ -795,6 +795,12 @@ def generate_baseline(
         )
     )
     lines.extend(
+        _section(
+            "Temporary bootstrap ownership authority",
+            ('GRANT "erp_migration_owner" TO CURRENT_USER;',),
+        )
+    )
+    lines.extend(
         _section("Reviewed extension provisioning", auxiliary_extensions)
     )
     lines.extend(
@@ -854,6 +860,12 @@ def generate_baseline(
     lines.extend(_section("Reviewed RLS policies", platform_statements("rls_policies")))
     lines.extend(_section("Reviewed global reference seeds", platform_statements("seeds")))
     lines.extend(_section("Reviewed runtime grants", platform_statements("grants")))
+    lines.extend(
+        _section(
+            "Remove temporary bootstrap ownership authority",
+            ('REVOKE "erp_migration_owner" FROM CURRENT_USER;',),
+        )
+    )
     lines.extend(["COMMIT;", ""])
     sql = "\n".join(lines)
     return GenerationResult(

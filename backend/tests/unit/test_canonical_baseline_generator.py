@@ -313,6 +313,28 @@ def test_btree_gist_is_provisioned_before_every_gist_exclusion(catalog) -> None:
     )
 
 
+def test_bootstrap_membership_is_scoped_to_the_migration_transaction(catalog) -> None:
+    mappings = generator._merge_reviewed_mappings(
+        [
+            generator._load_enforcement_mapping(path)
+            for path in generator._discover_enforcement_mapping_paths(CANONICAL_ROOT)
+        ]
+    )
+    sql = generator.generate_baseline(
+        catalog,
+        enforcement_mapping=mappings.invariants,
+        platform_mapping=mappings.platform,
+    ).sql
+
+    grant = 'GRANT "erp_migration_owner" TO CURRENT_USER;'
+    first_owner_change = 'ALTER TABLE "automation"."agent_grant_capabilities" OWNER TO'
+    revoke = 'REVOKE "erp_migration_owner" FROM CURRENT_USER;'
+    assert sql.count(grant) == 1
+    assert sql.count(revoke) == 1
+    assert sql.index(grant) < sql.index(first_owner_change) < sql.index(revoke)
+    assert sql.index(revoke) < sql.rindex("COMMIT;")
+
+
 def test_mapping_must_match_invariant_method_and_exact_requirement_text(catalog) -> None:
     table = next(table for table in catalog.tables if table.get("cross_row_invariants"))
     invariant = table["cross_row_invariants"][0]

@@ -192,6 +192,9 @@ CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
 CREATE ROLE "erp_regulatory_importer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE "erp_tax_provider" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 
+-- Temporary bootstrap ownership authority
+GRANT "erp_migration_owner" TO CURRENT_USER;
+
 -- Reviewed extension provisioning
 CREATE EXTENSION "btree_gist" WITH SCHEMA "public";
 
@@ -26048,5 +26051,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "procurement" 
 ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "sales" REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "tax" REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+-- Remove temporary bootstrap ownership authority
+REVOKE "erp_migration_owner" FROM CURRENT_USER;
 
 COMMIT;
