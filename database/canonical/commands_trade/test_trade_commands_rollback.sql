@@ -47,13 +47,7 @@ SELECT pg_catalog.set_config(
     'app.request_id','91000000-0000-7000-8000-000000000008',true
 );
 
-INSERT INTO core.users (id,auth_user_id,display_name,status)
-VALUES (
-    '91000000-0000-7000-8000-000000000001',
-    '91000000-0000-7000-8000-000000000007',
-    'Trade permission actor','active'
-);
-
+ALTER TABLE core.organizations DISABLE TRIGGER USER;
 INSERT INTO core.organizations (
     id,legal_name,registered_address_line1,registered_city,registered_state_code,
     registered_postal_code,status,created_by_membership_id,updated_by_membership_id
@@ -61,6 +55,14 @@ INSERT INTO core.organizations (
     '91000000-0000-7000-8000-000000000002','Trade permission org','One Test Road',
     'Mumbai','27','400001','active','91000000-0000-7000-8000-000000000003',
     '91000000-0000-7000-8000-000000000003'
+);
+ALTER TABLE core.organizations ENABLE TRIGGER USER;
+
+INSERT INTO core.users (id,auth_user_id,display_name,status)
+VALUES (
+    '91000000-0000-7000-8000-000000000001',
+    '91000000-0000-7000-8000-000000000007',
+    'Trade permission actor','active'
 );
 
 INSERT INTO core.memberships (
