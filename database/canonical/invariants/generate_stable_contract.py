@@ -248,15 +248,6 @@ EXCLUDE USING gist (
             "guard_attachment_evidence",
             """
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW.status <> 'claimed' OR NEW.completed_at IS NOT NULL
-           OR NEW.resource_type IS NOT NULL OR NEW.resource_id IS NOT NULL
-           OR NEW.response_status IS NOT NULL OR NEW.response_media_type IS NOT NULL
-           OR NEW.response_body IS NOT NULL OR NEW.response_hash IS NOT NULL OR NEW.error_code IS NOT NULL THEN
-            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'new idempotency key must be an empty claimed row';
-        END IF;
-        RETURN NEW;
-    END IF;
     IF TG_OP = 'DELETE' THEN
         IF OLD.legal_hold THEN
             RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'attachment under legal hold cannot be retired';
@@ -356,6 +347,15 @@ $function$""",
             "guard_idempotency_claim",
             """
 BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status <> 'claimed' OR NEW.completed_at IS NOT NULL
+           OR NEW.resource_type IS NOT NULL OR NEW.resource_id IS NOT NULL
+           OR NEW.response_status IS NOT NULL OR NEW.response_media_type IS NOT NULL
+           OR NEW.response_body IS NOT NULL OR NEW.response_hash IS NOT NULL OR NEW.error_code IS NOT NULL THEN
+            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'new idempotency key must be an empty claimed row';
+        END IF;
+        RETURN NEW;
+    END IF;
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'idempotency claims cannot be deleted or reused';
     END IF;

@@ -111,11 +111,15 @@ def test_idempotency_and_delivery_guards_cover_direct_table_mutations() -> None:
         for entry in mapping["enforcements"]
     }
     idempotency = by_key["core.idempotency_keys:idempotency_claim_once"]
+    attachments = by_key["core.attachments:attachments_evidence_immutability"]
     outbox = by_key["core.outbox_events:outbox_delivery_transition"]
 
     assert "ON CONFLICT (org_id, actor_membership_id, operation, idempotency_key_hash) DO NOTHING" in idempotency
     assert "FOR UPDATE" in idempotency
     assert "different request" in idempotency
+    assert "IF TG_OP = 'INSERT'" in idempotency
+    assert "new idempotency key must be an empty claimed row" in idempotency
+    assert "new idempotency key must be an empty claimed row" not in attachments
     assert "terminal idempotency response is immutable" in idempotency
     assert '"INSERT OR UPDATE OR DELETE"' not in idempotency
     assert "AFTER INSERT OR UPDATE OR DELETE" in idempotency
