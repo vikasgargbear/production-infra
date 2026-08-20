@@ -89,6 +89,12 @@ def test_inventory_adjustment_uses_the_catalog_risk_vocabulary() -> None:
     sql = _sql()
     assert "capability.risk_class='consequential_write'" in sql
     assert "capability.risk_class='controlled_batched_movement'" not in sql
+    assert "conversion.row_version" not in sql
+    assert "mrp_conversion.row_version" not in sql
+    assert "effective_from<=adjustment_date" not in sql
+    assert "valid_from<=adjustment_date" in sql
+    assert "'version_hash',conversion_version_hash" in sql
+    assert "'version_hash',mrp_conversion_version_hash" in sql
 
 
 def test_typed_consent_and_request_facts_are_checked() -> None:

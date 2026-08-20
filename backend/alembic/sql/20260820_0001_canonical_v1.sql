@@ -6929,7 +6929,7 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         unit_cost numeric(20,4); extended_cost numeric(20,2);
         total_base numeric(20,6):=0; total_value numeric(20,2):=0;
         batch_id uuid; batch_origin text; batch_status text; qc_status text;
-        order_line_version_hash text;
+        order_line_version_hash text; mrp_conversion_version_hash text;
         requested_received numeric(20,6); requested_accepted numeric(20,6);
         requested_rejected numeric(20,6); requested_free numeric(20,6);
         license_type_count integer;
@@ -7077,6 +7077,8 @@ BEGIN
          WHERE org_id=organization_id AND id=NULLIF(requested_batch->>'mrp_uom_conversion_id','')::uuid
            AND product_id=product.id AND to_uom_code=product.base_uom_code AND status='active'
            AND valid_from<=received_day AND (valid_until IS NULL OR valid_until>=received_day) FOR SHARE;
+        mrp_conversion_version_hash:=pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to(pg_catalog.to_jsonb(mrp_conversion)::text,'UTF8'),'sha256'),'hex');
         SELECT count(*) INTO batch_count FROM inventory.batches
          WHERE org_id=organization_id AND product_id=product.id
            AND batch_number=requested_batch->>'manufacturer_batch_number';
@@ -7157,7 +7159,7 @@ BEGIN
             'posted_base_billed_quantity',prior_base_billed::text,'posted_base_free_quantity',prior_base_free::text),
           pg_catalog.jsonb_build_object('resource_type','inventory_location','id',location.id,'row_version',location.row_version,
             'location_type',location.location_type,'temperature_min_c',location.temperature_min_c,'temperature_max_c',location.temperature_max_c),
-          pg_catalog.jsonb_build_object('resource_type','mrp_uom_conversion','id',mrp_conversion.id,'row_version',mrp_conversion.row_version,
+          pg_catalog.jsonb_build_object('resource_type','mrp_uom_conversion','id',mrp_conversion.id,'version_hash',mrp_conversion_version_hash,
             'from_uom_code',mrp_conversion.from_uom_code,'to_uom_code',mrp_conversion.to_uom_code,
             'multiplier',mrp_conversion.multiplier::text,'valid_from',mrp_conversion.valid_from,'valid_until',mrp_conversion.valid_until),
           CASE WHEN batch_origin='preexisting' THEN pg_catalog.jsonb_build_object('resource_type','manufacturer_batch','id',existing_batch.id,
@@ -11088,6 +11090,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         total_base numeric(20,6):=0; total_value numeric(20,2):=0;
         pending_count integer; recall_count integer; line_no integer:=0;
         medicine_count integer:=0; license_type_count integer; license_sources jsonb;
+        conversion_version_hash text;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR inventory_document_id IS NULL OR branch_id IS NULL OR adjustment_date IS NULL
@@ -11185,7 +11188,9 @@ BEGIN
     SELECT * INTO STRICT conversion FROM catalog.uom_conversions WHERE org_id=organization_id
       AND id=(requested_line->>'uom_conversion_id')::uuid AND product_id=product.id AND status='active'
       AND from_uom_code<>to_uom_code AND to_uom_code=product.base_uom_code AND multiplier>0
-      AND effective_from<=adjustment_date AND (effective_to IS NULL OR effective_to>=adjustment_date) FOR SHARE;
+      AND valid_from<=adjustment_date AND (valid_until IS NULL OR valid_until>=adjustment_date) FOR SHARE;
+    conversion_version_hash:=pg_catalog.encode(extensions.digest(
+      pg_catalog.convert_to(pg_catalog.to_jsonb(conversion)::text,'UTF8'),'sha256'),'hex');
     FOR requested_count IN SELECT value FROM pg_catalog.jsonb_array_elements(requested_line->'batch_counts') LOOP
       line_no:=line_no+1;
       IF NULLIF(requested_count->>'inventory_document_line_id','')::uuid IS NULL
@@ -11229,8 +11234,9 @@ BEGIN
       source_versions:=source_versions||pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object('resource_type','product','id',product.id,'row_version',product.row_version,
           'drug_schedule',product.drug_schedule,'ndps_regulated',product.ndps_regulated,'cold_chain_required',product.cold_chain_required),
-        pg_catalog.jsonb_build_object('resource_type','uom_conversion','id',conversion.id,'row_version',conversion.row_version,
-          'from_uom_code',conversion.from_uom_code,'to_uom_code',conversion.to_uom_code,'multiplier',conversion.multiplier::text),
+        pg_catalog.jsonb_build_object('resource_type','uom_conversion','id',conversion.id,'version_hash',conversion_version_hash,
+          'from_uom_code',conversion.from_uom_code,'to_uom_code',conversion.to_uom_code,'multiplier',conversion.multiplier::text,
+          'valid_from',conversion.valid_from,'valid_until',conversion.valid_until),
         pg_catalog.jsonb_build_object('resource_type','inventory_batch','id',batch.id,'row_version',batch.row_version,
           'status',batch.status,'expires_on',batch.expires_on,'mrp',batch.mrp::text,'mrp_uom_conversion_id',batch.mrp_uom_conversion_id),
         pg_catalog.jsonb_build_object('resource_type','stock_balance','id',last_ledger.id,'branch_id',branch.id,
