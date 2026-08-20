@@ -26,12 +26,9 @@ BEGIN
      OR pg_catalog.has_table_privilege('erp_tax_provider','tax.eway_bills','INSERT,UPDATE,DELETE') THEN
     RAISE EXCEPTION 'provider received direct authority-table DML';
   END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_trigger
-     WHERE tgname IN ('tax_einvoices_provider_guard','tax_eway_bills_provider_guard')
-       AND NOT tgisinternal
-    GROUP BY true HAVING pg_catalog.count(*)=2
-  ) THEN
+  IF (SELECT pg_catalog.count(*) FROM pg_catalog.pg_trigger
+       WHERE tgname IN ('tax_einvoices_provider_guard','tax_eway_bills_provider_guard')
+         AND NOT tgisinternal)<>2 THEN
     RAISE EXCEPTION 'provider authority mutation guards are absent';
   END IF;
 END

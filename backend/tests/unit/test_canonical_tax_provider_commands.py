@@ -205,6 +205,8 @@ def test_plumbing_allows_only_exact_provider_completion_system_audit() -> None:
 
 def test_postgres_fixture_is_rollback_only() -> None:
     fixture = (ROOT / "test_tax_provider_commands_rollback.sql").read_text()
+    assert "GROUP BY true" not in fixture
+    assert ")<>2 THEN" in fixture
     assert fixture.startswith("\\set ON_ERROR_STOP on\n\nBEGIN;")
     assert fixture.rstrip().endswith("ROLLBACK;")
     assert "has_function_privilege" in fixture
