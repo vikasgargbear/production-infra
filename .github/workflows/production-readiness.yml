@@ -11,11 +11,23 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_canonical_staging:
+        description: Apply and verify the canonical baseline on the pinned free staging project
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  canonical-free-staging:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_canonical_staging
+    uses: ./.github/workflows/canonical-staging.yml
+    with:
+      confirmation: DEPLOY_FREE_CANONICAL_STAGING
+    secrets: inherit
+
   mcp-sdk-compatibility:
     runs-on: ubuntu-latest
     steps:

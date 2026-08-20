@@ -7,6 +7,12 @@ on:
         description: Type DEPLOY_FREE_CANONICAL_STAGING
         required: true
         type: string
+  workflow_call:
+    inputs:
+      confirmation:
+        description: Exact free-staging deployment confirmation
+        required: true
+        type: string
 
 permissions:
   contents: read
