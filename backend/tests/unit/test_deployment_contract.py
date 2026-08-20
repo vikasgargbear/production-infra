@@ -311,6 +311,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'join_transaction_mode="create_savepoint"' in preflight
     assert "outer_transaction.rollback()" in preflight
     assert "SqlAlchemyOperatorActionService" in preflight
+    assert '"2000.00", "INR"' in provisioner
+    assert "maximum_amount, currency_code" in provisioner
+    assert "demo-v2" in provisioner
 
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():

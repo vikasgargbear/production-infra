@@ -30,7 +30,7 @@ SOURCE_URI = "https://gstcouncil.gov.in/sites/default/files/2024-09/02_2024_ctr_
 SOURCE_RETRIEVED_ON = date(2026, 8, 20)
 SOURCE_PUBLICATION_DATE = date(2024, 7, 12)
 SOURCE_EFFECTIVE_FROM = date(2024, 7, 15)
-CLIENT_ID = "aasopharma-canonical-staging-demo"
+CLIENT_ID = "aasopharma-canonical-staging-demo-v2"
 
 IDS = {
     "org": "d3000000-0000-7000-8000-000000000001",
@@ -41,7 +41,7 @@ IDS = {
     "role": "d3000000-0000-7000-8000-000000000006",
     "access_grant": "d3000000-0000-7000-8000-000000000007",
     "safety_setting": "d3000000-0000-7000-8000-000000000008",
-    "agent_grant": "d3000000-0000-7000-8000-000000000009",
+    "agent_grant": "d3000000-0000-7000-8000-000000000020",
     "customer_party": "d3000000-0000-7000-8000-000000000010",
     "customer_account": "d3000000-0000-7000-8000-000000000011",
     "customer_address": "d3000000-0000-7000-8000-000000000012",
@@ -255,7 +255,8 @@ def bootstrap_identity(connection) -> None:
                 updated_by_membership_id
             ) VALUES (
                 %s, %s, %s, %s, 'Canonical staging demo runner', NULL,
-                'self_consent', 'demo-v1', extensions.digest('canonical staging demo consent','sha256'),
+                'self_consent', 'demo-v2',
+                extensions.digest('canonical staging demo consent; INR 2000 maximum','sha256'),
                 %s, transaction_timestamp(), %s, transaction_timestamp(),
                 transaction_timestamp() + interval '30 days', 'active', %s, %s
             ) ON CONFLICT (org_id, id) DO NOTHING
@@ -266,18 +267,31 @@ def bootstrap_identity(connection) -> None:
             ),
         )
         capabilities = (
-            ("sales.order.prepare", "write", "consequential_write", "actor_confirmation"),
-            ("automation.command.approve", "write", "consequential_write", "actor_confirmation"),
-            ("automation.command.execute", "write", "consequential_write", "actor_confirmation"),
-            ("automation.command.status.get", "read", "read_only", "none"),
+            (
+                "sales.order.prepare", "write", "consequential_write",
+                "actor_confirmation", "2000.00", "INR",
+            ),
+            (
+                "automation.command.approve", "write", "consequential_write",
+                "actor_confirmation", None, None,
+            ),
+            (
+                "automation.command.execute", "write", "consequential_write",
+                "actor_confirmation", None, None,
+            ),
+            (
+                "automation.command.status.get", "read", "read_only", "none",
+                None, None,
+            ),
         )
         cursor.executemany(
             """
             INSERT INTO automation.agent_grant_capabilities (
                 org_id, agent_grant_id, capability_code, operation_mode,
-                risk_class, approval_policy, allow_sensitive_read, status,
+                risk_class, approval_policy, maximum_amount, currency_code,
+                allow_sensitive_read, status,
                 created_by_membership_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, false, 'active', %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, 'active', %s)
             ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
             """,
             [
