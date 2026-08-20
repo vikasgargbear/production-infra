@@ -115,9 +115,6 @@ VALUES (
     '20000000-0000-7000-8000-000000000001'
 );
 
-INSERT INTO core.permissions (code, domain, action, risk_class, description)
-VALUES ('core.settings.manage', 'core', 'settings.manage', 'consequential_write', 'Manage ERP settings');
-
 INSERT INTO core.role_permissions (
     org_id, role_id, permission_code, created_by_membership_id
 )
