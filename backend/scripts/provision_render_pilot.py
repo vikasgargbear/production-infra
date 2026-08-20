@@ -468,6 +468,30 @@ class RenderClient:
             )
 
     def deploy(self, service: ServiceRef, commit_id: str) -> Mapping[str, object]:
+        history = self.request(
+            "GET", f"/services/{service.id}/deploys", query={"limit": 20}
+        )
+        if isinstance(history, list):
+            for item in history:
+                deploy = item.get("deploy", item) if isinstance(item, dict) else {}
+                commit = deploy.get("commit", {}) if isinstance(deploy, dict) else {}
+                if (
+                    isinstance(commit, dict)
+                    and commit.get("id") == commit_id
+                    and deploy.get("status")
+                    not in {
+                        "build_failed",
+                        "update_failed",
+                        "pre_deploy_failed",
+                        "canceled",
+                        "deactivated",
+                    }
+                ):
+                    return {
+                        "id": deploy["id"],
+                        "status": deploy.get("status", "created"),
+                        "reused": True,
+                    }
         result = self.request(
             "POST",
             f"/services/{service.id}/deploys",
@@ -477,7 +501,11 @@ class RenderClient:
             raise ProvisioningError(
                 f"Render did not return a deploy ID for {service.name}"
             )
-        return {"id": result["id"], "status": result.get("status", "queued")}
+        return {
+            "id": result["id"],
+            "status": result.get("status", "queued"),
+            "reused": False,
+        }
 
 
 def dry_run_plan(owner_id: str, repo: str, branch: str) -> Dict[str, object]:

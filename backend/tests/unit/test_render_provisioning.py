@@ -250,7 +250,9 @@ def test_existing_service_type_drift_is_refused():
 
 
 def test_deploy_is_pinned_to_exact_commit_and_returns_deploy_id():
-    client = RecordingClient([{"id": "dep-exact", "status": "build_in_progress"}])
+    client = RecordingClient(
+        [[], {"id": "dep-exact", "status": "build_in_progress"}]
+    )
     service = provision.ServiceRef(
         "srv-api",
         provision.API_NAME,
@@ -262,8 +264,16 @@ def test_deploy_is_pinned_to_exact_commit_and_returns_deploy_id():
     assert client.deploy(service, "a" * 40) == {
         "id": "dep-exact",
         "status": "build_in_progress",
+        "reused": False,
     }
     assert client.calls == [
+        (
+            "GET",
+            "/services/srv-api/deploys",
+            None,
+            {"limit": 20},
+            False,
+        ),
         (
             "POST",
             "/services/srv-api/deploys",
@@ -272,6 +282,32 @@ def test_deploy_is_pinned_to_exact_commit_and_returns_deploy_id():
             False,
         )
     ]
+
+
+def test_deploy_reuses_nonterminal_exact_commit():
+    client = RecordingClient(
+        [[{
+            "deploy": {
+                "id": "dep-existing",
+                "status": "update_in_progress",
+                "commit": {"id": "b" * 40},
+            }
+        }]]
+    )
+    service = provision.ServiceRef(
+        "srv-api",
+        provision.API_NAME,
+        "web_service",
+        "https://api.onrender.com",
+        {},
+    )
+
+    assert client.deploy(service, "b" * 40) == {
+        "id": "dep-existing",
+        "status": "update_in_progress",
+        "reused": True,
+    }
+    assert [call[0] for call in client.calls] == ["GET"]
 
 
 def test_deploy_requires_exact_commit_argument():
@@ -316,7 +352,12 @@ class ConvergeClient:
 
     def deploy(self, service, commit_id):
         self.deployed.append(service.name)
-        return {"id": f"dep-{service.id}", "status": "queued", "commit": commit_id}
+        return {
+            "id": f"dep-{service.id}",
+            "status": "queued",
+            "commit": commit_id,
+            "reused": False,
+        }
 
 
 @pytest.mark.parametrize("deploy", [False, True])

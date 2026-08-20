@@ -702,7 +702,7 @@ jobs:
               printf '%s deploy %s status: %s\n' "$service_name" "$deploy_id" "$deploy_status"
               case "$deploy_status" in
                 live) ;;
-                build_failed|update_failed|canceled|deactivated)
+                build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
                   echo "::error title=Render deploy failed::$service_name deploy $deploy_id ended as $deploy_status"
                   exit 1
                   ;;
@@ -717,7 +717,7 @@ jobs:
               echo "::error title=Render deploy timeout::Exact commit did not become live after five bounded checks"
               exit 1
             fi
-            sleep 90
+            sleep 180
           done
 
       - name: Wait for free service smoke readiness
