@@ -185,6 +185,7 @@ GRANT "erp_app" TO "erp_runtime";
 -- Reviewed platform enforcement: role:migration_owner
 CREATE ROLE "erp_migration_owner" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT BYPASSRLS;
 REVOKE CREATE ON SCHEMA "public" FROM PUBLIC;
+GRANT USAGE ON SCHEMA "extensions" TO "erp_migration_owner";
 CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;
 CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;

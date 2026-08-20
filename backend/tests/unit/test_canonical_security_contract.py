@@ -44,6 +44,7 @@ def test_roles_are_non_owning_at_runtime_and_have_no_rls_bypass() -> None:
     assert '"erp_runtime" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS' in sql
     assert 'GRANT "erp_app" TO "erp_runtime";' in sql
     assert 'REVOKE "erp_migration_owner" FROM "erp_app", "erp_runtime";' in sql
+    assert 'GRANT USAGE ON SCHEMA "extensions" TO "erp_migration_owner";' in sql
     assert 'OWNER TO "erp_runtime"' not in sql
     assert 'OWNER TO "erp_app"' not in sql
     assert "service_role" not in sql.lower()

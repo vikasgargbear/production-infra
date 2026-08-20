@@ -681,6 +681,7 @@ def build_baseline_mapping(
         "role:migration_owner": [
             'CREATE ROLE "erp_migration_owner" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT BYPASSRLS;',
             'REVOKE CREATE ON SCHEMA "public" FROM PUBLIC;',
+            'GRANT USAGE ON SCHEMA "extensions" TO "erp_migration_owner";',
             'CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";',
             'REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;',
         ],
@@ -748,6 +749,7 @@ def generate_sql(manifest: dict[str, Any]) -> str:
         "GRANT \"erp_app\" TO \"erp_runtime\";",
         "REVOKE \"erp_migration_owner\" FROM \"erp_app\", \"erp_runtime\";",
         "REVOKE CREATE ON SCHEMA \"public\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"extensions\" TO \"erp_migration_owner\";",
         "CREATE SCHEMA \"erp_security\" AUTHORIZATION \"erp_migration_owner\";",
         "REVOKE ALL ON SCHEMA \"erp_security\" FROM PUBLIC;",
         "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\";",
