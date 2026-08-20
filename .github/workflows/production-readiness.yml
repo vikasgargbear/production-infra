@@ -31,6 +31,11 @@ on:
         required: true
         default: false
         type: boolean
+      canonical_staging_render_sha:
+        description: Reviewed application SHA for free-staging Render deployment
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -44,6 +49,7 @@ jobs:
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
+      render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
     secrets: inherit
 
   mcp-sdk-compatibility:

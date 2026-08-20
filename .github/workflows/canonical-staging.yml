@@ -27,6 +27,11 @@ on:
         required: false
         default: false
         type: boolean
+      render_deploy_sha:
+        description: Reviewed application commit to deploy; defaults to this workflow commit
+        required: false
+        default: ""
+        type: string
   workflow_call:
     inputs:
       confirmation:
@@ -53,6 +58,11 @@ on:
         required: false
         default: false
         type: boolean
+      render_deploy_sha:
+        description: Reviewed application commit to deploy; defaults to this workflow commit
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -86,6 +96,8 @@ jobs:
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -685,11 +697,22 @@ jobs:
           test -n "$SUPABASE_ANON_KEY"
           test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" = disabled-unissued-canonical-staging
           mkdir -p staging-evidence
+          deploy_sha='${{ inputs.render_deploy_sha }}'
+          if [ -z "$deploy_sha" ]; then
+            deploy_sha="$GITHUB_SHA"
+          fi
+          test "${#deploy_sha}" = 40
+          case "$deploy_sha" in
+            *[!0-9a-f]*) echo "Render deploy SHA must be lowercase hexadecimal" >&2; exit 2 ;;
+          esac
+          git cat-file -e "$deploy_sha^{commit}"
+          git merge-base --is-ancestor "$deploy_sha" "$GITHUB_SHA"
+          echo "CANONICAL_RENDER_DEPLOY_SHA=$deploy_sha" >> "$GITHUB_ENV"
           python3 backend/scripts/provision_render_pilot.py \
             --apply \
             --deploy \
             --branch "$GITHUB_REF_NAME" \
-            --commit-id "$GITHUB_SHA" \
+            --commit-id "$deploy_sha" \
             > staging-evidence/render-pilot.json
 
           for attempt in 1 2 3 4 5; do
@@ -709,6 +732,7 @@ jobs:
                 *) all_live=false ;;
               esac
             done < <(jq -r '.services as $services | .deployed | to_entries[] |
+              select(.key == "aasopharma-api-pilot") |
               [.key, $services[.key].id, .value.id] | @tsv' staging-evidence/render-pilot.json)
             if [ "$all_live" = true ]; then
               break
@@ -865,12 +889,14 @@ jobs:
             --arg revision "20260820_0001" \
             --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
             --arg commit_sha "$GITHUB_SHA" \
+            --arg render_deploy_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
             --arg pooler_mode "$CANONICAL_ACTIVE_POOLER_MODE" \
             '{
               project_ref: $project_ref,
               revision: $revision,
                approved_sha256: $approved_sha256,
                commit_sha: $commit_sha,
+               render_deploy_sha: $render_deploy_sha,
                pooler_mode: $pooler_mode,
               canonical_table_count: 110,
               result: "baseline_and_isolated_roles_verified"
