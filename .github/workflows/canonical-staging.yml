@@ -153,6 +153,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import os
+          import sys
           from urllib.parse import quote
 
           import psycopg2
@@ -165,7 +166,8 @@ jobs:
           with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
               with connection.cursor() as cursor:
                   cursor.execute("SELECT version_num FROM public.alembic_version")
-                  assert cursor.fetchone() == ("20260820_0001",)
+                  revision = cursor.fetchone()
+                  assert revision == ("20260820_0001",), revision
                   cursor.execute(
                       """
                       SELECT count(*)
@@ -177,7 +179,8 @@ jobs:
                          AND table_type = 'BASE TABLE'
                       """
                   )
-                  assert cursor.fetchone() == (110,)
+                  table_count = cursor.fetchone()
+                  assert table_count == (110,), table_count
                   cursor.execute(
                       """
                       SELECT rolname, rolsuper, rolcreaterole, rolbypassrls, rolcanlogin
@@ -188,9 +191,9 @@ jobs:
                       (list(expected_roles),),
                   )
                   rows = cursor.fetchall()
-                  assert len(rows) == 3
+                  assert len(rows) == 3, rows
                   assert all(not superuser and not createrole and not bypassrls and canlogin
-                             for _, superuser, createrole, bypassrls, canlogin in rows)
+                             for _, superuser, createrole, bypassrls, canlogin in rows), rows
 
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
           host = "aws-0-ap-south-1.pooler.supabase.com"
@@ -199,13 +202,22 @@ jobs:
                   f"postgresql://{role}.{ref}:{quote(password, safe='')}"
                   f"@{host}:5432/postgres?sslmode=require"
               )
-              with psycopg2.connect(url) as connection:
-                  with connection.cursor() as cursor:
-                      cursor.execute(
-                          "SELECT current_user, rolsuper, rolbypassrls "
-                          "FROM pg_catalog.pg_roles WHERE rolname = current_user"
-                      )
-                      assert cursor.fetchone() == (role, False, False)
+              try:
+                  with psycopg2.connect(url) as connection:
+                      with connection.cursor() as cursor:
+                          cursor.execute(
+                              "SELECT current_user, rolsuper, rolbypassrls "
+                              "FROM pg_catalog.pg_roles WHERE rolname = current_user"
+                          )
+                          posture = cursor.fetchone()
+                          assert posture == (role, False, False), posture
+              except Exception as exc:
+                  message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(
+                      f"::error title=Canonical staging role verification failed::{role}: {message}",
+                      file=sys.stderr,
+                  )
+                  raise
           PY
 
       - name: Build and mask isolated service connections
