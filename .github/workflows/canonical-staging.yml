@@ -360,6 +360,7 @@ jobs:
            WHERE activity.pid<>pg_backend_pid()
              AND activity.datname=current_database()
              AND activity.backend_type='client backend'
+             AND activity.usename<>'postgres'
              AND activity.backend_start<transaction_timestamp()-interval '2 minutes'
              AND (
                activity.application_name IN (

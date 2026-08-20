@@ -204,6 +204,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert workflow.count("connect_timeout=15") == 7
     assert "Release stale canonical staging sessions" in workflow
     assert "pg_terminate_backend(activity.pid)" in workflow
+    assert "activity.usename<>'postgres'" in workflow
     assert "application_name=canonical_staging_ci" in workflow
     assert "application_name=canonical_staging_verify" in workflow
     assert "for attempt in $(seq 1 30)" in workflow
