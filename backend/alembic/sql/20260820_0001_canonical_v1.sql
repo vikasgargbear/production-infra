@@ -6813,10 +6813,6 @@ BEGIN
         'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
     END IF;
     totals:=output_document->'totals'; requested_total:=(totals->>'grand_total')::numeric;
-    aggregate_hash:=extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256');
-    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.purchase_order.prepare',
-      (resolved_document->>'branch_id')::uuid,NULL,purchase_order_id,requested_total,'INR',key_hash,
-      request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     fiscal_year:=CASE WHEN pg_catalog.date_part('month',(resolved_document->>'order_date')::date)>=4
       THEN pg_catalog.date_part('year',(resolved_document->>'order_date')::date)::integer
       ELSE pg_catalog.date_part('year',(resolved_document->>'order_date')::date)::integer-1 END;
@@ -6874,6 +6870,10 @@ BEGIN
         CASE WHEN resolved_line->>'line_kind'='product' THEN 'purchase_of_goods' END);
     END LOOP;
     PERFORM erp_trade_commands_v2.assert_purchase_order_artifact(organization_id,purchase_order_id,input_document,output_document);
+    aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('purchase_order',purchase_order_id,1);
+    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.purchase_order.prepare',
+      (resolved_document->>'branch_id')::uuid,NULL,purchase_order_id,requested_total,'INR',key_hash,
+      request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(
       organization_id,membership_id,'procurement.purchase_order.approve',key_hash,extensions.digest(request_bytes,'sha256'),expires_at);
     IF replay_id IS NOT NULL THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='purchase-order prepare replay reached completed approval'; END IF;
@@ -7784,9 +7784,6 @@ BEGIN
         'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
     END IF;
     requested_total:=(totals->>'grand_total')::numeric;
-    aggregate_hash:=extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256');
-    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.supplier_invoice.prepare',
-      (resolved_document->>'branch_id')::uuid,NULL,supplier_invoice_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     INSERT INTO procurement.supplier_invoices(org_id,id,branch_id,supplier_account_id,buyer_tax_registration_id,
       supplier_tax_registration_id,supplier_invoice_number,supplier_invoice_date,received_date,due_date,fiscal_year,status,
       supply_type,zero_rated_payment_mode,tax_charge_mechanism,place_of_supply_state_code,calculation_ruleset_version,
@@ -7852,6 +7849,9 @@ BEGIN
       END IF;
     END LOOP;
     PERFORM erp_commercial_commands.assert_supplier_invoice_artifact(organization_id,supplier_invoice_id,input_document,output_document);
+    aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('supplier_invoice',supplier_invoice_id,1);
+    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.supplier_invoice.prepare',
+      (resolved_document->>'branch_id')::uuid,NULL,supplier_invoice_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(organization_id,membership_id,
       'procurement.supplier_invoice.post',key_hash,extensions.digest(request_bytes,'sha256'),expires_at);
     IF replay_id IS NOT NULL THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='supplier-invoice prepare replay reached completed execution'; END IF;
@@ -9115,10 +9115,6 @@ BEGIN
         'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
     END IF;
     totals:=output_document->'totals'; requested_total:=(totals->>'grand_total')::numeric;
-    aggregate_hash:=extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256');
-    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'sales.invoice.prepare',
-      (resolved_document->>'branch_id')::uuid,NULL,invoice_id,requested_total,'INR',key_hash,
-      request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     fiscal_year:=CASE WHEN pg_catalog.date_part('month',(resolved_document->>'invoice_date')::date)>=4
       THEN pg_catalog.date_part('year',(resolved_document->>'invoice_date')::date)::integer
       ELSE pg_catalog.date_part('year',(resolved_document->>'invoice_date')::date)::integer-1 END;
@@ -9220,6 +9216,10 @@ BEGIN
     END LOOP;
     PERFORM erp_commercial_commands.assert_sales_invoice_artifact(organization_id,invoice_id,input_document,output_document);
     PERFORM "erp_automation_commands"."assert_sales_invoice_draft"(organization_id,invoice_id,inventory_document_id,resolved_document);
+    aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('sales_invoice',invoice_id,1);
+    PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'sales.invoice.prepare',
+      (resolved_document->>'branch_id')::uuid,NULL,invoice_id,requested_total,'INR',key_hash,
+      request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(
       organization_id,membership_id,'sales.invoice.post',key_hash,extensions.digest(request_bytes,'sha256'),expires_at);
     IF replay_id IS NOT NULL THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='sales-invoice prepare replay reached a completed execution claim'; END IF;
@@ -9557,9 +9557,6 @@ BEGIN
       'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
   END IF;
   totals:=output_document->'totals'; requested_total:=(totals->>'grand_total')::numeric;
-  aggregate_hash:=extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256');
-  PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'sales.return.prepare',
-    (resolved_document->>'branch_id')::uuid,NULL,sales_return_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
   fiscal_year:=CASE WHEN pg_catalog.date_part('month',(resolved_document->>'return_date')::date)>=4
     THEN pg_catalog.date_part('year',(resolved_document->>'return_date')::date)::integer
     ELSE pg_catalog.date_part('year',(resolved_document->>'return_date')::date)::integer-1 END;
@@ -9620,6 +9617,9 @@ BEGIN
   END LOOP;
   PERFORM erp_commercial_commands.assert_sales_return_artifact(organization_id,sales_return_id,input_document,output_document);
   PERFORM "erp_automation_commands"."assert_sales_return_draft"(organization_id,sales_return_id,inventory_document_id,resolved_document);
+  aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('sales_return',sales_return_id,1);
+  PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'sales.return.prepare',
+    (resolved_document->>'branch_id')::uuid,NULL,sales_return_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
   SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(organization_id,membership_id,
     'sales.return.post',key_hash,extensions.digest(request_bytes,'sha256'),expires_at);
   IF replay_id IS NOT NULL THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='sales-return prepare replay reached a completed execution claim'; END IF;
@@ -10056,9 +10056,6 @@ BEGIN
       'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
   END IF;
   requested_total:=(totals->>'grand_total')::numeric;
-  aggregate_hash:=extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256');
-  PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.purchase_return.prepare',
-    (resolved_document->>'branch_id')::uuid,NULL,purchase_return_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
   fiscal_year:=CASE WHEN pg_catalog.date_part('month',(resolved_document->>'return_date')::date)>=4
     THEN pg_catalog.date_part('year',(resolved_document->>'return_date')::date)::integer
     ELSE pg_catalog.date_part('year',(resolved_document->>'return_date')::date)::integer-1 END;
@@ -10128,6 +10125,9 @@ BEGIN
   END LOOP;
   PERFORM erp_commercial_commands.assert_purchase_return_artifact(organization_id,purchase_return_id,input_document,output_document);
   PERFORM "erp_automation_commands"."assert_purchase_return_draft"(organization_id,purchase_return_id,inventory_document_id,resolved_document);
+  aggregate_hash:="erp_automation_commands"."aggregate_version_hash"('purchase_return',purchase_return_id,1);
+  PERFORM "erp_automation_commands"."prepare_operator_command"(organization_id,command_id,grant_id,'procurement.purchase_return.prepare',
+    (resolved_document->>'branch_id')::uuid,NULL,purchase_return_id,requested_total,'INR',key_hash,request_bytes,preview_bytes,NULL,aggregate_hash,expires_at);
   SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(organization_id,membership_id,
     'procurement.purchase_return.post',key_hash,extensions.digest(request_bytes,'sha256'),expires_at);
   IF replay_id IS NOT NULL THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='purchase-return prepare replay reached completed execution claim'; END IF;

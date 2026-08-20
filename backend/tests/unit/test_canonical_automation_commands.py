@@ -398,6 +398,38 @@ def test_calculation_issue_atomically_links_exact_command_evidence() -> None:
     assert "calculation link may set only the exact authority hash once" in mapping
 
 
+def test_calculated_prepares_bind_commands_to_persisted_document_versions() -> None:
+    mapping = _sql()
+    calculated_prepares = (
+        ("purchase_order", "purchase_order_id", "procurement.purchase_order.prepare"),
+        ("supplier_invoice", "supplier_invoice_id", "procurement.supplier_invoice.prepare"),
+        ("sales_invoice", "invoice_id", "sales.invoice.prepare"),
+        ("sales_order", "order_id", "sales.order.prepare"),
+        ("sales_return", "sales_return_id", "sales.return.prepare"),
+        ("purchase_return", "purchase_return_id", "procurement.purchase_return.prepare"),
+    )
+    for resource_type, resource_id, capability in calculated_prepares:
+        start = mapping.index(f'CREATE FUNCTION "erp_automation_commands"."persist_{resource_type}_prepare"')
+        end = mapping.index("\nREVOKE ALL ON FUNCTION", start)
+        function_sql = mapping[start:end]
+        aggregate = (
+            f'"aggregate_version_hash"(\'{resource_type}\',{resource_id},1)'
+        )
+        assert aggregate in function_sql
+        assert "resolved_document->'source_versions'" not in function_sql[
+            function_sql.index("aggregate_hash:=") : function_sql.index(
+                '"prepare_operator_command"'
+            )
+        ]
+        assert function_sql.index("INSERT INTO ") < function_sql.index(aggregate)
+        assert function_sql.index(aggregate) < function_sql.index(
+            f"'{capability}'", function_sql.index('"prepare_operator_command"')
+        )
+        assert function_sql.index('"prepare_operator_command"') < function_sql.index(
+            "erp_calculation_authority.issue_artifact"
+        )
+
+
 def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() -> None:
     mapping = _sql()
     assert mapping.count(
@@ -524,14 +556,18 @@ def test_sales_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "erp_commercial_commands.post_sales_invoice(",
     ):
         assert fragment in mapping
-    prepare_at = mapping.index(
-        '"prepare_operator_command"(organization_id,command_id,grant_id,\'sales.invoice.prepare\''
+    function_at = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."persist_sales_invoice_prepare"'
     )
     sequence_at = mapping.index(
-        "invoice_number:=erp_core_commands.allocate_document_number", prepare_at
+        "invoice_number:=erp_core_commands.allocate_document_number", function_at
     )
     draft_at = mapping.index("INSERT INTO sales.invoices", sequence_at)
-    assert prepare_at < sequence_at < draft_at
+    prepare_at = mapping.index(
+        '"prepare_operator_command"(organization_id,command_id,grant_id,\'sales.invoice.prepare\''
+        , draft_at
+    )
+    assert sequence_at < draft_at < prepare_at
     reauthorize_at = mapping.index(
         'current_resolution:="erp_automation_commands"."resolve_sales_invoice_prepare"'
     )
@@ -567,14 +603,18 @@ def test_purchase_order_prepare_and_execute_are_closed_typed_and_atomic() -> Non
         "erp_trade_commands_v2.approve_purchase_order(",
     ):
         assert fragment in mapping
-    prepare_at = mapping.index(
-        '"prepare_operator_command"(organization_id,command_id,grant_id,\'procurement.purchase_order.prepare\''
+    function_at = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."persist_purchase_order_prepare"'
     )
     sequence_at = mapping.index(
-        "order_number:=erp_core_commands.allocate_document_number", prepare_at
+        "order_number:=erp_core_commands.allocate_document_number", function_at
     )
     draft_at = mapping.index("INSERT INTO procurement.purchase_orders", sequence_at)
-    assert prepare_at < sequence_at < draft_at
+    prepare_at = mapping.index(
+        '"prepare_operator_command"(organization_id,command_id,grant_id,\'procurement.purchase_order.prepare\''
+        , draft_at
+    )
+    assert sequence_at < draft_at < prepare_at
     reauthorize_at = mapping.index(
         'current_resolution:="erp_automation_commands"."resolve_purchase_order_prepare"'
     )
@@ -664,10 +704,14 @@ def test_supplier_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> N
         "NULL::uuid,NULL::bytea,NULL::bytea",
     ):
         assert fragment in mapping
+    function_at = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."persist_supplier_invoice_prepare"'
+    )
+    draft_at = mapping.index("INSERT INTO procurement.supplier_invoices", function_at)
     prepare_at = mapping.index(
         '"prepare_operator_command"(organization_id,command_id,grant_id,\'procurement.supplier_invoice.prepare\''
+        , draft_at
     )
-    draft_at = mapping.index("INSERT INTO procurement.supplier_invoices", prepare_at)
     reauthorize_at = mapping.index(
         'current_resolution:="erp_automation_commands"."resolve_supplier_invoice_prepare"'
     )
@@ -675,7 +719,7 @@ def test_supplier_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> N
         "erp_commercial_commands.post_supplier_invoice(", reauthorize_at
     )
     success_at = mapping.index("SET status='succeeded'", post_at)
-    assert prepare_at < draft_at
+    assert draft_at < prepare_at
     assert reauthorize_at < post_at < success_at
     artifact_at = mapping.index("erp_calculation_authority.issue_artifact(", draft_at)
     assert "INSERT INTO inventory.inventory_documents" not in mapping[
@@ -714,16 +758,20 @@ def test_sales_return_prepare_and_execute_pin_lineage_tax_and_cost_atomically() 
     ):
         assert fragment in mapping
     assert mapping.count("'resource_type','sales_return_prior_state'") == 1
+    function_at = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."persist_sales_return_prepare"'
+    )
+    draft_at = mapping.index("INSERT INTO sales.returns", function_at)
     prepare_at = mapping.index(
         '"prepare_operator_command"(organization_id,command_id,grant_id,\'sales.return.prepare\''
+        , draft_at
     )
-    draft_at = mapping.index("INSERT INTO sales.returns", prepare_at)
-    artifact_at = mapping.index("erp_calculation_authority.issue_artifact(", draft_at)
+    artifact_at = mapping.index("erp_calculation_authority.issue_artifact(", prepare_at)
     reauthorize_at = mapping.index(
         'current_resolution:="erp_automation_commands"."resolve_sales_return_prepare"'
     )
     assert_at = mapping.index('"assert_sales_return_draft"(', reauthorize_at)
     post_at = mapping.index("erp_commercial_commands.post_sales_return(", assert_at)
     success_at = mapping.index("SET status='succeeded'", post_at)
-    assert prepare_at < draft_at < artifact_at
+    assert draft_at < prepare_at < artifact_at
     assert reauthorize_at < assert_at < post_at < success_at
