@@ -261,12 +261,20 @@ BEGIN
         RAISE EXCEPTION 'branch-scoped actor updated another branch';
     END IF;
 
-    UPDATE core.settings
-       SET value_text = 'allowed-change'
-     WHERE id = '70000000-0000-7000-8000-000000000001';
+    INSERT INTO core.settings (
+        org_id, id, scope_kind, branch_id, namespace, key, value_type,
+        value_text, created_by_membership_id, updated_by_membership_id
+    ) VALUES (
+        '10000000-0000-7000-8000-000000000001',
+        '70000000-0000-7000-8000-000000000005', 'branch',
+        '40000000-0000-7000-8000-000000000001', 'rls_test',
+        'allowed_insert', 'text', 'allowed',
+        '20000000-0000-7000-8000-000000000001',
+        '20000000-0000-7000-8000-000000000001'
+    );
     GET DIAGNOSTICS affected = ROW_COUNT;
     IF affected <> 1 THEN
-        RAISE EXCEPTION 'branch permission did not authorize matching-branch update';
+        RAISE EXCEPTION 'branch permission did not authorize matching-branch insert';
     END IF;
 
     BEGIN
