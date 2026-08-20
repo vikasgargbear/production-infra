@@ -21,6 +21,11 @@ on:
         required: true
         default: false
         type: boolean
+      reset_canonical_staging:
+        description: Reset canonical data on the pinned disposable free-staging project
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -32,6 +37,7 @@ jobs:
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
+      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
     secrets: inherit
 
   mcp-sdk-compatibility:

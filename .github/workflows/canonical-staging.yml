@@ -17,6 +17,11 @@ on:
         required: false
         default: false
         type: boolean
+      reset_disposable_data:
+        description: Reset only canonical schemas and roles on the pinned disposable project
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       confirmation:
@@ -30,6 +35,11 @@ on:
         type: boolean
       provision_demo_data:
         description: Provision and exercise the disposable synthetic demo organization
+        required: false
+        default: false
+        type: boolean
+      reset_disposable_data:
+        description: Reset only canonical schemas and roles on the pinned disposable project
         required: false
         default: false
         type: boolean
@@ -132,6 +142,69 @@ jobs:
           echo "::add-mask::$psycopg_database_url"
           echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
           echo "PSYCOPG_DATABASE_URL=$psycopg_database_url" >> "$GITHUB_ENV"
+
+      - name: Reset canonical data on the pinned disposable project
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" <<'SQL'
+          BEGIN;
+          DROP SCHEMA IF EXISTS
+            erp_plumbing,
+            erp_tax_provider_commands,
+            erp_trade_commands_v2,
+            erp_trade_commands,
+            erp_trade_invariants,
+            erp_commercial_commands,
+            erp_finance_invariants,
+            erp_finance_commands,
+            erp_regulatory_commands,
+            erp_core_commands,
+            erp_compliance_commands,
+            erp_calculation_authority,
+            erp_invariants_agent,
+            erp_stable_invariants,
+            erp_automation_commands,
+            erp_security,
+            calculation,
+            automation,
+            hr,
+            compliance,
+            tax,
+            finance,
+            procurement,
+            sales,
+            inventory,
+            catalog,
+            parties,
+            core
+          CASCADE;
+          DROP TABLE IF EXISTS public.alembic_version;
+          DO $reset_canonical_roles$
+          DECLARE
+            role_name text;
+          BEGIN
+            FOREACH role_name IN ARRAY ARRAY[
+              'erp_runtime', 'erp_calculator', 'erp_regulatory_importer',
+              'erp_tax_provider', 'erp_app', 'erp_migration_owner'
+            ] LOOP
+              IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
+                EXECUTE pg_catalog.format('DROP OWNED BY %I CASCADE', role_name);
+              END IF;
+            END LOOP;
+          END
+          $reset_canonical_roles$;
+          DROP ROLE IF EXISTS erp_runtime;
+          DROP ROLE IF EXISTS erp_calculator;
+          DROP ROLE IF EXISTS erp_regulatory_importer;
+          DROP ROLE IF EXISTS erp_tax_provider;
+          DROP ROLE IF EXISTS erp_app;
+          DROP ROLE IF EXISTS erp_migration_owner;
+          COMMIT;
+          SQL
+          test "$(psql -X -Atqc "SELECT to_regclass('auth.users') IS NOT NULL" "$PSYCOPG_DATABASE_URL")" = t
+          test "$(psql -X -Atqc "SELECT to_regclass('public.alembic_version') IS NULL" "$PSYCOPG_DATABASE_URL")" = t
+          test "$(psql -X -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')" "$PSYCOPG_DATABASE_URL")" = 0
 
       - name: Apply the approved baseline twice
         run: |

@@ -209,6 +209,22 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
 
 
+def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
+    workflow = _read(".github/workflows/canonical-staging.yml")
+    production_workflow = _read(".github/workflows/production-readiness.yml")
+
+    assert "reset_disposable_data:" in workflow
+    assert "if: inputs.reset_disposable_data == true" in workflow
+    assert "Refuse any target except the reviewed free staging project" in workflow
+    assert "DROP TABLE IF EXISTS public.alembic_version" in workflow
+    assert "DROP ROLE IF EXISTS erp_runtime" in workflow
+    assert "to_regclass('auth.users') IS NOT NULL" in workflow
+    assert "DROP SCHEMA auth" not in workflow
+    assert "DROP SCHEMA storage" not in workflow
+    assert "reset_canonical_staging:" in production_workflow
+    assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
+
+
 def test_frontend_builds_use_the_reviewed_node_runtime():
     workflow = _read(".github/workflows/production-readiness.yml")
     blueprint = _read("render.yaml")
