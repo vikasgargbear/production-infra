@@ -281,7 +281,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-commercial-command-enforcements.json",
-  "mapping_sha256": "ad3fd7caf58ad88204717ccd3223ac02967d2ab2147e54e808037b8524906ef3",
+  "mapping_sha256": "278bf39c54d0bf6ea5e09dea4ea41652cc5818c792b830119262fe6263371fad",
   "postgresql": "15+",
   "prohibitions": [
     "No dynamic SQL.",

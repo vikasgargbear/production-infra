@@ -1775,6 +1775,7 @@ DECLARE header {header_table}%ROWTYPE; original {original_table}%ROWTYPE; artifa
         eligible_cgst numeric(20,2):=0; eligible_sgst numeric(20,2):=0; eligible_igst numeric(20,2):=0; eligible_cess numeric(20,2):=0;
         inventory_value numeric(20,2):=0; inventory_entries bigint:=0; expected_inventory_value numeric(20,2):=0; variance_value numeric(20,2):=0;
         outstanding numeric(20,2); applied numeric(20,2); residual numeric(20,2); original_event_id uuid; adjustment_deadline date;
+        registration_scope_count bigint;
 BEGIN
     PERFORM erp_trade_commands.assert_context(organization_id,actor_id);
     IF NULLIF(pg_catalog.current_setting('app.request_id',true),'')::uuid IS DISTINCT FROM request_id THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial request context mismatch'; END IF;
@@ -1786,6 +1787,40 @@ BEGIN
     IF replay_id IS NOT NULL THEN IF replay_id<>resource_id THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='commercial replay mismatch'; END IF; RETURN replay_id; END IF;
     {original_lookup}
     {rule_assertion}
+    IF tax_required THEN
+      SELECT count(*) INTO registration_scope_count
+        FROM tax.registrations registration
+        JOIN tax.registration_branches association
+          ON association.org_id=registration.org_id
+         AND association.registration_id=registration.id
+       WHERE registration.org_id=organization_id
+         AND registration.id=original_tax.registration_id
+         AND registration.status='active'
+         AND registration.effective_from<=header.{return_date}
+         AND (registration.effective_to IS NULL OR registration.effective_to>=header.{return_date})
+         AND association.branch_id=header.branch_id
+         AND association.status='active'
+         AND association.effective_from<=header.{return_date}
+         AND (association.effective_to IS NULL OR association.effective_to>=header.{return_date});
+      IF registration_scope_count<>1 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='statutory return requires exactly one active branch GST registration association on return date';
+      END IF;
+      PERFORM 1
+        FROM tax.registrations registration
+        JOIN tax.registration_branches association
+          ON association.org_id=registration.org_id
+         AND association.registration_id=registration.id
+       WHERE registration.org_id=organization_id
+         AND registration.id=original_tax.registration_id
+         AND registration.status='active'
+         AND registration.effective_from<=header.{return_date}
+         AND (registration.effective_to IS NULL OR registration.effective_to>=header.{return_date})
+         AND association.branch_id=header.branch_id
+         AND association.status='active'
+         AND association.effective_from<=header.{return_date}
+         AND (association.effective_to IS NULL OR association.effective_to>=header.{return_date})
+       FOR SHARE OF registration,association;
+    END IF;
     SELECT account.party_id INTO STRICT party_id FROM {party_table} account WHERE account.org_id=organization_id AND account.id=header.{party_key} AND account.status='active' FOR SHARE;
     SELECT * INTO STRICT artifact FROM calculation.artifacts WHERE org_id=organization_id AND id=artifact_id FOR UPDATE;
     input_doc:=pg_catalog.convert_from(artifact.input_bytes,'UTF8')::jsonb; output_doc:=pg_catalog.convert_from(artifact.output_bytes,'UTF8')::jsonb;

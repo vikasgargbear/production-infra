@@ -33,6 +33,8 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert "companion_count<>(CASE WHEN EXISTS" in mapping
     assert "SELECT open_item.* INTO STRICT original_open" in mapping
     assert "INTO STRICT original_event_id,original_open" not in mapping
+    assert "statutory return requires exactly one active branch GST registration association on return date" in mapping
+    assert "FOR SHARE OF registration,association" in mapping
     parsed = json.loads(manifest)
     assert parsed["mapping_sha256"] == hashlib.sha256(mapping.encode()).hexdigest()
     assert parsed["implementation_status"] == "implemented"
