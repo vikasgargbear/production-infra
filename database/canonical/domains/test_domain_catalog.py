@@ -35,7 +35,11 @@ class DomainCatalogContractTests(unittest.TestCase):
             "core.reference_data_releases": "regulated_import",
             "catalog.units_of_measure": "application_seed",
             "catalog.ingredients": "regulated_import",
+            "compliance.controlled_movement_rule_versions": "regulated_import",
+            "tax.einvoice_rule_versions": "regulated_import",
+            "tax.gst_adjustment_rule_versions": "regulated_import",
             "tax.tax_code_versions": "regulated_import",
+            "tax.withholding_rule_versions": "regulated_import",
         }, references)
 
     def test_rejects_missing_global_reference_population_mode(self):
