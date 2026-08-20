@@ -173,11 +173,20 @@ INSERT INTO core.reference_data_releases (
     source_document_sha256, dataset_storage_bucket, dataset_storage_object_path,
     dataset_media_type, dataset_sha256, record_count, publication_date,
     effective_from, reviewed_by_user_id, reviewed_at, status
-) VALUES (
+) VALUES
+(
     '10000000-0000-0000-0000-000000000054', 'ingredient_classification',
     'fixture-classification-v1', 'cdsco', 'https://cdsco.gov.in/fixture',
     'fixture', 'regulated/source.json', 'application/json', decode(repeat('91', 32), 'hex'),
     'fixture', 'regulated/dataset.json', 'application/json', decode(repeat('92', 32), 'hex'),
+    1, DATE '2026-01-01', DATE '2026-01-01',
+    '10000000-0000-0000-0000-000000000011', transaction_timestamp(), 'active'
+),
+(
+    '10000000-0000-0000-0000-000000000055', 'hsn_sac_tax',
+    'fixture-tax-v1', 'cbic', 'https://cbic-gst.gov.in/fixture',
+    'fixture', 'regulated/tax-source.json', 'application/json', decode(repeat('93', 32), 'hex'),
+    'fixture', 'regulated/tax-dataset.json', 'application/json', decode(repeat('94', 32), 'hex'),
     1, DATE '2026-01-01', DATE '2026-01-01',
     '10000000-0000-0000-0000-000000000011', transaction_timestamp(), 'active'
 );
@@ -193,16 +202,16 @@ INSERT INTO catalog.ingredients (
 INSERT INTO catalog.products (
     org_id, id, sku, product_kind, name, manufacturer_party_id,
     base_uom_code, hsn_code, drug_schedule, requires_prescription,
-    ndps_regulated, regulatory_ruleset_version, status
+    ndps_regulated, regulatory_ruleset_version, hsn_release_id, status
 ) VALUES
     ('10000000-0000-0000-0000-000000000020', '10000000-0000-0000-0000-000000000052',
      'FIXTURE-VALID', 'medicine', 'Fixture Medicine',
      '10000000-0000-0000-0000-000000000050', 'EA', '3004', 'NONE', false, false,
-     'fixture-not-applicable-v1', 'draft'),
+     'fixture-not-applicable-v1', '10000000-0000-0000-0000-000000000055', 'draft'),
     ('10000000-0000-0000-0000-000000000020', '10000000-0000-0000-0000-000000000053',
      'FIXTURE-EMPTY', 'medicine', 'Empty Medicine',
      '10000000-0000-0000-0000-000000000050', 'EA', '3004', 'NONE', false, false,
-     'fixture-not-applicable-v1', 'draft');
+     'fixture-not-applicable-v1', '10000000-0000-0000-0000-000000000055', 'draft');
 INSERT INTO catalog.product_ingredients (
     org_id, product_id, ingredient_id, sequence_number, ingredient_role,
     strength_value, strength_uom_code, basis_quantity, basis_uom_code
@@ -211,6 +220,10 @@ INSERT INTO catalog.product_ingredients (
     '10000000-0000-0000-0000-000000000052',
     '10000000-0000-0000-0000-000000000051', 1, 'active', 10, 'MG', 1, 'EA'
 );
+-- Product activation itself has a separate reviewed rollback suite. Keep that
+-- command boundary out of this lower-level composition/first-use fixture.
+ALTER TABLE catalog.products
+    DISABLE TRIGGER products_regulatory_classification_guard;
 UPDATE catalog.products SET status = 'active'
  WHERE id = '10000000-0000-0000-0000-000000000052';
 DO $test$
