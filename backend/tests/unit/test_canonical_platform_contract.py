@@ -234,3 +234,18 @@ def test_approval_fixture_rejects_subject_and_accepts_distinct_authorized_member
     assert fixture.count("'10000000-0000-0000-0000-000000000021', 'approved'") == 1
     assert fixture.count("'10000000-0000-0000-0000-000000000022', 'approved'") == 1
     assert "'10000000-0000-0000-0000-000000000022',\n    '10000000-0000-0000-0000-000000000030'" in fixture
+
+
+def test_medicine_composition_trigger_branches_before_table_specific_fields() -> None:
+    mapping = (
+        REPO_ROOT
+        / "database"
+        / "canonical"
+        / "invariants_agent"
+        / "baseline-invariants-agent-enforcements.json"
+    ).read_text(encoding="utf-8")
+
+    assert "target_product uuid := CASE WHEN TG_TABLE_NAME = 'products'" not in mapping
+    assert "IF TG_TABLE_NAME = 'products' THEN" in mapping
+    assert "ELSIF TG_OP = 'DELETE' THEN" in mapping
+    assert "target_product := OLD.product_id" in mapping

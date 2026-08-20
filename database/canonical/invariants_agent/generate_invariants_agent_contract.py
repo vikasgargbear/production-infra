@@ -248,10 +248,20 @@ END
             "guard_active_medicine_composition",
             """
 DECLARE
-    target_org uuid := CASE WHEN TG_TABLE_NAME = 'products' THEN NEW.org_id WHEN TG_OP = 'DELETE' THEN OLD.org_id ELSE NEW.org_id END;
-    target_product uuid := CASE WHEN TG_TABLE_NAME = 'products' THEN NEW.id WHEN TG_OP = 'DELETE' THEN OLD.product_id ELSE NEW.product_id END;
+    target_org uuid;
+    target_product uuid;
     product_row catalog.products%ROWTYPE;
 BEGIN
+    IF TG_TABLE_NAME = 'products' THEN
+        target_org := NEW.org_id;
+        target_product := NEW.id;
+    ELSIF TG_OP = 'DELETE' THEN
+        target_org := OLD.org_id;
+        target_product := OLD.product_id;
+    ELSE
+        target_org := NEW.org_id;
+        target_product := NEW.product_id;
+    END IF;
     SELECT * INTO product_row
       FROM catalog.products AS product
      WHERE product.org_id = target_org

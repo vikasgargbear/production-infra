@@ -38,7 +38,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-invariants-agent-enforcements.json",
-  "mapping_sha256": "c0b80099d667b30318b5436f7ea53fe87c9768ff9c2036c2e4585084be3ecce8",
+  "mapping_sha256": "63849573a2970a39f1ccef626c3bcb30948ec5217427f712e6c5dbe555ad1dfd",
   "postgresql": "15+",
   "resolved_count": 5,
   "resolved_invariants": [
