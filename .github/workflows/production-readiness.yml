@@ -36,6 +36,11 @@ on:
         required: true
         default: false
         type: boolean
+      refresh_canonical_staging_pooler:
+        description: Reapply the reviewed free-tier Supavisor configuration
+        required: true
+        default: false
+        type: boolean
       canonical_staging_render_sha:
         description: Reviewed application SHA for free-staging Render deployment
         required: false
@@ -55,6 +60,7 @@ jobs:
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
+      refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
     secrets: inherit
 

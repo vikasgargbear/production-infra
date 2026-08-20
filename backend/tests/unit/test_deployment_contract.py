@@ -412,6 +412,17 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
     assert "rotate_canonical_staging_roles:" in production_workflow
     assert "rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}" in production_workflow
+    assert "refresh_canonical_staging_pooler:" in production_workflow
+    assert "refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}" in production_workflow
+    assert "refresh_pooler_configuration:" in workflow
+    refresh_step = workflow.split(
+        "Refresh the reviewed free-tier Supavisor configuration", 1
+    )[1].split("Reset canonical data", 1)[0]
+    assert "if: inputs.refresh_pooler_configuration == true" in refresh_step
+    assert '"default_pool_size":15' in refresh_step
+    assert '"pool_mode":"transaction"' in refresh_step
+    assert "/config/database/pooler" in refresh_step
+    assert "sleep 125" in refresh_step
     assert "ALTER ROLE %I NOLOGIN" in workflow
     assert "pg_catalog.pg_terminate_backend(activity.pid)" in workflow
     assert "activity.usename IN" in workflow

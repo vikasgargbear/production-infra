@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      refresh_pooler_configuration:
+        description: Reapply the reviewed free-tier Supavisor configuration
+        required: false
+        default: false
+        type: boolean
       provision_demo_data:
         description: Provision and exercise the disposable synthetic demo organization
         required: false
@@ -40,6 +45,11 @@ on:
         type: string
       rotate_role_passwords:
         description: Explicit isolated-role credential rotation
+        required: false
+        default: false
+        type: boolean
+      refresh_pooler_configuration:
+        description: Reapply the reviewed free-tier Supavisor configuration
         required: false
         default: false
         type: boolean
@@ -193,6 +203,20 @@ jobs:
           echo "PSYCOPG_DATABASE_URL=$psycopg_database_url" >> "$GITHUB_ENV"
           echo "CANONICAL_ACTIVE_POOLER_PORT=$SUPABASE_SESSION_POOLER_PORT" >> "$GITHUB_ENV"
           echo "CANONICAL_ACTIVE_POOLER_MODE=session" >> "$GITHUB_ENV"
+
+      - name: Refresh the reviewed free-tier Supavisor configuration
+        if: inputs.refresh_pooler_configuration == true
+        run: |
+          set -euo pipefail
+          response=$(curl --fail --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data '{"default_pool_size":15,"pool_mode":"transaction"}' \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/database/pooler")
+          test "$(jq -r .default_pool_size <<<"$response")" = 15
+          test "$(jq -r .pool_mode <<<"$response")" = transaction
+          sleep 125
 
       - name: Reset canonical data on the pinned disposable project
         if: inputs.reset_disposable_data == true
