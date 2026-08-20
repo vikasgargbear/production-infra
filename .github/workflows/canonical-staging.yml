@@ -690,6 +690,7 @@ jobs:
           echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
 
       - name: Reconcile and deploy the free Render pilot
+        if: inputs.provision_demo_data != true
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY"
@@ -758,6 +759,7 @@ jobs:
           done
 
       - name: Wait for free service smoke readiness
+        if: inputs.provision_demo_data != true
         run: |
           set -euo pipefail
           api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
@@ -770,7 +772,7 @@ jobs:
           api_ready=false
           frontend_ready=false
           mcp_healthy=false
-          for _attempt in $(seq 1 90); do
+          for _attempt in 1 2 3 4 5; do
             if curl --fail --silent --show-error --max-time 20 "$api_url/health" >/dev/null \
               && curl --fail --silent --show-error --max-time 20 "$api_url/ready" >/dev/null; then
               api_ready=true
@@ -785,7 +787,7 @@ jobs:
               && [ "$mcp_healthy" = true ]; then
               break
             fi
-            sleep 10
+            sleep 30
           done
           test "$api_ready" = true
           test "$frontend_ready" = true
@@ -837,23 +839,38 @@ jobs:
           runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${CANONICAL_ACTIVE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_runtime"
           echo "::add-mask::$runtime_url"
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
-          export CANONICAL_DEMO_API_URL
-          CANONICAL_DEMO_API_URL=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
+          export CANONICAL_DEMO_API_URL=http://127.0.0.1:8090
+          echo "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" >> "$GITHUB_ENV"
+
+          api_log=$(mktemp)
+          PYTHONPATH=backend PORT=8090 python3 -m uvicorn app.main:app \
+            --host 127.0.0.1 --port 8090 --workers 1 \
+            >"$api_log" 2>&1 &
+          api_pid=$!
+          cleanup_demo_api() {
+            kill "$api_pid" >/dev/null 2>&1 || true
+            wait "$api_pid" >/dev/null 2>&1 || true
+          }
+          trap 'cleanup_demo_api; cleanup_demo_role_membership' EXIT
+          api_ready=false
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 10 \
+              "$CANONICAL_DEMO_API_URL/health" >/dev/null \
+              && curl --fail --silent --show-error --max-time 10 \
+                "$CANONICAL_DEMO_API_URL/ready" >/dev/null; then
+              api_ready=true
+              break
+            fi
+            sleep 3
+          done
+          if [ "$api_ready" != true ]; then
+            detail=$(tail -c 3500 "$api_log" | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
+            echo "::error title=Canonical CI API failed readiness::$detail"
+            exit 1
+          fi
 
           demo_log=$(mktemp)
           if ! python3 backend/scripts/provision_canonical_demo.py 2>&1 | tee "$demo_log"; then
-            api_service_id=$(jq -er '.services["aasopharma-api-pilot"].id' \
-              staging-evidence/render-pilot.json)
-            render_log=$(mktemp)
-            curl --fail --silent --show-error --get \
-              --header "Authorization: Bearer $RENDER_API_KEY" \
-              --data-urlencode 'ownerId=tea-da2nh58ae00c73ciaqog' \
-              --data-urlencode "resource=$api_service_id" \
-              --data-urlencode 'level=error' \
-              --data-urlencode 'type=app' \
-              --data-urlencode 'direction=backward' \
-              --data-urlencode 'limit=20' \
-              'https://api.render.com/v1/logs' > "$render_log" || true
             python3 - "$demo_log" <<'PY'
           import pathlib
           import sys
@@ -862,35 +879,25 @@ jobs:
           detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical demo provisioning failed::{detail}")
           PY
-            python3 - "$render_log" <<'PY'
-          import json
+            python3 - "$api_log" <<'PY'
           import pathlib
           import re
           import sys
 
           raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
-          try:
-              document = json.loads(raw)
-              entries = document.get("logs", []) if isinstance(document, dict) else []
-              detail = "\n".join(
-                  f"{entry.get('timestamp', '')} {entry.get('message', '')}"
-                  for entry in entries[-8:]
-                  if isinstance(entry, dict)
-              ) or raw
-          except json.JSONDecodeError:
-              detail = raw
           detail = re.sub(
               r"postgres(?:ql)?(?:\+psycopg2)?://[^@\s]+@",
               "postgresql://<redacted>@",
-              detail,
+              raw,
               flags=re.IGNORECASE,
           )
           detail = re.sub(r"Bearer\s+\S+", "Bearer <redacted>", detail)
           detail = detail[-3500:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Canonical API Render traceback::{detail}")
+          print(f"::error title=Canonical CI API traceback::{detail}")
           PY
             exit 1
           fi
+          cleanup_demo_api
           cleanup_demo_role_membership
           trap - EXIT
 

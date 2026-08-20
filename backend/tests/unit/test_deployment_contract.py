@@ -316,8 +316,10 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "demo-v2" in provisioner
 
     workflow = _read(".github/workflows/canonical-staging.yml")
-    assert "https://api.render.com/v1/logs" in workflow
-    assert "Canonical API Render traceback" in workflow
+    assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
+    assert "PYTHONPATH=backend PORT=8090 python3 -m uvicorn" in workflow
+    assert "for attempt in 1 2 3 4 5" in workflow
+    assert "Canonical CI API traceback" in workflow
     assert "postgresql://<redacted>@" in workflow
 
 
