@@ -886,7 +886,7 @@ def seed_end_to_end_master(connection) -> None:
                 created_by_membership_id,updated_by_membership_id
             ) VALUES (
                 %s,%s,'organization','Synthetic Medicines Distributor Private Limited',
-                'Synthetic Medicines Distributor','DEMOB1234C','resident','company',
+                'Synthetic Medicines Distributor','DEMOC5678D','resident','company',
                 'verified',%s,transaction_timestamp(),'draft',%s,%s
             ) ON CONFLICT (org_id,id) DO NOTHING
             """,
@@ -927,7 +927,7 @@ def seed_end_to_end_master(connection) -> None:
                 registered_legal_name,state_code,taxpayer_type,valid_from,
                 verified_at,status,created_by_membership_id,updated_by_membership_id
             ) VALUES (
-                %s,%s,%s,'GSTIN','27DEMOB1234C1Z5',
+                %s,%s,%s,'GSTIN','27DEMOC5678D1Z5',
                 'Synthetic Medicines Distributor Private Limited','27','regular',%s,
                 transaction_timestamp(),'active',%s,%s
             ) ON CONFLICT (org_id,id) DO NOTHING
@@ -1630,7 +1630,7 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                 igst_amount,cess_amount,total_amount,portal_reference,source_row_hash,
                 created_by_membership_id
             ) VALUES (
-                %s,%s,%s,1,'27DEMOB1234C1Z5',
+                %s,%s,%s,1,'27DEMOC5678D1Z5',
                 'Synthetic Medicines Distributor Private Limited',%s,%s,'invoice',
                 '27',5000.00,300.00,300.00,0,0,5600.00,%s,
                 extensions.digest(%s,'sha256'),%s
@@ -1675,7 +1675,7 @@ def seed_purchase_return_portal_evidence(connection) -> dict[str, str]:
                 igst_amount,cess_amount,total_amount,portal_reference,source_row_hash,
                 created_by_membership_id
             ) VALUES (
-                %s,%s,%s,2,'27DEMOB1234C1Z5',
+                %s,%s,%s,2,'27DEMOC5678D1Z5',
                 'Synthetic Medicines Distributor Private Limited',%s,%s,'credit_note',
                 '27',1000.00,60.00,60.00,0,0,1120.00,%s,
                 extensions.digest(%s,'sha256'),%s
