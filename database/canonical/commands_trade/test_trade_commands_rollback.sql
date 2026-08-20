@@ -131,8 +131,8 @@ BEGIN
     SELECT pg_catalog.pg_get_functiondef(
         'erp_security.has_permission(text,uuid)'::pg_catalog.regprocedure
     ) INTO permission_definition;
-    IF pg_catalog.position('grant_row.status = ''active''' IN permission_definition)=0
-       OR pg_catalog.position('grant_row.expires_at > pg_catalog.transaction_timestamp()' IN permission_definition)=0 THEN
+    IF pg_catalog.strpos(permission_definition, 'grant_row.status = ''active''')=0
+       OR pg_catalog.strpos(permission_definition, 'grant_row.expires_at > pg_catalog.transaction_timestamp()')=0 THEN
         RAISE EXCEPTION 'trade permission authority does not reject revoked or expired grants';
     END IF;
 END

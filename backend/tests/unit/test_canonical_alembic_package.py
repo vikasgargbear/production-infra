@@ -133,3 +133,15 @@ def test_disposable_postgres_bootstrap_matches_supabase_crypto_prerequisite() ->
     assert "CREATE SCHEMA extensions;" in bootstrap
     assert "CREATE EXTENSION pgcrypto WITH SCHEMA extensions;" in bootstrap
     assert "CREATE SCHEMA auth;" in bootstrap
+
+
+def test_postgres_fixtures_do_not_schema_qualify_special_sql_syntax() -> None:
+    fixtures = sorted(
+        (REPO_ROOT / "database" / "canonical").glob("**/test_*_rollback.sql")
+    )
+
+    assert fixtures
+    for fixture in fixtures:
+        sql = fixture.read_text(encoding="utf-8")
+        assert "pg_catalog.position(" not in sql, fixture
+        assert "pg_catalog.extract(" not in sql, fixture

@@ -62,59 +62,59 @@ BEGIN
       FROM pg_catalog.pg_proc procedure JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_commercial_commands' AND procedure.proname='assert_adjustment_note_artifact';
 
-    IF pg_catalog.position('rounding_adjustment>0' IN sales_return_body)=0
-       OR pg_catalog.position('rounding_adjustment<0' IN sales_return_body)=0
-       OR pg_catalog.position('rounding_gain' IN sales_return_body)=0
-       OR pg_catalog.position('rounding_loss' IN sales_return_body)=0 THEN
+    IF pg_catalog.strpos(sales_return_body, 'rounding_adjustment>0')=0
+       OR pg_catalog.strpos(sales_return_body, 'rounding_adjustment<0')=0
+       OR pg_catalog.strpos(sales_return_body, 'rounding_gain')=0
+       OR pg_catalog.strpos(sales_return_body, 'rounding_loss')=0 THEN
         RAISE EXCEPTION 'sales return command does not cover positive and negative rounding reversals';
     END IF;
-    IF pg_catalog.position('gst_tax_treatment' IN sales_return_body)=0
-       OR pg_catalog.position('gst_adjustment_rule_versions' IN sales_return_body)=0
-       OR pg_catalog.position('recipient ITC-reversal evidence' IN sales_return_body)=0
-       OR pg_catalog.position('registration_branches' IN sales_return_body)=0 THEN
+    IF pg_catalog.strpos(sales_return_body, 'gst_tax_treatment')=0
+       OR pg_catalog.strpos(sales_return_body, 'gst_adjustment_rule_versions')=0
+       OR pg_catalog.strpos(sales_return_body, 'recipient ITC-reversal evidence')=0
+       OR pg_catalog.strpos(sales_return_body, 'registration_branches')=0 THEN
         RAISE EXCEPTION 'sales return command lacks statutory/commercial GST, evidence, or effective branch-registration authority';
     END IF;
-    IF pg_catalog.position('rcm_igst_payable' IN purchase_return_body)=0
-       OR pg_catalog.position('Reverse-charge liability reversal' IN purchase_return_body)=0 THEN
+    IF pg_catalog.strpos(purchase_return_body, 'rcm_igst_payable')=0
+       OR pg_catalog.strpos(purchase_return_body, 'Reverse-charge liability reversal')=0 THEN
         RAISE EXCEPTION 'purchase return command does not reverse component-wise RCM liability';
     END IF;
-    IF pg_catalog.position('supplier_credit_note_portal_line_id' IN purchase_return_body)=0
-       OR pg_catalog.position('supplier GST credit-note portal evidence differs from purchase return' IN purchase_return_body)=0
-       OR pg_catalog.position('commercial-only adjustment cannot alter GST' IN purchase_return_body)=0 THEN
+    IF pg_catalog.strpos(purchase_return_body, 'supplier_credit_note_portal_line_id')=0
+       OR pg_catalog.strpos(purchase_return_body, 'supplier GST credit-note portal evidence differs from purchase return')=0
+       OR pg_catalog.strpos(purchase_return_body, 'commercial-only adjustment cannot alter GST')=0 THEN
         RAISE EXCEPTION 'purchase return command conflates buyer debit note with supplier statutory GST credit-note evidence';
     END IF;
-    IF pg_catalog.position('purchase_return_inventory_variance' IN purchase_return_body)=0
-       OR pg_catalog.position('inventory_value' IN purchase_return_body)=0 THEN
+    IF pg_catalog.strpos(purchase_return_body, 'purchase_return_inventory_variance')=0
+       OR pg_catalog.strpos(purchase_return_body, 'inventory_value')=0 THEN
         RAISE EXCEPTION 'purchase return command does not reconcile changed MWA cost';
     END IF;
-    IF pg_catalog.position('allocated dispatch lacks exactly one posted inventory-valuation accounting event' IN sales_invoice_body)=0 THEN
+    IF pg_catalog.strpos(sales_invoice_body, 'allocated dispatch lacks exactly one posted inventory-valuation accounting event')=0 THEN
         RAISE EXCEPTION 'allocated invoice command does not fail closed on missing dispatch valuation';
     END IF;
-    IF pg_catalog.position('Dispatch COGS from posted stock ledger' IN dispatch_valuation_body)=0
-       OR pg_catalog.position('cost_of_goods_sold' IN dispatch_valuation_body)=0
-       OR pg_catalog.position('inventory_asset' IN dispatch_valuation_body)=0 THEN
+    IF pg_catalog.strpos(dispatch_valuation_body, 'Dispatch COGS from posted stock ledger')=0
+       OR pg_catalog.strpos(dispatch_valuation_body, 'cost_of_goods_sold')=0
+       OR pg_catalog.strpos(dispatch_valuation_body, 'inventory_asset')=0 THEN
         RAISE EXCEPTION 'dispatch valuation command does not use posted ledger and explicit account roles';
     END IF;
-    IF pg_catalog.position('finance.adjustment_note.post' IN adjustment_body)=0
-       OR pg_catalog.position('rcm_igst_payable' IN adjustment_body)=0
-       OR pg_catalog.position('adjustment open item does not belong to the original invoice event' IN adjustment_body)=0
-       OR pg_catalog.position('consume_artifact' IN adjustment_body)=0 THEN
+    IF pg_catalog.strpos(adjustment_body, 'finance.adjustment_note.post')=0
+       OR pg_catalog.strpos(adjustment_body, 'rcm_igst_payable')=0
+       OR pg_catalog.strpos(adjustment_body, 'adjustment open item does not belong to the original invoice event')=0
+       OR pg_catalog.strpos(adjustment_body, 'consume_artifact')=0 THEN
         RAISE EXCEPTION 'generic adjustment command lacks typed calculation, RCM, or open-item authority';
     END IF;
-    IF pg_catalog.position('gst_adjustment_rule_versions' IN adjustment_body)=0
-       OR pg_catalog.position('counterparty_portal_document_line_id' IN adjustment_body)=0
-       OR pg_catalog.position('gst_tax_treatment' IN adjustment_body)=0 THEN
+    IF pg_catalog.strpos(adjustment_body, 'gst_adjustment_rule_versions')=0
+       OR pg_catalog.strpos(adjustment_body, 'counterparty_portal_document_line_id')=0
+       OR pg_catalog.strpos(adjustment_body, 'gst_tax_treatment')=0 THEN
         RAISE EXCEPTION 'generic adjustment command lacks effective GST-rule, counterparty-portal, or statutory/commercial separation';
     END IF;
-    IF pg_catalog.position('SELECT DISTINCT sales_invoice_line_id,supplier_invoice_line_id' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('cumulative adjustment exceeds original plus increases or residual is inexact' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('cumulative adjustment header or payable exceeds original plus increases' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('positive_rounding' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('negative_rounding' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('ceiling.cgst' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('ceiling.sgst' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('ceiling.igst' IN adjustment_assertion_body)=0
-       OR pg_catalog.position('ceiling.cess' IN adjustment_assertion_body)=0 THEN
+    IF pg_catalog.strpos(adjustment_assertion_body, 'SELECT DISTINCT sales_invoice_line_id,supplier_invoice_line_id')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'cumulative adjustment exceeds original plus increases or residual is inexact')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'cumulative adjustment header or payable exceeds original plus increases')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'positive_rounding')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'negative_rounding')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'ceiling.cgst')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'ceiling.sgst')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'ceiling.igst')=0
+       OR pg_catalog.strpos(adjustment_assertion_body, 'ceiling.cess')=0 THEN
         RAISE EXCEPTION 'generic adjustment assertion lacks typed line, residual, tax-component, rounding, or payable ceilings';
     END IF;
 END

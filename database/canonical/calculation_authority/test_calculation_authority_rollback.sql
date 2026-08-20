@@ -39,10 +39,10 @@ BEGIN
         RAISE EXCEPTION 'tenant runtime cannot inspect calculation evidence';
     END IF;
     SELECT pg_catalog.pg_get_functiondef(issue_oid) INTO STRICT issue_source;
-    IF pg_catalog.position('session_user' IN issue_source)=0
-       OR pg_catalog.position('erp_calculator' IN issue_source)=0
-       OR pg_catalog.position('assert_input_schema' IN issue_source)=0
-       OR pg_catalog.position('assert_output_schema' IN issue_source)=0 THEN
+    IF pg_catalog.strpos(issue_source, 'session_user')=0
+       OR pg_catalog.strpos(issue_source, 'erp_calculator')=0
+       OR pg_catalog.strpos(issue_source, 'assert_input_schema')=0
+       OR pg_catalog.strpos(issue_source, 'assert_output_schema')=0 THEN
         RAISE EXCEPTION 'issuer no longer checks authenticated principal and fixed schemas';
     END IF;
 END
