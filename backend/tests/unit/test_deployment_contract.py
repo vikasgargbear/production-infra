@@ -376,6 +376,10 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "INSERT INTO tax.organization_fiscal_tax_facts" not in provisioner
     assert 'IDS["operator_auth_user"], IDS["org"]' in provisioner
     assert 'IDS["fiscal_fact_evidence"]' in provisioner
+    fiscal_verification = provisioner.split("def verify_fiscal_tax_fact", 1)[1].split(
+        "\ndef activate_demo_product", 1
+    )[0]
+    assert "set_config('app.request_id', %s, true)" in fiscal_verification
     reconciliation = provisioner.split("def reconcile", 1)[1].split("\ndef main", 1)[0]
     assert "order_row.subtotal" in reconciliation
     assert "order_row.gst_taxable_total" in reconciliation

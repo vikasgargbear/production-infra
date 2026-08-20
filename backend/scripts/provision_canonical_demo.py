@@ -1140,6 +1140,7 @@ def verify_fiscal_tax_fact(connection) -> None:
             "SELECT erp_security.activate_context(%s, %s)",
             (IDS["operator_auth_user"], IDS["org"]),
         )
+        cursor.execute("SELECT set_config('app.request_id', %s, true)", (IDS["request"],))
         cursor.execute(
             """
             SELECT erp_compliance_commands.verify_organization_fiscal_tax_fact(
