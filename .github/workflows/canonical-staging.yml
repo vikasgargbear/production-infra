@@ -168,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15"
           database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
           echo "::add-mask::$database_url"
           echo "::add-mask::$psycopg_database_url"
@@ -390,7 +390,7 @@ jobs:
           for role, password in expected_roles.items():
               url = (
                   f"postgresql://{role}.{ref}:{quote(password, safe='')}"
-                  f"@{host}:{port}/postgres?sslmode=require"
+                  f"@{host}:{port}/postgres?sslmode=require&connect_timeout=15"
               )
               last_error = None
               for attempt in range(1, 19):
@@ -482,9 +482,9 @@ jobs:
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
           provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${host}:${port}/postgres?sslmode=require"
-          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:${calculator_password}@${host}:${port}/postgres?sslmode=require"
-          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:${provider_password}@${host}:${port}/postgres?sslmode=require"
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${host}:${port}/postgres?sslmode=require&connect_timeout=15"
+          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:${calculator_password}@${host}:${port}/postgres?sslmode=require&connect_timeout=15"
+          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:${provider_password}@${host}:${port}/postgres?sslmode=require&connect_timeout=15"
           echo "::add-mask::$runtime_url"
           echo "::add-mask::$calculator_url"
           echo "::add-mask::$provider_url"
@@ -578,12 +578,12 @@ jobs:
             -c 'GRANT erp_migration_owner TO postgres' >/dev/null
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
-          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15"
           echo "::add-mask::$importer_url"
           export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
 
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15"
           echo "::add-mask::$runtime_url"
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
           export CANONICAL_DEMO_API_URL

@@ -199,6 +199,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
+    assert workflow.count("connect_timeout=15") == 7
     assert "for attempt in $(seq 1 30)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
