@@ -1372,7 +1372,7 @@ class FakeGoodsReceiptSession:
                 },
                 "source_versions": [
                     {"resource_type": "purchase_order", "id": request["purchase_order_id"], "row_version": 3},
-                    {"resource_type": "purchase_order_line", "id": request["lines"][0]["purchase_order_line_id"], "row_version": 2},
+                    {"resource_type": "purchase_order_line", "id": request["lines"][0]["purchase_order_line_id"], "version_hash": "ab" * 32},
                     {"resource_type": "purchase_order_calculation_artifact", "id": str(uuid4()), "aggregate_version": 3},
                     {"resource_type": "mrp_uom_conversion", "id": source["mrp_uom_conversion_id"], "row_version": 4},
                     {"resource_type": "receiving_branch_wholesale_license", "id": str(uuid4()), "row_version": 1},

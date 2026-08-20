@@ -708,6 +708,9 @@ def test_goods_receipt_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "location.location_type<>'cold_storage'",
         "product_id=product.id AND to_uom_code=product.base_uom_code",
         "existing manufacturer batch immutable facts differ from receipt evidence",
+        "pg_catalog.to_jsonb(order_line)::text",
+        "'purchase_order_line_version_hash',order_line_version_hash",
+        "'version_hash',order_line_version_hash",
         "order_line.net_value_amount/",
         "order_line.base_billed_quantity+order_line.base_free_quantity",
         "INSERT INTO procurement.goods_receipts",
@@ -717,6 +720,7 @@ def test_goods_receipt_prepare_and_execute_are_closed_typed_and_atomic() -> None
         "erp_trade_commands.post_goods_receipt(",
     ):
         assert fragment in mapping
+    assert "order_line.row_version" not in mapping
     prepare_at = mapping.index(
         '"prepare_operator_command"(organization_id,command_id,grant_id,\'procurement.goods_receipt.prepare\''
     )

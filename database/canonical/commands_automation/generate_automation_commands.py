@@ -1184,6 +1184,7 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         unit_cost numeric(20,4); extended_cost numeric(20,2);
         total_base numeric(20,6):=0; total_value numeric(20,2):=0;
         batch_id uuid; batch_origin text; batch_status text; qc_status text;
+        order_line_version_hash text;
         requested_received numeric(20,6); requested_accepted numeric(20,6);
         requested_rejected numeric(20,6); requested_free numeric(20,6);
         license_type_count integer;
@@ -1272,6 +1273,8 @@ BEGIN
       SELECT * INTO STRICT order_line FROM procurement.purchase_order_lines
        WHERE org_id=organization_id AND id=NULLIF(requested_line->>'purchase_order_line_id','')::uuid
          AND purchase_order_id=purchase_order.id AND line_kind='product' FOR SHARE;
+      order_line_version_hash:=pg_catalog.encode(extensions.digest(
+        pg_catalog.convert_to(pg_catalog.to_jsonb(order_line)::text,'UTF8'),'sha256'),'hex');
       SELECT * INTO STRICT product FROM catalog.products
        WHERE org_id=organization_id AND id=order_line.product_id AND status='active' FOR SHARE;
       SELECT * INTO STRICT manufacturer FROM parties.parties
@@ -1373,7 +1376,7 @@ BEGIN
           'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,
           'goods_receipt_line_id',requested_batch->>'goods_receipt_line_id',
           'inventory_document_line_id',requested_batch->>'inventory_document_line_id',
-          'purchase_order_line_id',order_line.id,'purchase_order_line_row_version',order_line.row_version,
+          'purchase_order_line_id',order_line.id,'purchase_order_line_version_hash',order_line_version_hash,
           'product_id',product.id,'product_row_version',product.row_version,
           'manufacturer_party_id',manufacturer.id,'manufacturer_row_version',manufacturer.row_version,
           'batch_id',batch_id,'batch_origin',batch_origin,
@@ -1392,7 +1395,7 @@ BEGIN
           'cgst_rate',order_line.cgst_rate::text,'sgst_rate',order_line.sgst_rate::text,
           'igst_rate',order_line.igst_rate::text,'cess_rate',order_line.cess_rate::text));
         source_versions:=source_versions||pg_catalog.jsonb_build_array(
-          pg_catalog.jsonb_build_object('resource_type','purchase_order_line','id',order_line.id,'row_version',order_line.row_version,
+          pg_catalog.jsonb_build_object('resource_type','purchase_order_line','id',order_line.id,'version_hash',order_line_version_hash,
             'base_billed_quantity',order_line.base_billed_quantity::text,'base_free_quantity',order_line.base_free_quantity::text,
             'net_value_amount',order_line.net_value_amount::text,'uom_conversion_factor',order_line.uom_conversion_factor::text),
           pg_catalog.jsonb_build_object('resource_type','product','id',product.id,'row_version',product.row_version,
