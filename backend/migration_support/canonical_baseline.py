@@ -150,10 +150,12 @@ def execute_packaged_sql(cursor: Any, sql: str) -> None:
         cursor.execute(sql)
     except Exception as exc:
         position_text = getattr(getattr(exc, "diag", None), "statement_position", None)
+        if position_text is None:
+            raise
         try:
             position = int(position_text)
         except (TypeError, ValueError):
-            raise
+            raise exc
         offset = max(position - 1, 0)
         line_number = sql.count("\n", 0, offset) + 1
         statement_start = sql.rfind(";", 0, offset) + 1

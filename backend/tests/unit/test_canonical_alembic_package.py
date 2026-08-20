@@ -143,6 +143,24 @@ def test_revision_reports_the_generated_statement_location() -> None:
         package.execute_packaged_sql(Cursor(), "SELECT 1;\nSELECT forbidden;")
 
 
+def test_revision_preserves_database_errors_without_a_statement_position() -> None:
+    class Diagnostic:
+        statement_position = None
+
+    class DatabaseError(Exception):
+        diag = Diagnostic()
+
+    error = DatabaseError("permission denied")
+
+    class Cursor:
+        def execute(self, _sql):
+            raise error
+
+    with pytest.raises(DatabaseError) as raised:
+        package.execute_packaged_sql(Cursor(), "SELECT forbidden;")
+    assert raised.value is error
+
+
 def test_disposable_postgres_bootstrap_matches_supabase_crypto_prerequisite() -> None:
     bootstrap = (
         REPO_ROOT / "database/canonical/ci/bootstrap_supabase_auth.sql"
