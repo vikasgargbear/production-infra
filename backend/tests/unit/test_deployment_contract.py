@@ -227,6 +227,18 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "f\"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/restart\"" in workflow
     assert "time.sleep(60)" in workflow
     assert "/database/query\"" not in workflow
+    reconciliation = workflow.split(
+        "Reconcile reviewed command definitions on pre-cutover staging", 1
+    )[1].split("Verify baseline topology", 1)[0]
+    assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
+    assert '"erp_core_commands"."allocate_document_number"' in reconciliation
+    assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
+    assert "SET ROLE erp_migration_owner" in reconciliation
+    assert "GRANT erp_migration_owner TO postgres" in reconciliation
+    assert "REVOKE erp_migration_owner FROM postgres" in reconciliation
+    assert "--single-transaction" in reconciliation
+    assert "pg_catalog.greatest(" in reconciliation
+    assert "pg_catalog.least(" in reconciliation
     assert "isolated_role_count" in workflow
     assert "unsafe_role_count" in workflow
     baseline_query = workflow.split("baseline_query=$(cat", 1)[1].split("SQL\n", 1)[0]

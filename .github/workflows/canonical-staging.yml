@@ -451,6 +451,58 @@ jobs:
               raise last_error
           PY
 
+      - name: Reconcile reviewed command definitions on pre-cutover staging
+        run: |
+          set -euo pipefail
+          reconciliation_sql=$(mktemp)
+          python3 - "$reconciliation_sql" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          targets = (
+              (
+                  "database/canonical/commands_core/baseline-core-command-enforcements.json",
+                  'CREATE FUNCTION "erp_core_commands"."allocate_document_number"',
+              ),
+              (
+                  "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
+                  'CREATE FUNCTION "erp_automation_commands"."execute_approved_command"',
+              ),
+          )
+          selected = []
+          for path, prefix in targets:
+              artifact = json.loads(pathlib.Path(path).read_text())
+              matches = [
+                  statement
+                  for enforcement in artifact["enforcements"]
+                  for statement in enforcement["statements"]
+                  if statement.startswith(prefix)
+              ]
+              if len(matches) != 1:
+                  raise RuntimeError(f"expected one reviewed definition for {prefix}")
+              selected.append(
+                  matches[0].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+              )
+          pathlib.Path(sys.argv[1]).write_text(
+              "SET ROLE erp_migration_owner;\n" + ";\n".join(selected) + ";\nRESET ROLE;\n"
+          )
+          PY
+          cleanup_migration_membership() {
+            psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+              -c 'REVOKE erp_migration_owner FROM postgres' >/dev/null 2>&1 || true
+          }
+          trap cleanup_migration_membership EXIT
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres' >/dev/null
+          psql -X --single-transaction -v ON_ERROR_STOP=1 \
+            "$PSYCOPG_DATABASE_URL" -f "$reconciliation_sql" >/dev/null
+          test "$(psql -X -Atqc \
+            "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0" \
+            "$PSYCOPG_DATABASE_URL")" = "t|t"
+          cleanup_migration_membership
+          trap - EXIT
+
       - name: Verify baseline topology and isolated role posture
         run: |
           python3 - <<'PY'
