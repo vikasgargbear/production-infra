@@ -19,24 +19,6 @@ SET LOCAL ROLE "erp_migration_owner";
 SELECT set_config('app.org_id', '10000000-0000-7000-8000-000000000001', true);
 SELECT set_config('app.request_id', '90000000-0000-7000-8000-000000000010', true);
 
-INSERT INTO core.users (id, auth_user_id, display_name, status)
-VALUES
-    (
-        '30000000-0000-7000-8000-000000000001',
-        '90000000-0000-7000-8000-000000000001',
-        'RLS actor A', 'active'
-    ),
-    (
-        '30000000-0000-7000-8000-000000000002',
-        '90000000-0000-7000-8000-000000000002',
-        'RLS actor B', 'active'
-    ),
-    (
-        '30000000-0000-7000-8000-000000000003',
-        '90000000-0000-7000-8000-000000000003',
-        'Disabled RLS actor', 'disabled'
-    );
-
 INSERT INTO core.organizations (
     id, legal_name, registered_address_line1, registered_city,
     registered_state_code, registered_postal_code, status,
@@ -54,6 +36,24 @@ VALUES
         'Pune', '27', '411001', 'active',
         '20000000-0000-7000-8000-000000000002',
         '20000000-0000-7000-8000-000000000002'
+    );
+
+INSERT INTO core.users (id, auth_user_id, display_name, status)
+VALUES
+    (
+        '30000000-0000-7000-8000-000000000001',
+        '90000000-0000-7000-8000-000000000001',
+        'RLS actor A', 'active'
+    ),
+    (
+        '30000000-0000-7000-8000-000000000002',
+        '90000000-0000-7000-8000-000000000002',
+        'RLS actor B', 'active'
+    ),
+    (
+        '30000000-0000-7000-8000-000000000003',
+        '90000000-0000-7000-8000-000000000003',
+        'Disabled RLS actor', 'disabled'
     );
 
 INSERT INTO core.memberships (
