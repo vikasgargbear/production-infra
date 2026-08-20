@@ -76,9 +76,25 @@ REGULATED_EXTERNAL = {
     "tax.eway_bill.generate",
     "tax.return.file",
 }
+READ_ONLY = {
+    "automation.command.view",
+}
 CONSEQUENTIAL_WRITE = {
     "automation.command.approve",
     "automation.command.execute",
+    "finance.customer_receipt.create",
+    "finance.supplier_advance.create",
+    "finance.supplier_payment.create",
+    "inventory.adjustment.create",
+    "inventory.destruction.create",
+    "inventory.transfer.create",
+    "procurement.purchase_return.create",
+    "procurement.supplier_invoice.create",
+    "procurement.order.manage",
+    "sales.dispatch.create",
+    "sales.invoice.create",
+    "sales.order.create",
+    "sales.return.create",
     "compliance.controlled_substance.post",
     "compliance.recall.execute",
     "finance.adjustment_note.manage",
@@ -137,16 +153,39 @@ REVERSIBLE_WRITE = {
     "parties.party.manage",
     "parties.supplier.manage",
     "parties.tax_registration.manage",
-    "procurement.order.manage",
     "sales.order.manage",
     "tax.registration.manage",
     "tax.return_period.manage",
 }
 PERMISSION_RISKS = {
+    **{code: "read_only" for code in READ_ONLY},
     **{code: "access_administration" for code in ACCESS_ADMINISTRATION},
     **{code: "regulated_external" for code in REGULATED_EXTERNAL},
     **{code: "consequential_write" for code in CONSEQUENTIAL_WRITE},
     **{code: "reversible_write" for code in REVERSIBLE_WRITE},
+}
+
+# Operator actions authorize business commands in addition to table-level RLS
+# writes. Keep this independent seed input explicit so a fresh database can
+# authorize every reviewed action without inventing tenant-local permissions.
+CANONICAL_OPERATOR_PERMISSIONS = {
+    "automation.command.approve",
+    "automation.command.execute",
+    "automation.command.view",
+    "finance.customer_receipt.create",
+    "finance.supplier_advance.create",
+    "finance.supplier_payment.create",
+    "inventory.adjustment.create",
+    "inventory.destruction.create",
+    "inventory.transfer.create",
+    "procurement.order.manage",
+    "procurement.purchase_return.create",
+    "procurement.receipt.post",
+    "procurement.supplier_invoice.create",
+    "sales.dispatch.create",
+    "sales.invoice.create",
+    "sales.order.create",
+    "sales.return.create",
 }
 
 UOM_ROWS = (
@@ -164,11 +203,12 @@ UOM_ROWS = (
 
 
 def _permission_rows(catalog: Any) -> tuple[tuple[str, str, str, str, str], ...]:
-    codes = {
+    rls_codes = {
         table["rls"]["write_permission"]
         for table in catalog.tables
         if table["rls"]["write_permission"] is not None
     }
+    codes = rls_codes | CANONICAL_OPERATOR_PERMISSIONS
     classified = set(PERMISSION_RISKS)
     if codes != classified:
         raise ContractError(

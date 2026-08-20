@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from app.domain.operator_actions.contract import ACTION_POLICIES
 from scripts import generate_canonical_baseline as baseline
 
 
@@ -84,8 +85,18 @@ def test_bootstrap_seeds_are_exact_and_regulated_ledgers_deploy_empty() -> None:
         for table in catalog.tables
         if table["rls"]["write_permission"] is not None
     }
+    operator_permissions = {policy.permission for policy in ACTION_POLICIES.values()}
 
-    assert set(manifest["seed_authorities"]["core.permissions"]["exact_codes"]) == permission_codes
+    assert generator.CANONICAL_OPERATOR_PERMISSIONS == operator_permissions
+    assert {
+        permission: generator.PERMISSION_RISKS[permission]
+        for permission in operator_permissions
+    } == {
+        policy.permission: policy.risk_class for policy in ACTION_POLICIES.values()
+    }
+    assert set(manifest["seed_authorities"]["core.permissions"]["exact_codes"]) == (
+        permission_codes | operator_permissions
+    )
     assert manifest["seed_authorities"]["core.permissions"]["authority_kind"] == "application_contract"
     assert len(manifest["seed_authorities"]["core.permissions"]["dataset_sha256"]) == 64
     assert manifest["seed_authorities"]["catalog.units_of_measure"]["exact_codes"] == [
