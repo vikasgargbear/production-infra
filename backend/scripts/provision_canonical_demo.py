@@ -798,8 +798,8 @@ def reconcile(connection, execution: dict[str, Any]) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT order_row.id, order_row.order_number, order_row.status,
-                   order_row.gross_total, order_row.discount_total,
-                   order_row.taxable_total, order_row.cgst_total,
+                   order_row.subtotal, order_row.discount_total,
+                   order_row.gst_taxable_total, order_row.cgst_total,
                    order_row.sgst_total, order_row.igst_total,
                    order_row.cess_total, order_row.rounding_adjustment,
                    order_row.grand_total, count(line.id)

@@ -323,6 +323,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert '"2000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
+    reconciliation = provisioner.split("def reconcile", 1)[1].split("\ndef main", 1)[0]
+    assert "order_row.subtotal" in reconciliation
+    assert "order_row.gst_taxable_total" in reconciliation
+    assert "order_row.gross_total" not in reconciliation
+    assert "order_row.taxable_total" not in reconciliation
 
     workflow = _read(".github/workflows/canonical-staging.yml")
     assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
