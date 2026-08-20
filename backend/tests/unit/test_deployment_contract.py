@@ -237,6 +237,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "seq 1 60" not in workflow
     assert 'os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5' in workflow
     assert "if attempt < 5" in workflow
+    assert "Allow rotated credentials to propagate through Supavisor" in workflow
+    assert "run: sleep 125" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
     assert "def verify_role(role, password, port)" in workflow
@@ -406,6 +408,8 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "DROP SCHEMA storage" not in workflow
     assert "reset_canonical_staging:" in production_workflow
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
+    assert "rotate_canonical_staging_roles:" in production_workflow
+    assert "rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}" in production_workflow
     assert "ALTER ROLE %I NOLOGIN" in workflow
     assert "pg_catalog.pg_terminate_backend(activity.pid)" in workflow
     assert "activity.usename IN" in workflow

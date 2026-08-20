@@ -461,6 +461,10 @@ jobs:
               raise last_error
           PY
 
+      - name: Allow rotated credentials to propagate through Supavisor
+        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
+        run: sleep 125
+
       - name: Reconcile reviewed command definitions on pre-cutover staging
         run: |
           set -euo pipefail
