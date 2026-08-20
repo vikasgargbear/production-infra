@@ -267,6 +267,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
     assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
+    assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
     assert '"t|t|t|t|t"' in reconciliation

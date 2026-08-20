@@ -516,9 +516,14 @@ jobs:
           selected = []
           for path, prefix in targets:
               artifact = json.loads(pathlib.Path(path).read_text())
+              enforcements = artifact.get("enforcements")
+              if enforcements is None:
+                  enforcements = artifact.get("platform_enforcements")
+              if not isinstance(enforcements, list):
+                  raise RuntimeError(f"reviewed enforcement list is missing from {path}")
               matches = [
                   statement
-                  for enforcement in artifact["enforcements"]
+                  for enforcement in enforcements
                   for statement in enforcement["statements"]
                   if statement.startswith(prefix)
               ]
