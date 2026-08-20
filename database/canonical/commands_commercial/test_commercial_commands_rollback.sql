@@ -92,7 +92,7 @@ BEGIN
     END IF;
     IF pg_catalog.strpos(purchase_return_body, 'supplier_credit_note_portal_line_id')=0
        OR pg_catalog.strpos(purchase_return_body, 'supplier GST credit-note portal evidence differs from purchase return')=0
-       OR pg_catalog.strpos(purchase_return_body, 'commercial-only adjustment cannot alter GST')=0 THEN
+       OR pg_catalog.strpos(purchase_return_body, 'commercial-only return cannot alter GST')=0 THEN
         RAISE EXCEPTION 'purchase return command conflates buyer debit note with supplier statutory GST credit-note evidence';
     END IF;
     IF pg_catalog.strpos(purchase_return_body, 'purchase_return_inventory_variance')=0

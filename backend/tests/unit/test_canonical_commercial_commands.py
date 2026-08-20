@@ -247,7 +247,7 @@ def test_postgres_fixture_is_rollback_only_and_exercises_commercial_authority() 
     assert "recipient ITC-reversal evidence" in fixture
     assert "registration_branches" in fixture
     assert "supplier_credit_note_portal_line_id" in fixture
-    assert "commercial-only adjustment cannot alter GST" in fixture
+    assert "commercial-only return cannot alter GST" in fixture
 
 
 def test_generated_sql_is_fail_closed_and_covers_accounting_edge_cases() -> None:
