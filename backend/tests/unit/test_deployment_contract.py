@@ -275,9 +275,12 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
-    assert '"t|t|t|t|t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
+    assert "resolve_goods_receipt_prepare" in reconciliation
+    assert "goods_receipt_date_current" in reconciliation
+    assert "pg_catalog.current_date" in reconciliation
     assert "persist_purchase_order_prepare" in reconciliation
     assert "purchase_order_binding_current" in reconciliation
     assert "guard_command_request_match" in reconciliation

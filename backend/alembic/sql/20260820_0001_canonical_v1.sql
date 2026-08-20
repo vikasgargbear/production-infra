@@ -7096,8 +7096,9 @@ BEGIN
             THEN 'command_candidate' ELSE 'preexisting' END;
           batch_status:=existing_batch.status;
         ELSE
-          IF NOT (mrp_conversion.valid_from<=pg_catalog.current_date
-             AND (mrp_conversion.valid_until IS NULL OR mrp_conversion.valid_until>=pg_catalog.current_date)) THEN
+          IF NOT (mrp_conversion.valid_from<=(pg_catalog.transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date
+             AND (mrp_conversion.valid_until IS NULL
+               OR mrp_conversion.valid_until>=(pg_catalog.transaction_timestamp() AT TIME ZONE 'Asia/Kolkata')::date)) THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='new batch MRP conversion is not effective on creation date'; END IF;
           batch_origin:='command_candidate';
           batch_status:='quarantined';
