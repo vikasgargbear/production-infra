@@ -13,6 +13,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
+try:
+    from fastapi.routing import iter_route_contexts
+except ImportError:  # FastAPI <= 0.136 flattens included routers.
+    iter_route_contexts = None
+
 from .auth.org_context import get_org_context
 from .security.permissions import PermissionChecker
 
@@ -235,11 +240,14 @@ def validate_operation_definitions(
 
 def _route_index(app: FastAPI) -> Dict[Tuple[str, str], List[APIRoute]]:
     index: Dict[Tuple[str, str], List[APIRoute]] = {}
-    for route in app.routes:
+    contexts = iter_route_contexts(app.routes) if iter_route_contexts else app.routes
+    for context in contexts:
+        route = getattr(context, "original_route", context)
         if not isinstance(route, APIRoute):
             continue
+        path = getattr(context, "path", route.path)
         for method in route.methods or set():
-            key = (route.path, method.upper())
+            key = (path, method.upper())
             index.setdefault(key, []).append(route)
     return index
 

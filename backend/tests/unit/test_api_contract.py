@@ -1,10 +1,12 @@
 """Contract tests for the reviewed agent-facing OpenAPI allowlist."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 
+from app.core import api_contract
 from app.core.api_contract import (
     OPERATION_REGISTRY,
     OperationRisk,
@@ -60,6 +62,22 @@ def test_installer_rejects_route_without_enforced_security_dependencies():
 
     with pytest.raises(RuntimeError, match="JWT organization context"):
         install_operation_registry(unsafe_app, (claimed_safe,))
+
+
+def test_route_index_uses_effective_paths_from_lazy_included_routers(monkeypatch):
+    nested = FastAPI()
+
+    @nested.get("/local")
+    async def nested_read():
+        return {"ok": True}
+
+    route = next(item for item in nested.routes if getattr(item, "path", None) == "/local")
+    effective = SimpleNamespace(original_route=route, path="/api/nested/local")
+    monkeypatch.setattr(api_contract, "iter_route_contexts", lambda _routes: (effective,))
+
+    index = api_contract._route_index(nested)
+
+    assert index[("/api/nested/local", "GET")] == [route]
 
 
 def test_openapi_contains_only_the_reviewed_mcp_allowlist():

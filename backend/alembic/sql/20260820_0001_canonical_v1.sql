@@ -19522,7 +19522,8 @@ BEGIN
     consumed:=erp_calculation_authority.consume_artifact(organization_id,artifact_id,'procurement.purchase_return.post','purchase_return',resource_id,header.row_version,request_id,command_request_id,claim_id);
     IF pg_catalog.convert_from(consumed,'UTF8')::jsonb IS DISTINCT FROM output_doc THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='consumed return calculation changed'; END IF;
     IF invoiced THEN
-      SELECT event.id,open_item.* INTO STRICT original_event_id,original_open FROM finance.accounting_events event JOIN finance.open_items open_item ON open_item.org_id=event.org_id AND open_item.accounting_event_id=event.id WHERE event.org_id=organization_id AND event.supplier_invoice_id=header.supplier_invoice_id FOR UPDATE OF open_item;
+      SELECT open_item.* INTO STRICT original_open FROM finance.accounting_events event JOIN finance.open_items open_item ON open_item.org_id=event.org_id AND open_item.accounting_event_id=event.id WHERE event.org_id=organization_id AND event.supplier_invoice_id=header.supplier_invoice_id FOR UPDATE OF open_item;
+      original_event_id:=original_open.accounting_event_id;
       SELECT original_open.principal_amount-coalesce(sum(allocation.amount) FILTER (WHERE allocation.status='posted'
         AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal WHERE reversal.org_id=allocation.org_id
           AND reversal.reversal_of_allocation_id=allocation.id)),0)
@@ -21413,7 +21414,8 @@ BEGIN
     consumed:=erp_calculation_authority.consume_artifact(organization_id,artifact_id,'sales.return.post','sales_return',resource_id,header.row_version,request_id,command_request_id,claim_id);
     IF pg_catalog.convert_from(consumed,'UTF8')::jsonb IS DISTINCT FROM output_doc THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='consumed return calculation changed'; END IF;
     IF invoiced THEN
-      SELECT event.id,open_item.* INTO STRICT original_event_id,original_open FROM finance.accounting_events event JOIN finance.open_items open_item ON open_item.org_id=event.org_id AND open_item.accounting_event_id=event.id WHERE event.org_id=organization_id AND event.sales_invoice_id=header.invoice_id FOR UPDATE OF open_item;
+      SELECT open_item.* INTO STRICT original_open FROM finance.accounting_events event JOIN finance.open_items open_item ON open_item.org_id=event.org_id AND open_item.accounting_event_id=event.id WHERE event.org_id=organization_id AND event.sales_invoice_id=header.invoice_id FOR UPDATE OF open_item;
+      original_event_id:=original_open.accounting_event_id;
       SELECT original_open.principal_amount-coalesce(sum(allocation.amount) FILTER (WHERE allocation.status='posted'
         AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal WHERE reversal.org_id=allocation.org_id
           AND reversal.reversal_of_allocation_id=allocation.id)),0)
