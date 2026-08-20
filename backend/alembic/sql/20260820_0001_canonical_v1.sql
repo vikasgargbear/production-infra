@@ -19700,7 +19700,7 @@ BEGIN
       SELECT count(*) INTO companion_count FROM inventory.inventory_documents document
        WHERE document.org_id=NEW.org_id AND document.purchase_return_id=NEW.id
          AND document.document_type='purchase_return_issue' AND document.status='posted';
-      IF companion_count<>1 THEN
+      IF companion_count<>(1) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return inventory-document ownership differs'; END IF;
       expected_tax:=CASE WHEN NEW.gst_tax_treatment='statutory' THEN 1 ELSE 0 END;
       SELECT count(*) INTO companion_count FROM tax.documents WHERE org_id=NEW.org_id AND adjustment_note_id=note.id AND document_class='adjustment_note';
@@ -21565,7 +21565,7 @@ BEGIN
       SELECT count(*) INTO companion_count FROM inventory.inventory_documents document
        WHERE document.org_id=NEW.org_id AND document.sales_return_id=NEW.id
          AND document.document_type='sales_return_receipt' AND document.status='posted';
-      IF companion_count<>CASE WHEN EXISTS (SELECT 1 FROM sales.return_lines line WHERE line.org_id=NEW.org_id AND line.return_id=NEW.id AND line.disposition='return_to_stock') THEN 1 ELSE 0 END THEN
+      IF companion_count<>(CASE WHEN EXISTS (SELECT 1 FROM sales.return_lines line WHERE line.org_id=NEW.org_id AND line.return_id=NEW.id AND line.disposition='return_to_stock') THEN 1 ELSE 0 END) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return inventory-document ownership differs'; END IF;
       expected_tax:=CASE WHEN NEW.gst_tax_treatment='statutory' THEN 1 ELSE 0 END;
       SELECT count(*) INTO companion_count FROM tax.documents WHERE org_id=NEW.org_id AND adjustment_note_id=note.id AND document_class='adjustment_note';

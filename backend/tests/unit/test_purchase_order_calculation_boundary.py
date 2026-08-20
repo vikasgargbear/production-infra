@@ -1,4 +1,5 @@
 from app.main import app
+from app.core.api_contract import _route_index
 
 
 def test_purchase_preview_is_authenticated_and_not_mcp_exported():
@@ -11,11 +12,7 @@ def test_purchase_preview_is_authenticated_and_not_mcp_exported():
 
 
 def test_purchase_preview_route_is_mounted_once():
-    route = next(
-        route
-        for route in app.routes
-        if getattr(route, "path", None) == "/api/calculations/purchase-order"
-    )
+    route = _route_index(app)[("/api/calculations/purchase-order", "POST")][0]
     assert route.methods == {"POST"}
 
 

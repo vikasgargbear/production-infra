@@ -30,6 +30,7 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert "pg_catalog.date_part('year'" in mapping
     assert "companion_count<>(CASE WHEN NEW.gst_tax_treatment='statutory'" in mapping
     assert "companion_count<>CASE WHEN NEW.gst_tax_treatment='statutory'" not in mapping
+    assert "companion_count<>(CASE WHEN EXISTS" in mapping
     assert "SELECT open_item.* INTO STRICT original_open" in mapping
     assert "INTO STRICT original_event_id,original_open" not in mapping
     parsed = json.loads(manifest)

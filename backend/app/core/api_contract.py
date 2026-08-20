@@ -238,17 +238,18 @@ def validate_operation_definitions(
     return definitions
 
 
-def _route_index(app: FastAPI) -> Dict[Tuple[str, str], List[APIRoute]]:
-    index: Dict[Tuple[str, str], List[APIRoute]] = {}
+def _route_index(app: FastAPI) -> Dict[Tuple[str, str], List[Any]]:
+    index: Dict[Tuple[str, str], List[Any]] = {}
     contexts = iter_route_contexts(app.routes) if iter_route_contexts else app.routes
     for context in contexts:
-        route = getattr(context, "original_route", context)
-        if not isinstance(route, APIRoute):
+        original_route = getattr(context, "original_route", context)
+        if not isinstance(original_route, APIRoute):
             continue
-        path = getattr(context, "path", route.path)
-        for method in route.methods or set():
+        effective_route = context if context is not original_route else original_route
+        path = getattr(effective_route, "path", original_route.path)
+        for method in effective_route.methods or set():
             key = (path, method.upper())
-            index.setdefault(key, []).append(route)
+            index.setdefault(key, []).append(effective_route)
     return index
 
 
@@ -327,17 +328,15 @@ def install_operation_registry(
 
         route = matches[0]
         _validate_route_security(route, operation)
-        route.operation_id = operation.operation_id
-        route.unique_id = operation.operation_id
-        route.openapi_extra = {
-            **(route.openapi_extra or {}),
-            **operation.openapi_extensions(),
-        }
 
     original_openapi = app.openapi
 
     def contract_openapi() -> Dict[str, Any]:
         schema = original_openapi()
+        for operation in definitions:
+            path_operation = schema["paths"][operation.path][operation.method.lower()]
+            path_operation["operationId"] = operation.operation_id
+            path_operation.update(operation.openapi_extensions())
         schema["x-erp-contract"] = _registry_extension(definitions)
         return schema
 

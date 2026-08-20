@@ -641,7 +641,7 @@ BEGIN
       SELECT count(*) INTO companion_count FROM inventory.inventory_documents document
        WHERE document.org_id=NEW.org_id AND document.{inventory_source}=NEW.id
          AND document.document_type='{inventory_type}' AND document.status='posted';
-      IF companion_count<>{inventory_expected} THEN
+      IF companion_count<>({inventory_expected}) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return inventory-document ownership differs'; END IF;
       expected_tax:={tax_expected};
       SELECT count(*) INTO companion_count FROM tax.documents WHERE org_id=NEW.org_id AND adjustment_note_id=note.id AND document_class='adjustment_note';

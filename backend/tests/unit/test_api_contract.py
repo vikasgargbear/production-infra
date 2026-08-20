@@ -72,12 +72,16 @@ def test_route_index_uses_effective_paths_from_lazy_included_routers(monkeypatch
         return {"ok": True}
 
     route = next(item for item in nested.routes if getattr(item, "path", None) == "/local")
-    effective = SimpleNamespace(original_route=route, path="/api/nested/local")
+    effective = SimpleNamespace(
+        original_route=route,
+        path="/api/nested/local",
+        methods=route.methods,
+    )
     monkeypatch.setattr(api_contract, "iter_route_contexts", lambda _routes: (effective,))
 
     index = api_contract._route_index(nested)
 
-    assert index[("/api/nested/local", "GET")] == [route]
+    assert index[("/api/nested/local", "GET")] == [effective]
 
 
 def test_openapi_contains_only_the_reviewed_mcp_allowlist():

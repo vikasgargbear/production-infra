@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.routes.internal import mcp_actions
+from app.core.api_contract import _route_index
 from app.domain.operator_actions import (
     ACTION_POLICIES,
     PREPARE_PAYLOAD_MODELS,
@@ -1339,8 +1340,9 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
 
     action_routes = [
         route
-        for route in application.routes
-        if getattr(route, "path", "").startswith("/api/internal/mcp/")
+        for (path, _method), routes in _route_index(application).items()
+        if path.startswith("/api/internal/mcp/")
+        for route in routes
     ]
     assert len(action_routes) == 5
     assert all(route.include_in_schema is False for route in action_routes)

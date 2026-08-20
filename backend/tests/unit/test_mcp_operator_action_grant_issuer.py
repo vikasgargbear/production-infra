@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.api.routes.internal import mcp_agent_grants
 from app.api.routes.internal.mcp_agent_grants import OperatorGrantRequest
+from app.core.api_contract import _route_index
 from app.domain.operator_actions import ACTION_POLICIES
 
 
@@ -239,12 +240,9 @@ def test_operator_issuer_route_is_hidden_and_has_no_oauth_bearer_field():
     assert "/api/internal/mcp/agent-grants/authorize-action" not in application.openapi()[
         "paths"
     ]
-    route = next(
-        route
-        for route in application.routes
-        if getattr(route, "path", "")
-        == "/api/internal/mcp/agent-grants/authorize-action"
-    )
+    route = _route_index(application)[
+        ("/api/internal/mcp/agent-grants/authorize-action", "POST")
+    ][0]
     assert route.include_in_schema is False
     assert route.methods == {"POST"}
     assert "access_token" not in OperatorGrantRequest.model_fields
