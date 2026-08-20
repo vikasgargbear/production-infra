@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      provision_demo_data:
+        description: Provision and exercise the disposable synthetic demo organization
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       confirmation:
@@ -20,6 +25,11 @@ on:
         type: string
       rotate_role_passwords:
         description: Explicit isolated-role credential rotation
+        required: false
+        default: false
+        type: boolean
+      provision_demo_data:
+        description: Provision and exercise the disposable synthetic demo organization
         required: false
         default: false
         type: boolean
@@ -44,6 +54,7 @@ jobs:
       ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
       ERP_CALCULATOR_PASSWORD: ${{ secrets.ERP_CALCULATOR_PASSWORD }}
       ERP_TAX_PROVIDER_PASSWORD: ${{ secrets.ERP_TAX_PROVIDER_PASSWORD }}
+      ERP_REGULATORY_IMPORTER_PASSWORD: ${{ secrets.ERP_REGULATORY_IMPORTER_PASSWORD }}
       JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
       MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
       MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
@@ -412,6 +423,45 @@ jobs:
              }' staging-evidence/render-pilot.json \
              > staging-evidence/render-pilot-smoke.json
 
+      - name: Provision and exercise the disposable demo organization
+        if: inputs.provision_demo_data == true
+        env:
+          CANONICAL_DEMO_WRITE_ACK: PROVISION_DISPOSABLE_DEMO
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+        run: |
+          set -euo pipefail
+          test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
+
+          python3 - <<'PY'
+          import os
+          import psycopg2
+          from psycopg2 import sql
+
+          with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
+              connection.autocommit = True
+              with connection.cursor() as cursor:
+                  cursor.execute(
+                      sql.SQL("ALTER ROLE {} PASSWORD %s").format(
+                          sql.Identifier("erp_regulatory_importer")
+                      ),
+                      (os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],),
+                  )
+          PY
+
+          importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
+          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          echo "::add-mask::$importer_url"
+          export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
+
+          runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          echo "::add-mask::$runtime_url"
+          export ERP_RUNTIME_DATABASE_URL="$runtime_url"
+          export CANONICAL_DEMO_API_URL
+          CANONICAL_DEMO_API_URL=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
+
+          python3 backend/scripts/provision_canonical_demo.py
+
       - name: Publish staging baseline evidence
         run: |
           mkdir -p staging-evidence
@@ -432,6 +482,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: canonical-staging-baseline-${{ github.run_id }}
-          path: staging-evidence/*.json
+          path: staging-evidence/*
           if-no-files-found: error
           retention-days: 14

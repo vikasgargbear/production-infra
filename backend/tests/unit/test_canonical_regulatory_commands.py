@@ -133,7 +133,10 @@ def test_activation_derives_independent_regulatory_dimensions_and_hsn_release() 
         "medicine composition lacks one complete effective reviewed ingredient release",
         "hsn_release_id=tax_release.id",
         "selected HSN tax version is not active, effective or product-matched",
-        "v1 activation fails closed without a reviewed non-medicine regulatory authority",
+        "non-medicine activation has medicine-only regulatory facts or lacks a manufacturer",
+        "non-medicine HSN tax version is not active, effective or product-matched",
+        "non-medicine HSN lacks an active effective reviewed release",
+        "regulatory_ruleset_version=tax_release.ruleset_version",
     ):
         assert fragment in sql
     assert "selected_tax_code_version_id" not in sql

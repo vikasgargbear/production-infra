@@ -14701,7 +14701,49 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='product is not an activatable expected version';
     END IF;
     IF product.product_kind<>'medicine' THEN
-      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='v1 activation fails closed without a reviewed non-medicine regulatory authority';
+      IF product.manufacturer_party_id IS NULL
+         OR COALESCE(product.drug_schedule,'NONE')<>'NONE'
+         OR COALESCE(product.requires_prescription,false)
+         OR COALESCE(product.ndps_regulated,false)
+         OR product.schedule_h2_applicable_from IS NOT NULL
+         OR product.traceability_product_code IS NOT NULL THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='non-medicine activation has medicine-only regulatory facts or lacks a manufacturer';
+      END IF;
+      SELECT * INTO tax_version FROM tax.tax_code_versions
+       WHERE status='active' AND code_kind='hsn'
+         AND default_supply_type='goods' AND code=product.hsn_code
+         AND CURRENT_DATE BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date)
+       FOR SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='non-medicine HSN tax version is not active, effective or product-matched';
+      END IF;
+      SELECT * INTO tax_release FROM core.reference_data_releases
+       WHERE id=tax_version.release_id AND dataset_kind='hsn_sac_tax' AND status='active'
+         AND CURRENT_DATE BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date)
+       FOR SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='non-medicine HSN lacks an active effective reviewed release';
+      END IF;
+      INSERT INTO "erp_regulatory_commands"."command_scopes" VALUES
+        (pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),'product_activation',product_id);
+      UPDATE catalog.products SET
+        drug_schedule='NONE',requires_prescription=false,ndps_regulated=false,
+        regulatory_ruleset_version=tax_release.ruleset_version,
+        schedule_h2_applicable_from=NULL,traceability_product_code=NULL,
+        hsn_release_id=tax_release.id,status='active',updated_at=pg_catalog.transaction_timestamp(),
+        updated_by_membership_id=actor_id,row_version=row_version+1
+       WHERE org_id=organization_id AND id=product_id AND row_version=expected_row_version;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='non-medicine product changed before activation';
+      END IF;
+      DELETE FROM "erp_regulatory_commands"."command_scopes" WHERE backend_pid=pg_catalog.pg_backend_pid()
+        AND transaction_id=pg_catalog.txid_current() AND scope='product_activation' AND target_id=product_id;
+      response_document:=pg_catalog.jsonb_build_object(
+        'product_id',product_id,'row_version',expected_row_version+1,
+        'ingredient_ruleset_version',NULL,
+        'tax_ruleset_version',tax_release.ruleset_version,'tax_code_version_id',tax_version.id);
+      PERFORM "erp_core_commands"."finish_claim"(organization_id,claim.id,'catalog.products',product_id,response_document);
+      RETURN product_id;
     END IF;
     PERFORM "erp_regulatory_commands"."assert_reference_readiness"(CURRENT_DATE);
     IF product.manufacturer_party_id IS NULL THEN

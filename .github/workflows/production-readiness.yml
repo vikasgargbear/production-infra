@@ -16,6 +16,11 @@ on:
         required: true
         default: false
         type: boolean
+      provision_canonical_demo:
+        description: Provision and exercise the disposable free-staging demo organization
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -26,6 +31,7 @@ jobs:
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
+      provision_demo_data: ${{ inputs.provision_canonical_demo }}
     secrets: inherit
 
   mcp-sdk-compatibility:
