@@ -185,6 +185,7 @@ def test_postgres15_fixture_is_rollback_only_and_wired_after_the_clean_baseline(
     assert "EXCEPTION WHEN exclusion_violation" in fixture
     assert "employee reporting cycle was accepted" in fixture
     assert "revoked agent grant executed a command" in fixture
+    assert fixture.count("EXCEPTION WHEN object_not_in_prerequisite_state") == 2
     assert "set_config('app.request_id'" in fixture
     assert "ALTER TABLE core.organizations DISABLE TRIGGER USER" in fixture
     assert fixture.index("INSERT INTO core.organizations") < fixture.index("INSERT INTO core.users")
