@@ -98,16 +98,15 @@ _ACTIVATE_CONTEXT_SQL = text(
 _DEPLOYMENT_READINESS_SQL = text(
     """
     SELECT
-      (SELECT version_num='20260820_0001'
-         FROM "public"."alembic_version"
-        LIMIT 1)
-      AND (SELECT count(*)=110
-             FROM information_schema.tables
-            WHERE table_schema IN (
+      (SELECT count(*)=110
+         FROM pg_catalog.pg_class relation
+         JOIN pg_catalog.pg_namespace namespace
+           ON namespace.oid=relation.relnamespace
+        WHERE namespace.nspname IN (
               'core','parties','catalog','hr','inventory','sales',
               'procurement','finance','tax','compliance','automation','calculation'
             )
-              AND table_type='BASE TABLE')
+          AND relation.relkind='r')
       AND pg_catalog.to_regprocedure(
             'erp_security.activate_context(uuid,uuid)'
           ) IS NOT NULL
