@@ -467,10 +467,24 @@ class RenderClient:
                 + ", ".join(unexpected)
             )
 
-    def deploy(self, service: ServiceRef, commit_id: str) -> Mapping[str, object]:
+    def deploy(
+        self,
+        service: ServiceRef,
+        commit_id: str,
+        *,
+        cancel_stale_deploys: bool = False,
+    ) -> Mapping[str, object]:
         history = self.request(
             "GET", f"/services/{service.id}/deploys", query={"limit": 20}
         )
+        active_statuses = {
+            "created",
+            "queued",
+            "build_in_progress",
+            "update_in_progress",
+            "pre_deploy_in_progress",
+        }
+        stale_active = []
         if isinstance(history, list):
             for item in history:
                 deploy = item.get("deploy", item) if isinstance(item, dict) else {}
@@ -492,6 +506,18 @@ class RenderClient:
                         "status": deploy.get("status", "created"),
                         "reused": True,
                     }
+                if (
+                    cancel_stale_deploys
+                    and isinstance(deploy, dict)
+                    and isinstance(deploy.get("id"), str)
+                    and deploy.get("status") in active_statuses
+                ):
+                    stale_active.append(deploy["id"])
+        for deploy_id in stale_active:
+            self.request(
+                "POST",
+                f"/services/{service.id}/deploys/{deploy_id}/cancel",
+            )
         result = self.request(
             "POST",
             f"/services/{service.id}/deploys",
@@ -637,7 +663,11 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
             else services
         )
         for service in selected_services:
-            deployed[service.name] = client.deploy(service, args.commit_id)
+            deployed[service.name] = client.deploy(
+                service,
+                args.commit_id,
+                cancel_stale_deploys=getattr(args, "cancel_stale_deploys", False),
+            )
 
     return {
         "mode": "applied",
@@ -676,11 +706,18 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         choices=(API_NAME, FRONTEND_NAME, MCP_NAME),
         help="Deploy only this service; repeat as needed (default: all three)",
     )
+    parser.add_argument(
+        "--cancel-stale-deploys",
+        action="store_true",
+        help="Cancel non-target active deploys for explicitly selected services",
+    )
     args = parser.parse_args(argv)
     if args.deploy and not args.apply:
         parser.error("--deploy requires --apply")
     if args.deploy and not args.commit_id:
         parser.error("--deploy requires --commit-id")
+    if args.cancel_stale_deploys and not args.deploy_service:
+        parser.error("--cancel-stale-deploys requires --deploy-service")
     return args
 
 

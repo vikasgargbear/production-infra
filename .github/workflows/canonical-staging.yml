@@ -712,6 +712,7 @@ jobs:
             --apply \
             --deploy \
             --deploy-service aasopharma-api-pilot \
+            --cancel-stale-deploys \
             --branch "$GITHUB_REF_NAME" \
             --commit-id "$deploy_sha" \
             > staging-evidence/render-pilot.json

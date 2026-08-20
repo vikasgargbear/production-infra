@@ -310,6 +310,38 @@ def test_deploy_reuses_nonterminal_exact_commit():
     assert [call[0] for call in client.calls] == ["GET"]
 
 
+def test_deploy_can_cancel_stale_non_target_queue_before_exact_commit():
+    client = RecordingClient(
+        [
+            [{
+                "deploy": {
+                    "id": "dep-stale",
+                    "status": "build_in_progress",
+                    "commit": {"id": "a" * 40},
+                }
+            }],
+            {"id": "dep-stale", "status": "canceled"},
+            {"id": "dep-exact", "status": "created"},
+        ]
+    )
+    service = provision.ServiceRef(
+        "srv-api",
+        provision.API_NAME,
+        "web_service",
+        "https://api.onrender.com",
+        {},
+    )
+
+    result = client.deploy(service, "b" * 40, cancel_stale_deploys=True)
+
+    assert result["id"] == "dep-exact"
+    assert [call[:2] for call in client.calls] == [
+        ("GET", "/services/srv-api/deploys"),
+        ("POST", "/services/srv-api/deploys/dep-stale/cancel"),
+        ("POST", "/services/srv-api/deploys"),
+    ]
+
+
 def test_deploy_requires_exact_commit_argument():
     with pytest.raises(SystemExit):
         provision.parse_args(["--apply", "--deploy"])
@@ -350,7 +382,7 @@ class ConvergeClient:
     def require_allowed_env(self, _service, _allowed):
         return None
 
-    def deploy(self, service, commit_id):
+    def deploy(self, service, commit_id, *, cancel_stale_deploys=False):
         self.deployed.append(service.name)
         return {
             "id": f"dep-{service.id}",
@@ -376,6 +408,7 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
             deploy=deploy,
             commit_id="a" * 40 if deploy else None,
             deploy_service=None,
+            cancel_stale_deploys=False,
         )
     )
 
@@ -413,6 +446,7 @@ def test_converge_can_deploy_only_the_reviewed_api_service(monkeypatch):
             deploy=True,
             commit_id="c" * 40,
             deploy_service=[provision.API_NAME],
+            cancel_stale_deploys=True,
         )
     )
 
