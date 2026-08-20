@@ -158,7 +158,8 @@ jobs:
               "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF" \
               | jq -er .status)
             if [ "$status" = ACTIVE_HEALTHY ]; then
-              sleep 20
+              # Supavisor can retain a failed auth-query circuit for up to two minutes.
+              sleep 125
               break
             fi
             test "$attempt" -lt 5

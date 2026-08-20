@@ -418,6 +418,11 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "restart_staging_database:" in workflow
     assert "if: inputs.restart_staging_database == true" in workflow
     assert '"https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart"' in workflow
+    restart_step = workflow.split("Restart the pinned free staging database", 1)[1].split(
+        "Install the reviewed migration toolchain", 1
+    )[0]
+    assert "Supavisor can retain a failed auth-query circuit for up to two minutes" in restart_step
+    assert "sleep 125" in restart_step
     assert "restart_canonical_staging:" in production_workflow
     assert "restart_staging_database: ${{ inputs.restart_canonical_staging }}" in production_workflow
 
