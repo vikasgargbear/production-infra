@@ -202,7 +202,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
-    assert "if: inputs.rotate_role_passwords == true" in workflow
+    assert "if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in workflow
     assert "Run canonical rollback fixtures on live free staging" in workflow
     assert "test \"$fixture_count\" = 14" in workflow
     assert "REVOKE erp_migration_owner, erp_runtime FROM postgres" in workflow

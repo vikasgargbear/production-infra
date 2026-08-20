@@ -281,7 +281,7 @@ jobs:
           fi
 
       - name: Provision isolated staging login credentials
-        if: inputs.rotate_role_passwords == true
+        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
         run: |
           python3 - <<'PY'
           import os
