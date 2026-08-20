@@ -249,6 +249,36 @@ def test_existing_service_type_drift_is_refused():
         client.find_service("owner", provision.MCP_NAME, "web_service")
 
 
+def test_deploy_is_pinned_to_exact_commit_and_returns_deploy_id():
+    client = RecordingClient([{"id": "dep-exact", "status": "build_in_progress"}])
+    service = provision.ServiceRef(
+        "srv-api",
+        provision.API_NAME,
+        "web_service",
+        "https://api.onrender.com",
+        {},
+    )
+
+    assert client.deploy(service, "a" * 40) == {
+        "id": "dep-exact",
+        "status": "build_in_progress",
+    }
+    assert client.calls == [
+        (
+            "POST",
+            "/services/srv-api/deploys",
+            {"clearCache": "do_not_clear", "commitId": "a" * 40},
+            None,
+            False,
+        )
+    ]
+
+
+def test_deploy_requires_exact_commit_argument():
+    with pytest.raises(SystemExit):
+        provision.parse_args(["--apply", "--deploy"])
+
+
 class ConvergeClient:
     def __init__(self):
         self.deployed = []
@@ -284,8 +314,9 @@ class ConvergeClient:
     def require_allowed_env(self, _service, _allowed):
         return None
 
-    def deploy(self, service):
+    def deploy(self, service, commit_id):
         self.deployed.append(service.name)
+        return {"id": f"dep-{service.id}", "status": "queued", "commit": commit_id}
 
 
 @pytest.mark.parametrize("deploy", [False, True])
@@ -302,6 +333,7 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
             repo=provision.DEFAULT_REPO,
             branch="main",
             deploy=deploy,
+            commit_id="a" * 40 if deploy else None,
         )
     )
 
@@ -321,6 +353,8 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
         if deploy
         else []
     )
+    if deploy:
+        assert result["deployed"][provision.API_NAME]["id"] == "dep-srv-api"
 
 
 def test_mcp_existing_environment_refuses_admin_or_unreviewed_keys():

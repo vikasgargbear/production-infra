@@ -467,12 +467,17 @@ class RenderClient:
                 + ", ".join(unexpected)
             )
 
-    def deploy(self, service: ServiceRef) -> None:
-        self.request(
+    def deploy(self, service: ServiceRef, commit_id: str) -> Mapping[str, object]:
+        result = self.request(
             "POST",
             f"/services/{service.id}/deploys",
-            payload={"clearCache": "do_not_clear"},
+            payload={"clearCache": "do_not_clear", "commitId": commit_id},
         )
+        if not isinstance(result, dict) or not isinstance(result.get("id"), str):
+            raise ProvisioningError(
+                f"Render did not return a deploy ID for {service.name}"
+            )
+        return {"id": result["id"], "status": result.get("status", "queued")}
 
 
 def dry_run_plan(owner_id: str, repo: str, branch: str) -> Dict[str, object]:
@@ -592,11 +597,12 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
         mcp_service, mcp_env(values, api_service.url, mcp_service.url)
     )
 
-    deployed: List[str] = []
+    deployed: Dict[str, Mapping[str, object]] = {}
     if args.deploy:
+        if not args.commit_id:
+            raise ProvisioningError("--deploy requires --commit-id")
         for service in (api_service, frontend_service, mcp_service):
-            client.deploy(service)
-            deployed.append(service.name)
+            deployed[service.name] = client.deploy(service, args.commit_id)
 
     return {
         "mode": "applied",
@@ -625,9 +631,15 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--owner-id", default=DEFAULT_OWNER_ID)
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--branch", default=DEFAULT_BRANCH)
+    parser.add_argument(
+        "--commit-id",
+        help="Exact reviewed Git commit to deploy (required with --deploy)",
+    )
     args = parser.parse_args(argv)
     if args.deploy and not args.apply:
         parser.error("--deploy requires --apply")
+    if args.deploy and not args.commit_id:
+        parser.error("--deploy requires --commit-id")
     return args
 
 

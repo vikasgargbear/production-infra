@@ -689,7 +689,36 @@ jobs:
             --apply \
             --deploy \
             --branch "$GITHUB_REF_NAME" \
+            --commit-id "$GITHUB_SHA" \
             > staging-evidence/render-pilot.json
+
+          for attempt in 1 2 3 4 5; do
+            all_live=true
+            while IFS=$'\t' read -r service_name service_id deploy_id; do
+              deploy_status=$(curl --fail --silent --show-error \
+                --header "Authorization: Bearer $RENDER_API_KEY" \
+                "https://api.render.com/v1/services/$service_id/deploys/$deploy_id" \
+                | jq -er '.status')
+              printf '%s deploy %s status: %s\n' "$service_name" "$deploy_id" "$deploy_status"
+              case "$deploy_status" in
+                live) ;;
+                build_failed|update_failed|canceled|deactivated)
+                  echo "::error title=Render deploy failed::$service_name deploy $deploy_id ended as $deploy_status"
+                  exit 1
+                  ;;
+                *) all_live=false ;;
+              esac
+            done < <(jq -r '.services as $services | .deployed | to_entries[] |
+              [.key, $services[.key].id, .value.id] | @tsv' staging-evidence/render-pilot.json)
+            if [ "$all_live" = true ]; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::error title=Render deploy timeout::Exact commit did not become live after five bounded checks"
+              exit 1
+            fi
+            sleep 90
+          done
 
       - name: Wait for free service smoke readiness
         run: |
