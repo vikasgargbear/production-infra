@@ -56,7 +56,6 @@ INSERT INTO core.organizations (
     'Mumbai','27','400001','active','91000000-0000-7000-8000-000000000003',
     '91000000-0000-7000-8000-000000000003'
 );
-ALTER TABLE core.organizations ENABLE TRIGGER USER;
 
 INSERT INTO core.users (id,auth_user_id,display_name,status)
 VALUES (
