@@ -326,4 +326,5 @@ def test_generic_adjustment_tax_boundary_is_typed_and_service_advances_stay_defe
     assert "guard_posted_supplier_invoice_lines" in fixture
     assert "guard_posted_sales_return_lines" in fixture
     assert "guard_posted_purchase_return_lines" in fixture
+    assert "'search_path=\"\"'=ANY" in fixture
     assert "reviewed security modes and empty fixed search_path" in fixture

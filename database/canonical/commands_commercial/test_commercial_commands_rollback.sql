@@ -39,7 +39,7 @@ BEGIN
       JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_commercial_commands'
        AND (
-           NOT coalesce(procedure.proconfig,'{}'::text[]) @> ARRAY['search_path=']
+           NOT ('search_path=""'=ANY(coalesce(procedure.proconfig,'{}'::text[])))
            OR (procedure.proname IN ('guard_posted_sales_invoice_lines',
                                      'guard_posted_supplier_invoice_lines',
                                      'guard_posted_sales_return_lines',
