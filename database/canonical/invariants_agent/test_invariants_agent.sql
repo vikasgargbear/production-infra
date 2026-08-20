@@ -161,7 +161,7 @@ INSERT INTO parties.parties (org_id, id, party_kind, legal_name, status)
 VALUES (
     '10000000-0000-0000-0000-000000000020',
     '10000000-0000-0000-0000-000000000050',
-    'organization', 'Fixture Manufacturer', 'active'
+    'organization', 'Fixture Manufacturer', 'draft'
 );
 INSERT INTO catalog.ingredients (
     id, canonical_name, normalized_name, drugs_rules_schedule,
