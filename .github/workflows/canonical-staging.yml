@@ -292,7 +292,22 @@ jobs:
               grep -q '^ROLLBACK;' "$fixture"
             fi
             echo "running live rollback fixture: $fixture"
-            psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" -f "$fixture"
+            fixture_log=$(mktemp)
+            if ! psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+              -f "$fixture" >"$fixture_log" 2>&1; then
+              cat "$fixture_log"
+              python3 - "$fixture" "$fixture_log" <<'PY'
+          import pathlib
+          import sys
+
+          fixture = sys.argv[1]
+          detail = pathlib.Path(sys.argv[2]).read_text(errors="replace")[-3000:]
+          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Live canonical fixture failed::{fixture}: {detail}")
+          PY
+              exit 1
+            fi
+            cat "$fixture_log"
             fixture_count=$((fixture_count + 1))
           done < <(find database/canonical -type f -name 'test_*.sql' | LC_ALL=C sort)
           test "$fixture_count" = 14
