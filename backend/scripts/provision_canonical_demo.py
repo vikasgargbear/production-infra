@@ -17,6 +17,7 @@ from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 import jwt
 import pdfplumber
@@ -583,8 +584,8 @@ def api_call(method: str, path: str, operation: str, permission: str, payload=No
     return body
 
 
-def exercise_sales_order(evidence_dir: Path) -> dict[str, Any]:
-    payload = {
+def sales_order_payload() -> dict[str, Any]:
+    return {
         "idempotency_key": f"demo-sales-order-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
         "order_date": SOURCE_RETRIEVED_ON.isoformat(),
@@ -614,6 +615,80 @@ def exercise_sales_order(evidence_dir: Path) -> dict[str, Any]:
             }
         ],
     }
+
+
+def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
+    """Resolve and calculate without persisting, so live failures remain diagnosable."""
+    identity = (
+        f"aasopharma:{IDS['org']}:{IDS['membership']}:sales.order.prepare:"
+        f"{payload['idempotency_key']}"
+    )
+    order_id = uuid5(NAMESPACE_URL, identity + ":order")
+    request_document = {
+        key: value for key, value in payload.items() if key != "idempotency_key"
+    }
+    request_document["lines"] = [
+        {
+            **line,
+            "line_id": str(uuid5(NAMESPACE_URL, identity + f":line:{index}")),
+        }
+        for index, line in enumerate(payload["lines"], start=1)
+    ]
+    request_document["charge_lines"] = [
+        {
+            **line,
+            "line_id": str(
+                uuid5(NAMESPACE_URL, identity + f":charge-line:{index}")
+            ),
+        }
+        for index, line in enumerate(payload.get("charge_lines", ()), start=1)
+    ]
+
+    with psycopg2.connect(required("ERP_CALCULATOR_DATABASE_URL")) as calculator:
+        calculator.set_session(readonly=True)
+        with calculator.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT erp_automation_commands.resolve_sales_order_prepare(
+                    %s, %s, %s, %s, %s, %s, %s::jsonb
+                )
+                """,
+                (
+                    IDS["org"],
+                    IDS["membership"],
+                    IDS["auth_user"],
+                    IDS["user"],
+                    IDS["agent_grant"],
+                    CLIENT_ID,
+                    json.dumps(request_document, separators=(",", ":"), sort_keys=True),
+                ),
+            )
+            resolution = cursor.fetchone()[0]
+
+    backend_root = str(Path(__file__).resolve().parents[1])
+    if backend_root not in sys.path:
+        sys.path.insert(0, backend_root)
+    from app.infrastructure.operator_actions.sales_order import calculation_documents
+
+    _calculation_input, calculation_output = calculation_documents(
+        request_document, resolution, order_id=order_id
+    )
+    evidence = {
+        "order_id": str(order_id),
+        "supply_type": resolution["supply_type"],
+        "ruleset_version": resolution["ruleset_version"],
+        "resolved_line_count": len(resolution["lines"]),
+        "totals": calculation_output["totals"],
+    }
+    (evidence_dir / "canonical-demo-sales-order-preflight.json").write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print("canonical demo sales-order resolver and Decimal preflight passed")
+
+
+def exercise_sales_order(
+    evidence_dir: Path, payload: dict[str, Any]
+) -> dict[str, Any]:
     prepared = api_call(
         "POST", "/api/internal/mcp/actions/sales.order.prepare/prepare",
         "sales.order.prepare", "sales.order.create", payload,
@@ -703,7 +778,9 @@ def main() -> int:
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         activate_demo_product(runtime)
 
-    journey = exercise_sales_order(evidence_dir)
+    payload = sales_order_payload()
+    preflight_sales_order(payload, evidence_dir)
+    journey = exercise_sales_order(evidence_dir, payload)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         reconciliation = reconcile(runtime, journey["executed"])
     summary = {

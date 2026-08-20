@@ -234,6 +234,14 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "psycopg2.Binary" in activation
     assert "extensions.digest" not in activation
 
+    preflight = provisioner.split("def preflight_sales_order", 1)[1].split(
+        "\ndef exercise_sales_order", 1
+    )[0]
+    assert 'required("ERP_CALCULATOR_DATABASE_URL")' in preflight
+    assert "calculator.set_session(readonly=True)" in preflight
+    assert "resolve_sales_order_prepare" in preflight
+    assert "calculation_documents" in preflight
+
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     workflow = _read(".github/workflows/canonical-staging.yml")
