@@ -163,13 +163,32 @@ VALUES (
     '10000000-0000-0000-0000-000000000050',
     'organization', 'Fixture Manufacturer', 'draft'
 );
+
+-- Regulated references are importer-only in production. This rolled-back
+-- fixture seeds the minimum FK authority without claiming an official import.
+ALTER TABLE core.reference_data_releases DISABLE TRIGGER USER;
+INSERT INTO core.reference_data_releases (
+    id, dataset_kind, ruleset_version, source_authority, source_uri,
+    source_storage_bucket, source_storage_object_path, source_media_type,
+    source_document_sha256, dataset_storage_bucket, dataset_storage_object_path,
+    dataset_media_type, dataset_sha256, record_count, publication_date,
+    effective_from, reviewed_by_user_id, reviewed_at, status
+) VALUES (
+    '10000000-0000-0000-0000-000000000054', 'ingredient_classification',
+    'fixture-classification-v1', 'cdsco', 'https://cdsco.gov.in/fixture',
+    'fixture', 'regulated/source.json', 'application/json', decode(repeat('91', 32), 'hex'),
+    'fixture', 'regulated/dataset.json', 'application/json', decode(repeat('92', 32), 'hex'),
+    1, DATE '2026-01-01', DATE '2026-01-01',
+    '10000000-0000-0000-0000-000000000011', transaction_timestamp(), 'active'
+);
+ALTER TABLE catalog.ingredients DISABLE TRIGGER USER;
 INSERT INTO catalog.ingredients (
-    id, canonical_name, normalized_name, drugs_rules_schedule,
-    ndps_classification, classification_ruleset_version, status
+    id, release_id, canonical_name, normalized_name, drugs_rules_schedule,
+    ndps_classification, classification_ruleset_version, effective_from
 ) VALUES (
     '10000000-0000-0000-0000-000000000051',
-    'Fixture Ingredient', 'fixture ingredient', 'NONE', 'NONE',
-    'fixture-classification-v1', 'active'
+    '10000000-0000-0000-0000-000000000054', 'Fixture Ingredient',
+    'fixture ingredient', 'NONE', 'NONE', 'fixture-classification-v1', DATE '2026-01-01'
 );
 INSERT INTO catalog.products (
     org_id, id, sku, product_kind, name, manufacturer_party_id,
