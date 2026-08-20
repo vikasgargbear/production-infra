@@ -392,6 +392,7 @@ jobs:
           python3 - <<'PY'
           import os
           import psycopg2
+          import sys
           from psycopg2 import sql
 
           roles = {
@@ -404,10 +405,18 @@ jobs:
               connection.autocommit = True
               with connection.cursor() as cursor:
                   for role, password in roles.items():
-                      cursor.execute(
-                          sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
-                          (password,),
-                      )
+                      try:
+                          cursor.execute(
+                              sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
+                              (password,),
+                          )
+                      except Exception as exc:
+                          message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                          print(
+                              f"::error title=Canonical staging role provisioning failed::{role}: {message}",
+                              file=sys.stderr,
+                          )
+                          raise
           PY
 
       - name: Verify baseline topology and isolated role posture
