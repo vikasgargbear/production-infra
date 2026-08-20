@@ -203,6 +203,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "for attempt in $(seq 1 30)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
+    assert "canceling statement due to (lock|statement) timeout" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
     assert "if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in workflow
