@@ -193,6 +193,11 @@ def test_postgres15_fixture_is_rollback_only_and_wired_after_the_clean_baseline(
     assert "ALTER TABLE core.reference_data_releases DISABLE TRIGGER USER" in fixture
     assert "ALTER TABLE catalog.ingredients DISABLE TRIGGER USER" in fixture
     assert "without claiming an official import" in fixture
+    assert "DISABLE TRIGGER command_requests_exact_capability_guard" in fixture
+    assert "DISABLE TRIGGER command_requests_prepare_scope_guard" in fixture
+    assert "DISABLE TRIGGER command_requests_execution_guard" in fixture
+    assert "DISABLE TRIGGER command_approvals_reviewed_write_guard" in fixture
+    assert "aggregate_version_hash" in fixture
     assert "find database/canonical -type f -name 'test_*.sql'" in gate
     assert 'psql -X -v ON_ERROR_STOP=1 -f "$fixture"' in gate
     assert gate.index('psql -X -v ON_ERROR_STOP=1 -f "$tmpdir/canonical-baseline.sql"') < gate.index(

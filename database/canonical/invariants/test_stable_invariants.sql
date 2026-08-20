@@ -385,20 +385,38 @@ INSERT INTO automation.agent_grant_capabilities (
     '00000000-0000-0000-0000-000000000070',
     'fixture.write', 'write', 'consequential_write', 'separate_approver'
 );
+
+-- This fixture exercises the lower-level stable constraints with a synthetic
+-- operation. The reviewed command layer is covered by its own rollback suite.
+ALTER TABLE automation.command_requests
+    DISABLE TRIGGER command_requests_exact_capability_guard;
+ALTER TABLE automation.command_requests
+    DISABLE TRIGGER command_requests_prepare_scope_guard;
+ALTER TABLE automation.command_requests
+    DISABLE TRIGGER command_requests_execution_guard;
+ALTER TABLE automation.command_approvals
+    DISABLE TRIGGER command_approvals_reviewed_write_guard;
 INSERT INTO automation.command_requests (
     org_id, id, agent_grant_id, requested_by_membership_id,
-    capability_code, operation, idempotency_key_hash,
+    capability_code, operation, operation_mode, branch_id,
+    target_resource_type, target_resource_id, target_row_version,
+    serializer_version, idempotency_key_hash,
     request_media_type, request_bytes, request_hash,
     preview_media_type, preview_bytes, preview_hash,
+    aggregate_version_hash,
     risk_class, approval_policy, required_approval_count, expires_at
 ) VALUES (
     '00000000-0000-0000-0000-000000000010',
     '00000000-0000-0000-0000-000000000071',
     '00000000-0000-0000-0000-000000000070',
     '00000000-0000-0000-0000-000000000003',
-    'fixture.write', 'fixture.create', decode(repeat('81', 32), 'hex'),
+    'fixture.write', 'fixture.create', 'write',
+    '00000000-0000-0000-0000-000000000004',
+    'fixture', '00000000-0000-0000-0000-000000000074', 1,
+    'fixture-v1', decode(repeat('81', 32), 'hex'),
     'application/json', convert_to('{}', 'UTF8'), decode(repeat('82', 32), 'hex'),
     'application/json', convert_to('{}', 'UTF8'), decode(repeat('83', 32), 'hex'),
+    decode(repeat('86', 32), 'hex'),
     'consequential_write', 'separate_approver', 1, transaction_timestamp() + interval '30 minutes'
 );
 DO $test$
@@ -406,12 +424,14 @@ BEGIN
     BEGIN
         INSERT INTO automation.command_approvals (
             org_id, command_request_id, approver_membership_id, decision,
-            preview_hash, authentication_strength, valid_until_at
+            preview_hash, aggregate_version_hash, authentication_strength,
+            idempotency_key_hash, valid_until_at
         ) VALUES (
             '00000000-0000-0000-0000-000000000010',
             '00000000-0000-0000-0000-000000000071',
             '00000000-0000-0000-0000-000000000003', 'approved',
-            decode(repeat('84', 32), 'hex'), 'reauthenticated',
+            decode(repeat('84', 32), 'hex'), decode(repeat('86', 32), 'hex'),
+            'reauthenticated', decode(repeat('87', 32), 'hex'),
             transaction_timestamp() + interval '15 minutes'
         );
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'approval for stale preview was accepted';
@@ -422,13 +442,15 @@ END
 $test$;
 INSERT INTO automation.command_approvals (
     org_id, id, command_request_id, approver_membership_id, decision,
-    preview_hash, authentication_strength, valid_until_at
+    preview_hash, aggregate_version_hash, authentication_strength,
+    idempotency_key_hash, valid_until_at
 ) VALUES (
     '00000000-0000-0000-0000-000000000010',
     '00000000-0000-0000-0000-000000000072',
     '00000000-0000-0000-0000-000000000071',
     '00000000-0000-0000-0000-000000000003', 'approved',
-    decode(repeat('83', 32), 'hex'), 'reauthenticated',
+    decode(repeat('83', 32), 'hex'), decode(repeat('86', 32), 'hex'),
+    'reauthenticated', decode(repeat('88', 32), 'hex'),
     transaction_timestamp() + interval '15 minutes'
 );
 DO $test$
