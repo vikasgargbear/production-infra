@@ -1512,7 +1512,7 @@ def reconcile_purchase_order(connection, resource_id: str) -> dict[str, Any]:
                    purchase_order.cgst_total,purchase_order.sgst_total,
                    purchase_order.igst_total,purchase_order.grand_total,
                    count(line.id) AS line_count,
-                   array_agg(line.id ORDER BY line.line_number) AS line_ids
+                   jsonb_agg(line.id::text ORDER BY line.line_number) AS line_ids
               FROM procurement.purchase_orders AS purchase_order
               JOIN procurement.purchase_order_lines AS line
                 ON line.org_id=purchase_order.org_id

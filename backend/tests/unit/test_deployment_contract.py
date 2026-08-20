@@ -378,6 +378,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "posted_allocation.open_item_id=item.id" in provisioner
     assert "GROUP BY purchase_order.org_id,purchase_order.id" in provisioner
     assert "GROUP BY payment.org_id,payment.id" in provisioner
+    assert "jsonb_agg(line.id::text ORDER BY line.line_number)" in provisioner
+    assert "array_agg(line.id" not in provisioner
     assert "purchase_order.order_number" not in provisioner
     assert "receipt.receipt_number" not in provisioner
     assert "balance.moving_weighted_average" not in provisioner
