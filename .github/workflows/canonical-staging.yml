@@ -390,7 +390,7 @@ jobs:
           fi
 
       - name: Provision isolated staging login credentials
-        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true || inputs.provision_demo_data == true
+        if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
         env:
           ROTATE_ROLE_PASSWORDS: ${{ inputs.rotate_role_passwords || inputs.reset_disposable_data }}
         run: |
@@ -450,6 +450,24 @@ jobs:
       - name: Reconcile reviewed command definitions on pre-cutover staging
         run: |
           set -euo pipefail
+          definition_state=$(mktemp)
+          definition_query=$(cat <<'SQL'
+          SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0 AS core_current,
+                 position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0 AS automation_current
+          SQL
+          )
+          if curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
+            >"$definition_state" \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true)' \
+              "$definition_state" >/dev/null; then
+            echo "Control plane verified reviewed command definitions are already current"
+            exit 0
+          fi
           reconciliation_sql=$(mktemp)
           python3 - "$reconciliation_sql" <<'PY'
           import json

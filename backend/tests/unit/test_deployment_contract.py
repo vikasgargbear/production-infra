@@ -218,7 +218,11 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "auth_query secret check timed out" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
-    assert "inputs.provision_demo_data == true" in workflow
+    role_provisioning = workflow.split(
+        "Provision isolated staging login credentials", 1
+    )[1].split("Reconcile reviewed command definitions", 1)[0]
+    assert "inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in role_provisioning
+    assert "inputs.provision_demo_data" not in role_provisioning
     assert "ROTATE_ROLE_PASSWORDS: ${{ inputs.rotate_role_passwords || inputs.reset_disposable_data }}" in workflow
     assert 'rotate_passwords = os.environ["ROTATE_ROLE_PASSWORDS"].lower() == "true"' in workflow
     assert "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s" in workflow
@@ -241,6 +245,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     reconciliation = workflow.split(
         "Reconcile reviewed command definitions on pre-cutover staging", 1
     )[1].split("Verify baseline topology", 1)[0]
+    assert "/database/query/read-only" in reconciliation
+    assert "Control plane verified reviewed command definitions are already current" in reconciliation
+    assert ".core_current? == true and .automation_current? == true" in reconciliation
     assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
     assert '"erp_core_commands"."allocate_document_number"' in reconciliation
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
