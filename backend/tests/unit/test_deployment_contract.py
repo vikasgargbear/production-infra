@@ -262,6 +262,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     )[1].split("Verify baseline topology", 1)[0]
     assert "/database/query/read-only" in reconciliation
     assert "Control plane verified reviewed command definitions are already current" in reconciliation
+    assert "purchase_order.id,purchase_order.row_version" in reconciliation
     assert ".core_current? == true and .automation_current? == true" in reconciliation
     assert ".trade_current? == true and .compliance_current? == true" in reconciliation
     assert ".plumbing_current? == true" in reconciliation
