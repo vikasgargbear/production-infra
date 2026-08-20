@@ -703,27 +703,34 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
                     ),
                     runtime_principal_configured=True,
                 )
-                prepared = service.prepare(
-                    policy=ACTION_POLICIES["sales.order.prepare"],
-                    payload={
-                        key: value
-                        for key, value in payload.items()
-                        if key != "idempotency_key"
-                    },
-                    idempotency_key=payload["idempotency_key"],
-                    context=ActionContext(
-                        auth_user_id=UUID(IDS["auth_user"]),
-                        user_id=UUID(IDS["user"]),
-                        organization_id=UUID(IDS["org"]),
-                        membership_id=UUID(IDS["membership"]),
-                        agent_grant_id=UUID(IDS["agent_grant"]),
-                        client_id=CLIENT_ID,
-                        operation_key="sales.order.prepare",
-                        permission="sales.order.create",
-                        branch_ids=(UUID(IDS["branch"]),),
-                        organization_scope=True,
-                    ),
-                )
+                try:
+                    prepared = service.prepare(
+                        policy=ACTION_POLICIES["sales.order.prepare"],
+                        payload={
+                            key: value
+                            for key, value in payload.items()
+                            if key != "idempotency_key"
+                        },
+                        idempotency_key=payload["idempotency_key"],
+                        context=ActionContext(
+                            auth_user_id=UUID(IDS["auth_user"]),
+                            user_id=UUID(IDS["user"]),
+                            organization_id=UUID(IDS["org"]),
+                            membership_id=UUID(IDS["membership"]),
+                            agent_grant_id=UUID(IDS["agent_grant"]),
+                            client_id=CLIENT_ID,
+                            operation_key="sales.order.prepare",
+                            permission="sales.order.create",
+                            branch_ids=(UUID(IDS["branch"]),),
+                            organization_scope=True,
+                        ),
+                    )
+                except Exception as exc:
+                    database_error = getattr(exc, "orig", exc)
+                    raise RuntimeError(
+                        "sales-order rollback persistence preflight failed: "
+                        f"{type(database_error).__name__}: {database_error}"
+                    ) from None
                 if prepared.command_request_id is None or not prepared.preview_hash.startswith(
                     "sha256:"
                 ):
