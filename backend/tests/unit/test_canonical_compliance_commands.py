@@ -49,7 +49,7 @@ def test_commands_are_private_idempotent_and_fixed_search_path() -> None:
     assert "SECURITY DEFINER" in mapping
     assert "ON CONFLICT (org_id,actor_membership_id,operation,idempotency_key_hash) DO NOTHING" in mapping
     assert "response_status=200,response_media_type='application/json'" in mapping
-    assert "response_hash=extensions.digest(response_body,'sha256')" in mapping
+    assert "response_hash=extensions.digest(terminal_response_body,'sha256')" in mapping
     assert 'REVOKE ALL ON TABLE \\"erp_compliance_commands\\".\\"command_scopes\\"' in mapping
     assert mapping.count("GRANT EXECUTE ON FUNCTION") == len(manifest["security"]["runtime_commands"])
     assert "EXECUTE FORMAT" not in mapping.upper()

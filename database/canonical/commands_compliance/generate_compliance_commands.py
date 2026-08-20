@@ -152,15 +152,16 @@ END
             '"finish_claim"(organization_id uuid, p_claim_id uuid, p_resource_type varchar, p_resource_id uuid)',
             "void",
             '''
-DECLARE response_body bytea;
+DECLARE terminal_response_body bytea;
 BEGIN
-    response_body := pg_catalog.convert_to(
+    terminal_response_body := pg_catalog.convert_to(
       pg_catalog.jsonb_build_object(
         'resource_type',p_resource_type,'resource_id',p_resource_id
       )::text,'UTF8');
     UPDATE core.idempotency_keys SET status='succeeded',resource_type=p_resource_type,
       resource_id=p_resource_id,response_status=200,response_media_type='application/json',
-      response_body=response_body,response_hash=extensions.digest(response_body,'sha256'),
+      response_body=terminal_response_body,
+      response_hash=extensions.digest(terminal_response_body,'sha256'),
       completed_at=pg_catalog.transaction_timestamp()
      WHERE org_id=organization_id AND id=p_claim_id AND status='claimed';
     IF NOT FOUND THEN

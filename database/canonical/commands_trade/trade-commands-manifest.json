@@ -60,7 +60,7 @@
   ],
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-command-enforcements.json",
-  "mapping_sha256": "a1a20d9c88d946c61261b61647cac2043a01e12b0629e4b365de1943f83cbcb6",
+  "mapping_sha256": "92b85bf9c7e1344d35b944be252aa72d15191cc12e3c5de177769a32ba910647",
   "ownership": {
     "idempotency_claim_owner": "erp_trade_commands.claim",
     "inventory_ledger_writer_count": 1,
