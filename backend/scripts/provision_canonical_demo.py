@@ -1143,7 +1143,8 @@ def verify_fiscal_tax_fact(connection) -> None:
         cursor.execute(
             """
             SELECT erp_compliance_commands.verify_organization_fiscal_tax_fact(
-                %s,%s,%s,2026,'company',50000000,false,NULL,%s,%s,%s,
+                %s::uuid,%s::uuid,%s::uuid,2026::smallint,'company'::varchar,
+                50000000::numeric,false,NULL::varchar,%s::uuid,%s::bytea,%s::bytea,
                 transaction_timestamp() + interval '30 minutes'
             )
             """,

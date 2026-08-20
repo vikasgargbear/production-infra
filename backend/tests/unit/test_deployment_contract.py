@@ -367,6 +367,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert provisioner.count("'27DEMOC5678D1Z5'") == 3
     assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     assert "verify_organization_fiscal_tax_fact" in provisioner
+    assert "2026::smallint" in provisioner
+    assert "NULL::varchar" in provisioner
     assert "INSERT INTO tax.organization_fiscal_tax_facts" not in provisioner
     assert 'IDS["operator_auth_user"], IDS["org"]' in provisioner
     assert 'IDS["fiscal_fact_evidence"]' in provisioner
