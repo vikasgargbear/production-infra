@@ -389,6 +389,12 @@ jobs:
       - name: Reconcile reviewed document sequence allocator on existing staging
         run: |
           set -euo pipefail
+          allocator_current=$(psql -X -A -t -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" -c \
+            "SELECT pg_catalog.position('pg_catalog.greatest(sequence.padding::integer' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::pg_catalog.regprocedure)) > 0")
+          if [ "$allocator_current" = t ]; then
+            echo "Reviewed document sequence allocator is already current"
+            exit 0
+          fi
           cleanup_reconcile_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
               -c 'REVOKE erp_migration_owner FROM postgres' \

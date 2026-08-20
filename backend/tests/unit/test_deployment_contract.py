@@ -211,6 +211,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "canceling statement due to (lock|statement) timeout" in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "Reconcile reviewed document sequence allocator on existing staging" in workflow
+    assert "pg_catalog.pg_get_functiondef" in workflow
+    assert 'if [ "$allocator_current" = t ]' in workflow
     assert "baseline-core-command-enforcements.json" in workflow
     assert 'definition.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)' in workflow
     assert "pg_catalog.greatest(sequence.padding::integer" in workflow
