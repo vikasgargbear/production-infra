@@ -147,8 +147,23 @@ jobs:
         if: inputs.reset_disposable_data == true
         run: |
           set -euo pipefail
-          psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" <<'SQL'
+          reset_log=$(mktemp)
+          if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
           BEGIN;
+          DO $adopt_canonical_roles$
+          DECLARE
+            role_name text;
+          BEGIN
+            FOREACH role_name IN ARRAY ARRAY[
+              'erp_runtime', 'erp_calculator', 'erp_regulatory_importer',
+              'erp_tax_provider', 'erp_app', 'erp_migration_owner'
+            ] LOOP
+              IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
+                EXECUTE pg_catalog.format('GRANT %I TO %I', role_name, SESSION_USER);
+              END IF;
+            END LOOP;
+          END
+          $adopt_canonical_roles$;
           DROP SCHEMA IF EXISTS
             erp_plumbing,
             erp_tax_provider_commands,
@@ -202,6 +217,18 @@ jobs:
           DROP ROLE IF EXISTS erp_migration_owner;
           COMMIT;
           SQL
+          then
+            python3 - "$reset_log" <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Disposable canonical reset failure::{text}")
+          PY
+            exit 1
+          fi
+          cat "$reset_log"
           test "$(psql -X -Atqc "SELECT to_regclass('auth.users') IS NOT NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT to_regclass('public.alembic_version') IS NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')" "$PSYCOPG_DATABASE_URL")" = 0
