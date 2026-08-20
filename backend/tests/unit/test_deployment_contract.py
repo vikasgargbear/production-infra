@@ -241,10 +241,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "Canonical staging restart deferred" not in workflow
     assert "def verify_role(role, password, port)" in workflow
     assert 'canary_role = "erp_runtime"' in workflow
-    assert "verify_role(canary_role, canary_password, session_port)" in workflow
-    assert "verify_role(canary_role, canary_password, transaction_port)" in workflow
+    assert "verify_role_with_retry(canary_role, canary_password, session_port)" in workflow
+    assert "verify_role_with_retry(canary_role, canary_password, transaction_port)" in workflow
     assert "for role, password in expected_roles.items()" in workflow
-    assert "for attempt in range(1, 3)" not in workflow
+    assert "for attempt in range(1, 4):" in workflow
     assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
     assert "Transaction pooler selected after session-mode canary failed" in workflow
     assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow
@@ -384,6 +384,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
     assert "PYTHONPATH=backend PORT=8090 python3 -m uvicorn" in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
+    assert "def verify_role_with_retry(role, password, port):" in workflow
+    assert "for attempt in range(1, 4):" in workflow
     assert "Canonical CI API traceback" in workflow
     assert "postgresql://<redacted>@" in workflow
 
