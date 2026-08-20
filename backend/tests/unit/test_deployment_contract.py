@@ -226,6 +226,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
 
 def test_demo_runtime_computes_activation_hash_without_extensions_access():
     provisioner = _read("backend/scripts/provision_canonical_demo.py")
+    assert '"sales.order.manage"' in provisioner
+    assert '"internal.sequence.allocate"' in provisioner
     activation = provisioner.split("def activate_demo_product", 1)[1].split(
         "\ndef token", 1
     )[0]

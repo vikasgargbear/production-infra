@@ -58,10 +58,12 @@ IDS = {
 
 REQUIRED_PERMISSIONS = (
     "sales.order.create",
+    "sales.order.manage",
     "catalog.product.manage",
     "automation.command.approve",
     "automation.command.execute",
     "automation.command.view",
+    "internal.sequence.allocate",
 )
 
 
