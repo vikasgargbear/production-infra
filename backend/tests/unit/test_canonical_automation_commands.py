@@ -439,6 +439,19 @@ def test_calculated_prepares_bind_commands_to_persisted_document_versions() -> N
         '"aggregate_version_hash"(\n               NEW.target_resource_type,'
         "NEW.target_resource_id,NEW.target_row_version"
     ) in mapping
+    compact_mapping = "".join(mapping.split())
+    for resource_type, variable in (
+        ("sales_order", "sales_order"),
+        ("purchase_order", "purchase_order"),
+        ("supplier_invoice", "supplier_invoice"),
+        ("sales_invoice", "sales_invoice"),
+        ("sales_return", "sales_return"),
+        ("purchase_return", "purchase_return"),
+    ):
+        assert (
+            f'"aggregate_version_hash"(\'{resource_type}\','
+            f"{variable}.id,{variable}.row_version)"
+        ) in compact_mapping
 
 
 def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() -> None:

@@ -6143,8 +6143,8 @@ BEGIN
            OR request_document->>'purchase_order_id' IS DISTINCT FROM request_row.target_resource_id::text
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
            OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
-           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
-                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256')
+           OR request_row.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
+                'purchase_order',purchase_order.id,purchase_order.row_version)
            OR request_row.calculation_hash IS DISTINCT FROM calculation_artifact.authority_hash
            OR calculation_artifact.status<>'issued'
            OR calculation_artifact.expires_at<=pg_catalog.transaction_timestamp()
@@ -6178,8 +6178,8 @@ BEGIN
            OR request_document->>'inventory_document_id' IS DISTINCT FROM inventory_document_id::text
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
            OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
-           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
-                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256')
+           OR request_row.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
+                'supplier_invoice',supplier_invoice.id,supplier_invoice.row_version)
            OR request_row.calculation_hash IS NOT NULL THEN
           RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='goods receipt PO, ceiling, batch, MRP, QC, licence, location, or cost source changed'; END IF;
         PERFORM "{SCHEMA}"."assert_goods_receipt_draft"(
@@ -6207,8 +6207,8 @@ BEGIN
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
            OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
            OR current_resolution->'goods_receipt_ids' IS DISTINCT FROM request_document->'goods_receipt_ids'
-           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
-                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256')
+           OR request_row.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
+                'sales_invoice',sales_invoice.id,sales_invoice.row_version)
            OR request_row.calculation_hash IS DISTINCT FROM calculation_artifact.authority_hash
            OR calculation_artifact.status<>'issued'
            OR calculation_artifact.expires_at<=pg_catalog.transaction_timestamp()
@@ -6279,8 +6279,8 @@ BEGIN
            OR NULLIF(request_document->>'inventory_document_id','')::uuid IS DISTINCT FROM inventory_document_id
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
            OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
-           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
-                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256')
+           OR request_row.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
+                'sales_return',sales_return.id,sales_return.row_version)
            OR request_row.calculation_hash IS DISTINCT FROM calculation_artifact.authority_hash
            OR calculation_artifact.status<>'issued'
            OR calculation_artifact.expires_at<=pg_catalog.transaction_timestamp()
@@ -6316,8 +6316,8 @@ BEGIN
            OR request_document->>'inventory_document_id' IS DISTINCT FROM inventory_document_id::text
            OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
            OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
-           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
-                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256')
+           OR request_row.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
+                'purchase_return',purchase_return.id,purchase_return.row_version)
            OR request_row.calculation_hash IS DISTINCT FROM calculation_artifact.authority_hash
            OR calculation_artifact.status<>'issued' OR calculation_artifact.expires_at<=pg_catalog.transaction_timestamp()
            OR calculation_artifact.operation<>'sales.return.post'
