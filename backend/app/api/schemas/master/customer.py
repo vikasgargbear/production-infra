@@ -226,7 +226,6 @@ class CustomerResponse(CustomerBase):
     territory_id: Optional[int] = None
     route_id: Optional[int] = None
     assigned_salesperson_id: Optional[int] = None
-    price_list_id: Optional[int] = None
     discount_group_id: Optional[int] = None
     
     # Communication Preferences
@@ -241,10 +240,6 @@ class CustomerResponse(CustomerBase):
     total_business_amount: Decimal = Field(default=Decimal("0.00"))
     total_transactions: int = Field(default=0)
     average_order_value: Decimal = Field(default=Decimal("0.00"))
-    
-    # Loyalty
-    loyalty_points: Decimal = Field(default=Decimal("0.00"))
-    loyalty_tier: Optional[str] = Field(default="bronze", description="bronze/silver/gold/platinum")
     
     # Blacklist
     blacklisted: bool = Field(default=False)

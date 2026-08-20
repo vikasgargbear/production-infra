@@ -1,0 +1,68 @@
+{
+  "canonical_table": "calculation.artifacts",
+  "canonical_table_count": 93,
+  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "deployment_blockers": [
+    "Provision an independent erp_calculator password in the deployment secret store; never embed it in migrations or expose it to browser/API/MCP clients.",
+    "Configure a calculator-only database connection whose session_user is erp_calculator; the standard erp_runtime connection cannot issue artifacts.",
+    "Execute the PostgreSQL 15 rollback fixture and end-to-end issue/consume/replay/concurrency tests before enabling calculation-bound posting."
+  ],
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-calculation-authority-enforcements.json",
+  "mapping_sha256": "3bc31cef0c8d34a15bcea609789fac7e0caf9207a63b0e4b5be86527030d5b4f",
+  "postgresql": "15+",
+  "private_boundary": {
+    "function": "erp_calculation_authority.consume_artifact",
+    "required_caller": "reviewed SECURITY DEFINER typed posting command",
+    "transactional_behavior": "row and aggregate locks plus consumption update roll back with posting failure"
+  },
+  "proof": {
+    "canonical_payload_owner": "versioned application Decimal engine and serializer",
+    "client_hash_authority": false,
+    "database_computed_hashes": [
+      "input_sha256",
+      "output_sha256",
+      "authority_hash"
+    ],
+    "database_role": "bind exact bytes and metadata; validate typed aggregate/idempotency/command; consume once"
+  },
+  "public_boundary": {
+    "authenticated_principal": "PostgreSQL session_user must equal erp_calculator",
+    "direct_table_dml": false,
+    "function": "erp_calculation_authority.issue_artifact",
+    "grantee": "erp_calculator"
+  },
+  "schemas": {
+    "application_codec": {
+      "file": "backend/app/domain/calculations/serialization.py",
+      "public_functions": [
+        "reversal_input_payload",
+        "serialize_prior_reversal_state"
+      ],
+      "sha256": "bf6c6a9715b2a4f2136aae72377f04f12f12033b8d5a20e05087729916e4f8d0"
+    },
+    "canonicalization": "RFC 8785 JCS object-key ordering; every decimal value remains its normalized JSON string from the Decimal engine",
+    "input": {
+      "file": "calculation-input-v1.schema.json",
+      "id": "https://aasopharma.internal/schemas/calculation-input-v1.schema.json",
+      "sha256": "7178df2c7f6a9070bc0ef472d34458297d91c9fdeb5de6078ec886982ddebdd5"
+    },
+    "output": {
+      "file": "calculation-output-v1.schema.json",
+      "id": "https://aasopharma.internal/schemas/calculation-output-v1.schema.json",
+      "sha256": "204abdbd24de8db0aecc33fb7f56d6a23a851be90456383c30f5a1e6901cec54"
+    }
+  },
+  "sql_file": "calculation-authority.sql",
+  "sql_sha256": "0c57a8bdd7706ddd7b03194089fdd1153347fd64140a25a8eae92229629e95a1",
+  "status": "blocked_pending_calculator_credential_and_execution_tests",
+  "supported_operations": [
+    "sales.order.approve",
+    "sales.invoice.post",
+    "sales.return.post",
+    "procurement.purchase_order.approve",
+    "procurement.supplier_invoice.post",
+    "procurement.purchase_return.post",
+    "finance.adjustment_note.post"
+  ]
+}

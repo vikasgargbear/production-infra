@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the official MCP SDK boundary without mounting it in the ERP API."""
+"""Validate the isolated official-SDK MCP transport and read-only registry."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from packaging.version import Version
 
 
 ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_ROOT = ROOT / "backend/mcp_runtime"
 BACKEND_REQUIREMENTS = ROOT / "backend/requirements.txt"
 REGISTRY_SOURCE = ROOT / "backend/app/core/api_contract.py"
 EXPECTED_TOOLS = {
@@ -102,6 +103,13 @@ def probe_official_sdk() -> str:
     )
     if not callable(sdk_app):
         raise RuntimeError("Official SDK did not return an ASGI application")
+    sys.path.insert(0, str(RUNTIME_ROOT))
+    try:
+        from aasopharma_mcp.server import create_app, registered_tool_names
+    finally:
+        sys.path.pop(0)
+    if not callable(create_app) or set(registered_tool_names()) != EXPECTED_TOOLS:
+        raise RuntimeError("isolated MCP service drifted from the reviewed registry")
     return importlib.metadata.version("mcp")
 
 
@@ -125,18 +133,22 @@ def build_report(probe_sdk: bool) -> Dict[str, object]:
         )
 
     return {
-        "status": "isolated_internal_pilot_gate",
+        "status": "isolated_read_only_transport_source",
         "python": ".".join(map(str, sys.version_info[:3])),
         "official_sdk_version": sdk_version,
         "registry_tools": tools,
         "write_tools_exported": False,
-        "mcp_transport_implemented": False,
+        "mcp_transport_implemented": True,
+        "transport": "official_sdk_streamable_http_stateless",
+        "authentication": "supabase_asymmetric_jwks_issuer_audience",
+        "authorization": "application_owned_agent_grants_per_tool",
         "shared_runtime_conflicts": conflicts,
         "remaining_blockers": [
-            "official SDK cannot share the currently pinned FastAPI runtime",
-            "ERP HS256 bearer tokens are not MCP audience-restricted OAuth grants",
-            "remote OAuth/JWKS audience validation and consent are not implemented",
-            "gst.settings.get is still route-owned rather than an application operation",
+            "official SDK remains isolated from the legacy FastAPI dependency pins",
+            "Supabase DCR is disabled and no reviewed hosted-client pre-registration is configured in repository evidence",
+            "no hosted OAuth consent UI exists; an active pre-consented agent grant is required before readiness",
+            "the canonical schema and MCP internal API are not deployment-verified",
+            "MCP Inspector plus real ChatGPT and Claude staging verification is incomplete",
         ],
     }
 

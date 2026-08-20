@@ -44,11 +44,11 @@ Define one source of truth for each fact. Examples:
 
 | Fact | Canonical candidate | Other representations |
 |---|---|---|
-| Issued sale | `sales.invoices` + `sales.invoice_items` | GST/report rows are derived snapshots or filings |
-| Inventory change | append-only `inventory.inventory_movements` | `location_wise_stock` is a rebuildable balance projection |
-| Customer debt | posted invoices, allocations, credit/debit adjustments | `financial.customer_outstanding` is a projection with reconciliation |
-| Supplier debt | supplier invoices, allocations, adjustments | `financial.supplier_outstanding` is a projection |
-| Accounting effect | posted `journal_entries` + lines | dashboards and cash forecasts are projections |
+| Issued sale | `sales.invoices` + `sales.invoice_lines` | GST/report rows are derived snapshots or filings |
+| Inventory change | append-only `inventory.stock_ledger_entries` | `inventory.stock_balances` is a rebuildable balance projection |
+| Customer debt | posted invoices and adjustments represented by `finance.open_items`, settled through `finance.allocations` | customer outstanding totals are reconciled projections |
+| Supplier debt | posted supplier invoices and adjustments represented by `finance.open_items`, settled through `finance.allocations` | supplier outstanding totals are reconciled projections |
+| Accounting effect | posted `finance.journal_entries` + `finance.journal_lines` | dashboards and cash forecasts are projections |
 | Tax obligation | versioned transaction tax snapshot | GSTR tables are period filing/reconciliation artifacts |
 
 The candidates above require validation against actual triggers and production

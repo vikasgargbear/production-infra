@@ -1,10 +1,11 @@
 # Render Internal Pilot
 
 `render.yaml` is the active deployment Blueprint for the internal pilot. It
-creates two free services:
+declares three manually deployed services:
 
 - `aasopharma-api-pilot`: the existing FastAPI Docker image
 - `aasopharma-erp-pilot`: the compiled React static site
+- `aasopharma-mcp-pilot`: isolated MCP service contract, currently not ready
 
 This is not the production-readiness claim. Render free services sleep, have
 cold starts, and provide limited scaling controls. The Google Cloud Run template
@@ -20,12 +21,9 @@ have been reviewed.
 The Docker service builds with context `backend/`, runs as a non-root user,
 binds the platform `PORT`, and exposes `GET /health` for process liveness and
 `GET /ready` for Render's database-backed health gate. REST lives under `/api`.
-A future Streamable HTTP MCP transport must mount at
-`/mcp` in this same FastAPI service; do not create a second MCP web service.
-
-The reviewed MCP registry is not a hosted MCP transport today. `/mcp` must not
-be advertised to ChatGPT or Claude until the SDK dependency migration and a real
-OAuth authorization server are implemented and tested.
+The MCP transport is isolated from legacy FastAPI dependency pins in its own
+Python 3.11 service. Do not advertise it to ChatGPT or Claude while `/ready`
+reports the blockers documented in `render-mcp.md`.
 
 ## Configuration
 
@@ -44,8 +42,10 @@ Set these as secret values only in Render, never in Git, Blueprint values,
 Docker build arguments, or frontend variables:
 
 - `DATABASE_URL`
+- `TAX_PROVIDER_DATABASE_URL`
+- `TAX_PROVIDER_INTERNAL_SERVICE_TOKEN`
+- `TAX_PROVIDER_INTERNAL_HMAC_SECRET`
 - `JWT_SECRET_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
 - `SMTP_USER`
 - `SMTP_PASSWORD`
 
@@ -54,7 +54,7 @@ alongside the Supabase settings. Every `sync: false` entry intentionally require
 deployment-time input and contains no repository value.
 
 `REACT_APP_SUPABASE_ANON_KEY` is intentionally public and still relies on
-Supabase RLS. Never put the service-role key, database URL, JWT signing key, or
+Supabase RLS. Never put the database URL, JWT signing key, or
 any other secret in `REACT_APP_*`; Create React App embeds those variables in
 browser JavaScript.
 

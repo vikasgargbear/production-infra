@@ -73,16 +73,6 @@ from .api.routes.finance import tax as tax_entries
 from .api.routes.finance import credit_notes as credit_debit_notes
 from .api.routes.finance import expenses as expense_claims
 
-# Payroll Module
-from .api.routes.payroll import (
-    salary_structure_router,
-    leave_policy_router,
-    attendance_router,
-    leave_router,
-    payroll_run_router,
-    salary_slips_router,
-)
-
 # Compliance Module
 from .api.routes.compliance import gst
 from .api.routes.compliance import gstr2b
@@ -105,9 +95,16 @@ from .api.routes import sync as sync_router
 # Standalone utilities (remain at root level)
 from .api.routes import metadata
 from .api.routes import calculations
-from .api.routes.loyalty import router as loyalty_router
 from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
+from .api.routes.internal import (
+    mcp_actions,
+    mcp_agent_grants,
+    mcp_canonical_reads,
+    mcp_canonical_resolution_reads,
+    tax_provider,
+)
+from .infrastructure.operator_actions import install_sqlalchemy_operator_action_service
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -120,6 +117,7 @@ from .api.routes import schema as schema_router  # Live database schema document
 async def lifespan(app: FastAPI):
     # Initialize structured logging before anything else
     setup_logging()
+    install_sqlalchemy_operator_action_service()
 
     import logging
     logger = logging.getLogger(__name__)
@@ -129,7 +127,7 @@ async def lifespan(app: FastAPI):
     if is_production() and is_test_mode_enabled():
         raise RuntimeError(
             "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
-            "Remove TEST_MODE env var or set APP_ENV/ENV=development."
+            "Remove TEST_MODE env var or set APP_ENV=development."
         )
 
     if is_production():
@@ -254,6 +252,11 @@ api.include_router(auth_enterprise.router, tags=["Authentication"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
 api.include_router(users.router, tags=["Users"])
 api.include_router(role_management.router, tags=["Role Management"])
+api.include_router(mcp_agent_grants.router)
+api.include_router(mcp_canonical_reads.router)
+api.include_router(mcp_canonical_resolution_reads.router)
+api.include_router(mcp_actions.router)
+api.include_router(tax_provider.router)
 
 # --- Audit ---
 api.include_router(audit_router, tags=["Audit Trail"])
@@ -298,14 +301,6 @@ api.include_router(tax_entries.router, prefix="/tax-entries", tags=["Tax Entries
 api.include_router(credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
 api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
-# --- Payroll ---
-api.include_router(salary_structure_router, prefix="/payroll/salary-structures", tags=["Payroll"])
-api.include_router(leave_policy_router, prefix="/payroll/leave-policies", tags=["Payroll"])
-api.include_router(attendance_router, prefix="/payroll/attendance", tags=["Payroll"])
-api.include_router(leave_router, prefix="/payroll/leave", tags=["Payroll"])
-api.include_router(payroll_run_router, prefix="/payroll", tags=["Payroll"])
-api.include_router(salary_slips_router, prefix="/payroll/slips", tags=["Payroll"])
-
 # --- Compliance ---
 api.include_router(gst.router, prefix="/gst", tags=["GST"])
 api.include_router(gstr2b.router, prefix="/gst", tags=["GST"])
@@ -329,7 +324,6 @@ api.include_router(sync_router.router, tags=["Offline Sync"])
 api.include_router(documents.router, tags=["Documents"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
 api.include_router(calculations.router)
-api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 

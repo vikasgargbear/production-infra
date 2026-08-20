@@ -64,6 +64,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     mockAuthStateCallback = undefined;
     localStorage.clear();
+    window.history.replaceState({}, '', '/');
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     mockSignOut.mockResolvedValue({ error: null });
     global.fetch = jest.fn().mockResolvedValue({
@@ -113,6 +114,28 @@ test('Google login uses Supabase PKCE redirect on the current origin', async () 
         provider: 'google',
         options: {
             redirectTo: window.location.origin,
+            queryParams: { prompt: 'select_account' },
+        },
+    });
+});
+
+
+test('Google login returns to the exact consent request without carrying other query data', async () => {
+    window.history.replaceState(
+        {},
+        '',
+        '/oauth/consent?authorization_id=authorization_123456789&untrusted=value',
+    );
+    mockSignInWithOAuth.mockResolvedValue({ data: {}, error: null });
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    await act(async () => currentAuth.loginWithGoogle());
+
+    expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: {
+            redirectTo: `${window.location.origin}/oauth/consent?authorization_id=authorization_123456789`,
             queryParams: { prompt: 'select_account' },
         },
     });

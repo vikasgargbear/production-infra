@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   ShoppingCart,
-  CreditCard,
   ArrowRight,
   RotateCcw,
   Package,
@@ -13,10 +12,8 @@ import {
   Calculator,
   Settings2,
   Bell,
-  Loader2,
-  Banknote
+  Loader2
 } from 'lucide-react';
-import { Card, Button } from './global';
 import NotificationCenter from './global/NotificationCenter';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -45,7 +42,6 @@ const ACTION_MODULE_MAP: Record<string, string> = {
   'gst': 'gst',
   'reports': 'reports',
   'warehouse': 'inventory',
-  'payroll': 'master',
   'master': 'master',
 };
 
@@ -168,14 +164,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       shortcut: 'Ctrl+W'
     },
     {
-      id: 'payroll',
-      tab: 'payroll',
-      title: 'Payroll & HR',
-      subtitle: 'Salary, attendance, leaves, and payslips',
-      icon: Banknote,
-      shortcut: 'Ctrl+Shift+P'
-    },
-    {
       id: 'master',
       tab: 'master',
       title: 'Master Management',
@@ -239,10 +227,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             case 'r':
               e.preventDefault();
               setActiveTab('reports');
-              break;
-            case 'p':
-              e.preventDefault();
-              setActiveTab('payroll');
               break;
             default:
               break;

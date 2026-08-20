@@ -1,0 +1,58 @@
+{
+  "audit_evidence_version": "pg-jsonb-sha256-v1",
+  "blocked_count": 11,
+  "blocked_invariants": {
+    "automation.agent_grant_capabilities:agent_grant_capabilities_revocation": {
+      "reason": "Revocation immutability is locally enforceable, but the parent grant still stores no risk, approval, money, currency, or sensitive-read ceilings against which the capability can be proved."
+    },
+    "automation.command_requests:command_execution_guard": {
+      "reason": "PostgreSQL can lock the request and count approvals, but it cannot re-hash unknown aggregate serializers or dispatch the shared application command exactly once without a reviewed operation registry and stored command API."
+    },
+    "automation.command_requests:command_request_matches_grant": {
+      "reason": "Subject, grant state, expiry, and capability state are locally provable; operation compatibility, request branch, money/currency, and sensitive-read bounds are not persisted as typed request facts."
+    },
+    "catalog.products:products_regulatory_classification": {
+      "reason": "No reviewed, effective-dated CDSCO and NDPS ingredient classification dataset exists. Activation must remain an application preflight blocker rather than embedding unsupported legal classifications in SQL."
+    },
+    "core.access_grants:access_grants_state_transition": {
+      "reason": "Lifecycle and terminal immutability are locally enforceable, but transactional expiry at every authorization use can only be proved by the separately reviewed security permission helper and every caller using it."
+    },
+    "core.data_retention_cases:data_retention_cases_command_guard": {
+      "reason": "Typed eligibility, legal-hold evaluation and subject anonymization require the reviewed core privacy command boundary."
+    },
+    "core.document_sequences:document_sequences_atomic_allocation": {
+      "reason": "The sequence row has no persisted idempotency owner or allocation evidence. A row trigger cannot prove replay ownership, exactly-once allocation, and permanent no-reuse together."
+    },
+    "core.settings:settings_state_transition": {
+      "reason": "Retirement immutability is locally enforceable, but no audit-event identifier, command identifier, or replacement lineage proves that retirement and replacement were one audited reviewed action."
+    },
+    "parties.customer_accounts:customer_accounts_state_transition": {
+      "reason": "Lifecycle and closed-state immutability are locally enforceable, but no command or audit-event reference proves the required audit evidence for credit-limit and credit-day changes."
+    },
+    "parties.parties:parties_state_transition": {
+      "reason": "Lifecycle and archive immutability are locally enforceable, but posted snapshots do not carry a stable source-party version that proves exactly when each identity value became immutable."
+    },
+    "parties.supplier_accounts:supplier_accounts_state_transition": {
+      "reason": "Lifecycle and closed-state immutability are locally enforceable, but no command or audit-event reference proves the required audit evidence for payment-term changes."
+    }
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-invariants-agent-enforcements.json",
+  "mapping_sha256": "c0b80099d667b30318b5436f7ea53fe87c9768ff9c2036c2e4585084be3ecce8",
+  "postgresql": "15+",
+  "resolved_count": 5,
+  "resolved_invariants": [
+    "automation.command_approvals:command_approval_separation_of_duties",
+    "catalog.product_ingredients:active_medicine_has_composition",
+    "catalog.products:products_state_and_first_use",
+    "core.audit_events:audit_events_append_only",
+    "core.organizations:organizations_state_transition"
+  ],
+  "reviewed_count": 16,
+  "security": {
+    "dynamic_sql": false,
+    "function_schema": "erp_invariants_agent",
+    "security_definer": false,
+    "trigger_functions_public_execute": false
+  }
+}

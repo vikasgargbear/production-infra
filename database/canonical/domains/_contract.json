@@ -1,0 +1,91 @@
+{
+  "contract_version": "1.0.0",
+  "status": "reviewed_column_catalog_candidate",
+  "table_count": 110,
+  "domain_files": [
+    "core.json",
+    "parties.json",
+    "catalog.json",
+    "hr.json",
+    "inventory.json",
+    "sales.json",
+    "procurement.json",
+    "finance.json",
+    "tax.json",
+    "compliance.json",
+    "automation.json",
+    "calculation.json"
+  ],
+  "column_tuple": ["name", "postgres_type", "nullable", "default_sql", "sensitivity", "bounded_json_purpose"],
+  "column_rules": {
+    "nullable": "Boolean. False is required for primary-key and tenant-key columns.",
+    "default_sql": "SQL expression string or null when callers must supply a value.",
+    "sensitivity": ["public_reference", "internal", "personal", "financial", "regulated", "secret_ciphertext"],
+    "forbidden_types": ["json", "real", "double precision", "money", "serial", "bigserial"],
+    "identifier": "Externally addressable resources use uuid; application-generated UUIDv7 is preferred and gen_random_uuid() is the Supabase PostgreSQL 15-compatible fallback",
+    "timestamp": "timestamptz",
+    "money": "numeric(20,2)",
+    "calculation": "numeric(20,4)",
+    "quantity": "numeric(20,6)",
+    "rate": "numeric(9,6)",
+    "hash": "bytea containing exactly 32 SHA-256 bytes",
+    "opaque_payload": "bytea plus media type and SHA-256 for exact replay or provider envelopes",
+    "jsonb": "Allowed only when the sixth column-tuple element names configuration, external_payload, or audit_context. Money, quantity, rate, tax components, identifiers used as relationships, permissions, and identifier arrays remain relational columns or child tables."
+  },
+  "required_table_keys": [
+    "name",
+    "fact_owner",
+    "tenant_class",
+    "mutation_class",
+    "cross_row_invariants",
+    "lifecycle",
+    "rls",
+    "retention",
+    "columns",
+    "primary_key",
+    "foreign_keys",
+    "uniques",
+    "checks",
+    "indexes"
+  ],
+  "tenant_classes": {
+    "tenant_direct": "Contains org_id and uses PRIMARY KEY (org_id,id). All tenant and actor FKs include org_id.",
+    "tenant_association": "Pure non-addressable relationship with an org_id-leading natural composite primary key and no surrogate id. All tenant and actor FKs include org_id.",
+    "tenant_projection": "Rebuildable tenant read model with an org_id-leading natural composite primary key and no surrogate id; never owns a source business fact.",
+    "global_identity_root": "Single UUID primary key, but visibility is membership-derived and FORCE RLS is mandatory.",
+    "global_reference": "Stable controlled-code primary key or UUID when externally addressable; runtime is read-only and writes are controlled migrations only."
+  },
+  "global_reference_population_modes": {
+    "application_seed": "Reviewed deterministic rows are required in the baseline before the application can start.",
+    "regulated_import": "The baseline creates an empty ledger; only a reviewed importer command may populate official effective-dated releases."
+  },
+  "rls_classes": {
+    "tenant_membership": "FORCE RLS; org_id must equal app.org_id and app.membership_id must resolve to an active membership in that organization.",
+    "organization_membership": "FORCE RLS; organization id must be one of the verified actor's active memberships; bootstrap uses a bounded security-definer transaction.",
+    "user_shared_membership": "FORCE RLS; self or an authorized actor sharing an active organization may read; mutations require access-management permission.",
+    "global_reference_read_only": "Runtime SELECT only; no runtime INSERT, UPDATE, or DELETE grant."
+  },
+  "foreign_key_shape": {
+    "required_keys": ["name", "columns", "references", "referenced_columns", "cardinality", "on_delete", "deferrable"],
+    "allowed_on_delete": ["RESTRICT", "CASCADE", "SET NULL"],
+    "tenant_rule": "A reference from a tenant table to another tenant table must begin with org_id on both sides.",
+    "actor_rule": "Every membership actor column is paired with local org_id and references core.memberships(org_id,id)."
+  },
+  "index_shape": {
+    "required_keys": ["name", "columns", "unique", "where", "purpose"],
+    "rule": "Tenant indexes begin with org_id. Do not duplicate the primary key or a unique constraint."
+  },
+  "lifecycle_shape": {
+    "required_keys": ["state_column", "states", "initial", "terminal", "transitions"],
+    "not_applicable": "Use null state_column, empty states/terminal/transitions, and null initial."
+  },
+  "cross_row_invariant_shape": {
+    "required_keys": ["name", "enforcement", "rule"],
+    "allowed_enforcement": ["constraint_trigger", "exclusion_constraint", "transaction_guard"]
+  },
+  "delete_policy": "Regulated and actor-evidence rows are never hard-deleted. Master rows are disabled with lifecycle state. CASCADE is limited to replaceable authorization/composition children.",
+  "fact_ownership_rule": "Each table names exactly one authoritative fact. Projections, balances, credentials, files, and Supabase Auth identities remain externally or separately owned.",
+  "bounded_json_purposes": ["configuration", "external_payload", "audit_context"],
+  "json_business_fact_denylist": ["amount", "money", "price", "quantity", "rate", "tax", "gst", "permission", "role_ids", "branch_ids", "foreign_keys"],
+  "unresolved_design_choices": []
+}

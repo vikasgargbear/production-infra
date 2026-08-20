@@ -40,5 +40,5 @@ The gate intentionally fails until all of these are true:
 4. Concurrent claim, tenant isolation, mismatch, replay, and rollback tests run
    against PostgreSQL.
 
-The temporary `internal_notes` backend is disabled when `APP_ENV` or `ENV` is
+The temporary `internal_notes` backend is disabled when `APP_ENV` is
 `production` or `prod`.

@@ -12,6 +12,9 @@ that the target state is already implemented.
   pharmaceutical rule ownership, evidence, and missing release gates.
 - [MCP readiness](mcp-readiness.md): the agent-facing contract, authorization,
   approvals, idempotency, and audit requirements.
+- [`mcp-operator-actions.json`](mcp-operator-actions.json): machine-readable
+  day-to-day prepare, approve, execute, and status contract; all mutation tools
+  remain fail-closed and unexported.
 - [Hosting options, August 2026](hosting-options-2026-08.md): the accepted Render
   internal pilot, production promotion options, and hosted MCP OAuth gates.
 - [Repository boundaries](repository-boundaries.md): the frontend/backend split
@@ -20,6 +23,19 @@ that the target state is already implemented.
   tenant membership resolution, and the target identity model.
 - [Data model for agents](data-model-for-agents.md): rules for deciding whether
   to retain, merge, split, or retire tables.
+- [Canonical data model](canonical-data-model.md): the reviewed wholesale ERP
+  topology, relation cardinalities, type policy, and reset gates. The
+  machine-readable contract owns the current table count.
+- [`canonical-data-model.json`](canonical-data-model.json): machine-readable
+  topology authority and exhaustive disposition of the 184 live app relations.
+- [`canonical-field-dictionary.json`](canonical-field-dictionary.json):
+  generated definitions, types, classifications, constraints, relationships,
+  and semantic IDs for every fully qualified canonical field.
+- [`app-data-contract.json`](app-data-contract.json): application workflow and
+  MCP operation ownership mapped to the canonical model.
+- [`runtime-environment-contract.json`](runtime-environment-contract.json):
+  machine-readable environment-variable names, meanings, formats, defaults,
+  secret boundaries, and cross-service reuse rules.
 - [Legacy retirement](legacy-retirement.md): dependency-evidenced dead-code and
   compatibility cleanup, including canonical agent action mappings.
 - [`legacy-surface-inventory.yaml`](legacy-surface-inventory.yaml):

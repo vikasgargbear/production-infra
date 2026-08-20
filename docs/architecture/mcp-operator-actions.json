@@ -1,0 +1,315 @@
+{
+  "schema_version": "1.0.0",
+  "contract_id": "aasopharma.mcp.operator_actions.v1",
+  "status": "planned_fail_closed",
+  "purpose": "A bounded MCP contract for ordinary Indian pharma ERP operator work. Prepare resolves and validates business input; approval binds a human decision to the immutable preview; execution posts only that approved preview.",
+  "publication": {
+    "operator_actions_exported": false,
+    "writes_exported": false,
+    "fail_closed": true,
+    "release_gates": {
+      "canonical_api_command_boundary_verified": false,
+      "canonical_database_commands_deployed_verified": false,
+      "calculation_tax_inventory_parity_verified": false,
+      "idempotency_concurrency_audit_verified": false,
+      "hosted_oauth_consent_verified": false,
+      "chatgpt_claude_staging_verified": false
+    },
+    "publication_rule": "Every release gate must have reviewed evidence and be true in one atomic release change before any listed tool can enter the live MCP registry. This document alone never enables a tool."
+  },
+  "transport_boundary": {
+    "sequence": ["prepare", "approve", "execute", "status"],
+    "prepare_effect": "Persist a short-lived command request, independently resolve canonical references, recompute calculation and policy impact, and return an immutable preview. It must not post a business document, inventory movement, journal, tax fact, payment allocation, or outbox side effect.",
+    "approve_effect": "Record an authorized human decision against exactly one command_request_id and preview_hash. Approval cannot alter business input.",
+    "execute_effect": "Reauthorize, reload source versions, recompute, compare preview_hash, consume approval once, and atomically post command, idempotency result, audit event, and outbox event.",
+    "execute_allowed_fields": ["command_request_id", "preview_hash", "idempotency_key"],
+    "execute_forbidden_fields": ["business_payload", "payload", "lines", "amount", "billed_quantity", "free_quantity", "quoted_unit_rate", "line_discount", "document_discount", "tax_rate", "branch_id"],
+    "money_and_quantity_encoding": "JSON strings matching ^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,6})?$; binary JSON numbers are forbidden for money, quantity, rates and percentages.",
+    "discount_contract": "Every commercial line and document carries the canonical kind, basis, and exact decimal-string value. Use kind none and value 0 explicitly when no discount applies.",
+    "tax_contract": "Clients never supply GST, cess, withholding rate, tax amount, tax rule ID, or tax split. The backend derives tax from effective dated rules, product classification, registrations, locations, original fiscal lineage and document date.",
+    "batch_contract": "Every physical stock movement names each manufacturer batch and exact quantity. Goods receipt supplies the printed manufacturer batch identity and normalized expiry evidence so the backend can resolve or create the canonical batch.",
+    "tenant_contract": "Organization and actor are always derived from the verified grant. Every write requires explicit authorized branch facts; cross-branch transfers require both branches and reject equal endpoints.",
+    "preview_output_required": [
+      "command_request_id",
+      "preview_hash",
+      "expires_at",
+      "resolved_references",
+      "source_versions",
+      "calculation_ruleset",
+      "inventory_impact",
+      "financial_impact",
+      "tax_impact",
+      "policy_warnings",
+      "required_approvals"
+    ],
+    "typed_errors": [
+      "AUTH_REQUIRED",
+      "SCOPE_DENIED",
+      "BRANCH_DENIED",
+      "AMBIGUOUS_REFERENCE",
+      "VALIDATION_FAILED",
+      "STALE_VERSION",
+      "PREVIEW_EXPIRED",
+      "PREVIEW_CHANGED",
+      "APPROVAL_REQUIRED",
+      "IDEMPOTENCY_CONFLICT",
+      "PERIOD_CLOSED",
+      "INSUFFICIENT_STOCK",
+      "BATCH_BLOCKED",
+      "POLICY_BLOCKED"
+    ]
+  },
+  "resolution_reads": [
+    {
+      "tool": "erp_customer_search",
+      "operation_key": "parties.customers.search",
+      "resource": "parties",
+      "permission": "master.view",
+      "max_records": 50,
+      "description": "Resolve a customer by name, code, GSTIN, or phone inside the active organization; multiple matches require explicit selection."
+    },
+    {
+      "tool": "erp_inventory_location_search",
+      "operation_key": "inventory.locations.search",
+      "resource": "inventory",
+      "permission": "inventory.view",
+      "max_records": 50,
+      "description": "Resolve an authorized branch inventory location by exact code or name."
+    },
+    {
+      "tool": "erp_stock_batch_search",
+      "operation_key": "inventory.stock_batches.search",
+      "resource": "inventory",
+      "permission": "inventory.view",
+      "max_records": 100,
+      "description": "Return bounded batch availability, release state, expiry, location, UOM, reservation, and FEFO rank for one product and branch."
+    },
+    {
+      "tool": "erp_sales_order_get",
+      "operation_key": "sales.orders.get",
+      "resource": "sales_order",
+      "permission": "sales.view",
+      "max_records": 1,
+      "description": "Resolve one sales order by opaque ID or exact order number with remaining line quantities and row version."
+    },
+    {
+      "tool": "erp_sales_invoice_get",
+      "operation_key": "sales.invoices.get",
+      "resource": "sales_invoice",
+      "permission": "sales.view",
+      "max_records": 1,
+      "description": "Resolve one posted sales invoice by opaque ID or exact invoice number with returnable line balances and fiscal lineage."
+    },
+    {
+      "tool": "erp_purchase_order_get",
+      "operation_key": "procurement.purchase_orders.get",
+      "resource": "purchase_order",
+      "permission": "procurement.view",
+      "max_records": 1,
+      "description": "Resolve one purchase order by opaque ID or exact number with remaining receipt and advance quantities."
+    },
+    {
+      "tool": "erp_goods_receipt_get",
+      "operation_key": "procurement.goods_receipts.get",
+      "resource": "goods_receipt",
+      "permission": "procurement.view",
+      "max_records": 1,
+      "description": "Resolve one posted goods receipt by opaque ID or exact number with invoiceable line and batch balances."
+    },
+    {
+      "tool": "erp_supplier_invoice_get",
+      "operation_key": "procurement.supplier_invoices.get",
+      "resource": "supplier_invoice",
+      "permission": "procurement.view",
+      "max_records": 1,
+      "description": "Resolve one posted supplier invoice by opaque ID or exact supplier document number with returnable and payable balances."
+    },
+    {
+      "tool": "erp_open_item_search",
+      "operation_key": "finance.open_items.search",
+      "resource": "payments",
+      "permission": "finance.view",
+      "max_records": 100,
+      "description": "Return bounded receivable or payable open items for one exact party, currency, and branch for explicit allocation."
+    },
+    {
+      "tool": "erp_settlement_choice_search",
+      "operation_key": "finance.settlement_choices.search",
+      "resource": "payments",
+      "permission": "finance.view",
+      "max_records": 100,
+      "description": "Return active matching-currency asset settlement accounts for the delegated branch as explicit cash choices without a bank identity and non-cash choices with one active bank identity."
+    }
+  ],
+  "prepare_actions": [
+    {
+      "tool": "erp_sales_order_prepare",
+      "operation_key": "sales.order.prepare",
+      "resource": "sales_order",
+      "permission": "sales.order.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "commercial_lines",
+      "description": "Prepare a customer sales order with an effective UOM conversion, separate billed/free quantities, four-decimal quoted rate, price basis, explicit line/document discounts, and rounding policy."
+    },
+    {
+      "tool": "erp_sales_dispatch_prepare",
+      "operation_key": "sales.dispatch.prepare",
+      "resource": "dispatch",
+      "permission": "sales.dispatch.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "batched_commercial_lines",
+      "description": "Prepare physical dispatch against an approved sales order with exact released, unexpired manufacturer batches and logistics facts."
+    },
+    {
+      "tool": "erp_sales_invoice_prepare",
+      "operation_key": "sales.invoice.prepare",
+      "resource": "sales_invoice",
+      "permission": "sales.invoice.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "batched_commercial_lines",
+      "description": "Prepare a sales invoice for the India wholesale pilot. Supports normal-charge intra-state, inter-state, and evidenced SEZ supplies; export, outward reverse charge, and SEZ without-payment supplies remain fail-closed. Direct issue requires an exact logistics snapshot, while dispatch allocation never issues stock twice."
+    },
+    {
+      "tool": "erp_sales_return_prepare",
+      "operation_key": "sales.return.prepare",
+      "resource": "sales_return",
+      "permission": "sales.return.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "original_document_return",
+      "description": "Prepare a customer return and credit treatment with original invoice-line ceilings, exact returned batches, quarantine receipt and derived statutory eligibility."
+    },
+    {
+      "tool": "erp_purchase_order_prepare",
+      "operation_key": "procurement.purchase_order.prepare",
+      "resource": "purchase_order",
+      "permission": "procurement.order.manage",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "commercial_lines",
+      "description": "Prepare a normal-charge domestic purchase order for one effective GST-registered regular or casual supplier, with typed product and charge lines, exact UOM/free-quantity valuation, and backend-derived intra/inter-state tax. Import, SEZ, reverse-charge, composition, and unregistered-supplier cases fail closed in the pilot."
+    },
+    {
+      "tool": "erp_goods_receipt_prepare",
+      "operation_key": "procurement.goods_receipt.prepare",
+      "resource": "goods_receipt",
+      "permission": "procurement.receipt.post",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "received_batches",
+      "description": "Prepare an India-pilot GRN against one approved PO with exact billed/free ceilings, manufacturer lot, expiry, tax-inclusive marketed-pack MRP basis, completed accepted/partial QC evidence, destination location, provisional PO-derived MWA cost and immutable source versions. Fully rejected or free-only receipts and unsupported PO tax scopes fail closed."
+    },
+    {
+      "tool": "erp_supplier_invoice_prepare",
+      "operation_key": "procurement.supplier_invoice.prepare",
+      "resource": "supplier_invoice",
+      "permission": "procurement.supplier_invoice.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "commercial_lines",
+      "description": "Prepare a supplier invoice matched to posted goods-receipt lines, preserving supplier document identity and deriving tax independently."
+    },
+    {
+      "tool": "erp_purchase_return_prepare",
+      "operation_key": "procurement.purchase_return.prepare",
+      "resource": "purchase_return",
+      "permission": "procurement.purchase_return.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "original_document_return",
+      "description": "Prepare a supplier return with original supplier-invoice ceilings, explicit batch issue and commercial debit-note versus supplier GST credit-note separation."
+    },
+    {
+      "tool": "erp_customer_receipt_prepare",
+      "operation_key": "finance.customer_receipt.prepare",
+      "resource": "payments",
+      "permission": "finance.customer_receipt.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "payment_allocations",
+      "description": "Prepare an inbound customer receipt with exact amount, method, external reference and receivable allocations."
+    },
+    {
+      "tool": "erp_supplier_payment_prepare",
+      "operation_key": "finance.supplier_payment.prepare",
+      "resource": "payments",
+      "permission": "finance.supplier_payment.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "payment_allocations",
+      "description": "Prepare an outbound supplier payment with gross settlement basis, payable allocations and backend-derived withholding."
+    },
+    {
+      "tool": "erp_supplier_advance_prepare",
+      "operation_key": "finance.supplier_advance.prepare",
+      "resource": "payments",
+      "permission": "finance.supplier_advance.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "supplier_advance",
+      "description": "Prepare a supplier advance allocated to approved product PO lines; gross basis equals net cash plus backend-derived withholding."
+    },
+    {
+      "tool": "erp_inventory_transfer_prepare",
+      "operation_key": "inventory.transfer.prepare",
+      "resource": "inventory",
+      "permission": "inventory.transfer.create",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "interbranch_batched_movement",
+      "description": "Prepare an interbranch stock transfer with distinct source/destination branches and locations, exact batches and logistics."
+    },
+    {
+      "tool": "erp_inventory_adjustment_prepare",
+      "operation_key": "inventory.adjustment.prepare",
+      "resource": "inventory",
+      "permission": "inventory.adjustment.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "controlled_batched_movement",
+      "description": "Prepare an evidenced, reason-coded inventory adjustment with direction and exact product batches."
+    },
+    {
+      "tool": "erp_inventory_destruction_prepare",
+      "operation_key": "inventory.destruction.prepare",
+      "resource": "inventory",
+      "permission": "inventory.destruction.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "controlled_batched_movement",
+      "description": "Prepare authorized destruction of expired, damaged, recalled or quality-rejected stock with exact batches and evidence."
+    }
+  ],
+  "shared_actions": [
+    {
+      "tool": "erp_operation_approve",
+      "operation_key": "automation.command.approve",
+      "resource": "agent_governance",
+      "mode": "write",
+      "risk": "consequential_write",
+      "permission": "automation.command.approve",
+      "allowed_fields": ["command_request_id", "preview_hash", "approval_intent", "idempotency_key"]
+    },
+    {
+      "tool": "erp_operation_execute",
+      "operation_key": "automation.command.execute",
+      "resource": "agent_governance",
+      "mode": "write",
+      "risk": "consequential_write",
+      "permission": "automation.command.execute",
+      "allowed_fields": ["command_request_id", "preview_hash", "idempotency_key"]
+    },
+    {
+      "tool": "erp_operation_status_get",
+      "operation_key": "automation.command.status.get",
+      "resource": "agent_governance",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    }
+  ]
+}

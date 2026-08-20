@@ -1,0 +1,4082 @@
+{
+  "domain": "sales",
+  "table_count": 9,
+  "tables": [
+    {
+      "name": "sales.orders",
+      "fact_owner": "Customer commitment before custody, revenue, tax, or accounting posting.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "document_state_machine",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "submitted",
+          "approved",
+          "partially_fulfilled",
+          "fulfilled",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "fulfilled",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->submitted",
+          "draft->cancelled",
+          "submitted->approved",
+          "submitted->cancelled",
+          "approved->partially_fulfilled",
+          "approved->fulfilled",
+          "approved->cancelled",
+          "partially_fulfilled->fulfilled",
+          "partially_fulfilled->cancelled"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.order.manage"
+      },
+      "retention": {
+        "class": "commercial_document",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "customer_account_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "order_number",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "fiscal_year",
+          "smallint",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "order_date",
+          "date",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "requested_delivery_date",
+          "date",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'",
+          "regulated"
+        ],
+        [
+          "supply_type",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "zero_rated_payment_mode",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "billing_address_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "shipping_address_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "customer_po_number",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "customer_po_date",
+          "date",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'",
+          "financial"
+        ],
+        [
+          "calculation_ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_kind",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_value",
+          "numeric(20,6)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "subtotal",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "discount_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "charges_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "net_value_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "gst_taxable_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "recipient_assessed_tax_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "rounding_policy",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "rounding_adjustment",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "grand_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "approved_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "approved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_orders_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_branch",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_customer",
+          "columns": [
+            "org_id",
+            "customer_account_id"
+          ],
+          "references": "parties.customer_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_billing_address",
+          "columns": [
+            "org_id",
+            "billing_address_id"
+          ],
+          "references": "parties.addresses",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_shipping_address",
+          "columns": [
+            "org_id",
+            "shipping_address_id"
+          ],
+          "references": "parties.addresses",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_approved_by",
+          "columns": [
+            "org_id",
+            "approved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_orders_updated_by",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_sales_orders_number",
+          "columns": [
+            "org_id",
+            "branch_id",
+            "fiscal_year",
+            "order_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_sales_orders_status",
+          "expression": "status IN ('draft','submitted','approved','partially_fulfilled','fulfilled','cancelled')"
+        },
+        {
+          "name": "ck_sales_orders_year",
+          "expression": "fiscal_year BETWEEN 2000 AND 9999"
+        },
+        {
+          "name": "ck_sales_orders_money",
+          "expression": "subtotal>=0 AND discount_total>=0 AND charges_total>=0 AND gst_taxable_total>=0 AND cgst_total>=0 AND sgst_total>=0 AND igst_total>=0 AND cess_total>=0 AND grand_total>=0"
+        },
+        {
+          "name": "ck_sales_orders_approval",
+          "expression": "status NOT IN ('approved','partially_fulfilled','fulfilled') OR (approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "ck_sales_orders_net_gst_totals",
+          "expression": "net_value_total>=0 AND gst_taxable_total>=0 AND gst_taxable_total<=net_value_total"
+        },
+        {
+          "name": "ck_sales_orders_document_discount_kind_basis",
+          "expression": "document_discount_kind IN ('none','percent','amount') AND document_discount_basis IN ('taxable_value','price_value')"
+        },
+        {
+          "name": "ck_sales_orders_document_discount_value",
+          "expression": "(document_discount_kind='none' AND document_discount_value=0) OR (document_discount_kind='percent' AND document_discount_value>=0 AND document_discount_value<=100) OR (document_discount_kind='amount' AND document_discount_value>=0 AND document_discount_value=round(document_discount_value,2))"
+        },
+        {
+          "name": "ck_sales_orders_supply_type",
+          "expression": "supply_type IN ('intra_state','inter_state','export','sez')"
+        },
+        {
+          "name": "ck_sales_orders_zero_rated_payment_mode",
+          "expression": "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst') AND ((supply_type IN ('export','sez') AND zero_rated_payment_mode IN ('without_payment','with_igst')) OR (supply_type NOT IN ('export','sez') AND zero_rated_payment_mode='not_applicable'))"
+        },
+        {
+          "name": "ck_sales_orders_rounding_policy",
+          "expression": "rounding_policy IN ('none','nearest_rupee') AND ((rounding_policy='none' AND rounding_adjustment=0 AND grand_total=net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) OR (rounding_policy='nearest_rupee' AND grand_total=round(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END),0) AND rounding_adjustment=grand_total-(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) AND abs(rounding_adjustment)<=0.50))"
+        },
+        {
+          "name": "ck_sales_orders_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND ((tax_charge_mechanism='normal' AND recipient_assessed_tax_total=0) OR (tax_charge_mechanism='reverse_charge' AND recipient_assessed_tax_total=cgst_total+sgst_total+igst_total+cess_total))"
+        },
+        {
+          "name": "ck_sales_orders_tax_component_totals",
+          "expression": "((supply_type='intra_state') AND igst_total=0 AND cgst_total=sgst_total) OR ((supply_type IN ('inter_state','export','sez')) AND cgst_total=0 AND sgst_total=0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_sales_orders_customer_status",
+          "columns": [
+            "org_id",
+            "customer_account_id",
+            "status",
+            "order_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Customer order history and fulfilment queue."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_orders_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Approval recomputes typed product and charge lines and header amounts under calculation_ruleset_version, validates effective HSN/SAC tax versions on order_date, and freezes approved commercial terms. Header net_value_total and gst_taxable_total must equal their rounded line sums. Persist document_discount_kind, document_discount_basis, and document_discount_value; discount_total must equal line_discount_amount plus allocated document_discount_amount across lines. zero_rated taxability is valid only for export/SEZ: zero_rated_payment_mode without_payment requires zero GST, while with_igst requires IGST only and preserves refund context. rounding_policy is immutable and pre-round net value plus tax components plus rounding_adjustment must equal grand_total. tax_charge_mechanism is uniform across lines: normal tax is part of counterparty grand_total; reverse_charge tax is excluded from payable and summed in recipient_assessed_tax_total."
+        }
+      ]
+    },
+    {
+      "name": "sales.order_lines",
+      "fact_owner": "An ordered product quantity and immutable commercial/tax calculation snapshot.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "document_child_approved_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.order.manage"
+      },
+      "retention": {
+        "class": "commercial_document_child",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "order_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_kind",
+          "text",
+          false,
+          "'product'",
+          "regulated"
+        ],
+        [
+          "product_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "charge_code",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_code",
+          "varchar(16)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_conversion_factor",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "billed_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "free_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "base_billed_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "base_free_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "free_supply_tax_treatment",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "quoted_unit_rate",
+          "numeric(20,4)",
+          true,
+          null,
+          "financial"
+        ],
+        [
+          "price_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gross_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "line_discount_kind",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_value",
+          "numeric(20,6)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_discount_eligible",
+          "boolean",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "line_taxable_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_taxable_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "tax_classification_code_snapshot",
+          "varchar(8)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_code_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "taxability_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "cgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "line_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_order_lines_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_order_lines_order",
+          "columns": [
+            "org_id",
+            "order_id"
+          ],
+          "references": "sales.orders",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_order_lines_product",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_order_lines_uom",
+          "columns": [
+            "uom_code"
+          ],
+          "references": "catalog.units_of_measure",
+          "referenced_columns": [
+            "code"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_order_lines_tax_code_version",
+          "columns": [
+            "tax_code_version_id"
+          ],
+          "references": "tax.tax_code_versions",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_order_lines_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_order_lines_number",
+          "columns": [
+            "org_id",
+            "order_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_sales_order_lines_line_kind",
+          "expression": "line_kind IN ('product','charge')"
+        },
+        {
+          "name": "ck_sales_order_lines_charge_code",
+          "expression": "charge_code IS NULL OR charge_code IN ('freight','packing','insurance','handling','other')"
+        },
+        {
+          "name": "ck_sales_order_lines_price_basis",
+          "expression": "price_basis IN ('tax_exclusive','tax_inclusive')"
+        },
+        {
+          "name": "ck_sales_order_lines_free_supply_tax_treatment",
+          "expression": "(line_kind='product' AND free_supply_tax_treatment IN ('excluded_from_taxable_value','included_at_unit_rate')) OR (line_kind='charge' AND free_supply_tax_treatment IS NULL)"
+        },
+        {
+          "name": "ck_sales_order_lines_uom_conversion",
+          "expression": "line_kind='charge' OR (base_billed_quantity=round(billed_quantity*uom_conversion_factor,6) AND base_free_quantity=round(free_quantity*uom_conversion_factor,6))"
+        },
+        {
+          "name": "ck_sales_order_lines_typed_payload",
+          "expression": "(line_kind='product' AND product_id IS NOT NULL AND charge_code IS NULL AND uom_code IS NOT NULL AND uom_conversion_factor IS NOT NULL AND uom_conversion_factor>0 AND billed_quantity IS NOT NULL AND free_quantity IS NOT NULL AND base_billed_quantity IS NOT NULL AND base_free_quantity IS NOT NULL AND billed_quantity>=0 AND free_quantity>=0 AND billed_quantity+free_quantity>0 AND base_billed_quantity>=0 AND base_free_quantity>=0 AND base_billed_quantity+base_free_quantity>0 AND free_supply_tax_treatment IS NOT NULL AND quoted_unit_rate IS NOT NULL AND quoted_unit_rate>=0) OR (line_kind='charge' AND product_id IS NULL AND charge_code IS NOT NULL AND uom_code IS NULL AND uom_conversion_factor IS NULL AND billed_quantity IS NULL AND free_quantity IS NULL AND base_billed_quantity IS NULL AND base_free_quantity IS NULL AND free_supply_tax_treatment IS NULL AND quoted_unit_rate IS NULL)"
+        },
+        {
+          "name": "ck_sales_order_lines_money",
+          "expression": "gross_amount>=0 AND line_discount_amount>=0 AND line_taxable_discount_amount>=0 AND document_discount_amount>=0 AND document_taxable_discount_amount>=0 AND gst_taxable_value>=0 AND cgst_amount>=0 AND sgst_amount>=0 AND igst_amount>=0 AND cess_amount>=0 AND line_total>=0"
+        },
+        {
+          "name": "ck_sales_order_lines_tax_rates",
+          "expression": "cgst_rate>=0 AND sgst_rate>=0 AND igst_rate>=0 AND cess_rate>=0"
+        },
+        {
+          "name": "ck_sales_order_lines_line_discount_kind_basis",
+          "expression": "line_discount_kind IN ('none','percent','amount') AND line_discount_basis IN ('taxable_value','price_value') AND (line_kind<>'charge' OR line_discount_kind='none')"
+        },
+        {
+          "name": "ck_sales_order_lines_line_discount_value",
+          "expression": "(line_discount_kind='none' AND line_discount_value=0) OR (line_discount_kind='percent' AND line_discount_value>=0 AND line_discount_value<=100) OR (line_discount_kind='amount' AND line_discount_value>=0 AND line_discount_value=round(line_discount_value,2))"
+        },
+        {
+          "name": "ck_sales_order_lines_discount_outputs",
+          "expression": "line_discount_amount>=0 AND line_taxable_discount_amount>=0 AND document_discount_amount>=0 AND document_taxable_discount_amount>=0 AND net_value_amount>=0 AND gst_taxable_value>=0 AND gst_taxable_value<=net_value_amount"
+        },
+        {
+          "name": "ck_sales_order_lines_taxability_snapshot",
+          "expression": "taxability_snapshot IN ('taxable','zero_rated','exempt','nil_rated','non_gst')"
+        },
+        {
+          "name": "ck_sales_order_lines_taxability_value_shape",
+          "expression": "(taxability_snapshot IN ('taxable','zero_rated') AND gst_taxable_value=net_value_amount) OR (taxability_snapshot IN ('exempt','nil_rated','non_gst') AND gst_taxable_value=0 AND cgst_rate=0 AND sgst_rate=0 AND igst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0)"
+        },
+        {
+          "name": "ck_sales_order_lines_zero_rated_tax",
+          "expression": "taxability_snapshot<>'zero_rated' OR (cgst_rate=0 AND sgst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND cess_amount=0)"
+        },
+        {
+          "name": "ck_sales_order_lines_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND (tax_charge_mechanism<>'reverse_charge' OR (price_basis='tax_exclusive' AND taxability_snapshot<>'zero_rated' AND line_discount_basis='taxable_value'))"
+        },
+        {
+          "name": "ck_sales_order_lines_reverse_charge_payable",
+          "expression": "(tax_charge_mechanism='normal' AND line_total=net_value_amount+cgst_amount+sgst_amount+igst_amount+cess_amount) OR (tax_charge_mechanism='reverse_charge' AND line_total=net_value_amount)"
+        },
+        {
+          "name": "ck_sales_order_lines_tax_component_shape",
+          "expression": "(igst_rate=0 AND cgst_rate=sgst_rate AND cgst_amount=sgst_amount) OR (cgst_rate=0 AND sgst_rate=0 AND cgst_amount=0 AND sgst_amount=0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_order_lines_product",
+          "columns": [
+            "org_id",
+            "product_id",
+            "order_id"
+          ],
+          "unique": false,
+          "where": "line_kind = 'product'",
+          "purpose": "Product demand and fulfilment lookup."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_order_lines_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "For product rows, derive base_billed_quantity and base_free_quantity from the immutable uom_conversion_factor at six-decimal precision. Recompute product quantities or typed charge amounts using the persisted tax-exclusive or tax-inclusive price_basis; apply the explicit free_supply_tax_treatment to product gross value, then discounts, taxable value, tax amounts, and line total. Reject tax_code_version_id outside its effective period. Only product lines may be dispatched, reserved, or allocated. Persist line discount kind/basis/value, document-discount eligibility and both nominal/taxable discount allocations; all outputs must match the canonical engine exactly. taxability_snapshot must match the effective tax-code default, except zero_rated is allowed only for qualifying export/SEZ header context with preserved ITC/refund treatment. net_value_amount retains all pre-tax payable value while gst_taxable_value excludes exempt, nil-rated and non-GST value. For zero_rated lines, enforce the header mode: without_payment has zero components; with_igst permits only IGST and must match the effective rate. tax_charge_mechanism must equal the header; reverse_charge requires tax-exclusive pricing and pre-tax discount basis, records compliance tax components, and excludes those components from line_total. Intra-state component rates and rounded amounts have exact CGST=SGST equality; inter-state/zero-rated-with-IGST has zero CGST and SGST."
+        }
+      ]
+    },
+    {
+      "name": "sales.dispatches",
+      "fact_owner": "Customer custody transfer evidence before or with invoicing.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "document_state_machine_posted_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "posted",
+          "cancelled",
+          "reversed"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "cancelled",
+          "reversed"
+        ],
+        "transitions": [
+          "draft->posted",
+          "draft->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.dispatch.post"
+      },
+      "retention": {
+        "class": "regulated_dispatch",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "customer_account_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "dispatch_number",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "fiscal_year",
+          "smallint",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "dispatch_date",
+          "date",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'",
+          "regulated"
+        ],
+        [
+          "shipping_address_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        ["origin_address_line1", "text", true, null, "regulated"],
+        ["origin_address_line2", "text", true, null, "regulated"],
+        ["origin_city", "text", true, null, "regulated"],
+        ["origin_state_code", "char(2)", true, null, "regulated"],
+        ["origin_pincode", "char(6)", true, null, "regulated"],
+        ["destination_address_line1", "text", true, null, "regulated"],
+        ["destination_address_line2", "text", true, null, "regulated"],
+        ["destination_city", "text", true, null, "regulated"],
+        ["destination_state_code", "char(2)", true, null, "regulated"],
+        ["destination_pincode", "char(6)", true, null, "regulated"],
+        ["transport_mode", "text", true, null, "regulated"],
+        ["distance_km", "numeric(12,2)", true, null, "regulated"],
+        ["transporter_party_id", "uuid", true, null, "regulated"],
+        [
+          "transporter_name",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "transporter_gstin",
+          "varchar(15)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "vehicle_number",
+          "varchar(20)",
+          true,
+          null,
+          "regulated"
+        ],
+        ["vehicle_type", "text", true, null, "regulated"],
+        [
+          "transport_document_number",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        ["transport_document_date", "date", true, null, "regulated"],
+        ["movement_started_at", "timestamptz", true, null, "regulated"],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_dispatches_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_branch",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_customer",
+          "columns": [
+            "org_id",
+            "customer_account_id"
+          ],
+          "references": "parties.customer_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_shipping",
+          "columns": [
+            "org_id",
+            "shipping_address_id"
+          ],
+          "references": "parties.addresses",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_transporter_party",
+          "columns": ["org_id", "transporter_party_id"],
+          "references": "parties.parties",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_posted_by",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatches_updated_by",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_dispatches_number",
+          "columns": [
+            "org_id",
+            "branch_id",
+            "fiscal_year",
+            "dispatch_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_dispatches_status",
+          "expression": "status IN ('draft','posted','cancelled','reversed')"
+        },
+        {
+          "name": "ck_dispatches_year",
+          "expression": "fiscal_year BETWEEN 2000 AND 9999"
+        },
+        {
+          "name": "ck_dispatches_posted",
+          "expression": "status NOT IN ('posted','reversed') OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "ck_dispatches_logistics_snapshot",
+          "expression": "status NOT IN ('posted','reversed') OR (btrim(origin_address_line1)<>'' AND btrim(origin_city)<>'' AND origin_state_code~'^[0-9]{2}$' AND origin_pincode~'^[0-9]{6}$' AND btrim(destination_address_line1)<>'' AND btrim(destination_city)<>'' AND destination_state_code~'^[0-9]{2}$' AND destination_pincode~'^[0-9]{6}$' AND transport_mode IN ('road','rail','air','ship','multimodal','in_person') AND distance_km>=0 AND movement_started_at IS NOT NULL AND ((transport_mode='road' AND vehicle_number IS NOT NULL AND vehicle_type IN ('regular','over_dimensional_cargo')) OR (transport_mode IN ('rail','air','ship','multimodal') AND transport_document_number IS NOT NULL AND transport_document_date IS NOT NULL) OR transport_mode='in_person') AND (transporter_gstin IS NULL OR transporter_gstin~'^[0-9]{2}[A-Z0-9]{13}$'))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_dispatches_customer_status",
+          "columns": [
+            "org_id",
+            "customer_account_id",
+            "status",
+            "dispatch_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Customer dispatch history and posting queue."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_dispatches_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Posting verifies line quantities do not exceed approved order quantities, locks released manufacturer batches with dispatch_date strictly earlier than expires_on, freezes the exact origin/destination address and pincode, mode, distance, transporter, vehicle or transport-document and movement-start snapshot, and creates exactly one typed inventory document without writing stock directly. The inventory document physical snapshot must equal this dispatch snapshot field-for-field; e-way evidence binds the physical inventory document and optional fiscal tax document."
+        }
+      ]
+    },
+    {
+      "name": "sales.dispatch_lines",
+      "fact_owner": "A batch-specific custody transfer allocated to one order line.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "document_child_posted_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.dispatch.post"
+      },
+      "retention": {
+        "class": "regulated_dispatch_child",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "dispatch_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "order_line_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "product_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "batch_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "from_location_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_code",
+          "varchar(16)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "billed_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "free_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "regulated"
+        ],
+        [
+          "base_billed_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "base_free_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_dispatch_lines_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_dispatch",
+          "columns": [
+            "org_id",
+            "dispatch_id"
+          ],
+          "references": "sales.dispatches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_order_line",
+          "columns": [
+            "org_id",
+            "order_line_id"
+          ],
+          "references": "sales.order_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_product",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_batch",
+          "columns": [
+            "org_id",
+            "batch_id"
+          ],
+          "references": "inventory.batches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_location",
+          "columns": [
+            "org_id",
+            "from_location_id"
+          ],
+          "references": "inventory.locations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_uom",
+          "columns": [
+            "uom_code"
+          ],
+          "references": "catalog.units_of_measure",
+          "referenced_columns": [
+            "code"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_dispatch_lines_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_dispatch_lines_number",
+          "columns": [
+            "org_id",
+            "dispatch_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_dispatch_lines_quantities",
+          "expression": "billed_quantity>=0 AND free_quantity>=0 AND base_billed_quantity>=0 AND base_free_quantity>=0 AND base_billed_quantity+base_free_quantity>0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_dispatch_lines_order_line",
+          "columns": [
+            "org_id",
+            "order_line_id",
+            "dispatch_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Cumulative order fulfilment ceiling."
+        },
+        {
+          "name": "ix_dispatch_lines_batch",
+          "columns": [
+            "org_id",
+            "batch_id",
+            "dispatch_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Batch traceability."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_dispatch_lines_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Require the source order line to be line_kind product; enforce product identity, batch/product identity, location branch ownership, UOM conversion, and cumulative billed/free dispatch ceilings."
+        }
+      ]
+    },
+    {
+      "name": "sales.invoices",
+      "fact_owner": "Posted customer fiscal invoice and immutable tax snapshot.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "fiscal_document_state_machine_posted_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "posted",
+          "cancelled",
+          "reversed"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "cancelled",
+          "reversed"
+        ],
+        "transitions": [
+          "draft->posted",
+          "draft->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.invoice.post"
+      },
+      "retention": {
+        "class": "statutory_fiscal_document",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "customer_account_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "seller_tax_registration_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "customer_tax_registration_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_number",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "fiscal_year",
+          "smallint",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_date",
+          "date",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "due_date",
+          "date",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_type",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'",
+          "regulated"
+        ],
+        [
+          "supply_type",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "zero_rated_payment_mode",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "place_of_supply_state_code",
+          "char(2)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "calculation_ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_kind",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "document_discount_value",
+          "numeric(20,6)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "seller_legal_name_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "seller_gstin_snapshot",
+          "varchar(15)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "seller_address_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "buyer_legal_name_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "buyer_gstin_snapshot",
+          "varchar(15)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "buyer_address_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'",
+          "financial"
+        ],
+        [
+          "subtotal",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "discount_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "charges_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "net_value_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "gst_taxable_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "recipient_assessed_tax_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "rounding_policy",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "rounding_adjustment",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "grand_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_invoices_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_branch",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_customer",
+          "columns": [
+            "org_id",
+            "customer_account_id"
+          ],
+          "references": "parties.customer_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_seller_registration",
+          "columns": [
+            "org_id",
+            "seller_tax_registration_id"
+          ],
+          "references": "tax.registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_customer_registration",
+          "columns": [
+            "org_id",
+            "customer_tax_registration_id"
+          ],
+          "references": "parties.tax_registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_posted_by",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoices_updated_by",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_invoices_number",
+          "columns": [
+            "org_id",
+            "seller_tax_registration_id",
+            "fiscal_year",
+            "invoice_type",
+            "invoice_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_invoices_status",
+          "expression": "status IN ('draft','posted','cancelled','reversed')"
+        },
+        {
+          "name": "ck_invoices_type",
+          "expression": "invoice_type IN ('tax_invoice','bill_of_supply')"
+        },
+        {
+          "name": "ck_invoices_supply",
+          "expression": "supply_type IN ('intra_state','inter_state','export','sez')"
+        },
+        {
+          "name": "ck_invoices_money",
+          "expression": "subtotal>=0 AND discount_total>=0 AND charges_total>=0 AND gst_taxable_total>=0 AND cgst_total>=0 AND sgst_total>=0 AND igst_total>=0 AND cess_total>=0 AND grand_total>=0"
+        },
+        {
+          "name": "ck_invoices_posted",
+          "expression": "status NOT IN ('posted','reversed') OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "ck_sales_invoices_net_gst_totals",
+          "expression": "net_value_total>=0 AND gst_taxable_total>=0 AND gst_taxable_total<=net_value_total"
+        },
+        {
+          "name": "ck_sales_invoices_document_discount_kind_basis",
+          "expression": "document_discount_kind IN ('none','percent','amount') AND document_discount_basis IN ('taxable_value','price_value')"
+        },
+        {
+          "name": "ck_sales_invoices_document_discount_value",
+          "expression": "(document_discount_kind='none' AND document_discount_value=0) OR (document_discount_kind='percent' AND document_discount_value>=0 AND document_discount_value<=100) OR (document_discount_kind='amount' AND document_discount_value>=0 AND document_discount_value=round(document_discount_value,2))"
+        },
+        {
+          "name": "ck_sales_invoices_supply_type",
+          "expression": "supply_type IN ('intra_state','inter_state','export','sez')"
+        },
+        {
+          "name": "ck_sales_invoices_zero_rated_payment_mode",
+          "expression": "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst') AND ((supply_type IN ('export','sez') AND zero_rated_payment_mode IN ('without_payment','with_igst')) OR (supply_type NOT IN ('export','sez') AND zero_rated_payment_mode='not_applicable'))"
+        },
+        {
+          "name": "ck_sales_invoices_rounding_policy",
+          "expression": "rounding_policy IN ('none','nearest_rupee') AND ((rounding_policy='none' AND rounding_adjustment=0 AND grand_total=net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) OR (rounding_policy='nearest_rupee' AND grand_total=round(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END),0) AND rounding_adjustment=grand_total-(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) AND abs(rounding_adjustment)<=0.50))"
+        },
+        {
+          "name": "ck_sales_invoices_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND ((tax_charge_mechanism='normal' AND recipient_assessed_tax_total=0) OR (tax_charge_mechanism='reverse_charge' AND recipient_assessed_tax_total=cgst_total+sgst_total+igst_total+cess_total))"
+        },
+        {
+          "name": "ck_sales_invoices_tax_component_totals",
+          "expression": "((supply_type='intra_state') AND igst_total=0 AND cgst_total=sgst_total) OR ((supply_type IN ('inter_state','export','sez')) AND cgst_total=0 AND sgst_total=0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_invoices_customer_date",
+          "columns": [
+            "org_id",
+            "customer_account_id",
+            "invoice_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Customer invoice history."
+        },
+        {
+          "name": "ix_invoices_registration_date",
+          "columns": [
+            "org_id",
+            "seller_tax_registration_id",
+            "invoice_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "GST return extraction."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_invoices_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Posting accepts only tax_invoice or bill_of_supply; credit and debit adjustments are owned by finance.adjustment_notes. It recomputes and verifies typed product/charge lines and header totals, validates HSN/SAC tax versions on invoice_date, freezes tax snapshots, and creates exactly one tax document, receivable open item, and accounting event. Header net_value_total and gst_taxable_total must equal their rounded line sums. Persist document_discount_kind, document_discount_basis, and document_discount_value; discount_total must equal line_discount_amount plus allocated document_discount_amount across lines. zero_rated taxability is valid only for export/SEZ: zero_rated_payment_mode without_payment requires zero GST, while with_igst requires IGST only and preserves refund context. rounding_policy is immutable and pre-round net value plus tax components plus rounding_adjustment must equal grand_total. tax_charge_mechanism is uniform across lines: normal tax is part of counterparty grand_total; reverse_charge tax is excluded from payable and summed in recipient_assessed_tax_total. Posting must carry the mechanism and recipient-assessed components and zero organization self-assessed tax into exactly one tax.documents record and accounting event for liability and eligible ITC treatment."
+        },
+        {
+          "name": "sales_invoices_invariant_2",
+          "enforcement": "transaction_guard",
+          "rule": "An invoice owns exactly one typed inventory document when at least one product line is direct_issue. Each product line has exactly one fulfillment source: direct lines are represented exactly once in the invoice-owned issue, while dispatch-allocated lines have exact posted dispatch allocation lineage and never issue stock again. Mixed invoices remain one atomic commercial aggregate without double stock or COGS."
+        }
+      ]
+    },
+    {
+      "name": "sales.invoice_lines",
+      "fact_owner": "An invoiced product quantity and immutable commercial/tax calculation snapshot.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "fiscal_document_child_posted_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.invoice.post"
+      },
+      "retention": {
+        "class": "statutory_fiscal_document_child",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "invoice_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_kind",
+          "text",
+          false,
+          "'product'",
+          "regulated"
+        ],
+        [
+          "order_line_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "product_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "charge_code",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_code",
+          "varchar(16)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_conversion_factor",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "billed_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "free_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "base_billed_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "base_free_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "free_supply_tax_treatment",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "quoted_unit_rate",
+          "numeric(20,4)",
+          true,
+          null,
+          "financial"
+        ],
+        [
+          "price_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gross_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "line_discount_kind",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_value",
+          "numeric(20,6)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_discount_eligible",
+          "boolean",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "line_taxable_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "document_taxable_discount_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "tax_classification_code_snapshot",
+          "varchar(8)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_code_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "taxability_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "revenue_account_id",
+          "uuid",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "cgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "line_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_invoice_lines_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_invoice",
+          "columns": [
+            "org_id",
+            "invoice_id"
+          ],
+          "references": "sales.invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_order_line",
+          "columns": [
+            "org_id",
+            "order_line_id"
+          ],
+          "references": "sales.order_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_product",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_uom",
+          "columns": [
+            "uom_code"
+          ],
+          "references": "catalog.units_of_measure",
+          "referenced_columns": [
+            "code"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_tax_code_version",
+          "columns": [
+            "tax_code_version_id"
+          ],
+          "references": "tax.tax_code_versions",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_revenue_account",
+          "columns": [
+            "org_id",
+            "revenue_account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_lines_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_invoice_lines_number",
+          "columns": [
+            "org_id",
+            "invoice_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_sales_invoice_lines_line_kind",
+          "expression": "line_kind IN ('product','charge')"
+        },
+        {
+          "name": "ck_sales_invoice_lines_charge_code",
+          "expression": "charge_code IS NULL OR charge_code IN ('freight','packing','insurance','handling','other')"
+        },
+        {
+          "name": "ck_sales_invoice_lines_price_basis",
+          "expression": "price_basis IN ('tax_exclusive','tax_inclusive')"
+        },
+        {
+          "name": "ck_sales_invoice_lines_free_supply_tax_treatment",
+          "expression": "(line_kind='product' AND free_supply_tax_treatment IN ('excluded_from_taxable_value','included_at_unit_rate')) OR (line_kind='charge' AND free_supply_tax_treatment IS NULL)"
+        },
+        {
+          "name": "ck_sales_invoice_lines_uom_conversion",
+          "expression": "line_kind='charge' OR (base_billed_quantity=round(billed_quantity*uom_conversion_factor,6) AND base_free_quantity=round(free_quantity*uom_conversion_factor,6))"
+        },
+        {
+          "name": "ck_sales_invoice_lines_typed_payload",
+          "expression": "(line_kind='product' AND product_id IS NOT NULL AND charge_code IS NULL AND uom_code IS NOT NULL AND uom_conversion_factor IS NOT NULL AND uom_conversion_factor>0 AND billed_quantity IS NOT NULL AND free_quantity IS NOT NULL AND base_billed_quantity IS NOT NULL AND base_free_quantity IS NOT NULL AND billed_quantity>=0 AND free_quantity>=0 AND billed_quantity+free_quantity>0 AND base_billed_quantity>=0 AND base_free_quantity>=0 AND base_billed_quantity+base_free_quantity>0 AND free_supply_tax_treatment IS NOT NULL AND quoted_unit_rate IS NOT NULL AND quoted_unit_rate>=0) OR (line_kind='charge' AND product_id IS NULL AND charge_code IS NOT NULL AND uom_code IS NULL AND uom_conversion_factor IS NULL AND billed_quantity IS NULL AND free_quantity IS NULL AND base_billed_quantity IS NULL AND base_free_quantity IS NULL AND free_supply_tax_treatment IS NULL AND quoted_unit_rate IS NULL)"
+        },
+        {
+          "name": "ck_sales_invoice_lines_money",
+          "expression": "gross_amount>=0 AND line_discount_amount>=0 AND line_taxable_discount_amount>=0 AND document_discount_amount>=0 AND document_taxable_discount_amount>=0 AND gst_taxable_value>=0 AND cgst_amount>=0 AND sgst_amount>=0 AND igst_amount>=0 AND cess_amount>=0 AND line_total>=0"
+        },
+        {
+          "name": "ck_sales_invoice_lines_tax_rates",
+          "expression": "cgst_rate>=0 AND sgst_rate>=0 AND igst_rate>=0 AND cess_rate>=0"
+        },
+        {
+          "name": "ck_sales_invoice_lines_line_discount_kind_basis",
+          "expression": "line_discount_kind IN ('none','percent','amount') AND line_discount_basis IN ('taxable_value','price_value') AND (line_kind<>'charge' OR line_discount_kind='none')"
+        },
+        {
+          "name": "ck_sales_invoice_lines_line_discount_value",
+          "expression": "(line_discount_kind='none' AND line_discount_value=0) OR (line_discount_kind='percent' AND line_discount_value>=0 AND line_discount_value<=100) OR (line_discount_kind='amount' AND line_discount_value>=0 AND line_discount_value=round(line_discount_value,2))"
+        },
+        {
+          "name": "ck_sales_invoice_lines_discount_outputs",
+          "expression": "line_discount_amount>=0 AND line_taxable_discount_amount>=0 AND document_discount_amount>=0 AND document_taxable_discount_amount>=0 AND net_value_amount>=0 AND gst_taxable_value>=0 AND gst_taxable_value<=net_value_amount"
+        },
+        {
+          "name": "ck_sales_invoice_lines_taxability_snapshot",
+          "expression": "taxability_snapshot IN ('taxable','zero_rated','exempt','nil_rated','non_gst')"
+        },
+        {
+          "name": "ck_sales_invoice_lines_taxability_value_shape",
+          "expression": "(taxability_snapshot IN ('taxable','zero_rated') AND gst_taxable_value=net_value_amount) OR (taxability_snapshot IN ('exempt','nil_rated','non_gst') AND gst_taxable_value=0 AND cgst_rate=0 AND sgst_rate=0 AND igst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0)"
+        },
+        {
+          "name": "ck_sales_invoice_lines_zero_rated_tax",
+          "expression": "taxability_snapshot<>'zero_rated' OR (cgst_rate=0 AND sgst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND cess_amount=0)"
+        },
+        {
+          "name": "ck_sales_invoice_lines_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND (tax_charge_mechanism<>'reverse_charge' OR (price_basis='tax_exclusive' AND taxability_snapshot<>'zero_rated' AND line_discount_basis='taxable_value'))"
+        },
+        {
+          "name": "ck_sales_invoice_lines_reverse_charge_payable",
+          "expression": "(tax_charge_mechanism='normal' AND line_total=net_value_amount+cgst_amount+sgst_amount+igst_amount+cess_amount) OR (tax_charge_mechanism='reverse_charge' AND line_total=net_value_amount)"
+        },
+        {
+          "name": "ck_sales_invoice_lines_tax_component_shape",
+          "expression": "(igst_rate=0 AND cgst_rate=sgst_rate AND cgst_amount=sgst_amount) OR (cgst_rate=0 AND sgst_rate=0 AND cgst_amount=0 AND sgst_amount=0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_invoice_lines_product",
+          "columns": [
+            "org_id",
+            "product_id",
+            "invoice_id"
+          ],
+          "unique": false,
+          "where": "line_kind = 'product'",
+          "purpose": "Product sales and recall traceability."
+        },
+        {
+          "name": "ix_invoice_lines_order",
+          "columns": [
+            "org_id",
+            "order_line_id",
+            "invoice_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Order billing history."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_invoice_lines_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "For product rows, derive base_billed_quantity and base_free_quantity from the immutable uom_conversion_factor at six-decimal precision. Recompute product quantities or typed charge amounts using persisted price_basis and product free_supply_tax_treatment, then discounts, taxable value, tax amounts, and line total from the immutable HSN/SAC tax version and calculation ruleset. Posted price basis, UOM conversion, free-supply treatment, and revenue_account_id are immutable; posting locks an active same-tenant income account for every line. Only product lines may allocate to dispatches or issue inventory. Persist line discount kind/basis/value, document-discount eligibility and both nominal/taxable discount allocations; all outputs must match the canonical engine exactly. taxability_snapshot must match the effective tax-code default, except zero_rated is allowed only for qualifying export/SEZ header context with preserved ITC/refund treatment. net_value_amount retains all pre-tax payable value while gst_taxable_value excludes exempt, nil-rated and non-GST value. For zero_rated lines, enforce the header mode: without_payment has zero components; with_igst permits only IGST and must match the effective rate. tax_charge_mechanism must equal the header; reverse_charge requires tax-exclusive pricing and pre-tax discount basis, records compliance tax components, and excludes those components from line_total. Intra-state component rates and rounded amounts have exact CGST=SGST equality; inter-state/zero-rated-with-IGST has zero CGST and SGST."
+        }
+      ]
+    },
+    {
+      "name": "sales.invoice_dispatch_allocations",
+      "fact_owner": "Auditable many-to-many billed/free quantity allocation between invoice and dispatch lines.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "allocation_append_only_posted",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.invoice.post"
+      },
+      "retention": {
+        "class": "statutory_allocation",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "invoice_line_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "dispatch_line_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "allocated_base_billed_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "regulated"
+        ],
+        [
+          "allocated_base_free_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_invoice_dispatch_allocations_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_dispatch_alloc_invoice_line",
+          "columns": [
+            "org_id",
+            "invoice_line_id"
+          ],
+          "references": "sales.invoice_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_dispatch_alloc_dispatch_line",
+          "columns": [
+            "org_id",
+            "dispatch_line_id"
+          ],
+          "references": "sales.dispatch_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_invoice_dispatch_alloc_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_invoice_dispatch_alloc_pair",
+          "columns": [
+            "org_id",
+            "invoice_line_id",
+            "dispatch_line_id"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_invoice_dispatch_alloc_quantity",
+          "expression": "allocated_base_billed_quantity>=0 AND allocated_base_free_quantity>=0 AND allocated_base_billed_quantity+allocated_base_free_quantity>0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_invoice_dispatch_alloc_dispatch",
+          "columns": [
+            "org_id",
+            "dispatch_line_id",
+            "invoice_line_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Dispatch-side allocation ceiling."
+        },
+        {
+          "name": "ix_invoice_dispatch_alloc_invoice",
+          "columns": [
+            "org_id",
+            "invoice_line_id",
+            "dispatch_line_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Invoice-side allocation ceiling."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_invoice_dispatch_allocations_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Require line_kind product; under locked invoice and dispatch lines, cumulative allocated billed and free base quantities may not exceed either source line, product identity must match, and posted allocations are immutable."
+        }
+      ]
+    },
+    {
+      "name": "sales.returns",
+      "fact_owner": "Posted customer return/credit event linked to the original invoice.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "fiscal_document_state_machine_posted_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "posted",
+          "cancelled",
+          "reversed"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "cancelled",
+          "reversed"
+        ],
+        "transitions": [
+          "draft->posted",
+          "draft->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.return.post"
+      },
+      "retention": {
+        "class": "statutory_fiscal_document",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "customer_account_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "return_number",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "fiscal_year",
+          "smallint",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "return_date",
+          "date",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "reason_code",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gst_adjustment_rule_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "recipient_itc_reversal_evidence_attachment_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "recipient_itc_reversal_confirmed_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'",
+          "regulated"
+        ],
+        [
+          "calculation_ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "zero_rated_payment_mode",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "net_value_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "gst_taxable_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "recipient_assessed_tax_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "rounding_policy",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "rounding_adjustment",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "grand_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_returns_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_branch",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_customer",
+          "columns": [
+            "org_id",
+            "customer_account_id"
+          ],
+          "references": "parties.customer_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_invoice",
+          "columns": [
+            "org_id",
+            "invoice_id"
+          ],
+          "references": "sales.invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_gst_adjustment_rule_version",
+          "columns": [
+            "gst_adjustment_rule_version_id"
+          ],
+          "references": "tax.gst_adjustment_rule_versions",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_itc_reversal_evidence",
+          "columns": [
+            "org_id",
+            "recipient_itc_reversal_evidence_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_posted_by",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_sales_returns_updated_by",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_sales_returns_number",
+          "columns": [
+            "org_id",
+            "branch_id",
+            "fiscal_year",
+            "return_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_sales_returns_status",
+          "expression": "status IN ('draft','posted','cancelled','reversed')"
+        },
+        {
+          "name": "ck_sales_returns_money",
+          "expression": "gst_taxable_total>=0 AND cgst_total>=0 AND sgst_total>=0 AND igst_total>=0 AND cess_total>=0 AND grand_total>=0"
+        },
+        {
+          "name": "ck_sales_returns_posted",
+          "expression": "status NOT IN ('posted','reversed') OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "ck_sales_returns_net_gst_totals",
+          "expression": "net_value_total>=0 AND gst_taxable_total>=0 AND gst_taxable_total<=net_value_total"
+        },
+        {
+          "name": "ck_sales_returns_zero_rated_payment_mode",
+          "expression": "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst')"
+        },
+        {
+          "name": "ck_sales_returns_rounding_policy",
+          "expression": "rounding_policy IN ('none','nearest_rupee') AND ((rounding_policy='none' AND rounding_adjustment=0 AND grand_total=net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) OR (rounding_policy='nearest_rupee' AND grand_total=round(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END),0) AND rounding_adjustment=grand_total-(net_value_total+(CASE WHEN tax_charge_mechanism='normal' THEN cgst_total+sgst_total+igst_total+cess_total ELSE 0 END)) AND abs(rounding_adjustment)<=0.50))"
+        },
+        {
+          "name": "ck_sales_returns_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND ((tax_charge_mechanism='normal' AND recipient_assessed_tax_total=0) OR (tax_charge_mechanism='reverse_charge' AND recipient_assessed_tax_total=cgst_total+sgst_total+igst_total+cess_total))"
+        },
+        {
+          "name": "ck_sales_returns_tax_component_totals",
+          "expression": "(igst_total=0 AND cgst_total=sgst_total) OR (cgst_total=0 AND sgst_total=0)"
+        },
+        {
+          "name": "ck_sales_returns_gst_tax_treatment",
+          "expression": "gst_tax_treatment IN ('statutory','commercial_only') AND ((gst_tax_treatment='statutory' AND recipient_itc_reversal_evidence_attachment_id IS NOT NULL AND recipient_itc_reversal_confirmed_at IS NOT NULL) OR (gst_tax_treatment='commercial_only' AND recipient_itc_reversal_evidence_attachment_id IS NULL AND recipient_itc_reversal_confirmed_at IS NULL AND gst_taxable_total=0 AND cgst_total=0 AND sgst_total=0 AND igst_total=0 AND cess_total=0 AND recipient_assessed_tax_total=0))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_sales_returns_invoice",
+          "columns": [
+            "org_id",
+            "invoice_id",
+            "return_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Original-invoice return ceiling and audit history."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_returns_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Posting locks the exact active tax.gst_adjustment_rule_versions row for the sales credit/decrease reason and return date, recomputes the credit from return lines using the original invoice tax versions, and freezes evidence. A statutory GST credit requires retained buyer-ITC-reversal evidence, satisfies the effective rule deadline, and creates exactly one decreasing tax document; a commercial_only credit remains a receivable adjustment but has zero GST components and creates no tax document. Every path creates exactly one accounting event and a typed inventory receipt when disposition is return-to-stock. Header net_value_total and gst_taxable_total must equal their rounded line sums. zero_rated_payment_mode must copy the original invoice mode and reverse the same without_payment zero-tax or with_igst IGST-paid treatment. Sales returns always preserve zero organization self-assessed tax; recipient_assessed_tax_total represents only the locked original reverse-charge context. rounding_policy is immutable and pre-round net value plus tax components plus rounding_adjustment must equal grand_total. Return rounding_policy copies the original; only the final cumulative reversal may absorb the deterministic residual, and cumulative reversed value may not exceed the original. tax_charge_mechanism is uniform across lines: normal tax is part of counterparty grand_total; reverse_charge tax is excluded from payable and summed in recipient_assessed_tax_total."
+        }
+      ]
+    },
+    {
+      "name": "sales.return_lines",
+      "fact_owner": "Batch-specific returned billed/free quantity and original tax-credit snapshot.",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "fiscal_document_child_posted_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "sales.return.post"
+      },
+      "retention": {
+        "class": "statutory_fiscal_document_child",
+        "minimum": "8_years_after_terminal",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "return_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_line_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_dispatch_allocation_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "product_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "batch_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "disposition_location_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "disposition",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "billed_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "free_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "uom_conversion_factor",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "base_billed_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "base_free_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "reversal_value_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "final_residual",
+          "boolean",
+          false,
+          null,
+          "regulated"
+        ],
+        ["gst_tax_treatment", "text", false, null, "regulated"],
+        [
+          "quoted_unit_rate",
+          "numeric(20,4)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "price_basis",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "free_supply_tax_treatment",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "hsn_code_snapshot",
+          "varchar(8)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "tax_code_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "taxability_snapshot",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "cgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "line_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "financial"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "now()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "fk_sales_return_lines_org",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_return",
+          "columns": [
+            "org_id",
+            "return_id"
+          ],
+          "references": "sales.returns",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_invoice_line",
+          "columns": [
+            "org_id",
+            "invoice_line_id"
+          ],
+          "references": "sales.invoice_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_allocation",
+          "columns": [
+            "org_id",
+            "invoice_dispatch_allocation_id"
+          ],
+          "references": "sales.invoice_dispatch_allocations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_product",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_batch",
+          "columns": [
+            "org_id",
+            "batch_id"
+          ],
+          "references": "inventory.batches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_location",
+          "columns": [
+            "org_id",
+            "disposition_location_id"
+          ],
+          "references": "inventory.locations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_tax_code_version",
+          "columns": [
+            "tax_code_version_id"
+          ],
+          "references": "tax.tax_code_versions",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "fk_return_lines_created_by",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_return_lines_number",
+          "columns": [
+            "org_id",
+            "return_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "ck_return_lines_quantity",
+          "expression": "billed_quantity>=0 AND free_quantity>=0 AND billed_quantity+free_quantity>0 AND uom_conversion_factor>0 AND base_billed_quantity>=0 AND base_free_quantity>=0 AND base_billed_quantity+base_free_quantity>0"
+        },
+        {
+          "name": "ck_return_lines_reversal_value_basis",
+          "expression": "reversal_value_basis IN ('billed_quantity','base_quantity')"
+        },
+        {
+          "name": "ck_return_lines_disposition",
+          "expression": "disposition IN ('return_to_stock','quarantine','destroy')"
+        },
+        {
+          "name": "ck_return_lines_money",
+          "expression": "quoted_unit_rate>=0 AND gst_taxable_value>=0 AND cgst_amount>=0 AND sgst_amount>=0 AND igst_amount>=0 AND cess_amount>=0 AND line_total>=0"
+        },
+        {
+          "name": "ck_return_lines_tax_rates",
+          "expression": "cgst_rate>=0 AND sgst_rate>=0 AND igst_rate>=0 AND cess_rate>=0"
+        },
+        {
+          "name": "ck_sales_return_lines_price_basis",
+          "expression": "price_basis IN ('tax_exclusive','tax_inclusive')"
+        },
+        {
+          "name": "ck_sales_return_lines_free_supply_tax_treatment",
+          "expression": "free_supply_tax_treatment IN ('excluded_from_taxable_value','included_at_unit_rate')"
+        },
+        {
+          "name": "ck_sales_return_lines_uom_conversion",
+          "expression": "base_billed_quantity=round(billed_quantity*uom_conversion_factor,6) AND base_free_quantity=round(free_quantity*uom_conversion_factor,6)"
+        },
+        {
+          "name": "ck_sales_return_lines_billed_reversal_basis",
+          "expression": "reversal_value_basis<>'billed_quantity' OR billed_quantity>0"
+        },
+        {
+          "name": "ck_sales_return_lines_taxability_snapshot",
+          "expression": "taxability_snapshot IN ('taxable','zero_rated','exempt','nil_rated','non_gst')"
+        },
+        {
+          "name": "ck_sales_return_lines_taxability_value_shape",
+          "expression": "gst_tax_treatment IN ('statutory','commercial_only') AND net_value_amount>=0 AND gst_taxable_value>=0 AND ((gst_tax_treatment='commercial_only' AND gst_taxable_value=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0) OR (gst_tax_treatment='statutory' AND ((taxability_snapshot IN ('taxable','zero_rated') AND gst_taxable_value=net_value_amount) OR (taxability_snapshot IN ('exempt','nil_rated','non_gst') AND gst_taxable_value=0 AND cgst_rate=0 AND sgst_rate=0 AND igst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0))))"
+        },
+        {
+          "name": "ck_sales_return_lines_zero_rated_tax",
+          "expression": "taxability_snapshot<>'zero_rated' OR (cgst_rate=0 AND sgst_rate=0 AND cess_rate=0 AND cgst_amount=0 AND sgst_amount=0 AND cess_amount=0)"
+        },
+        {
+          "name": "ck_sales_return_lines_tax_charge_mechanism",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND (tax_charge_mechanism<>'reverse_charge' OR (price_basis='tax_exclusive' AND taxability_snapshot<>'zero_rated'))"
+        },
+        {
+          "name": "ck_sales_return_lines_reverse_charge_payable",
+          "expression": "(tax_charge_mechanism='normal' AND line_total=net_value_amount+cgst_amount+sgst_amount+igst_amount+cess_amount) OR (tax_charge_mechanism='reverse_charge' AND line_total=net_value_amount)"
+        },
+        {
+          "name": "ck_sales_return_lines_tax_component_shape",
+          "expression": "(igst_rate=0 AND cgst_rate=sgst_rate AND cgst_amount=sgst_amount) OR (cgst_rate=0 AND sgst_rate=0 AND cgst_amount=0 AND sgst_amount=0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_return_lines_original",
+          "columns": [
+            "org_id",
+            "invoice_line_id",
+            "invoice_dispatch_allocation_id",
+            "return_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Cumulative original-line return ceiling."
+        },
+        {
+          "name": "ix_return_lines_batch",
+          "columns": [
+            "org_id",
+            "batch_id",
+            "return_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "Batch return and recall traceability."
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "sales_return_lines_invariant_1",
+          "enforcement": "transaction_guard",
+          "rule": "Under locked originals, an allocated return may not exceed its invoice-dispatch allocation and a direct-invoice return may not exceed its invoice line or typed inventory issue. Compute the reversal ratio only from the explicit reversal_value_basis of billed_quantity or base_quantity; persisted final_residual must equal the consumed calculation artifact. Tax version, product, batch, prices, and tax snapshots must match the credited original. Preserve the original quoted_unit_rate, price_basis, and free_supply_tax_treatment as immutable reversal evidence. Persist billed_quantity, free_quantity and uom_conversion_factor; their rounded six-decimal base quantities and factor must match the original line, so reversal_value_basis never inverts rounded base quantities. taxability_snapshot, net_value_amount and gst_taxable_value must match the reversed original components; zero_rated remains valid only under the original qualifying export/SEZ context. For zero_rated lines, enforce the header mode: without_payment has zero components; with_igst permits only IGST and must match the effective rate. tax_charge_mechanism must equal the header; reverse_charge requires tax-exclusive pricing and pre-tax discount basis, records compliance tax components, and excludes those components from line_total. Intra-state component rates and rounded amounts have exact CGST=SGST equality; inter-state/zero-rated-with-IGST has zero CGST and SGST."
+        }
+      ]
+    }
+  ]
+}

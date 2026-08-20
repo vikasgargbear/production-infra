@@ -10,7 +10,6 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 import logging
-import json
 
 from .....core.auth.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from .....core.auth.org_context import get_org_context, OrgContext
@@ -18,10 +17,11 @@ from .....core.money import money_json
 from .....core.utils.api_utils import handle_error
 from .....core.security.permissions import PermissionChecker  # RBAC
 from ....services.master.product.service import ProductService  # Service layer
-from ....services.document_number_service import DocumentNumberService
-from ....schemas.master.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
-from .....core.utils.constants import (
-    ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
+from ....schemas.master.product_schema import (
+    Product,
+    ProductCreate,
+    ProductMutationResponse,
+    ProductUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,15 +32,30 @@ router = APIRouter()
 DEFAULT_PAGE_SIZE = 20  # Configurable default page size
 MAX_PAGE_SIZE = 100     # Configurable maximum page size
 
-def _format_composition(composition_value):
-    """Convert composition to JSONB format for database"""
-    if isinstance(composition_value, dict):
-        # Already in correct format
-        return composition_value
-    elif isinstance(composition_value, str) and composition_value:
-        # Convert string to dict format
-        return {"active": composition_value}
-    return {}
+
+def _build_product_draft_data(product: ProductCreate, product_code: str) -> dict:
+    payload = product.model_dump()
+    return {
+        "product_code": product_code,
+        "product_name": payload["product_name"],
+        "generic_name": payload.get("generic_name"),
+        "brand": payload.get("brand"),
+        "manufacturer": payload.get("manufacturer"),
+        "category_id": payload.get("category_id"),
+        "type_id": payload.get("type_id"),
+        "product_type": payload["product_kind"],
+        "composition": "{}",
+        "hsn_code": None,
+        "gst_percent": None,
+        "reorder_level": payload.get("reorder_level"),
+        "min_stock_quantity": payload.get("min_stock_quantity"),
+        "max_stock_quantity": payload.get("max_stock_quantity"),
+        "maintain_batch": payload["maintain_batch"],
+        "maintain_expiry": payload["maintain_expiry"],
+        "is_active": False,
+        "is_saleable": False,
+        "is_purchasable": False,
+    }
 
 @router.get("")  # Matches /products (no trailing slash)
 @router.get("/")  # Matches /products/ (with trailing slash)
@@ -51,6 +66,7 @@ async def get_products(
     search: str = Query("", description="Search query"),
     product_type: str = Query("", description="Filter by product type"),
     manufacturer: str = Query("", description="Filter by manufacturer"),
+    include_inactive: bool = Query(False, description="Include inactive product drafts in master-data views"),
     _: dict = Depends(PermissionChecker("inventory", "view")),  # RBAC
     context: OrgContext = Depends(get_org_context),  # NEW: Org context
     db: TenantAwareSession = Depends(get_tenant_aware_db)  # NEW: Tenant-aware DB
@@ -73,7 +89,8 @@ async def get_products(
             search=search if search else None,
             product_type=product_type if product_type else None,
             manufacturer=manufacturer if manufacturer else None,
-            include_stock=True
+            include_stock=True,
+            include_inactive=include_inactive,
         )
         
     except HTTPException:
@@ -338,189 +355,55 @@ async def get_all_products_with_batches(
     except Exception as e:
         raise handle_error(e, "bulk sync products with batches")
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ProductMutationResponse,
+)
 @with_tenant_context
 async def create_product(
-    product: dict,  # Accept dict to handle flexible fields
+    product: ProductCreate,
     _: dict = Depends(PermissionChecker("inventory", "create")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """
-    Create a new product
-    """
+    """Create a non-saleable draft; classification and stock use other commands."""
     try:
-        # Get org_id from context
         org_id = context.org_id
-        
-        logger.info(f"Creating product with data: {product}")
-        
-        # Validate product data using ProductService
-        validation = ProductService.validate_product_data(product)
-        if not validation["valid"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Validation failed: {', '.join(validation['errors'])}"
-            )
-        
-        # Use validated data (with defaults applied)
-        validated = validation["data"]
-        
-        # Check for duplicate products
+        payload = product.model_dump()
+
         duplicate_check = ProductService.check_duplicate_product(
             db, str(org_id),
-            product_name=validated.get("product_name")
+            product_name=payload["product_name"],
         )
         if duplicate_check["has_duplicates"]:
-            # Return existing product instead of error for duplicate name
-            existing = duplicate_check["duplicates"][0]
-            return {
-                "product_id": existing["product_id"],
-                "product_name": existing["product_name"],
-                "message": "Product already exists"
-            }
-        
-        # Map frontend fields to database fields (matching actual table columns)
-        # Handle composition - could be dict or string
-        composition_value = product.get("composition", "")
-        if isinstance(composition_value, dict):
-            # Extract active ingredient for generic_name
-            generic_name_default = composition_value.get("active", "")
-        else:
-            generic_name_default = str(composition_value) if composition_value else ""
-        
-        # Generate product code using service if not provided
-        product_code = product.get("product_code")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Product name already exists")
+
+        product_code = payload.get("product_code")
         if not product_code:
             product_code = ProductService.generate_product_code(db, str(org_id))
-        
-        product_data = {
-            "product_code": product_code,
-            "product_name": validated.get("product_name"),
-            "generic_name": product.get("generic_name") or generic_name_default,
-            "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
-            "manufacturer": product.get("manufacturer"),
-            "composition": json.dumps(_format_composition(composition_value)),
-            "category_id": product.get("category_id") if product.get("category_id") else None,
-            "type_id": product.get("type_id") if product.get("type_id") else None,
-            "hsn_code": validated.get("hsn_code"),  # Uses validated HSN (with default applied)
-            "gst_percent": validated.get("gst_percent") or product.get("gst_rate") or 0,
-            "reorder_level": product.get("reorder_level"),
-            "min_stock_quantity": product.get("min_stock_quantity"),
-            "max_stock_quantity": product.get("max_stock_quantity"),
-            "base_uom_id": None,  # Let it be NULL if no UOMs exist
-            "maintain_batch": True,
-            "maintain_expiry": True,
-            "is_active": product.get("is_active", True)
-        }
-        
-        # Check if product code already exists
+
         code_check = ProductService.check_duplicate_product(
-            db, str(org_id),
-            product_code=product_data["product_code"]
+            db, str(org_id), product_code=product_code
         )
-        
         if code_check["has_duplicates"]:
-            # Return existing product instead of error
-            existing = code_check["duplicates"][0]
-            return {
-                "product_id": existing["product_id"],
-                "product_code": existing.get("product_code"),
-                "product_name": existing["product_name"],
-                "message": "Product already exists"
-            }
-        
-        # Create product using service method (returns product_id integer)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Product code already exists")
+
+        product_data = _build_product_draft_data(product, product_code)
+
         product_id = ProductService.insert_product(
             db=db,
             org_id=str(org_id),
-            product_data=product_data
+            product_data=product_data,
         )
-
-        product_code_val = product_data["product_code"]
-        product_name_val = product_data["product_name"]
-
-        # Create initial batch for products that maintain batches (simplified workflow for non-technical users)
-        # Check if product should have batches - either maintain_batch is True OR explicit values provided
-        should_create_batch = (
-            product_data.get("maintain_batch", True) or  # Default to True for pharmacy products
-            (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or
-            (product.get("mrp") and float(product.get("mrp", 0)) > 0)
-        )
-
-        if should_create_batch:
-            # Database field names ONLY - no aliases (single source of truth)
-            mrp_per_unit = float(product.get("mrp_per_unit", PricingDefaults.DEFAULT_MRP))
-            sale_price_per_unit = float(product.get("sale_price_per_unit") or (mrp_per_unit * PricingDefaults.SALE_PRICE_FROM_MRP))
-            cost_per_unit = float(product.get("cost_per_unit") or (sale_price_per_unit * PricingDefaults.COST_FROM_SALE_PRICE))
-            initial_quantity = float(product.get("initial_quantity", PricingDefaults.DEFAULT_INITIAL_QUANTITY))
-
-            # Calculate expiry date if not provided
-            from datetime import datetime, timedelta
-            expiry_date = product.get("expiry_date") or (datetime.now() + timedelta(days=DateDefaults.EXPIRY_DAYS_SHORT)).strftime("%Y-%m-%d")
-
-            # Parse pack configuration
-            pack_type = product.get("pack_type", PackDefaults.PACK_UOM)
-            pack_size = product.get("pack_size", PackDefaults.PACK_SIZE)
-            units_per_pack = product.get("units_per_pack", PackDefaults.UNITS_PER_PACK)
-            packages_per_box = product.get("packages_per_box", PackDefaults.PACKAGES_PER_BOX)
-
-            # Parse pack_input if provided (format: "packages*units" e.g., "1*10")
-            pack_input = product.get("pack_input", "")
-            if pack_input and "*" in pack_input:
-                try:
-                    parts = pack_input.split("*")
-                    if len(parts) == 2:
-                        packages_per_box = int(parts[0].strip())
-                        import re
-                        units_match = re.match(r'^(\d+)', parts[1].strip())
-                        if units_match:
-                            units_per_pack = int(units_match.group(1))
-                except Exception as parse_err:
-                    logger.warning(f"Could not parse pack_input '{pack_input}': {parse_err}")
-
-            # Build batch data with database field names
-            batch_data = {
-                "batch_number": product.get("batch_number") or DocumentNumberService.generate_batch_number(db, str(org_id)),
-                "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
-                "expiry_date": expiry_date,
-                "quantity": initial_quantity,
-                "cost_per_unit": cost_per_unit,
-                "sale_price_per_unit": sale_price_per_unit,
-                "mrp_per_unit": mrp_per_unit,
-                "pack_type": pack_type,
-                "pack_size": pack_size,
-                "units_per_pack": units_per_pack,
-                "packages_per_box": packages_per_box,
-                "pack_uom": product.get("pack_uom", pack_type),
-                "base_uom": product.get("base_uom", PackDefaults.BASE_UOM)
-            }
-
-            # Use savepoint so batch failure doesn't rollback the product INSERT
-            try:
-                savepoint = db.begin_nested()
-                batch_id = ProductService.create_initial_batch(
-                    db=db,
-                    org_id=str(org_id),
-                    product_id=product_id,
-                    batch_data=batch_data
-                )
-                savepoint.commit()
-                if batch_id:
-                    logger.info(f"Initial batch created for product {product_code_val}: Batch ID {batch_id}, MRP: {mrp_per_unit}")
-            except Exception as batch_error:
-                logger.warning(f"Could not create initial batch: {str(batch_error)}")
-
         db.commit()
 
-        logger.info(f"Product created: {product_code_val} - {product_name_val}")
-
-        return {
-            "product_id": product_id,
-            "product_code": product_code_val,
-            "product_name": product_name_val,
-            "message": "Product created successfully with initial stock" if product.get("quantity_available") else "Product created successfully"
-        }
+        return ProductMutationResponse(
+            product_id=product_id,
+            product_code=product_code,
+            product_name=payload["product_name"],
+            message="Product draft created; classification is required before sale",
+        )
         
     except HTTPException:
         db.rollback()
@@ -551,201 +434,61 @@ async def get_product(
     except Exception as e:
         raise handle_error(e, "get product", product_id)
 
-@router.put("/{product_id}")
+@router.put("/{product_id}", response_model=ProductMutationResponse)
 @with_tenant_context
 async def update_product(
     product_id: int,
-    product: dict,
+    product: ProductUpdate,
     _: dict = Depends(PermissionChecker("inventory", "edit")),  # RBAC
     db: TenantAwareSession = Depends(get_tenant_aware_db),
     context: OrgContext = Depends(get_org_context)
 ):
-    """Update product"""
+    """Update mutable identity fields on a product draft."""
     try:
-        # Build update query dynamically
         update_fields = []
         params = {"product_id": product_id}
-        
-        # Only include fields that actually exist in inventory.products table
+        payload = product.model_dump(exclude_unset=True)
+
         field_mapping = {
-            # Basic product info
             "product_name": "product_name",
             "generic_name": "generic_name",
             "brand": "brand",
-            "brand_name": "brand",  # Map brand_name to brand column
             "manufacturer": "manufacturer",
-            "manufacturer_code": "manufacturer_code",
-            "barcode": "barcode",
-            
-            # Classification
-            "category_id": "category_id",  # Now properly handled with valid IDs from DB
-            "type_id": "type_id",  # Product type ID from master table
-            "product_type": "product_type",  # Product type name (legacy)
-            "product_class": "product_class",
-            "hsn_code": "hsn_code",
-            
-            # Pharmaceutical details
-            "composition": "composition",
-            "strength": "strength",
-            "drug_schedule": "drug_schedule",
-            "requires_prescription": "requires_prescription",
-            "is_narcotic": "is_narcotic",
-            "is_controlled_substance": "is_controlled_substance",
-            
-            # Tax
-            "gst_percent": "gst_percent",
-            "cess_percentage": "cess_percentage",
-            
-            # Stock management
+            "category_id": "category_id",
+            "type_id": "type_id",
+            "product_kind": "product_type",
             "reorder_level": "reorder_level",
-            "reorder_quantity": "reorder_quantity",
             "min_stock_quantity": "min_stock_quantity",
             "max_stock_quantity": "max_stock_quantity",
-            "critical_stock_level": "critical_stock_level",
             "maintain_batch": "maintain_batch",
             "maintain_expiry": "maintain_expiry",
-            "allow_negative_stock": "allow_negative_stock",
-            
-            # Status flags
-            "is_active": "is_active",
-            "is_saleable": "is_saleable",
-            "is_purchasable": "is_purchasable",
-            "product_status": "product_status",
-            
-            # Note: These fields are in batches table, not products:
-            # unit, mrp, selling_price, purchase_price -> moved to batches
-            # storage_conditions, requires_cold_chain -> don't exist
-            # pack_config -> doesn't exist in current schema
         }
-        
-        # Track which DB fields have been added to avoid duplicates
-        added_fields = set()
-        
+
         for frontend_field, db_field in field_mapping.items():
-            if frontend_field in product and db_field not in added_fields:
-                # Special handling for category_id - must be valid or NULL
-                if db_field == "category_id":
-                    category_value = product[frontend_field]
-                    # Set category_id if it's a valid integer or NULL
-                    if category_value and str(category_value).isdigit():
-                        update_fields.append(f"{db_field} = :{db_field}")
-                        params[db_field] = int(category_value)
-                    elif not category_value:
-                        # Allow setting to NULL if empty
-                        update_fields.append(f"{db_field} = NULL")
-                    added_fields.add(db_field)
-                # Special handling for type_id - must be valid or NULL
-                elif db_field == "type_id":
-                    type_value = product[frontend_field]
-                    # Set type_id if it's a valid integer or NULL
-                    if type_value and str(type_value).isdigit():
-                        update_fields.append(f"{db_field} = :{db_field}")
-                        params[db_field] = int(type_value)
-                    elif not type_value:
-                        # Allow setting to NULL if empty
-                        update_fields.append(f"{db_field} = NULL")
-                    added_fields.add(db_field)
-                elif db_field == "composition":
-                    # Handle JSONB field for composition
-                    update_fields.append(f"{db_field} = CAST(:{db_field} AS jsonb)")
-                    if isinstance(product[frontend_field], dict):
-                        params[db_field] = json.dumps(product[frontend_field])
-                    else:
-                        params[db_field] = json.dumps({"active": str(product[frontend_field])})
-                else:
-                    update_fields.append(f"{db_field} = :{db_field}")
-                    params[db_field] = product[frontend_field]
-                added_fields.add(db_field)
-        
-        # Handle batch-level fields that are in batches table
-        batch_fields = {}
-        batch_field_mapping = {
-            # Pricing fields (in batches table) - database names ONLY
-            "mrp_per_unit": "mrp_per_unit",
-            "sale_price_per_unit": "sale_price_per_unit",
-            "cost_per_unit": "cost_per_unit",
-            
-            # Pack fields - database names ONLY
-            "pack_type": "pack_type",
-            "pack_size": "pack_size",
-            "units_per_pack": "units_per_pack",
-            "packages_per_box": "packages_per_box",
-            "pack_uom": "pack_uom",
-            "base_uom": "base_uom"
-        }
-        
-        # Handle regular batch fields (non-category)
-        for frontend_field, batch_field in batch_field_mapping.items():
-            if frontend_field in product:
-                batch_fields[batch_field] = product[frontend_field]
-        
-        # Handle category_name updates with proper master table linking
-        if "category_name" in product:
-            category_name = product.get("category_name")
-            if category_name:
-                # Use service to look up category_id
-                category_id = ProductService.get_category_by_name(db, category_name)
-                
-                if category_id:
-                    batch_fields["category_name"] = category_name
-                    batch_fields["category_id"] = category_id
-                    logger.info(f"Found category '{category_name}' with ID {category_id}")
-                else:
-                    batch_fields["category_name"] = category_name
-                    batch_fields["category_id"] = None
-                    logger.warning(f"Category '{category_name}' not found in master categories")
-        
-        # Check if we have any fields to update (product OR batch level)
-        if not update_fields and not batch_fields:
+            if frontend_field in payload:
+                update_fields.append(f"{db_field} = :{db_field}")
+                params[db_field] = payload[frontend_field]
+
+        updated = ProductService.update_product_dynamic(
+            db=db,
+            product_id=product_id,
+            update_fields=update_fields,
+            params=params,
+        )
+        if not updated:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No fields to update"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {product_id} not found",
             )
-        
-        # Update product table if we have product-level fields
-        updated = None
-        if update_fields:
-            # Use service method for dynamic update
-            updated = ProductService.update_product_dynamic(
-                db=db,
-                product_id=product_id,
-                update_fields=update_fields,
-                params=params
-            )
-            
-            if not updated:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Product {product_id} not found"
-                )
-        else:
-            # No product fields to update, but get product info for response
-            updated = ProductService.get_product_basic(db, product_id)
-            
-            if not updated:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Product {product_id} not found"
-                )
-        
-        # Update active batches if we have batch-level changes
-        if batch_fields:
-            updated_count = ProductService.update_product_batches(
-                db=db,
-                product_id=product_id,
-                batch_data=batch_fields
-            )
-            logger.info(f"Updated {len(batch_fields)} batch fields for product {product_id}")
-        
+
         db.commit()
-        
-        return {
-            "product_id": updated["product_id"],
-            "product_code": updated["product_code"],
-            "product_name": updated["product_name"],
-            "message": "Product updated successfully"
-        }
-        
+
+        return ProductMutationResponse(
+            product_id=updated["product_id"],
+            product_code=updated["product_code"],
+            product_name=updated["product_name"],
+            message="Product draft updated",
+        )
     except HTTPException:
         raise
     except Exception as e:

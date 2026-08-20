@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "readiness_state": "unbaselined",
+  "readiness_state": "migrating",
   "expected_tenant_setting": "app.org_id",
   "bootstrap_ddl_root": "database/02-tables",
   "canonical_migration_root": "backend/alembic",
@@ -12,7 +12,12 @@
   "required_migration_files": [
     "backend/alembic.ini",
     "backend/alembic/env.py",
-    "backend/alembic/script.py.mako"
+    "backend/alembic/script.py.mako",
+    "backend/alembic/versions/20260820_0001_canonical_v1.py",
+    "backend/alembic/sql/20260820_0001_canonical_v1.sql",
+    "backend/alembic/sql/20260820_0001_canonical_v1.manifest.json",
+    "backend/migration_support/canonical_baseline.py",
+    "backend/scripts/package_canonical_baseline_migration.py"
   ],
   "migration_versions_glob": "backend/alembic/versions/*.py",
   "migration_dependency_pattern": "^alembic(?:[<>=!~].*)?$",
@@ -27,8 +32,9 @@
     "system_config.system_health_metrics"
   ],
   "notes": [
-    "unbaselined is intentional: do not stamp or generate a baseline without comparing a reviewed live schema dump",
+    "migrating means the reviewed first revision is packaged and CI-gated but has not been applied to live Supabase",
+    "the first baseline requires its exact approved source SQL hash and a bootstrap principal with CREATEROLE; runtime principals are rejected",
     "database/02-tables is legacy bootstrap DDL, not proof of the current production schema",
-    "only backend/alembic may contain new production migrations after the live baseline is established"
+    "only backend/alembic may contain new production migrations; live reset and application cutover remain separate approval gates"
   ]
 }

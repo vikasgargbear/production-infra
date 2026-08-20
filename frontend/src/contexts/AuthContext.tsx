@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
 import { getSupabaseClient } from '../services/auth/supabaseClient';
+import { googleAuthReturnUrl } from '../services/auth/oauthConsentClient';
 import {
     clearErpSessionStorage,
     removeLegacyErpSessionKeys,
@@ -165,7 +166,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const { error } = await getSupabaseClient().auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin,
+                    redirectTo: googleAuthReturnUrl(window.location),
                     queryParams: { prompt: 'select_account' },
                 },
             });

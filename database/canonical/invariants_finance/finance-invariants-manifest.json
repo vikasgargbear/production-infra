@@ -1,0 +1,144 @@
+{
+  "blocked_count": 35,
+  "blocked_invariants": {
+    "compliance.controlled_movement_rule_versions:controlled_movement_rule_versions_release_authority": {
+      "reason": "Exact reviewed official rule releases require the isolated regulatory importer."
+    },
+    "compliance.controlled_substance_entries:controlled_substance_entries_cross_row_guard": {
+      "reason": "The license vocabulary does not represent all NDPS/controlled-substance authorities or effective applicability rules, so counterparty authorization cannot be proved for every controlled batch."
+    },
+    "compliance.destructions:destructions_cross_row_guard": {
+      "reason": "The approval record stores no approved batch/quantity snapshot, so posted destruction lines cannot be compared with the authorization."
+    },
+    "compliance.recall_batches:recall_batches_cross_row_guard": {
+      "reason": "Recall-tagged inventory documents are typed, but exact exposure snapshots and posted-ledger action totals require the reviewed compliance command boundary."
+    },
+    "compliance.storage_rule_versions:storage_rule_versions_effective_guard": {
+      "reason": "Effective non-overlap and evidence-bound activation require the compliance command boundary."
+    },
+    "compliance.temperature_readings:temperature_readings_cross_row_guard": {
+      "reason": "A reading without batch_id has no product/storage-rule reference, and no effective-dated location storage rule exists; permitted range resolution cannot be proved for every row."
+    },
+    "finance.accounting_events:accounting_events_cross_row_guard": {
+      "reason": "Several typed sources remain mutable until their reviewed posting/reversal commands exist, so a trigger could verify current posted status but could not prove the source is immutable after event insertion."
+    },
+    "finance.adjustment_note_lines:adjustment_note_lines_cross_row_guard": {
+      "reason": "The canonical Decimal calculator is application code; no reviewed SQL calculator or posting command persists proof that the exact ruleset was executed."
+    },
+    "finance.adjustment_notes:adjustment_notes_cross_row_guard": {
+      "reason": "No reviewed posting/reversal command atomically invokes the Decimal authority and creates the tax document, journal, accounting event, and bounded compensating note."
+    },
+    "finance.bank_statement_lines:bank_statement_lines_cross_row_guard": {
+      "reason": "The schema has no verified-import command or transaction marker proving that every line was inserted by the same authenticated parser transaction."
+    },
+    "finance.expense_claim_lines:expense_claim_lines_cross_row_guard": {
+      "reason": "The schema has no effective-dated evidence policy identifying which expense lines require receipts."
+    },
+    "finance.expense_claims:expense_claims_cross_row_guard": {
+      "reason": "The schema has no reviewed approver authorization predicate or account-mapping command for atomic journal creation."
+    },
+    "finance.payments:payments_cross_row_guard": {
+      "reason": "No reviewed payment posting/reversal command supplies ledger account mappings and atomically creates the journal, event, and allocation reversals."
+    },
+    "tax.documents:documents_cross_row_guard": {
+      "reason": "There is no reviewed tax-document posting command that binds source line snapshots, registration context, cumulative adjustments, and the canonical Decimal result atomically."
+    },
+    "tax.einvoice_rule_versions:einvoice_rule_versions_release_authority": {
+      "reason": "Exact reviewed official rule releases require the isolated regulatory importer."
+    },
+    "tax.einvoices:einvoices_cross_row_guard": {
+      "reason": "PostgreSQL cryptographic byte hashing is not provisioned by the canonical platform contract, and no provider-command boundary exists to prove exact request/response/QR envelopes and append-only cancellation evidence."
+    },
+    "tax.eway_bills:eway_bills_cross_row_guard": {
+      "reason": "PostgreSQL cryptographic byte hashing is not provisioned by the canonical platform contract, and no provider-command boundary exists to prove exact request/response envelopes and append-only cancellation evidence."
+    },
+    "tax.gst_adjustment_rule_versions:gst_adjustment_rule_versions_release_authority": {
+      "reason": "Exact reviewed official rule releases require the isolated regulatory importer."
+    },
+    "tax.organization_fiscal_tax_facts:organization_fiscal_tax_facts_evidence_guard": {
+      "reason": "A reviewed verification command is required to bind immutable turnover, TAN and notified-deductor facts to verified evidence."
+    },
+    "tax.portal_document_lines:portal_document_lines_cross_row_guard": {
+      "reason": "The schema has no parser command or transaction marker proving every line is inserted exactly once inside the parent parse transaction."
+    },
+    "tax.portal_documents:portal_documents_cross_row_guard": {
+      "reason": "Attachment equality and terminal immutability are enforceable, but no parser command can prove all parsed lines were inserted atomically before publishing the terminal state."
+    },
+    "tax.reconciliation_items:reconciliation_items_cross_row_guard": {
+      "reason": "The schema has no reviewed resolution authorization predicate or canonical audit-event command binding a one-time resolution."
+    },
+    "tax.reconciliation_runs:reconciliation_runs_cross_row_guard": {
+      "reason": "A row trigger cannot prove repeatable-read isolation, complete population coverage, or one atomic reconciliation algorithm execution without a reviewed stored command."
+    },
+    "tax.registration_branches:registration_branches_effective_guard": {
+      "reason": "Effective branch associations and immutable statutory use require a reviewed registration command and posting lookup."
+    },
+    "tax.return_documents:return_documents_cross_row_guard": {
+      "reason": "Return-type eligibility is a versioned statutory rule but no effective-dated eligibility ruleset is stored; inventing a timeless mapping would be unsafe."
+    },
+    "tax.tax_code_versions:tax_code_versions_release_authority": {
+      "reason": "A row constraint cannot verify official source and canonical dataset artifacts, typed review, exact-set insertion, or atomic whole-release supersession; the isolated regulatory import command owns this authority."
+    },
+    "tax.withholding_basis_lines:withholding_basis_lines_source_guard": {
+      "reason": "Exact source basis and cumulative threshold rows must be inserted atomically by the withholding deduction command."
+    },
+    "tax.withholding_certificate_lines:withholding_certificate_lines_cross_row_guard": {
+      "reason": "Certificate M:N coverage requires exact statement-line, party, regime, period and amount verification."
+    },
+    "tax.withholding_certificates:withholding_certificates_cross_row_guard": {
+      "reason": "A reviewed certificate importer must verify and retain one immutable per-deductee authority artifact and correction lineage."
+    },
+    "tax.withholding_deposit_lines:withholding_deposit_lines_cross_row_guard": {
+      "reason": "Deposit allocation components and cumulative deduction residuals require one locked deposit command."
+    },
+    "tax.withholding_deposits:withholding_deposits_cross_row_guard": {
+      "reason": "A reviewed command must bind one exact posted government payment and verified challan to immutable deduction allocations and compensating reversal."
+    },
+    "tax.withholding_rule_versions:withholding_rule_versions_release_authority": {
+      "reason": "The typed rule table exists, but the regulated importer does not yet parse and atomically activate exact withholding_rules releases."
+    },
+    "tax.withholding_statement_lines:withholding_statement_lines_cross_row_guard": {
+      "reason": "Statement membership and deposit coverage require locked authority verification."
+    },
+    "tax.withholding_statements:withholding_statements_cross_row_guard": {
+      "reason": "A reviewed filing command must freeze one exact statement population, acknowledgement and append-only revision lineage."
+    },
+    "tax.withholdings:withholdings_cross_row_guard": {
+      "reason": "The typed rule and basis model exists, but no reviewed command yet proves exact imported-rule selection, earlier-event timing, cumulative threshold basis, journal/allocation creation, and corrective reversal."
+    }
+  },
+  "catalog_invariant_sha256": "2c0e12e6b2f37ff2d60ab2051086c39e928ff998c19311f7bdcaad8f02e2aed3",
+  "domains": [
+    "finance",
+    "tax",
+    "compliance"
+  ],
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-finance-enforcements.json",
+  "mapping_sha256": "11bd517bd7531de1e391362a9440f50d08b8a9a96e8d9708c0d8af04e7e1232d",
+  "postgresql": "15+",
+  "resolved_count": 14,
+  "resolved_invariants": [
+    "compliance.licenses:licenses_cross_row_guard",
+    "compliance.recalls:recalls_cross_row_guard",
+    "finance.accounts:accounts_cross_row_guard",
+    "finance.allocations:allocations_cross_row_guard",
+    "finance.bank_accounts:bank_accounts_cross_row_guard",
+    "finance.bank_statements:bank_statements_cross_row_guard",
+    "finance.journal_entries:journal_entries_cross_row_guard",
+    "finance.journal_lines:journal_lines_cross_row_guard",
+    "finance.open_items:open_items_cross_row_guard",
+    "finance.reconciliation_matches:reconciliation_matches_cross_row_guard",
+    "tax.registrations:registrations_cross_row_guard",
+    "tax.return_periods:return_periods_cross_row_guard",
+    "tax.returns:returns_cross_row_guard",
+    "tax.tax_code_versions:tax_code_versions_cross_row_guard"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "fixed_empty_search_path": true,
+    "function_schema": "erp_finance_invariants",
+    "runtime_callable_functions": [],
+    "trigger_functions_public_execute": false
+  }
+}

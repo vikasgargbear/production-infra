@@ -1,0 +1,57 @@
+{
+  "blocker_delta": {
+    "current_catalog_after_mapping": 0,
+    "current_catalog_before_mapping": 8,
+    "current_catalog_resolved": 8,
+    "pre_correction_global_net": -1
+  },
+  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-regulatory-command-enforcements.json",
+  "mapping_sha256": "e4fac3d705ed43b7e47114e7ff4d3710df108778331a88f6e3c19339ce9df862",
+  "postgresql": "15+",
+  "regulated_seed_status": {
+    "baseline_seed_blockers_removed": 7,
+    "empty_baseline_tables": [
+      "core.reference_data_releases",
+      "catalog.ingredients",
+      "tax.tax_code_versions",
+      "tax.withholding_rule_versions",
+      "compliance.controlled_movement_rule_versions",
+      "tax.einvoice_rule_versions",
+      "tax.gst_adjustment_rule_versions"
+    ],
+    "operational_readiness": "blocked_until_active_official_reviewed_releases_are_imported",
+    "population_mode": "regulated_import"
+  },
+  "resolved_count": 8,
+  "resolved_invariants": [
+    "catalog.ingredients:ingredient_reference_release",
+    "catalog.products:products_regulatory_classification",
+    "compliance.controlled_movement_rule_versions:controlled_movement_rule_versions_release_authority",
+    "core.reference_data_releases:reference_data_release_import",
+    "tax.einvoice_rule_versions:einvoice_rule_versions_release_authority",
+    "tax.gst_adjustment_rule_versions:gst_adjustment_rule_versions_release_authority",
+    "tax.tax_code_versions:tax_code_versions_release_authority",
+    "tax.withholding_rule_versions:withholding_rule_versions_release_authority"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "fixed_empty_search_path": true,
+    "import_principal": "erp_regulatory_importer LOGIN NOINHERIT NOBYPASSRLS",
+    "importer_functions": [
+      "import_ingredient_release",
+      "import_tax_release",
+      "import_withholding_release",
+      "import_controlled_movement_release",
+      "import_einvoice_rule_release",
+      "import_gst_adjustment_rule_release"
+    ],
+    "mcp_functions": [],
+    "runtime_functions": [
+      "activate_product"
+    ],
+    "session_user_attestation": true
+  },
+  "source_manifest": "../commands_core/core-commands-manifest.json"
+}

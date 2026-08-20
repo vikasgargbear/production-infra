@@ -148,14 +148,10 @@ class TenantQueryBuilder:
 
         # ===== SALES SCHEMA =====
         # NOTE: Child item tables do NOT have org_id column — secured via FK to parent:
-        #   invoice_items, order_items, challan_items, sales_return_items,
-        #   scheme_customers, scheme_products, scheme_volume_slabs,
-        #   loyalty_tiers, loyalty_transactions
+        #   invoice_items, order_items, challan_items, sales_return_items
         'invoices', 'orders', 'delivery_challans',
         'credit_notes', 'debit_notes',
         'sales_returns',
-        'promotional_schemes',
-        'loyalty_programs',
 
         # ===== PROCUREMENT SCHEMA =====
         # NOTE: purchase_order_items, supplier_invoice_items, grn_items do NOT have org_id

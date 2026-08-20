@@ -1,0 +1,110 @@
+{
+  "domain": "calculation",
+  "table_count": 1,
+  "tables": [
+    {
+      "name": "calculation.artifacts",
+      "fact_owner": "Database-issued immutable evidence that one versioned decimal engine transformed exact canonical aggregate inputs into exact canonical outputs for one command and was consumed at most once",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "issued_then_consumed_authority",
+      "cross_row_invariants": [
+        {
+          "name": "calculation_artifact_issue_and_consume",
+          "enforcement": "transaction_guard",
+          "rule": "Only the separately authenticated erp_calculator database login may call the reviewed SECURITY DEFINER issuer; erp_app and erp_runtime cannot mint attestations. The issuer validates fixed canonical input/output schemas, including exact gst_tax_treatment and commercial-only gross-credit semantics, tenant, actor, branch, request, idempotency claim, optional agent command, typed aggregate identity/version/state, serializer/ruleset/engine identifiers and session attestation, then computes every SHA-256 digest and the database authority proof itself. Only a reviewed posting command may lock and consume an unexpired artifact once after rechecking the same bindings and current aggregate version. Runtime roles have SELECT only and cannot INSERT, UPDATE, DELETE, forge hashes, change payloads, issue, or consume artifacts directly."
+        }
+      ],
+      "lifecycle": {
+        "state_column": "status",
+        "states": ["issued", "consumed"],
+        "initial": "issued",
+        "terminal": ["consumed"],
+        "transitions": ["issued->consumed"]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": null
+      },
+      "retention": {
+        "class": "calculation_and_posting_evidence",
+        "minimum": "permanent_for_regulated_operations_else_8_years",
+        "hard_delete": false
+      },
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"],
+        ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["branch_id", "uuid", false, null, "internal"],
+        ["operation", "varchar(128)", false, null, "regulated"],
+        ["sales_order_id", "uuid", true, null, "regulated"],
+        ["sales_invoice_id", "uuid", true, null, "regulated"],
+        ["sales_return_id", "uuid", true, null, "regulated"],
+        ["purchase_order_id", "uuid", true, null, "regulated"],
+        ["supplier_invoice_id", "uuid", true, null, "regulated"],
+        ["purchase_return_id", "uuid", true, null, "regulated"],
+        ["adjustment_note_id", "uuid", true, null, "regulated"],
+        ["aggregate_version", "bigint", false, null, "regulated"],
+        ["actor_membership_id", "uuid", false, null, "personal"],
+        ["request_id", "uuid", false, null, "regulated"],
+        ["command_request_id", "uuid", true, null, "regulated"],
+        ["idempotency_key_id", "uuid", false, null, "regulated"],
+        ["request_sha256", "bytea", false, null, "secret_ciphertext"],
+        ["input_media_type", "varchar(128)", false, null, "regulated"],
+        ["input_bytes", "bytea", false, null, "secret_ciphertext"],
+        ["input_sha256", "bytea", false, null, "secret_ciphertext"],
+        ["output_media_type", "varchar(128)", false, null, "regulated"],
+        ["output_bytes", "bytea", false, null, "secret_ciphertext"],
+        ["output_sha256", "bytea", false, null, "secret_ciphertext"],
+        ["engine_version", "varchar(64)", false, null, "regulated"],
+        ["ruleset_version", "varchar(64)", false, null, "regulated"],
+        ["serializer_version", "varchar(64)", false, null, "regulated"],
+        ["calculator_principal", "varchar(63)", false, null, "regulated"],
+        ["attestation_method", "varchar(64)", false, null, "regulated"],
+        ["authority_version", "varchar(32)", false, "'1'::text", "regulated"],
+        ["authority_hash", "bytea", false, null, "secret_ciphertext"],
+        ["status", "text", false, "'issued'::text", "regulated"],
+        ["issued_at", "timestamptz", false, "transaction_timestamp()", "regulated"],
+        ["expires_at", "timestamptz", false, null, "regulated"],
+        ["consumed_at", "timestamptz", true, null, "regulated"],
+        ["consumed_by_membership_id", "uuid", true, null, "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "calculation_artifacts_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_branch_fk", "columns": ["org_id", "branch_id"], "references": "core.branches", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_actor_fk", "columns": ["org_id", "actor_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_consumed_by_fk", "columns": ["org_id", "consumed_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_command_fk", "columns": ["org_id", "command_request_id"], "references": "automation.command_requests", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_idempotency_fk", "columns": ["org_id", "idempotency_key_id"], "references": "core.idempotency_keys", "referenced_columns": ["org_id", "id"], "cardinality": "1:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_sales_order_fk", "columns": ["org_id", "sales_order_id"], "references": "sales.orders", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_sales_invoice_fk", "columns": ["org_id", "sales_invoice_id"], "references": "sales.invoices", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_sales_return_fk", "columns": ["org_id", "sales_return_id"], "references": "sales.returns", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_purchase_order_fk", "columns": ["org_id", "purchase_order_id"], "references": "procurement.purchase_orders", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_supplier_invoice_fk", "columns": ["org_id", "supplier_invoice_id"], "references": "procurement.supplier_invoices", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_purchase_return_fk", "columns": ["org_id", "purchase_return_id"], "references": "procurement.purchase_returns", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "calculation_artifacts_adjustment_note_fk", "columns": ["org_id", "adjustment_note_id"], "references": "finance.adjustment_notes", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [
+        {"name": "calculation_artifacts_idempotency_uq", "columns": ["org_id", "idempotency_key_id"], "where": null},
+        {"name": "calculation_artifacts_authority_hash_uq", "columns": ["org_id", "authority_hash"], "where": null}
+      ],
+      "checks": [
+        {"name": "calculation_artifacts_operation_ck", "expression": "operation IN ('sales.order.approve','sales.invoice.post','sales.return.post','procurement.purchase_order.approve','procurement.supplier_invoice.post','procurement.purchase_return.post','finance.adjustment_note.post')"},
+        {"name": "calculation_artifacts_typed_source_ck", "expression": "num_nonnulls(sales_order_id,sales_invoice_id,sales_return_id,purchase_order_id,supplier_invoice_id,purchase_return_id,adjustment_note_id)=1 AND ((operation='sales.order.approve' AND sales_order_id IS NOT NULL) OR (operation='sales.invoice.post' AND sales_invoice_id IS NOT NULL) OR (operation='sales.return.post' AND sales_return_id IS NOT NULL) OR (operation='procurement.purchase_order.approve' AND purchase_order_id IS NOT NULL) OR (operation='procurement.supplier_invoice.post' AND supplier_invoice_id IS NOT NULL) OR (operation='procurement.purchase_return.post' AND purchase_return_id IS NOT NULL) OR (operation='finance.adjustment_note.post' AND adjustment_note_id IS NOT NULL))"},
+        {"name": "calculation_artifacts_version_ck", "expression": "aggregate_version>0 AND btrim(engine_version)<>'' AND btrim(ruleset_version)<>'' AND serializer_version='aasopharma-jcs-decimal-v1' AND authority_version='1'"},
+        {"name": "calculation_artifacts_attestation_ck", "expression": "calculator_principal='erp_calculator' AND attestation_method='postgresql_session_user_v1'"},
+        {"name": "calculation_artifacts_media_ck", "expression": "input_media_type='application/vnd.aasopharma.calculation-input+json' AND output_media_type='application/vnd.aasopharma.calculation-output+json'"},
+        {"name": "calculation_artifacts_payload_ck", "expression": "octet_length(input_bytes) BETWEEN 2 AND 1048576 AND octet_length(output_bytes) BETWEEN 2 AND 1048576"},
+        {"name": "calculation_artifacts_hashes_ck", "expression": "octet_length(request_sha256)=32 AND octet_length(input_sha256)=32 AND octet_length(output_sha256)=32 AND octet_length(authority_hash)=32"},
+        {"name": "calculation_artifacts_status_ck", "expression": "status IN ('issued','consumed')"},
+        {"name": "calculation_artifacts_expiry_ck", "expression": "expires_at>issued_at"},
+        {"name": "calculation_artifacts_consumption_ck", "expression": "(status='issued' AND consumed_at IS NULL AND consumed_by_membership_id IS NULL) OR (status='consumed' AND consumed_at IS NOT NULL AND consumed_by_membership_id IS NOT NULL AND consumed_at>=issued_at)"}
+      ],
+      "indexes": [
+        {"name": "calculation_artifacts_aggregate_idx", "columns": ["org_id", "operation", "branch_id", "issued_at", "id"], "unique": false, "where": null, "purpose": "tenant command history and aggregate-bound artifact inspection"},
+        {"name": "calculation_artifacts_unconsumed_expiry_idx", "columns": ["org_id", "expires_at", "id"], "unique": false, "where": "status='issued'", "purpose": "reject or monitor stale unconsumed calculation evidence"},
+        {"name": "calculation_artifacts_command_idx", "columns": ["org_id", "command_request_id", "id"], "unique": false, "where": "command_request_id IS NOT NULL", "purpose": "MCP command preview and approval proof lookup"}
+      ]
+    }
+  ]
+}

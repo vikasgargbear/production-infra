@@ -4,6 +4,7 @@ import queryClient from './queryClient';
 import { useAuth } from './contexts/AuthContext';
 import { usePermissions } from './hooks/usePermissions';
 import LoginPage from './components/auth/LoginPage';
+import OAuthConsentPage from './components/auth/OAuthConsentPage';
 // import Sidebar from './components/Sidebar';
 import { ErrorBoundary } from './components/global/utilities';
 import { LoadingSpinner } from './components/global/ui';
@@ -18,7 +19,6 @@ import { LedgerHub } from './components/ledger';
 import CreditDebitFlow from './components/payment/flows/CreditDebitFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
-import PayrollHub from './components/payroll/PayrollHub';
 import ReportsHub from './components/reports/ReportsHub';
 // OLD AUTH DIAGNOSTIC - Not needed with new AuthContext
 // import AuthDiagnostic from './components/AuthDiagnostic';
@@ -92,7 +92,6 @@ type TabName =
   | 'credit-debit-note'
   | 'gst'
   | 'master'
-  | 'payroll'
   | 'receivables-collection'
   | 'components-test';
 
@@ -156,7 +155,6 @@ const TAB_MODULE_MAP: Partial<Record<TabName, string>> = {
   master:                  'master',
   customers:               'master',
   profile:                 'master',
-  payroll:                 'master',
 };
 
 const AppContent = (): JSX.Element => {
@@ -305,8 +303,6 @@ const AppContent = (): JSX.Element => {
         return <GSTHub key="gst" open={true} onClose={() => setActiveTab('home')} />;
       case 'master':
         return <MasterHub key="master" open={true} onClose={() => setActiveTab('home')} />;
-      case 'payroll':
-        return <PayrollHub key="payroll" open={true} onClose={() => setActiveTab('home')} />;
       case 'receivables-collection':
         return <div key="receivables-collection">Receivables Collection - Use Ledger Module → Collection Center</div>;
       case 'components-test':
@@ -351,6 +347,10 @@ const AppContent = (): JSX.Element => {
   // Show login if not authenticated
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  if (window.location.pathname === '/oauth/consent') {
+    return <OAuthConsentPage />;
   }
 
   // User is authenticated - show main app with offline support

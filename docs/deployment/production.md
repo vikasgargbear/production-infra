@@ -82,16 +82,16 @@ graph TB
 DATABASE_URL=postgresql://user:password@host:5432/pharmacy_prod
 
 # Security
-SECRET_KEY=<32+ character random string>
 JWT_SECRET_KEY=<32+ character random string>
-ENVIRONMENT=production
-DEBUG=false
+APP_ENV=production
+
+# Supabase Auth
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=<publishable-anon-key>
 
 # CORS (production domains)
-ALLOWED_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
-
-# Redis
-REDIS_URL=redis://redis-host:6379/0
+CORS_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
+APP_URL=https://app.yourdomain.com
 ```
 
 ### Optional Variables
@@ -153,15 +153,12 @@ See [Docker Deployment](docker.md)
 
 ### Method 3: Railway/Render
 
-```bash
-# Push to main triggers auto-deploy
-git push origin main
-
-# Or manual deploy
-railway up  # Railway
-# or
-render deploy  # Render
-```
+Render auto-deploy is disabled. Merge to `main` only after every required pull
+request check passes; the `deploy-render-pilot` GitHub job then calls the Render
+deploy API for the reviewed commit and waits for `/health` and `/ready`. Service
+creation, environment reconciliation, and an operator-initiated deploy use the
+fail-closed helper documented in [Render Deployment](render.md). Railway is not
+part of the reviewed canonical production path.
 
 ---
 
@@ -221,15 +218,13 @@ alembic upgrade head
 alembic current
 ```
 
-### Rollback Migration
+### Migration Failure Recovery
 
-```bash
-# Rollback last migration
-alembic downgrade -1
-
-# Rollback to specific revision
-alembic downgrade abc123
-```
+The canonical baseline migration deliberately has no downgrade. Never run
+`alembic downgrade` against a canonical database. A failed rehearsal is
+discarded and rebuilt from the reviewed baseline. After production cutover,
+restore a verified pre-cutover backup into a separate recovery environment,
+validate it, and switch traffic only through the reviewed incident process.
 
 ---
 
@@ -326,15 +321,19 @@ railway rollback
 # 1. Rollback code
 git checkout <previous-commit>
 
-# 2. Rollback migrations
-alembic downgrade -1
+# 2. Restore the verified backup into a separate recovery database
+createdb pharmacy_recovery
+pg_restore -d pharmacy_recovery backup_20260109.dump
 
-# 3. Restore database (if needed)
-pg_restore -d pharmacy_prod backup_20260109.dump
+# 3. Validate the recovery database and explicitly switch DATABASE_URL
+#    through the reviewed incident change process.
 
-# 4. Restart services
+# 4. Restart services only after readiness and data-integrity checks pass
 sudo systemctl restart pharmacy-api
 ```
+
+Do not restore over the failed database and do not downgrade the canonical
+revision in place.
 
 ---
 

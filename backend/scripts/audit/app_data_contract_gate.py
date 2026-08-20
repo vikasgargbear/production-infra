@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""Fail closed when app, canonical data, or MCP contracts drift."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any, Iterable
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CONTRACT = REPO_ROOT / "docs" / "architecture" / "app-data-contract.json"
+DEFAULT_MODEL = REPO_ROOT / "docs" / "architecture" / "canonical-data-model.json"
+DEFAULT_SOURCE_ROOT = REPO_ROOT / "backend" / "app"
+
+QUALIFIED_NAME = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+SQL_RELATION = re.compile(
+    r"(?i)\b(?:from|join|update|into|delete\s+from)\s+"
+    r"((?:analytics|compliance|financial|gst|inventory|master|parties|"
+    r"procurement|public|sales|system_config|payroll)\.[a-z_][a-z0-9_]*)"
+)
+VALID_ACTIONS = {
+    "retain",
+    "rename",
+    "merge",
+    "merge_duplicate",
+    "replace_projection",
+    "split",
+    "defer",
+    "retire",
+}
+VALID_RISKS = {
+    "read_only",
+    "reversible_write",
+    "consequential_write",
+    "regulated_external",
+}
+REQUIRED_SECURITY_RELATIONS = {
+    "core.users",
+    "core.memberships",
+    "core.permissions",
+    "core.role_permissions",
+    "core.access_grants",
+    "automation.agent_grants",
+    "automation.agent_grant_capabilities",
+    "automation.command_requests",
+    "automation.command_approvals",
+    "core.idempotency_keys",
+    "core.audit_events",
+}
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"duplicate JSON key: {key}")
+            value[key] = item
+        return value
+
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle, object_pairs_hook=reject_duplicates)
+
+
+def load_contract(path: Path = DEFAULT_CONTRACT) -> dict[str, Any]:
+    return _load_json(path)
+
+
+def load_model(path: Path = DEFAULT_MODEL) -> dict[str, Any]:
+    return _load_json(path)
+
+
+def relation_names(model: dict[str, Any]) -> list[str]:
+    groups = model.get("canonical_tables", {})
+    if not isinstance(groups, dict):
+        return []
+    return [
+        table
+        for tables in groups.values()
+        if isinstance(tables, list)
+        for table in tables
+        if isinstance(table, str)
+    ]
+
+
+def _duplicates(values: Iterable[str]) -> set[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    return duplicates
+
+
+def discover_sql_relations(source_root: Path) -> dict[str, set[str]]:
+    """Find schema-qualified relation positions in Python SQL literals."""
+
+    discovered: dict[str, set[str]] = {}
+    for path in sorted(source_root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError) as exc:
+            raise ValueError(f"cannot parse {path}: {exc}") from exc
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            for match in SQL_RELATION.finditer(node.value):
+                relation = match.group(1).lower()
+                discovered.setdefault(relation, set()).add(str(path))
+    return discovered
+
+
+def validate_contract(
+    contract: dict[str, Any],
+    source_root: Path | None = DEFAULT_SOURCE_ROOT,
+    model: dict[str, Any] | None = None,
+) -> list[str]:
+    errors: list[str] = []
+    if model is None:
+        try:
+            model = load_model()
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            return [f"canonical model cannot be loaded: {exc}"]
+
+    authority = contract.get("data_authority")
+    if not isinstance(authority, dict):
+        return ["data_authority must be an object"]
+    if authority.get("manifest") != "docs/architecture/canonical-data-model.json":
+        errors.append("data_authority.manifest must name the canonical model")
+    if authority.get("expected_version") != model.get("model_version"):
+        errors.append("canonical model version differs from app contract")
+
+    model_groups = model.get("canonical_tables")
+    if not isinstance(model_groups, dict) or not model_groups:
+        return errors + ["canonical model canonical_tables must be a non-empty object"]
+    names = relation_names(model)
+    for duplicate in sorted(_duplicates(names)):
+        errors.append(f"duplicate canonical model table: {duplicate}")
+    relation_index = set(names)
+    if authority.get("expected_table_count") != len(relation_index):
+        errors.append(
+            "canonical model table count differs from app contract: "
+            f"expected {authority.get('expected_table_count')}, got {len(relation_index)}"
+        )
+    for relation in sorted(REQUIRED_SECURITY_RELATIONS - relation_index):
+        errors.append(f"canonical model lacks required security relation: {relation}")
+
+    identity = contract.get("identity_resolution_contract")
+    if not isinstance(identity, dict):
+        errors.append("identity_resolution_contract must be an object")
+    else:
+        steps = identity.get("steps")
+        if not isinstance(steps, list) or not all(isinstance(step, str) for step in steps):
+            errors.append("identity_resolution_contract.steps must be a string array")
+        else:
+            identity_text = " ".join(steps)
+            for required in ("core.access_grants", "erp_security.activate_context"):
+                if required not in identity_text:
+                    errors.append(f"identity resolution omits canonical boundary {required}")
+            for retired in ("core.membership_roles", "core.activate_tenant", "SET LOCAL ROLE"):
+                if retired in identity_text:
+                    errors.append(f"identity resolution references retired boundary {retired}")
+
+    scope = contract.get("relation_scope")
+    if not isinstance(scope, dict):
+        errors.append("relation_scope must be an object")
+        scope = {}
+    classified: list[str] = []
+    deferred_relations: list[str] = []
+    retained_owners: dict[str, str] = {}
+    for category in (
+        "active_retained",
+        "legally_required_retained",
+        "cross_cutting_safety_retained",
+    ):
+        groups = scope.get(category, {})
+        if not isinstance(groups, dict):
+            errors.append(f"relation_scope.{category} must be an object")
+            continue
+        for owner, relations in groups.items():
+            if not isinstance(relations, list) or not relations:
+                errors.append(f"relation_scope.{category}.{owner} must be non-empty")
+                continue
+            for relation in relations:
+                classified.append(relation)
+                retained_owners[relation] = owner
+    deferred = scope.get("deferred_unmount", {})
+    if not isinstance(deferred, dict):
+        errors.append("relation_scope.deferred_unmount must be an object")
+        deferred = {}
+    for module, decision in deferred.items():
+        if not isinstance(decision, dict):
+            errors.append(f"deferred module {module} must be an object")
+            continue
+        relations = decision.get("relations")
+        if not isinstance(relations, list) or not relations:
+            errors.append(f"deferred module {module} must name relations")
+            continue
+        deferred_relations.extend(relations)
+        for field in ("backend_action", "frontend_action", "evidence"):
+            if not decision.get(field):
+                errors.append(f"deferred module {module} lacks {field}")
+    for duplicate in sorted(_duplicates(classified)):
+        errors.append(f"canonical relation classified more than once: {duplicate}")
+    for relation in sorted(relation_index - set(classified)):
+        errors.append(f"canonical relation has no scope decision: {relation}")
+    for relation in sorted(set(classified) - relation_index):
+        errors.append(f"scope decision names unknown canonical relation: {relation}")
+    for relation in sorted(set(deferred_relations) & relation_index):
+        errors.append(f"deferred relation remains in canonical model: {relation}")
+    for duplicate in sorted(_duplicates(deferred_relations)):
+        errors.append(f"deferred relation named more than once: {duplicate}")
+    if scope.get("lean_active_table_count") != len(retained_owners):
+        errors.append("lean_active_table_count differs from retained scope")
+    if scope.get("deferred_table_count") != len(deferred_relations):
+        errors.append("deferred_table_count differs from deferred scope")
+
+    workflows = contract.get("workflows")
+    if not isinstance(workflows, list) or not workflows:
+        return errors + ["workflows must be a non-empty array"]
+    resources = [item.get("resource", "") for item in workflows if isinstance(item, dict)]
+    for duplicate in sorted(_duplicates(resources)):
+        errors.append(f"duplicate workflow resource: {duplicate}")
+    for workflow in workflows:
+        if not isinstance(workflow, dict):
+            errors.append("workflow must be an object")
+            continue
+        resource = workflow.get("resource", "<unknown>")
+        for relation in workflow.get("relations", []):
+            if relation not in relation_index:
+                errors.append(f"workflow {resource}: unknown canonical relation {relation}")
+        for field in (
+            "api_routes",
+            "frontend_modules",
+            "relations",
+            "query_shapes",
+            "mcp_resources",
+            "mcp_tools",
+        ):
+            if not isinstance(workflow.get(field), list) or not workflow[field]:
+                errors.append(f"workflow {resource}: {field} must be non-empty")
+        if not workflow.get("approval_boundary"):
+            errors.append(f"workflow {resource}: approval_boundary is required")
+
+    resource_index = set(resources)
+    for relation, owner in retained_owners.items():
+        if owner not in resource_index:
+            errors.append(f"retained relation {relation} has unknown workflow owner {owner}")
+            continue
+        owner_workflow = next(item for item in workflows if item.get("resource") == owner)
+        if relation not in owner_workflow.get("relations", []):
+            errors.append(f"retained relation {relation} is absent from owner workflow {owner}")
+    operations = contract.get("mcp_operations")
+    if not isinstance(operations, list) or not operations:
+        errors.append("mcp_operations must be a non-empty array")
+        operations = []
+    tools = [item.get("tool", "") for item in operations if isinstance(item, dict)]
+    for duplicate in sorted(_duplicates(tools)):
+        errors.append(f"duplicate MCP tool: {duplicate}")
+    for operation in operations:
+        if not isinstance(operation, dict):
+            errors.append("MCP operation must be an object")
+            continue
+        tool = operation.get("tool", "<unknown>")
+        mode = operation.get("mode")
+        risk = operation.get("risk")
+        approval = operation.get("approval")
+        idempotency = operation.get("idempotency")
+        if operation.get("resource") not in resource_index:
+            errors.append(f"{tool}: MCP resource has no workflow")
+        if risk not in VALID_RISKS:
+            errors.append(f"{tool}: invalid risk {risk!r}")
+        if mode == "read":
+            if risk != "read_only" or idempotency != "not_applicable" or approval != "none":
+                errors.append(f"{tool}: read operation metadata is not side-effect free")
+        elif mode == "write":
+            if risk == "read_only":
+                errors.append(f"{tool}: write operation cannot be read_only")
+            if idempotency != "required":
+                errors.append(f"{tool}: MCP writes require idempotency")
+            if approval in {None, "", "none"}:
+                errors.append(f"{tool}: MCP writes require an approval boundary")
+        else:
+            errors.append(f"{tool}: mode must be read or write")
+        if risk == "consequential_write" and approval not in {
+            "actor_confirmation",
+            "command_policy",
+            "separate_approver",
+            "human_compliance_approver",
+        }:
+            errors.append(f"{tool}: consequential write lacks confirmation or approval")
+        if risk == "regulated_external" and approval != "human_compliance_approver":
+            errors.append(f"{tool}: regulated external action requires human approver")
+
+    legacy_map = contract.get("legacy_relation_map")
+    if not isinstance(legacy_map, dict):
+        errors.append("legacy_relation_map must be an object")
+        legacy_map = {}
+    for legacy, decision in legacy_map.items():
+        if not QUALIFIED_NAME.fullmatch(legacy):
+            errors.append(f"invalid legacy relation name: {legacy!r}")
+        if not isinstance(decision, dict):
+            errors.append(f"{legacy}: decision must be an object")
+            continue
+        action = decision.get("action")
+        if action not in VALID_ACTIONS:
+            errors.append(f"{legacy}: invalid migration action {action!r}")
+        target = decision.get("canonical")
+        if action in {"defer", "retire"}:
+            if not decision.get("reason"):
+                errors.append(f"{legacy}: {action} requires a reason")
+            if target is not None:
+                errors.append(f"{legacy}: {action} must not claim a canonical target")
+        elif target not in relation_index:
+            errors.append(f"{legacy}: unknown canonical target {target!r}")
+        also_targets = decision.get("also_targets", [])
+        if not isinstance(also_targets, list):
+            errors.append(f"{legacy}: also_targets must be an array")
+        else:
+            for additional in also_targets:
+                if additional not in relation_index:
+                    errors.append(f"{legacy}: unknown additional target {additional!r}")
+
+    routines = set(contract.get("legacy_routines", []))
+    if source_root is not None:
+        try:
+            discovered = discover_sql_relations(source_root)
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            for relation in sorted(
+                set(discovered) - set(legacy_map) - routines - relation_index
+            ):
+                evidence = ", ".join(sorted(discovered[relation]))
+                errors.append(f"unmapped SQL relation {relation}: {evidence}")
+    return errors
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT)
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE_ROOT)
+    parser.add_argument("--contract-only", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        contract = load_contract(args.contract)
+        model = load_model(args.model)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"app-data-contract: invalid input: {exc}", file=sys.stderr)
+        return 1
+    errors = validate_contract(
+        contract,
+        source_root=None if args.contract_only else args.source_root,
+        model=model,
+    )
+    if errors:
+        print("app-data-contract: FAILED", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+    print(
+        "app-data-contract: OK "
+        f"({len(relation_names(model))} canonical tables, {len(contract['workflows'])} "
+        f"workflows, {len(contract['mcp_operations'])} reviewed MCP operations)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

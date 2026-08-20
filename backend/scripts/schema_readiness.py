@@ -155,10 +155,10 @@ def check_authority_state(authority: Mapping, root: Path) -> list[Issue]:
         return []
     return [
         Issue(
-            code="authority_unbaselined",
+            code="authority_not_production_ready",
             message=(
-                "Schema authority is not production_ready. Establish and review a live baseline "
-                "before changing this state."
+                "Schema authority is not production_ready. Complete the isolated deployment, "
+                "runtime cutover, and live evidence gates before changing this state."
             ),
             path=_relative(root / AUTHORITY_PATH, root),
         )
@@ -604,6 +604,36 @@ def audit_repository(repo_root: Path) -> ReadinessReport:
     return ReadinessReport(authority_state=authority["readiness_state"], issues=tuple(issues))
 
 
+def audit_authority_contract(repo_root: Path) -> tuple[Issue, ...]:
+    """Validate the declared authority without treating retired DDL as the target.
+
+    The full repository audit remains available as a legacy cleanup diagnostic.
+    Reset-and-baseline promotion instead needs proof that every competing source
+    is classified, canonical Alembic infrastructure is complete, and the mixed
+    legacy deploy script stays guarded until cutover.
+    """
+    root = repo_root.resolve()
+    authority = load_authority(root)
+    issues: list[Issue] = []
+    issues.extend(check_migration_infrastructure(authority, root))
+    issues.extend(check_source_classification(authority, root))
+    deployment_issues = check_deployment_includes(authority, root)
+    if [issue.code for issue in deployment_issues] != [
+        "deployment_blocked_pending_live_baseline"
+    ]:
+        issues.extend(deployment_issues)
+        issues.append(Issue(
+            code="legacy_deployment_guard_missing",
+            message=(
+                "The retired mixed-SQL deployment entrypoint must retain its reviewed "
+                "guard; canonical Alembic is the only production migration authority."
+            ),
+            path=authority["deployment_entrypoint"],
+        ))
+    issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))
+    return tuple(issues)
+
+
 def validate_readiness_claim(report: ReadinessReport) -> bool:
     """Validate that the authority's claim is conservative.
 
@@ -637,14 +667,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Repository root (defaults to the root containing backend/ and database/).",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--validate-claim",
         action="store_true",
         help="Validate that schema-authority.json does not overstate readiness.",
     )
+    mode.add_argument(
+        "--validate-authority",
+        action="store_true",
+        help=(
+            "Validate the reset-and-baseline migration authority and legacy source "
+            "classification without requiring retired bootstrap DDL to be repaired."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.validate_authority:
+            issues = audit_authority_contract(args.repo_root)
+            if issues:
+                print("Database migration authority: BLOCKED")
+                for issue in issues:
+                    location = issue.path + (f":{issue.line}" if issue.line else "")
+                    print(f"[{issue.severity}] {issue.code} {location}: {issue.message}")
+                return 1
+            print(
+                "Database migration authority: OK "
+                "(canonical Alembic; legacy sources classified)"
+            )
+            return 0
         report = audit_repository(args.repo_root)
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as error:
         print(f"Database readiness: BLOCKED: {error}", file=sys.stderr)

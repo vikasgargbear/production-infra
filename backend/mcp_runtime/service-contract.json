@@ -1,0 +1,87 @@
+{
+  "service": "aasopharma-mcp",
+  "python": "3.11",
+  "transport": "streamable-http",
+  "mount_path": "/mcp",
+  "health_path": "/health",
+  "readiness_path": "/ready",
+  "required_environment": [
+    "ERP_API_BASE_URL",
+    "MCP_INTERNAL_SERVICE_TOKEN",
+    "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+    "MCP_RESOURCE_SERVER_URL",
+    "SUPABASE_OAUTH_ISSUER"
+  ],
+  "optional_environment": {
+    "MCP_BIND_HOST": "0.0.0.0",
+    "MCP_REQUEST_TIMEOUT_SECONDS": "10"
+  },
+  "derived_configuration": {
+    "jwks_url": "${SUPABASE_OAUTH_ISSUER}/.well-known/jwks.json",
+    "grant_authorize_url": "${ERP_API_BASE_URL}/api/internal/mcp/agent-grants/authorize",
+    "grant_readiness_url": "${ERP_API_BASE_URL}/api/internal/mcp/agent-grants/ready"
+  },
+  "oauth": {
+    "audience": "authenticated",
+    "required_scopes": ["openid", "offline_access"],
+    "allowed_scopes": ["openid", "profile", "email", "phone", "offline_access"],
+    "dynamic_client_registration": false,
+    "client_registration": "reviewed-pre-registration-only"
+  },
+  "tools": [
+    "erp_gst_settings_get",
+    "erp_product_search",
+    "erp_supplier_search"
+  ],
+  "writes_exported": false,
+  "operator_actions": {
+    "contract": "docs/architecture/mcp-operator-actions.json",
+    "status": "planned_fail_closed",
+    "exported": false,
+    "planned_tools": [
+      "erp_customer_receipt_prepare",
+      "erp_goods_receipt_prepare",
+      "erp_inventory_adjustment_prepare",
+      "erp_inventory_destruction_prepare",
+      "erp_inventory_transfer_prepare",
+      "erp_operation_approve",
+      "erp_operation_execute",
+      "erp_operation_status_get",
+      "erp_purchase_order_prepare",
+      "erp_purchase_return_prepare",
+      "erp_sales_dispatch_prepare",
+      "erp_sales_invoice_prepare",
+      "erp_sales_order_prepare",
+      "erp_sales_return_prepare",
+      "erp_supplier_advance_prepare",
+      "erp_supplier_invoice_prepare",
+      "erp_supplier_payment_prepare"
+    ],
+    "planned_resolution_tools": [
+      "erp_customer_search",
+      "erp_goods_receipt_get",
+      "erp_inventory_location_search",
+      "erp_open_item_search",
+      "erp_purchase_order_get",
+      "erp_sales_invoice_get",
+      "erp_sales_order_get",
+      "erp_settlement_choice_search",
+      "erp_stock_batch_search",
+      "erp_supplier_invoice_get"
+    ],
+    "release_gates": {
+      "canonical_api_command_boundary_verified": false,
+      "canonical_database_commands_deployed_verified": false,
+      "calculation_tax_inventory_parity_verified": false,
+      "idempotency_concurrency_audit_verified": false,
+      "hosted_oauth_consent_verified": false,
+      "chatgpt_claude_staging_verified": false
+    }
+  },
+  "readiness_blockers": [
+    "hosted_oauth_consent_not_implemented",
+    "reviewed_client_preregistration_not_evidenced",
+    "canonical_schema_deployment_not_verified",
+    "mcp_staging_verification_incomplete"
+  ]
+}

@@ -14,7 +14,7 @@ from .supplier import (
 
 from .product_schema import (
     ProductPackConfig,
-    ProductBase, ProductCreate, ProductUpdate, ProductResponse, ProductSummary,
+    ProductBase, ProductCreate, ProductUpdate, ProductMutationResponse, ProductResponse, ProductSummary,
     ProductListResponse, ProductSearch,
     Product  # Legacy alias
 )
@@ -31,7 +31,7 @@ __all__ = [
     "SupplierListResponse", "SupplierSummary",
     # Product
     "ProductPackConfig",
-    "ProductBase", "ProductCreate", "ProductUpdate", "ProductResponse", "ProductSummary",
+    "ProductBase", "ProductCreate", "ProductUpdate", "ProductMutationResponse", "ProductResponse", "ProductSummary",
     "ProductListResponse", "ProductSearch",
     "Product",
 ]

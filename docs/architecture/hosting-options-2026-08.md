@@ -106,7 +106,7 @@ below are implemented and tested.
 
 The official Python MCP SDK cannot be added safely as a one-line dependency in
 the shared FastAPI environment. The current stable `mcp==2.0.0` requires at least
-`pydantic>=2.12.0`, `PyJWT[crypto]>=2.10.1`, `python-multipart>=0.0.9`, and
+`pydantic>=2.12.0`, `PyJWT[crypto]>=2.13.0`, `python-multipart>=0.0.9`, and
 `uvicorn>=0.31.1`. This repository pins `pydantic==2.5.0`, `PyJWT==2.8.0`,
 `python-multipart==0.0.6`, and `uvicorn==0.24.0`. The workstation interpreter
 and existing virtual environment remain Python 3.9.6, while Render/Docker and

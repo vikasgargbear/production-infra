@@ -7,6 +7,14 @@
 
 import { apiHelpers } from '../../apiClient';
 import { createCrudApi } from '../../utils/createCrudApi';
+import {
+  productCreateSchema,
+  productUpdateSchema,
+  ProductCreateInput,
+  ProductMutationResponse,
+  ProductUpdateInput,
+} from '../../../../types/models/product';
+import type { AxiosResponse } from 'axios';
 
 // ============================================================================
 // TYPES
@@ -23,6 +31,7 @@ export interface ProductParams {
   expired?: boolean;
   expiring_soon?: boolean;
   days?: number;
+  include_inactive?: boolean;
 }
 
 export interface ProductSyncParams {
@@ -40,6 +49,17 @@ const crud = createCrudApi({ basePath: '/products' });
 
 export const productsApi = {
   ...crud,
+
+  create: (data: ProductCreateInput): Promise<AxiosResponse<ProductMutationResponse>> => {
+    return apiHelpers.post('/products', productCreateSchema.parse(data));
+  },
+
+  update: (
+    productId: number | string,
+    data: ProductUpdateInput,
+  ): Promise<AxiosResponse<ProductMutationResponse>> => {
+    return apiHelpers.put(`/products/${productId}`, productUpdateSchema.parse(data));
+  },
 
   // Search products
   search: (query: string, params: ProductParams = {}) => {

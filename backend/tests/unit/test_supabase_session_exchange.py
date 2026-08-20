@@ -1,5 +1,7 @@
 import asyncio
 import importlib
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -251,3 +253,82 @@ def test_supabase_identity_lookup_uses_only_token_and_anon_key(monkeypatch):
     }
     assert "must-not-be-used" not in captured["headers"].values()
     assert captured["client_kwargs"] == {"timeout": 10.0}
+
+
+def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    grant_id = UUID("44444444-4444-4444-4444-444444444444")
+    row = SimpleNamespace(
+        _mapping={
+            "org_id": UUID("22222222-2222-2222-2222-222222222222"),
+            "organization_name": "AASO Pharma",
+            "membership_id": UUID("33333333-3333-3333-3333-333333333333"),
+            "agent_grant_id": grant_id,
+            "client_id": "client-1",
+            "client_display_name": "Reviewed Assistant",
+            "branch_id": None,
+            "branch_name": None,
+            "consent_version": "v1",
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc),
+            "capability_code": "master.products.search",
+            "operation_mode": "read",
+            "risk_class": "read_only",
+            "approval_policy": "none",
+            "maximum_amount": None,
+            "currency_code": None,
+            "allow_sensitive_read": False,
+        }
+    )
+    captured = {}
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1,client-2")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda _db, subject, client_id: captured.update(
+            {"subject": subject, "client_id": client_id}
+        ) or [row],
+    )
+
+    result = _run(
+        oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object())
+    )
+
+    assert result.subject == UUID(AUTH_USER_ID)
+    assert result.agent_grant_id == grant_id
+    assert result.client_display_name == "Reviewed Assistant"
+    assert result.capabilities[0].capability_code == "master.products.search"
+    assert captured == {"subject": UUID(AUTH_USER_ID), "client_id": "client-1"}
+
+
+def test_consent_proposal_rejects_wrong_client_before_database_lookup(monkeypatch):
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("wrong client must not reach the database"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _run(oauth.get_mcp_consent_proposal("wrong-client", _credentials(), db=object()))
+
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "OAuth client is not pre-registered"
+
+
+def test_consent_proposal_sql_requires_live_canonical_authority():
+    source = (oauth.__file__ and open(oauth.__file__, encoding="utf-8").read()) or ""
+    for fragment in (
+        "automation.agent_grants",
+        "automation.agent_grant_capabilities",
+        "core.memberships",
+        "core.access_grants",
+        "grant_row.status='active'",
+        "grant_row.expires_at>transaction_timestamp()",
+        "access_grant.valid_from_at<=transaction_timestamp()",
+        "capability.status='active'",
+    ):
+        assert fragment in source
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in source

@@ -108,7 +108,7 @@ async def get_org_context(
                 detail="Service configuration error"
             )
         logger.warning("TEST_MODE enabled - bypassing authentication")
-        # Return default test context - adjust org_id to match your test org
+        # Legacy fixtures use integer branch IDs here. Canonical fixture packs use UUIDs.
         test_org_id = os.getenv("TEST_ORG_ID", "e78d6777-35f6-4b19-994f-caaede2f021a")
         test_branch_id = int(os.getenv("TEST_BRANCH_ID", "5"))
         return OrgContext(

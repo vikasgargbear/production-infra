@@ -1,0 +1,99 @@
+{
+  "blocked_count": 18,
+  "blocked_invariants": {
+    "automation.agent_grant_capabilities:agent_grant_capabilities_revocation": {
+      "reason": "The parent grant has no consented risk ceiling, approval-policy ceiling, amount ceiling, currency scope, or sensitive-read scope to compare against."
+    },
+    "automation.command_approvals:command_approval_separation_of_duties": {
+      "reason": "The request does not persist the permission code required of an approver, so same-organization permission cannot be proved without inventing an authorization mapping."
+    },
+    "automation.command_requests:command_execution_guard": {
+      "reason": "Execution, aggregate re-hashing, shared application command dispatch, and exactly-once resource creation require a reviewed stored command procedure and application command registry."
+    },
+    "automation.command_requests:command_request_matches_grant": {
+      "reason": "The request has no branch_id, requested amount/currency, or sensitive-read flag, and capability_code does not define an operation compatibility registry."
+    },
+    "catalog.ingredients:ingredient_reference_release": {
+      "reason": "A row constraint cannot verify official source bytes, a canonical exact-set dataset, reviewed object-storage evidence, atomic whole-release supersession, or invalidate affected tenant products; this requires the isolated regulatory import command."
+    },
+    "catalog.product_ingredients:active_medicine_has_composition": {
+      "reason": "No approved versioned-command identifier is stored on product or composition mutations, so post-first-use changes cannot be distinguished from unauthorized edits."
+    },
+    "catalog.products:products_regulatory_classification": {
+      "reason": "No effective-dated migration-owned ingredient classification ruleset or reviewed CDSCO/NDPS source dataset exists to derive and verify both independent regulatory dimensions."
+    },
+    "catalog.products:products_state_and_first_use": {
+      "reason": "No approved versioned-command identifier or immutable product-version relation exists for regulated post-first-use changes."
+    },
+    "core.access_grants:access_grants_state_transition": {
+      "reason": "Transactional expiry at every authorization use belongs to the security helper contract; this invariant cannot independently prove every caller uses that helper."
+    },
+    "core.audit_events:audit_events_append_only": {
+      "reason": "The catalog now stores mutation kind, before/after hashes and chain evidence, but canonical field serialization, hash algorithm versioning and a concurrency-safe organization chain lock still require reviewed trigger SQL."
+    },
+    "core.data_retention_cases:data_retention_cases_command_guard": {
+      "reason": "Eligibility, legal-hold evaluation, subject anonymization and immutable completion evidence require a typed privacy command spanning the subject aggregate; row-local constraints cannot prove those effects."
+    },
+    "core.document_sequences:document_sequences_atomic_allocation": {
+      "reason": "The sequence row has no idempotency claim link or allocation record, so ownership, replay, and no-reuse cannot all be proved by a row trigger."
+    },
+    "core.organizations:organizations_state_transition": {
+      "reason": "The organization has no legal-retention metadata columns identifying the updates permitted after closure."
+    },
+    "core.reference_data_releases:reference_data_release_import": {
+      "reason": "Release provenance requires an isolated operator principal, official-host validation, exact source and dataset hashes, typed reviewer evidence, transaction-scoped row imports, and atomic supersession that no row-local trigger can perform."
+    },
+    "core.settings:settings_state_transition": {
+      "reason": "There is no audit-event link or version lineage column proving that retirement and replacement were audited as one reviewed command."
+    },
+    "parties.customer_accounts:customer_accounts_state_transition": {
+      "reason": "There is no audit-event or approved-command link proving credit-limit and credit-day changes were audited."
+    },
+    "parties.parties:parties_state_transition": {
+      "reason": "Posted documents snapshot party identity but expose no stable source-party/version link that can prove whether an identity field has already been used."
+    },
+    "parties.supplier_accounts:supplier_accounts_state_transition": {
+      "reason": "There is no audit-event or approved-command link proving payment-term changes were audited."
+    }
+  },
+  "catalog_invariant_sha256": "b097eb09929941d26ab9245efbc9cdb7af6c301e9a3aac2cd0de6e65257ad130",
+  "extension_owner": {
+    "btree_gist": "catalog.product_ingredients:product_ingredients_no_overlap"
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-stable-enforcements.json",
+  "mapping_sha256": "b6203d9742fb64cf5e286963345424310b997cb28456f20b2b409dc6a4896c42",
+  "postgresql": "15+",
+  "resolved_count": 14,
+  "resolved_invariants": [
+    "automation.agent_grants:agent_grants_state_expiry_and_revocation",
+    "automation.command_approvals:command_approval_exact_preview",
+    "catalog.commercial_charge_tax_profiles:commercial_charge_tax_profiles_no_overlap",
+    "catalog.product_ingredients:product_ingredients_no_overlap",
+    "catalog.uom_conversions:uom_conversions_no_overlap",
+    "core.attachments:attachments_evidence_immutability",
+    "core.branches:branches_state_transition",
+    "core.idempotency_keys:idempotency_claim_once",
+    "core.memberships:memberships_state_transition",
+    "core.outbox_events:outbox_delivery_transition",
+    "core.users:users_state_transition",
+    "hr.employees:employees_state_transition",
+    "parties.addresses:addresses_primary_period_no_overlap",
+    "parties.tax_registrations:tax_registrations_state_and_period"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "function_schema": "erp_stable_invariants",
+    "runtime_callable_functions": [
+      "core.claim_idempotency_key(uuid,uuid,varchar,bytea,bytea,timestamptz)"
+    ],
+    "trigger_functions_public_execute": false
+  },
+  "stable_domains": [
+    "core",
+    "parties",
+    "catalog",
+    "hr",
+    "automation"
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "blocked_count": 8,
+  "blocked_invariants": {
+    "procurement.purchase_return_lines:procurement_purchase_return_lines_invariant_1": {
+      "reason": "Exact cumulative residual verification is possible for invoiced product allocations, but the modeled uninvoiced path has no immutable monetary source and neither path persists final_residual intent. The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "procurement.purchase_returns:procurement_purchase_returns_invariant_1": {
+      "reason": "The header has no supplier_invoice_id for locking the original cumulative reversal state. The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "procurement.supplier_invoice_lines:procurement_supplier_invoice_lines_invariant_1": {
+      "reason": "The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "procurement.supplier_invoices:procurement_supplier_invoices_invariant_1": {
+      "reason": "The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "sales.invoice_lines:sales_invoice_lines_invariant_1": {
+      "reason": "The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "sales.invoices:sales_invoices_invariant_1": {
+      "reason": "The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "sales.return_lines:sales_return_lines_invariant_1": {
+      "reason": "The persisted original supports proportional component checks, but final_residual intent must be tied to the locked cumulative original and prior returns. The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    },
+    "sales.returns:sales_returns_invariant_1": {
+      "reason": "Exact header residuals must be posted with their effects. The calculation envelope can be compared, but this invariant cannot be split from its header posting: the same restricted transaction must also create the exact typed tax document, open item or adjustment, accounting event/journal, and any required inventory document. No reviewed shared writer and account-mapping interface for those effects exists yet, and this trade fragment must not invent a parallel authority."
+    }
+  },
+  "calculation_gate": {
+    "required_interface": "The canonical calculation.artifacts authority supplies authenticated, database-hashed fixed input/output bytes and a private one-time consumer. The order commands in this fragment reconstruct inputs, compare every persisted result, and consume the artifact atomically; an application-supplied hash alone is never proof.",
+    "status": "consumed_for_order_approvals; downstream-posting-effects-still-blocked"
+  },
+  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-trade-posting-enforcements.json",
+  "mapping_sha256": "cded4d67222b70cd87c8588507e44b0f022bb37212489d5a6ee3407c0356f863",
+  "ownership": {
+    "composed_ledger_writer": "erp_trade_commands.emit_entry",
+    "composed_projector": "erp_trade_commands.project_entry",
+    "inventory_ledger_writer_added": false,
+    "inventory_projector_added": false,
+    "preclaim_interface": "core.claim_idempotency_key",
+    "runtime_commands": [
+      "erp_trade_commands_v2.approve_purchase_order",
+      "erp_trade_commands_v2.approve_sales_order",
+      "erp_trade_commands_v2.post_landed_cost_adjustment"
+    ]
+  },
+  "postgresql": "15+",
+  "prior_manifest_sha256": "f861d899d4a8591b075ab85e177b8cf4e9ec6e3afd71bb94e69abf35aa9cee0f",
+  "resolved_count": 9,
+  "resolved_invariants": [
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_landed_cost_allocation",
+    "inventory.inventory_documents:inventory_inventory_documents_invariant_2",
+    "inventory.inventory_documents:inventory_inventory_documents_landed_cost",
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_landed_cost",
+    "procurement.purchase_order_advance_allocations:purchase_order_advance_allocations_cross_row_guard",
+    "procurement.purchase_order_lines:procurement_purchase_order_lines_invariant_1",
+    "procurement.purchase_orders:procurement_purchase_orders_invariant_1",
+    "sales.order_lines:sales_order_lines_invariant_1",
+    "sales.orders:sales_orders_invariant_1"
+  ]
+}

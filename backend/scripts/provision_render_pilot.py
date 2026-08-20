@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently provision the two Render pilot services from reviewed inputs.
+"""Idempotently provision the three Render pilot services from reviewed inputs.
 
 Dry-run is the default. Applying changes requires --apply and RENDER_API_KEY.
 Deploying after configuration requires the additional --deploy flag.
@@ -25,15 +25,39 @@ DEFAULT_REPO = "https://github.com/vikasgargbear/production-infra"
 DEFAULT_BRANCH = "main"
 API_NAME = "aasopharma-api-pilot"
 FRONTEND_NAME = "aasopharma-erp-pilot"
+MCP_NAME = "aasopharma-mcp-pilot"
 
 BACKEND_REQUIRED = (
     "DATABASE_URL",
+    "ERP_CALCULATOR_DATABASE_URL",
+    "TAX_PROVIDER_DATABASE_URL",
+    "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN",
+    "TAX_PROVIDER_INTERNAL_HMAC_SECRET",
     "JWT_SECRET_KEY",
     "SUPABASE_URL",
     "SUPABASE_ANON_KEY",
-    "SUPABASE_SERVICE_ROLE_KEY",
+    "MCP_INTERNAL_SERVICE_TOKEN",
+    "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+)
+MCP_SHARED_REQUIRED = (
+    "SUPABASE_OAUTH_ISSUER",
+    "MCP_INTERNAL_SERVICE_TOKEN",
+    "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+)
+OPERATOR_REQUIRED = tuple(dict.fromkeys((*BACKEND_REQUIRED, *MCP_SHARED_REQUIRED)))
+MCP_ALLOWED_ENV_KEYS = frozenset(
+    {
+        "SUPABASE_OAUTH_ISSUER",
+        "MCP_RESOURCE_SERVER_URL",
+        "ERP_API_BASE_URL",
+        "MCP_INTERNAL_SERVICE_TOKEN",
+        "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+        "MCP_BIND_HOST",
+        "MCP_REQUEST_TIMEOUT_SECONDS",
+    }
 )
 SMTP_KEYS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD")
+SMTP_OPTIONAL_KEYS = ("SMTP_FROM_EMAIL", "SMTP_FROM_NAME")
 
 
 class ProvisioningError(RuntimeError):
@@ -71,10 +95,10 @@ def load_env_file(path: Optional[Path]) -> Dict[str, str]:
 
 def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
     values = load_env_file(env_file)
-    for key in (*BACKEND_REQUIRED, *SMTP_KEYS):
+    for key in (*OPERATOR_REQUIRED, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS):
         if os.getenv(key):
             values[key] = os.environ[key]
-    missing = [key for key in BACKEND_REQUIRED if not values.get(key, "").strip()]
+    missing = [key for key in OPERATOR_REQUIRED if not values.get(key, "").strip()]
     if missing:
         raise ProvisioningError(
             "Missing required operator values: " + ", ".join(sorted(missing))
@@ -92,14 +116,12 @@ def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
 def backend_env(values: Mapping[str, str], frontend_url: str) -> Dict[str, str]:
     result = {
         "APP_ENV": "production",
-        "ENV": "production",
-        "DEBUG": "false",
         "LOG_LEVEL": "INFO",
         "LOG_FORMAT": "json",
         "CORS_ORIGINS": frontend_url,
         "APP_URL": frontend_url,
     }
-    for key in (*BACKEND_REQUIRED, *SMTP_KEYS):
+    for key in (*BACKEND_REQUIRED, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS):
         if values.get(key):
             result[key] = values[key]
     return result
@@ -107,11 +129,30 @@ def backend_env(values: Mapping[str, str], frontend_url: str) -> Dict[str, str]:
 
 def frontend_env(values: Mapping[str, str], backend_url: Optional[str]) -> Dict[str, str]:
     result = {
+        "NODE_VERSION": "22",
         "REACT_APP_SUPABASE_URL": values["SUPABASE_URL"],
         "REACT_APP_SUPABASE_ANON_KEY": values["SUPABASE_ANON_KEY"],
     }
     if backend_url:
         result["REACT_APP_API_BASE_URL"] = backend_url
+    return result
+
+
+def mcp_env(
+    values: Mapping[str, str],
+    api_url: str,
+    mcp_url: Optional[str],
+) -> Dict[str, str]:
+    result = {
+        "SUPABASE_OAUTH_ISSUER": values["SUPABASE_OAUTH_ISSUER"],
+        "ERP_API_BASE_URL": api_url.rstrip("/"),
+        "MCP_INTERNAL_SERVICE_TOKEN": values["MCP_INTERNAL_SERVICE_TOKEN"],
+        "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": values[
+            "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+        ],
+    }
+    if mcp_url:
+        result["MCP_RESOURCE_SERVER_URL"] = mcp_url.rstrip("/") + "/mcp"
     return result
 
 
@@ -166,6 +207,33 @@ def frontend_create_payload(
             "routes": [
                 {"type": "rewrite", "source": "/*", "destination": "/index.html"}
             ],
+        },
+    }
+
+
+def mcp_create_payload(
+    owner_id: str,
+    repo: str,
+    branch: str,
+    env: Mapping[str, str],
+) -> Dict[str, object]:
+    return {
+        "type": "web_service",
+        "name": MCP_NAME,
+        "ownerId": owner_id,
+        "repo": repo,
+        "branch": branch,
+        "autoDeploy": "no",
+        "envVars": [{"key": key, "value": value} for key, value in sorted(env.items())],
+        "serviceDetails": {
+            "runtime": "docker",
+            "plan": "free",
+            "region": "singapore",
+            "healthCheckPath": "/ready",
+            "envSpecificDetails": {
+                "dockerContext": "./backend/mcp_runtime",
+                "dockerfilePath": "./backend/mcp_runtime/Dockerfile",
+            },
         },
     }
 
@@ -295,18 +363,30 @@ class RenderClient:
         desired_details: Dict[str, object] = {}
         if service.type == "web_service":
             current_region = current.get("region")
-            if current_region and current_region != "singapore":
+            if current_region != "singapore":
                 raise ProvisioningError(
-                    f"Existing {service.name} is in {current_region}; region cannot be patched safely"
+                    f"Existing {service.name} region is {current_region or 'unknown'}; "
+                    "region cannot be patched safely"
+                )
+            if service.name == API_NAME:
+                docker = {
+                    "dockerContext": "./backend",
+                    "dockerfilePath": "./backend/Dockerfile",
+                }
+            elif service.name == MCP_NAME:
+                docker = {
+                    "dockerContext": "./backend/mcp_runtime",
+                    "dockerfilePath": "./backend/mcp_runtime/Dockerfile",
+                }
+            else:
+                raise ProvisioningError(
+                    f"Unreviewed Render web service name: {service.name}"
                 )
             desired = {
                 "runtime": "docker",
                 "plan": "free",
                 "healthCheckPath": "/ready",
-                "envSpecificDetails": {
-                    "dockerContext": "./backend",
-                    "dockerfilePath": "./backend/Dockerfile",
-                },
+                "envSpecificDetails": docker,
             }
         else:
             desired = {
@@ -369,6 +449,22 @@ class RenderClient:
             changed = True
         return changed
 
+    def require_allowed_env(self, service: ServiceRef, allowed: Iterable[str]) -> None:
+        response = self.request(
+            "GET", f"/services/{service.id}/env-vars", query={"limit": 100}
+        )
+        keys = set()
+        for item in response or []:
+            env_var = item.get("envVar", item) if isinstance(item, dict) else {}
+            if isinstance(env_var, dict) and isinstance(env_var.get("key"), str):
+                keys.add(env_var["key"])
+        unexpected = sorted(keys - set(allowed))
+        if unexpected:
+            raise ProvisioningError(
+                f"Existing {service.name} has unreviewed environment keys: "
+                + ", ".join(unexpected)
+            )
+
     def deploy(self, service: ServiceRef) -> None:
         self.request(
             "POST",
@@ -378,15 +474,19 @@ class RenderClient:
 
 
 def dry_run_plan(owner_id: str, repo: str, branch: str) -> Dict[str, object]:
-    placeholders = {key: "${" + key + "}" for key in (*BACKEND_REQUIRED, *SMTP_KEYS)}
+    placeholders = {
+        key: "${" + key + "}"
+        for key in (*OPERATOR_REQUIRED, *SMTP_KEYS, *SMTP_OPTIONAL_KEYS)
+    }
     return {
         "mode": "dry_run",
         "workspace": owner_id,
-        "create_order": [FRONTEND_NAME, API_NAME],
+        "create_order": [FRONTEND_NAME, API_NAME, MCP_NAME],
         "notes": [
             "Create can start an initial deploy even when autoDeploy is no.",
             "The frontend is created first so its exact URL can configure API CORS.",
-            "Environment variables are updated per key; unmanaged variables are not deleted.",
+            "MCP is created after API; its exact URL then defines MCP_RESOURCE_SERVER_URL.",
+            "API/frontend env is updated per key; MCP refuses any unreviewed env key.",
             "No post-configuration deploy occurs unless --deploy is supplied.",
         ],
         "frontend_create": redacted_payload(
@@ -400,10 +500,23 @@ def dry_run_plan(owner_id: str, repo: str, branch: str) -> Dict[str, object]:
                 backend_env(placeholders, "${RENDER_FRONTEND_URL_AFTER_CREATE}"),
             )
         ),
+        "mcp_create": redacted_payload(
+            mcp_create_payload(
+                owner_id,
+                repo,
+                branch,
+                mcp_env(
+                    placeholders,
+                    "${RENDER_API_URL_AFTER_CREATE}",
+                    None,
+                ),
+            )
+        ),
         "api_sequence": [
             "GET /services by ownerId and exact name for each service",
             "POST /services for the static site when absent",
             "POST /services for the API when absent",
+            "POST /services for MCP when absent",
             "PATCH /services/{serviceId} only for configuration drift",
             "GET /services/{staticSiteId}/routes",
             "POST /services/{staticSiteId}/routes only when the SPA rewrite is absent",
@@ -419,6 +532,7 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
 
     api_service = client.find_service(args.owner_id, API_NAME, "web_service")
     frontend_service = client.find_service(args.owner_id, FRONTEND_NAME, "static_site")
+    mcp_service = client.find_service(args.owner_id, MCP_NAME, "web_service")
 
     if frontend_service is None:
         frontend_service = client.create_service(
@@ -440,15 +554,29 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
             )
         )
 
+    if mcp_service is None:
+        mcp_service = client.create_service(
+            mcp_create_payload(
+                args.owner_id,
+                args.repo,
+                args.branch,
+                mcp_env(values, api_service.url, None),
+            )
+        )
+
     changed = {
         API_NAME: client.ensure_auto_deploy_off(api_service),
         FRONTEND_NAME: client.ensure_auto_deploy_off(frontend_service),
+        MCP_NAME: client.ensure_auto_deploy_off(mcp_service),
     }
     changed[API_NAME] |= client.ensure_service_config(
         api_service, args.repo, args.branch
     )
     changed[FRONTEND_NAME] |= client.ensure_service_config(
         frontend_service, args.repo, args.branch
+    )
+    changed[MCP_NAME] |= client.ensure_service_config(
+        mcp_service, args.repo, args.branch
     )
     changed[FRONTEND_NAME] |= client.ensure_spa_rewrite(frontend_service)
     changed[API_NAME] |= client.ensure_env(
@@ -457,10 +585,14 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
     changed[FRONTEND_NAME] |= client.ensure_env(
         frontend_service, frontend_env(values, api_service.url)
     )
+    client.require_allowed_env(mcp_service, MCP_ALLOWED_ENV_KEYS)
+    changed[MCP_NAME] |= client.ensure_env(
+        mcp_service, mcp_env(values, api_service.url, mcp_service.url)
+    )
 
     deployed: List[str] = []
     if args.deploy:
-        for service in (api_service, frontend_service):
+        for service in (api_service, frontend_service, mcp_service):
             client.deploy(service)
             deployed.append(service.name)
 
@@ -473,6 +605,11 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
                 "url": frontend_service.url,
                 "changed": changed[FRONTEND_NAME],
             },
+            MCP_NAME: {
+                "id": mcp_service.id,
+                "url": mcp_service.url,
+                "changed": changed[MCP_NAME],
+            },
         },
         "deployed": deployed,
     }
@@ -481,7 +618,7 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Create/update Render resources")
-    parser.add_argument("--deploy", action="store_true", help="Deploy both services after updates")
+    parser.add_argument("--deploy", action="store_true", help="Deploy all three services after updates")
     parser.add_argument("--env-file", type=Path, help="Operator-owned KEY=VALUE file")
     parser.add_argument("--owner-id", default=DEFAULT_OWNER_ID)
     parser.add_argument("--repo", default=DEFAULT_REPO)

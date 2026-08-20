@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { productsApi } from '../../../services/api';
+import type { ProductCreateInput, ProductUpdateInput } from '../../../types/models/product';
 
 // ============================================
 // Type Definitions
@@ -35,25 +36,7 @@ export interface Product {
     is_active?: boolean;
 }
 
-export interface ProductFormData {
-    product_name: string;
-    category?: string;
-    manufacturer?: string;
-    product_type?: string;
-    hsn_code?: string;
-    generic_name?: string;
-    gst_percent?: number;
-    mrp?: number;
-    sale_price?: number;
-    cost_per_unit?: number;
-    min_stock?: number;
-    max_stock?: number;
-    reorder_level?: number;
-    rack_location?: string;
-    shelf_location?: string;
-    barcode?: string;
-    is_active?: boolean;
-}
+export type ProductFormData = ProductCreateInput;
 
 // ============================================
 // Hook Implementation
@@ -129,11 +112,8 @@ export function useProducts() {
         setLoading(true);
         try {
             const response = await productsApi.create(formData);
-            if (response.data?.success || response.data) {
-                await fetchProducts(page);
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to create product' };
+            await fetchProducts(page);
+            return { success: true, data: response.data };
         } catch (err: any) {
             return { success: false, error: err.message };
         } finally {
@@ -141,15 +121,12 @@ export function useProducts() {
         }
     }, [fetchProducts, page]);
 
-    const updateProduct = useCallback(async (productId: number, formData: ProductFormData) => {
+    const updateProduct = useCallback(async (productId: number, formData: ProductUpdateInput) => {
         setLoading(true);
         try {
             const response = await productsApi.update(productId, formData);
-            if (response.data?.success || response.data) {
-                await fetchProducts(page);
-                return { success: true, data: response.data };
-            }
-            return { success: false, error: 'Failed to update product' };
+            await fetchProducts(page);
+            return { success: true, data: response.data };
         } catch (err: any) {
             return { success: false, error: err.message };
         } finally {

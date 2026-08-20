@@ -96,7 +96,7 @@ cd backend
 DATABASE_URL="postgresql://..." \
 JWT_SECRET_KEY="..." \
 TEST_MODE=true \
-ENV=development \
+APP_ENV=development \
 CORS_ORIGINS="http://127.0.0.1:5173,http://localhost:5173" \
 PORT=8000 \
 ./venv/bin/python start.py

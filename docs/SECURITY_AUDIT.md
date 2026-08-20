@@ -18,7 +18,7 @@ Comprehensive security audit identified **49 gaps** across authentication, input
 | # | Issue | Fix | File |
 |---|-------|-----|------|
 | 1 | CORS `allow_origins=["*"]` | Env-based whitelist via `CORS_ORIGINS` | `main.py` |
-| 2 | TEST_MODE bypasses auth in prod | Startup crash + runtime block if `ENV=production` | `permissions.py`, `org_context.py`, `main.py` |
+| 2 | TEST_MODE bypasses auth in prod | Startup crash + runtime block if `APP_ENV=production` | `permissions.py`, `org_context.py`, `main.py` |
 | 3 | `verify_user_org_access()` always True | Now queries `master.org_users` | `jwt_auth.py` |
 | 4 | Schema endpoint no auth | All 4 routes require `PermissionChecker("master", "view")` | `schema.py` |
 | 5 | Error messages leak `str(e)` | Global exception handler + sanitized HTTPExceptions | `error_handler.py`, upload routes, schema, gstr2b |
@@ -60,7 +60,7 @@ Comprehensive security audit identified **49 gaps** across authentication, input
 ```env
 # REQUIRED in production
 CORS_ORIGINS=https://yourapp.com,https://admin.yourapp.com
-ENV=production
+APP_ENV=production
 JWT_SECRET_KEY=<random-32-char-string>
 
 # MUST NOT be set in production
@@ -126,7 +126,7 @@ Request → CORSMiddleware → RequestLoggerMiddleware → SecurityHeadersMiddle
 ### Post-Deploy Checks
 
 - [ ] `CORS_ORIGINS` env var set with production domain(s)
-- [ ] `ENV=production` set
+- [ ] `APP_ENV=production` set
 - [ ] `TEST_MODE` env var NOT set
 - [ ] Confirm HSTS header in response: `curl -I https://api.yourapp.com/health`
 - [ ] Confirm X-Request-ID header in response

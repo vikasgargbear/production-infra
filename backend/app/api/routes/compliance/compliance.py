@@ -15,9 +15,7 @@ from ....core.auth.org_context import get_org_context, OrgContext
 from ....core.security.permissions import PermissionChecker
 from ....core.auth.jwt_auth import get_org_id_string
 from ...schemas.compliance.mutations import (
-    ComplianceAuditMutationResponse,
     DrugLicenseMutationResponse,
-    InspectorVisitMutationResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,30 +36,6 @@ class DrugLicenseCreate(BaseModel):
     pharmacist_qualification: str
     storage_capacity: Optional[dict] = None  # {"normal": 100, "cold": 20}
     is_active: bool = True
-
-class ComplianceAudit(BaseModel):
-    """Schema for compliance audit"""
-    audit_type: str = Field(..., pattern="^(internal|regulatory|third_party|surprise)$")
-    audit_date: date
-    auditor_name: str
-    auditor_organization: Optional[str] = None
-    areas_audited: List[str]
-    findings: List[dict]  # [{"area": "storage", "status": "compliant", "observations": "...", "corrective_action": "..."}]
-    overall_status: str = Field(..., pattern="^(compliant|minor_issues|major_issues|non_compliant)$")
-    next_audit_date: Optional[date] = None
-
-class InspectorVisit(BaseModel):
-    """Schema for inspector visit"""
-    visit_date: date
-    inspector_name: str
-    inspector_id: str
-    inspector_designation: str
-    visit_type: str = Field(..., pattern="^(routine|surprise|follow_up|complaint_based)$")
-    areas_inspected: List[str]
-    violations_found: List[dict] = []
-    recommendations: List[str] = []
-    follow_up_required: bool = False
-    next_visit_date: Optional[date] = None
 
 class ComplianceDocument(BaseModel):
     """Schema for compliance document"""
@@ -296,197 +270,6 @@ async def get_expiring_licenses(
         logger.error(f"Error fetching expiring licenses: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch expiring licenses")
 
-@router.post("/audits", response_model=ComplianceAuditMutationResponse)
-@with_tenant_context
-async def record_compliance_audit(
-    audit: ComplianceAudit,
-    org_id: str = Depends(get_org_id_string),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """
-    Record a compliance audit
-    
-    - Internal or external audits
-    - Track findings and corrective actions
-    - Schedule follow-up audits
-    """
-    try:
-        # Insert audit record
-        insert_query = """
-            INSERT INTO compliance.compliance_audits (
-                org_id, audit_type, audit_date, auditor_name,
-                auditor_organization, areas_audited, audit_findings,
-                overall_status, next_audit_date, created_by
-            ) VALUES (
-                :org_id, :audit_type, :audit_date, :auditor_name,
-                :auditor_organization, :areas_audited, :findings,
-                :overall_status, :next_audit_date, :created_by
-            ) RETURNING audit_id
-        """
-        
-        result = db.execute(text(insert_query), {
-            "org_id": str(context.org_id),
-            "audit_type": audit.audit_type,
-            "audit_date": audit.audit_date,
-            "auditor_name": audit.auditor_name,
-            "auditor_organization": audit.auditor_organization,
-            "areas_audited": json.dumps(audit.areas_audited),
-            "findings": json.dumps(audit.findings),
-            "overall_status": audit.overall_status,
-            "next_audit_date": audit.next_audit_date,
-            "created_by": 1
-        })
-        
-        audit_id = result.scalar()
-        
-        # Create corrective action tasks for non-compliant findings
-        for finding in audit.findings:
-            if finding.get("status") in ["non_compliant", "major_issues"]:
-                if finding.get("corrective_action"):
-                    action_query = """
-                        INSERT INTO compliance.corrective_actions (
-                            org_id, audit_id, area, issue_description,
-                            corrective_action, priority, due_date,
-                            status, created_by
-                        ) VALUES (
-                            :org_id, :audit_id, :area, :issue,
-                            :action, :priority, :due_date,
-                            'pending', :created_by
-                        )
-                    """
-                    
-                    # Set due date based on priority
-                    priority = "high" if finding["status"] == "non_compliant" else "medium"
-                    due_days = 7 if priority == "high" else 30
-                    
-                    db.execute(text(action_query), {
-                        "org_id": str(context.org_id),
-                        "audit_id": audit_id,
-                        "area": finding["area"],
-                        "issue": finding.get("observations", ""),
-                        "action": finding["corrective_action"],
-                        "priority": priority,
-                        "due_date": date.today() + timedelta(days=due_days),
-                        "created_by": 1
-                    })
-        
-        # Create alert for next audit
-        if audit.next_audit_date:
-            alert_query = """
-                INSERT INTO compliance.compliance_alerts (
-                    org_id, alert_type, alert_date, reference_type,
-                    reference_id, alert_message, is_active
-                ) VALUES (
-                    :org_id, 'audit_due', :alert_date, 'audit',
-                    :audit_id, :message, true
-                )
-            """
-            
-            db.execute(text(alert_query), {
-                "org_id": str(context.org_id),
-                "alert_date": audit.next_audit_date - timedelta(days=7),
-                "audit_id": audit_id,
-                "message": f"{audit.audit_type.title()} audit scheduled for {audit.next_audit_date}"
-            })
-        
-        # TenantAwareSession auto-commits
-        
-        return {
-            "audit_id": audit_id,
-            "message": "Compliance audit recorded successfully",
-            "corrective_actions_created": len([f for f in audit.findings if f.get("corrective_action")])
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error recording audit: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to record audit: {str(e)}")
-
-@router.post("/inspector-visits", response_model=InspectorVisitMutationResponse)
-@with_tenant_context
-async def record_inspector_visit(
-    visit: InspectorVisit,
-    org_id: str = Depends(get_org_id_string),
-    db: TenantAwareSession = Depends(get_tenant_aware_db)
-):
-    """
-    Record drug inspector visit
-    
-    - Track inspections and findings
-    - Record violations and recommendations
-    - Schedule follow-ups
-    """
-    try:
-        insert_query = """
-            INSERT INTO compliance.inspector_visits (
-                org_id, visit_date, inspector_name, inspector_id,
-                inspector_designation, visit_type, areas_inspected,
-                violations_found, recommendations, follow_up_required,
-                next_visit_date, created_by
-            ) VALUES (
-                :org_id, :visit_date, :inspector_name, :inspector_id,
-                :inspector_designation, :visit_type, :areas_inspected,
-                :violations_found, :recommendations, :follow_up_required,
-                :next_visit_date, :created_by
-            ) RETURNING visit_id
-        """
-        
-        result = db.execute(text(insert_query), {
-            "org_id": str(context.org_id),
-            "visit_date": visit.visit_date,
-            "inspector_name": visit.inspector_name,
-            "inspector_id": visit.inspector_id,
-            "inspector_designation": visit.inspector_designation,
-            "visit_type": visit.visit_type,
-            "areas_inspected": json.dumps(visit.areas_inspected),
-            "violations_found": json.dumps(visit.violations_found),
-            "recommendations": json.dumps(visit.recommendations),
-            "follow_up_required": visit.follow_up_required,
-            "next_visit_date": visit.next_visit_date,
-            "created_by": 1
-        })
-        
-        visit_id = result.scalar()
-        
-        # Create corrective actions for violations
-        for violation in visit.violations_found:
-            action_query = """
-                INSERT INTO compliance.corrective_actions (
-                    org_id, visit_id, area, issue_description,
-                    corrective_action, priority, due_date,
-                    status, created_by
-                ) VALUES (
-                    :org_id, :visit_id, :area, :issue,
-                    :action, :priority, :due_date,
-                    'pending', :created_by
-                )
-            """
-            
-            db.execute(text(action_query), {
-                "org_id": str(context.org_id),
-                "visit_id": visit_id,
-                "area": violation.get("area", "general"),
-                "issue": violation.get("description", ""),
-                "action": violation.get("required_action", "Address violation"),
-                "priority": violation.get("severity", "high"),
-                "due_date": date.today() + timedelta(days=violation.get("deadline_days", 15)),
-                "created_by": 1
-            })
-        
-        # TenantAwareSession auto-commits
-        
-        return {
-            "visit_id": visit_id,
-            "message": "Inspector visit recorded successfully",
-            "violations_count": len(visit.violations_found),
-            "follow_up_required": visit.follow_up_required
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error recording inspector visit: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to record visit: {str(e)}")
-
 @router.get("/checklist")
 @with_tenant_context
 async def get_compliance_checklist(
@@ -544,28 +327,6 @@ async def get_compliance_checklist(
             "next_action_date": pharmacist_data["next_renewal"]
         })
         
-        # Recent Audits
-        audit_query = """
-            SELECT 
-                MAX(audit_date) as last_audit,
-                MIN(next_audit_date) as next_audit
-            FROM compliance.compliance_audits
-            WHERE org_id = :org_id
-        """
-        
-        audit_result = db.execute(text(audit_query), {"org_id": str(context.org_id)})
-        audit_data = dict(audit_result.first()._mapping)
-        
-        days_since_audit = (date.today() - audit_data["last_audit"]).days if audit_data["last_audit"] else 999
-        
-        checklist.append({
-            "category": "Compliance Audits",
-            "requirement": "Regular compliance audits required",
-            "status": "compliant" if days_since_audit < 180 else "action_required",
-            "details": f"Last audit: {audit_data['last_audit'] or 'Never'}",
-            "next_action_date": audit_data["next_audit"]
-        })
-        
         # Temperature Monitoring
         temp_query = """
             SELECT 
@@ -583,26 +344,6 @@ async def get_compliance_checklist(
             "requirement": "Continuous temperature monitoring for cold storage",
             "status": "compliant" if temp_data["active_zones"] == temp_data["monitored_zones"] else "action_required",
             "details": f"{temp_data['active_zones']} of {temp_data['monitored_zones']} zones actively monitored",
-            "next_action_date": None
-        })
-        
-        # Pending Corrective Actions
-        actions_query = """
-            SELECT 
-                COUNT(*) as total_actions,
-                COUNT(CASE WHEN status = 'pending' AND due_date < CURRENT_DATE THEN 1 END) as overdue_actions
-            FROM compliance.corrective_actions
-            WHERE org_id = :org_id AND status = 'pending'
-        """
-        
-        actions_result = db.execute(text(actions_query), {"org_id": str(context.org_id)})
-        actions_data = dict(actions_result.first()._mapping)
-        
-        checklist.append({
-            "category": "Corrective Actions",
-            "requirement": "All corrective actions must be completed on time",
-            "status": "action_required" if actions_data["overdue_actions"] > 0 else "compliant",
-            "details": f"{actions_data['total_actions']} pending actions, {actions_data['overdue_actions']} overdue",
             "next_action_date": None
         })
         
@@ -836,27 +577,6 @@ async def generate_regulatory_report(
         
         report_data["expired_destructions"] = [dict(row._mapping) for row in expired_result]
         
-        # Compliance Summary
-        summary_query = """
-            SELECT 
-                (SELECT COUNT(*) FROM compliance.compliance_audits 
-                 WHERE org_id = :org_id AND audit_date BETWEEN :from_date AND :to_date) as audits_conducted,
-                (SELECT COUNT(*) FROM compliance.inspector_visits 
-                 WHERE org_id = :org_id AND visit_date BETWEEN :from_date AND :to_date) as inspector_visits,
-                (SELECT COUNT(*) FROM compliance.corrective_actions 
-                 WHERE org_id = :org_id AND created_at BETWEEN :from_date AND :to_date) as corrective_actions,
-                (SELECT COUNT(*) FROM compliance.corrective_actions 
-                 WHERE org_id = :org_id AND status = 'completed' 
-                 AND updated_at BETWEEN :from_date AND :to_date) as actions_completed
-        """
-        
-        summary_result = db.execute(text(summary_query), {
-            "org_id": str(context.org_id),
-            "from_date": from_date,
-            "to_date": to_date
-        })
-        
-        report_data["compliance_summary"] = dict(summary_result.first()._mapping)
         
         return report_data
         

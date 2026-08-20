@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.1.0",
+  "purpose": "Canonical REST/MCP live success journeys plus explicit fail-closed probes, bound to the reviewed adapter registry and automation pilot scopes.",
+  "readiness_contract": {
+    "supported_prepare_operations": [
+      "finance.customer_receipt.prepare",
+      "finance.supplier_advance.prepare",
+      "finance.supplier_payment.prepare",
+      "inventory.adjustment.prepare",
+      "procurement.goods_receipt.prepare",
+      "procurement.purchase_order.prepare",
+      "procurement.purchase_return.prepare",
+      "procurement.supplier_invoice.prepare",
+      "sales.dispatch.prepare",
+      "sales.invoice.prepare",
+      "sales.order.prepare",
+      "sales.return.prepare"
+    ],
+    "unavailable_prepare_operations": [
+      "inventory.destruction.prepare",
+      "inventory.transfer.prepare"
+    ]
+  },
+  "journeys": [
+    {
+      "id": "sales_intra_mixed",
+      "coverage": ["multi_item", "tax_exclusive", "tax_inclusive", "line_discount", "document_discount", "free_quantity", "intra_state_gst", "cess", "nearest_rupee", "stock_issue", "journal", "receivable"],
+      "steps": [
+        {"id": "sales_order_mixed", "operation": "sales.order", "prepare_tool": "erp_sales_order_prepare"},
+        {"id": "sales_dispatch_mixed", "operation": "sales.dispatch", "prepare_tool": "erp_sales_dispatch_prepare"},
+        {"id": "sales_invoice_mixed", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document", "concurrency_probe": true},
+        {"id": "customer_receipt_partial", "operation": "finance.customer_receipt", "prepare_tool": "erp_customer_receipt_prepare"},
+        {"id": "sales_return_partial", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed"},
+        {"id": "sales_return_final", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_mixed", "final_residual": true}
+      ]
+    },
+    {
+      "id": "sales_supported_tax_treatments",
+      "coverage": ["inter_state_gst", "sez_zero_rated_with_igst", "commercial_only_credit", "paise_rounding"],
+      "steps": [
+        {"id": "sales_invoice_inter", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document"},
+        {"id": "sales_invoice_sez_with_igst", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "oracle": "document"},
+        {"id": "sales_return_commercial_only", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "oracle": "reversal", "original_step": "sales_invoice_inter", "gst_tax_treatment": "commercial_only"}
+      ]
+    },
+    {
+      "id": "procure_to_pay_supported",
+      "coverage": ["purchase_order", "vendor_advance_without_withholding", "goods_receipt", "manufacturer_batch", "tax_inclusive_mrp_pack", "supplier_invoice", "three_way_match", "supplier_payment_without_withholding", "payable_allocation", "purchase_return_partial", "purchase_return_final", "commercial_debit_note", "supplier_gst_credit_evidence"],
+      "steps": [
+        {"id": "purchase_order_mixed", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "oracle": "document"},
+        {"id": "supplier_advance_no_withholding", "operation": "finance.supplier_advance", "prepare_tool": "erp_supplier_advance_prepare"},
+        {"id": "goods_receipt_mixed", "operation": "procurement.goods_receipt", "prepare_tool": "erp_goods_receipt_prepare"},
+        {"id": "supplier_invoice_mixed", "operation": "procurement.supplier_invoice", "prepare_tool": "erp_supplier_invoice_prepare", "oracle": "document"},
+        {"id": "supplier_payment_balance_no_withholding", "operation": "finance.supplier_payment", "prepare_tool": "erp_supplier_payment_prepare"},
+        {"id": "purchase_return_partial", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed"},
+        {"id": "purchase_return_final", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "oracle": "reversal", "original_step": "supplier_invoice_mixed", "final_residual": true}
+      ]
+    },
+    {
+      "id": "inventory_supported_controls",
+      "coverage": ["cycle_count", "positive_gain_only", "batch_lineage", "stock_balance_projection", "moving_weighted_average", "evidence"],
+      "steps": [
+        {"id": "inventory_adjustment_cycle_count_gain", "operation": "inventory.adjustment", "prepare_tool": "erp_inventory_adjustment_prepare"}
+      ]
+    }
+  ],
+  "bounded_scope_contract": {
+    "finance.customer_receipt.prepare": {"manifest_key": "customer_receipt_pilot_scope", "unsupported_fail_closed": ["cash_section_269st_or_cash_account_without_authority", "cheque_without_account_payee_evidence", "foreign_currency", "advance_or_unapplied_receipt", "customer_deducted_tds_without_form16a_26as_authority"]},
+    "finance.supplier_advance.prepare": {"manifest_key": "supplier_advance_pilot_scope", "unsupported_fail_closed": ["section_194q_or_other_withholding_applicable", "gst_tds_notified_deductor", "non_resident_or_unverified_supplier_tax_profile", "cash_cheque_card_or_foreign_currency", "multiple_po_line_allocations", "received_or_invoiced_po", "advance_application_or_reversal"]},
+    "finance.supplier_payment.prepare": {"manifest_key": "supplier_payment_pilot_scope", "unsupported_fail_closed": ["section_194q_or_other_withholding_applicable", "gst_tds_notified_deductor", "charge_line_or_non_goods_invoice", "supplier_advance_withholding_adjustment_or_credit_netting", "cash_cheque_card_or_foreign_currency", "operator_payment_reversal_or_reconciled_bank_reversal"]},
+    "inventory.adjustment.prepare": {"manifest_key": "inventory_adjustment_pilot_scope", "unsupported_fail_closed": ["zero_loss_or_mixed_variance", "backdated_or_stale_count", "cold_chain_h_h1_x_ndps_or_recalled_product", "unowned_zero_balance_or_pending_source_stock", "damage_expiry_theft_or_quality_loss", "stock_count_reversal"]},
+    "procurement.goods_receipt.prepare": {"manifest_key": "goods_receipt_pilot_scope", "unsupported_fail_closed": ["fully_rejected_or_free_only_receipt", "H_H1_X_NDPS_or_controlled_product", "import_sez_or_reverse_charge_po", "missing_branch_or_supplier_forms_20B_and_21B"]},
+    "procurement.purchase_order.prepare": {"manifest_key": "purchase_order_pilot_scope", "unsupported_fail_closed": ["import", "sez", "reverse_charge", "composition_or_unregistered_supplier"]},
+    "procurement.purchase_return.prepare": {"manifest_key": "purchase_return_pilot_scope", "unsupported_fail_closed": ["uninvoiced_return", "import_sez_or_reverse_charge", "expired_recalled_damaged_or_quarantined_stock", "multi_batch_or_direct_return", "posted_return_reversal"]},
+    "procurement.supplier_invoice.prepare": {"manifest_key": "supplier_invoice_pilot_scope", "unsupported_fail_closed": ["import", "sez", "reverse_charge", "composition_or_unregistered_supplier", "direct_unreceived_product_lines", "price_variance_or_capitalized_charge", "ineligible_blocked_or_deferred_itc", "withholding"]},
+    "sales.invoice.prepare": {"manifest_key": "sales_invoice_pilot_scope", "unsupported_fail_closed": ["export", "outward_reverse_charge", "sez_without_payment_without_effective_lut_bond_evidence"]},
+    "sales.return.prepare": {"manifest_key": "sales_return_pilot_scope", "unsupported_fail_closed": ["direct_issue", "multiple_batches_for_one_invoice_line", "saleable_location_auto_release", "outward_reverse_charge", "statutory_unregistered_recipient_or_missing_itc_reversal_evidence", "late_statutory_credit_without_matching_authority", "posted_return_reversal"]}
+  },
+  "expected_rejections": [
+    {"id": "inventory_transfer_adapter_unavailable", "operation": "inventory.transfer", "prepare_tool": "erp_inventory_transfer_prepare", "phase": "readiness", "scope_case": "adapter_unavailable"},
+    {"id": "inventory_destruction_adapter_unavailable", "operation": "inventory.destruction", "prepare_tool": "erp_inventory_destruction_prepare", "phase": "readiness", "scope_case": "adapter_unavailable"},
+    {"id": "sales_invoice_export_rejected", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "phase": "prepare", "scope_case": "export"},
+    {"id": "sales_invoice_outward_rcm_rejected", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "phase": "prepare", "scope_case": "outward_reverse_charge", "expected_rest_code": "VALIDATION_FAILED"},
+    {"id": "sales_invoice_sez_without_payment_rejected", "operation": "sales.invoice", "prepare_tool": "erp_sales_invoice_prepare", "phase": "prepare", "scope_case": "sez_without_payment_without_effective_lut_bond_evidence", "expected_rest_code": "VALIDATION_FAILED", "expected_message_contains": "without_payment"},
+    {"id": "purchase_order_import_rejected", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "phase": "prepare", "scope_case": "import"},
+    {"id": "purchase_order_sez_rejected", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "phase": "prepare", "scope_case": "sez", "expected_rest_code": "VALIDATION_FAILED"},
+    {"id": "purchase_order_rcm_rejected", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "phase": "prepare", "scope_case": "reverse_charge", "expected_rest_code": "VALIDATION_FAILED"},
+    {"id": "purchase_order_composition_unregistered_rejected", "operation": "procurement.purchase_order", "prepare_tool": "erp_purchase_order_prepare", "phase": "prepare", "scope_case": "composition_or_unregistered_supplier"},
+    {"id": "goods_receipt_fully_rejected_rejected", "operation": "procurement.goods_receipt", "prepare_tool": "erp_goods_receipt_prepare", "phase": "prepare", "scope_case": "fully_rejected_or_free_only_receipt", "expected_rest_code": "VALIDATION_FAILED", "expected_message_contains": "fully rejected"},
+    {"id": "supplier_invoice_withholding_rejected", "operation": "procurement.supplier_invoice", "prepare_tool": "erp_supplier_invoice_prepare", "phase": "prepare", "scope_case": "withholding"},
+    {"id": "supplier_advance_withholding_rejected", "operation": "finance.supplier_advance", "prepare_tool": "erp_supplier_advance_prepare", "phase": "prepare", "scope_case": "section_194q_or_other_withholding_applicable"},
+    {"id": "supplier_payment_withholding_rejected", "operation": "finance.supplier_payment", "prepare_tool": "erp_supplier_payment_prepare", "phase": "prepare", "scope_case": "section_194q_or_other_withholding_applicable"},
+    {"id": "customer_receipt_cash_rejected", "operation": "finance.customer_receipt", "prepare_tool": "erp_customer_receipt_prepare", "phase": "prepare", "scope_case": "cash_section_269st_or_cash_account_without_authority", "expected_rest_code": "VALIDATION_FAILED"},
+    {"id": "inventory_adjustment_loss_rejected", "operation": "inventory.adjustment", "prepare_tool": "erp_inventory_adjustment_prepare", "phase": "prepare", "scope_case": "zero_loss_or_mixed_variance"},
+    {"id": "purchase_return_uninvoiced_rejected", "operation": "procurement.purchase_return", "prepare_tool": "erp_purchase_return_prepare", "phase": "prepare", "scope_case": "uninvoiced_return", "expected_rest_code": "VALIDATION_FAILED", "expected_message_contains": "uninvoiced"},
+    {"id": "sales_return_direct_issue_rejected", "operation": "sales.return", "prepare_tool": "erp_sales_return_prepare", "phase": "prepare", "scope_case": "direct_issue"}
+  ],
+  "cross_cutting": ["prepare_has_no_business_posting", "rest_mcp_preview_parity", "explicit_approval", "immutable_preview_hash", "idempotent_replay", "concurrent_execute_single_effect", "audit_chain", "outbox", "tenant_isolation", "decimal_oracle", "direct_database_reconciliation", "rejected_prepare_has_no_command"]
+}

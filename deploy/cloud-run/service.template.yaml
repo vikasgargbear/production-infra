@@ -29,8 +29,6 @@ spec:
           env:
             - name: APP_ENV
               value: production
-            - name: ENV
-              value: production
             - name: DEBUG
               value: "false"
             - name: LOG_LEVEL
@@ -58,11 +56,6 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: aasopharma-supabase-anon-key
-                  key: latest
-            - name: SUPABASE_SERVICE_ROLE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aasopharma-supabase-service-role-key
                   key: latest
             - name: SMTP_USER
               valueFrom:

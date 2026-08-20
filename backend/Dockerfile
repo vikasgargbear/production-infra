@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Fail the image build if the reviewed migration package was omitted or altered.
+RUN python scripts/package_canonical_baseline_migration.py --verify-package
+
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
 

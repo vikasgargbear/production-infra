@@ -1,0 +1,61 @@
+# AASOPharma MCP Runtime
+
+This isolated Python 3.11 service uses the official MCP SDK's stateless
+Streamable HTTP transport. It exports exactly `erp_product_search`,
+`erp_supplier_search`, and `erp_gst_settings_get`; it has no database connection
+and exports no writes.
+
+The planned operator action schemas live in `aasopharma_mcp/operator_actions.py`
+and are governed by `docs/architecture/mcp-operator-actions.json`. They cover
+sales, procurement, payments, supplier advances, and controlled inventory
+movements through prepare, approve, execute, and status. They are definitions,
+not registered tools: execution can eventually accept only the immutable
+`command_request_id`, `preview_hash`, and `idempotency_key`.
+
+## Configuration
+
+Required variables are `SUPABASE_OAUTH_ISSUER`,
+`MCP_RESOURCE_SERVER_URL` (HTTPS and ending `/mcp`), `ERP_API_BASE_URL`,
+`MCP_INTERNAL_SERVICE_TOKEN` (at least 32 characters), and
+`MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS`. Optional variables are `MCP_BIND_HOST`
+(default `0.0.0.0`) and `MCP_REQUEST_TIMEOUT_SECONDS` (default `10`). JWKS and
+internal grant URLs are derived. The OAuth audience is fixed to `authenticated`
+in code until a reviewed custom-token hook exists. Aliases are unsupported. The service never
+uses `SUPABASE_SERVICE_ROLE_KEY`, `APP_ENV`, or `ENV`. See
+`service-contract.json` for the machine contract.
+
+Only ES256/RS256 Supabase tokens with the exact issuer, `authenticated`
+audience, UUID subject, pre-registered client ID, and standard `openid` plus
+`offline_access` scopes are accepted. ERP permission names are not OAuth
+scopes. Each tool separately checks the app-owned active grant, exact read-only
+capability, role permission, expiry, tenant, and branch scope. The OAuth bearer
+is never forwarded to ERP.
+
+## Release State
+
+The source is not hosted-ready. Supabase DCR is disabled, and this repository
+has no hosted consent/approval UI. Canonical hidden reads and delegated claims
+are implemented, but their schema deployment has not been verified. Code-owned
+gates keep readiness and delegation at `503` until hosted consent, deployment
+evidence, and staging verification exist. Do not register this endpoint with
+ChatGPT or Claude in that state.
+
+The frontend lock currently fixes `@supabase/supabase-js` at `2.57.4`, before
+the official `auth.oauth.getAuthorizationDetails`, `approveAuthorization`, and
+`denyAuthorization` APIs. Consent implementation requires a normal Node 22
+install and reviewed lockfile update to a fixed compatible release at least
+`2.94.1`, followed by UI and denial/approval tests. Do not hand-edit the lock or
+invent direct REST calls when registry access is unavailable.
+
+ChatGPT needs `offline_access` for refresh and controlled Business/Enterprise/
+Edu admin or developer-mode rollout; tool snapshots must be frozen for review.
+With Supabase DCR disabled, Claude can use a pre-registered client ID/secret and
+callback `https://claude.ai/api/mcp/auth_callback` after hosted consent exists.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+PYTHONPATH=. .venv/bin/pytest -q tests
+```
+
+Tests inject JWKS decoding and HTTP clients and require no network.

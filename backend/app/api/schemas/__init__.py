@@ -3,7 +3,7 @@ Pydantic schemas for API validation
 
 Organized by domain to match routes structure:
 - auth/       - Authentication schemas
-- compliance/ - Drug license, audits, loyalty
+- compliance/ - Drug license and regulatory documents
 - finance/    - Payments, allocations, journals
 - inventory/  - Stock movements, batches
 - master/     - Customers, suppliers, products
@@ -26,7 +26,7 @@ from .master.supplier import (
     SupplierListResponse, SupplierSummary
 )
 from .master.product_schema import (
-    Product, ProductBase, ProductCreate, ProductUpdate, ProductResponse, 
+    Product, ProductBase, ProductCreate, ProductUpdate, ProductMutationResponse, ProductResponse,
     ProductSummary, ProductSearch, ProductListResponse
 )
 
@@ -88,17 +88,10 @@ from .auth.auth_schemas import (
 
 # Compliance schemas
 from .compliance.compliance import (
-    LicenseType, LicenseStatus, AuditType, AuditStatus,
+    LicenseType, LicenseStatus,
     DrugLicenseCreate, DrugLicenseResponse,
-    ComplianceAuditCreate, ComplianceAuditResponse,
-    InspectorVisitCreate, InspectorVisitResponse,
     ComplianceDocumentCreate, ComplianceDocumentResponse,
     ComplianceDashboard
-)
-from .loyalty.loyalty import (
-    LoyaltyProgramCreate, CustomerTier,
-    PointsTransaction, PointsRedemption,
-    SchemeCreate, SchemeResponse, DiscountCalculation
 )
 
 # Settings schemas

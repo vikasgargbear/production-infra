@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "readiness_state": "unbaselined",
+  "readiness_state": "migrating",
   "allowed_classifications": [
     "retain",
     "migrate",
@@ -16,7 +16,7 @@
     {
       "path": "backend/alembic",
       "classification": "retain",
-      "role": "canonical-production-migrations-after-baseline"
+      "role": "hash-bound-canonical-production-migration-authority"
     }
   ],
   "legacy_deployment_plan": {
@@ -25,8 +25,26 @@
     "execution_state": "fail-closed-pending-live-baseline",
     "reason": "The prior plan mixed bootstrap and production mutations and referenced 37 absent files."
   },
-  "competing_authority_count": 13,
+  "competing_authority_count": 16,
   "competing_authorities": [
+    {
+      "id": "canonical-tax-provider-command-scope",
+      "paths": ["database/canonical/commands_tax_provider/tax-provider-commands.sql"],
+      "classification": "migrate",
+      "reason": "Generated provider-neutral command SQL includes a private transaction-scope table; it may enter the canonical Alembic baseline only with the complete reviewed provider command boundary."
+    },
+    {
+      "id": "canonical-ci-auth-fixture",
+      "paths": ["database/canonical/ci/bootstrap_supabase_auth.sql"],
+      "classification": "retain",
+      "reason": "Disposable PostgreSQL 15 CI fixture only; local-host and database-name guards prohibit it from acting as a Supabase or production authority."
+    },
+    {
+      "id": "canonical-trigger-foundations",
+      "paths": ["database/canonical/platform/trigger-foundations.sql"],
+      "classification": "migrate",
+      "reason": "Generated helper foundations are reviewed but resolve no trigger blocker; only fully bound controls may be incorporated into the canonical Alembic baseline."
+    },
     {
       "id": "gstr2b-standalone-ddl",
       "paths": ["backend/migrations/add_gstr2b_tables.sql"],

@@ -1,0 +1,102 @@
+\set ON_ERROR_STOP on
+
+BEGIN;
+
+DO $automation_command_contract$
+DECLARE bad_count integer; runtime_count integer; calculator_count integer;
+BEGIN
+    SELECT count(*) INTO bad_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_automation_commands'
+       AND (NOT procedure.prosecdef OR procedure.proconfig IS NULL
+            OR NOT ('search_path=""'=ANY(procedure.proconfig)));
+    IF bad_count<>0 THEN
+        RAISE EXCEPTION 'automation functions require definer security and empty search_path';
+    END IF;
+
+    SELECT count(*) INTO runtime_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_automation_commands'
+       AND procedure.proname IN ('approve_operator_command','execute_approved_command',
+                                 'resolve_goods_receipt_prepare','persist_goods_receipt_prepare',
+                                 'resolve_sales_dispatch_prepare','persist_sales_dispatch_prepare',
+                                 'resolve_sales_invoice_prepare','resolve_purchase_order_prepare',
+                                 'resolve_supplier_invoice_prepare','resolve_sales_return_prepare')
+       AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
+    IF runtime_count<>11 THEN
+        RAISE EXCEPTION 'expected ten reviewed runtime automation commands, found %',runtime_count;
+    END IF;
+
+    SELECT count(*) INTO bad_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_automation_commands'
+       AND procedure.proname NOT IN ('approve_operator_command','execute_approved_command',
+                                     'resolve_goods_receipt_prepare','persist_goods_receipt_prepare',
+                                     'resolve_sales_dispatch_prepare','persist_sales_dispatch_prepare',
+                                     'resolve_sales_invoice_prepare','resolve_purchase_order_prepare',
+                                     'resolve_supplier_invoice_prepare','resolve_sales_return_prepare')
+       AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
+            OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
+            OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
+    IF bad_count<>0 THEN
+        RAISE EXCEPTION 'private automation helper exposes execute privilege';
+    END IF;
+
+    SELECT count(*) INTO calculator_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_automation_commands'
+      AND procedure.proname IN ('resolve_sales_order_prepare','persist_sales_order_prepare',
+                                 'resolve_sales_invoice_prepare','persist_sales_invoice_prepare',
+                                 'resolve_purchase_order_prepare','persist_purchase_order_prepare',
+                                 'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
+                                 'resolve_sales_return_prepare','persist_sales_return_prepare')
+       AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
+    IF calculator_count<>12 THEN
+        RAISE EXCEPTION 'expected ten reviewed calculator automation commands, found %',calculator_count;
+    END IF;
+
+    SELECT count(*) INTO bad_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_automation_commands'
+       AND procedure.proname NOT IN ('resolve_sales_order_prepare','persist_sales_order_prepare',
+                                     'resolve_sales_invoice_prepare','persist_sales_invoice_prepare',
+                                     'resolve_purchase_order_prepare','persist_purchase_order_prepare',
+                                     'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
+                                     'resolve_sales_return_prepare','persist_sales_return_prepare')
+       AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
+    IF bad_count<>0 THEN
+        RAISE EXCEPTION 'calculator can execute an unreviewed automation helper';
+    END IF;
+
+    IF pg_catalog.has_table_privilege('erp_runtime','erp_automation_commands.execution_scopes','SELECT')
+       OR pg_catalog.has_table_privilege('erp_runtime','erp_automation_commands.execution_scopes','INSERT')
+       OR pg_catalog.has_table_privilege('erp_app','erp_automation_commands.execution_scopes','SELECT')
+       OR pg_catalog.has_table_privilege('public','erp_automation_commands.execution_scopes','SELECT') THEN
+        RAISE EXCEPTION 'runtime can forge or inspect automation execution ownership';
+    END IF;
+
+    IF pg_catalog.has_table_privilege('erp_runtime','erp_automation_commands.write_scopes','SELECT,INSERT,UPDATE,DELETE')
+       OR pg_catalog.has_table_privilege('erp_app','erp_automation_commands.write_scopes','SELECT,INSERT,UPDATE,DELETE')
+       OR pg_catalog.has_table_privilege('erp_calculator','erp_automation_commands.write_scopes','SELECT,INSERT,UPDATE,DELETE')
+       OR pg_catalog.has_table_privilege('public','erp_automation_commands.write_scopes','SELECT,INSERT,UPDATE,DELETE') THEN
+        RAISE EXCEPTION 'application or calculator can forge reviewed automation writes';
+    END IF;
+
+    IF (SELECT count(*) FROM pg_catalog.pg_trigger
+         WHERE tgname IN ('agent_grant_capabilities_consent_guard',
+                          'command_requests_exact_capability_guard',
+                          'command_requests_prepare_scope_guard',
+                          'command_requests_execution_guard',
+                          'command_approvals_reviewed_write_guard')
+           AND NOT tgisinternal)<>5 THEN
+        RAISE EXCEPTION 'automation command trigger bindings are incomplete';
+    END IF;
+END
+$automation_command_contract$;
+
+ROLLBACK;

@@ -1,0 +1,41 @@
+"""Install the reviewed canonical ERP v1 baseline.
+
+Revision ID: 20260820_0001
+Revises: None
+"""
+
+from __future__ import annotations
+
+from alembic import context, op
+
+from migration_support.canonical_baseline import (
+    CanonicalBaselineError,
+    load_packaged_baseline,
+    require_approved_hash,
+    require_bootstrap_migration_principal,
+)
+
+
+revision = "20260820_0001"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    if context.is_offline_mode():
+        raise CanonicalBaselineError(
+            "canonical baseline requires an online principal and database preflight"
+        )
+    sql, manifest = load_packaged_baseline()
+    require_approved_hash(manifest)
+    connection = op.get_bind()
+    require_bootstrap_migration_principal(connection)
+    connection.exec_driver_sql(sql)
+
+
+def downgrade() -> None:
+    raise CanonicalBaselineError(
+        "canonical v1 downgrade is intentionally unavailable; follow "
+        "database/canonical/RESET_AND_BASELINE.md"
+    )

@@ -1,0 +1,98 @@
+{
+  "blocked_count": 10,
+  "blocked_invariants": {
+    "compliance.controlled_movement_rule_versions:controlled_movement_rule_versions_release_authority": {
+      "reason": "The isolated regulatory importer owns exact official controlled-movement rule releases."
+    },
+    "finance.adjustment_note_lines:adjustment_note_lines_cross_row_guard": {
+      "reason": "The canonical Decimal engine is not database-verifiable and no immutable calculation proof binds caller totals."
+    },
+    "finance.adjustment_notes:adjustment_notes_cross_row_guard": {
+      "reason": "Exact note and tax totals cannot be certified until the canonical Decimal result has reviewed database-verifiable provenance."
+    },
+    "tax.documents:documents_cross_row_guard": {
+      "reason": "No database-verifiable canonical Decimal proof binds immutable source-line snapshots and calculation rules to the tax document."
+    },
+    "tax.einvoice_rule_versions:einvoice_rule_versions_release_authority": {
+      "reason": "The isolated regulatory importer owns exact official e-invoice rule releases."
+    },
+    "tax.einvoices:einvoices_cross_row_guard": {
+      "reason": "IRP response authenticity, signed QR verification, cancellation, and regeneration require a configured external provider and cryptographic verification boundary."
+    },
+    "tax.eway_bills:eway_bills_cross_row_guard": {
+      "reason": "E-way authority response authenticity, cancellation, and regeneration require a configured external provider and cryptographic verification boundary."
+    },
+    "tax.gst_adjustment_rule_versions:gst_adjustment_rule_versions_release_authority": {
+      "reason": "The isolated regulatory importer owns exact official GST adjustment rule releases."
+    },
+    "tax.registration_branches:registration_branches_effective_guard": {
+      "reason": "A dedicated tax registration association command and posting/provider lookup must own this boundary."
+    },
+    "tax.withholding_rule_versions:withholding_rule_versions_release_authority": {
+      "reason": "The typed rule table requires an exact-set regulated withholding_rules importer before it can be trusted."
+    }
+  },
+  "blocker_delta": {
+    "after": 10,
+    "before": 26,
+    "resolved": 16
+  },
+  "destruction_posting": {
+    "required_before_enablement": [
+      "typed_biomedical_waste_or_pollution_control_authorization",
+      "authorized_facility_and_manifest_chain",
+      "atomic_inventory_write_off_journal_and_accounting_event",
+      "section_17_5_h_itc_reversal_or_proven_zero_input_tax_lineage",
+      "controlled_and_recall_register_companions_when_applicable"
+    ],
+    "status": "blocked_fail_closed"
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-compliance-command-enforcements.json",
+  "mapping_sha256": "c4ee818e98d518bb8f0778594c05293776ddad95c5656b3b2b945a9eef0b7c83",
+  "postgresql": "15+",
+  "resolved_count": 16,
+  "resolved_invariants": [
+    "compliance.controlled_substance_entries:controlled_substance_entries_cross_row_guard",
+    "compliance.destructions:destructions_cross_row_guard",
+    "compliance.recall_batches:recall_batches_cross_row_guard",
+    "compliance.storage_rule_versions:storage_rule_versions_effective_guard",
+    "compliance.temperature_readings:temperature_readings_cross_row_guard",
+    "finance.expense_claim_lines:expense_claim_lines_cross_row_guard",
+    "finance.expense_claims:expense_claims_cross_row_guard",
+    "tax.organization_fiscal_tax_facts:organization_fiscal_tax_facts_evidence_guard",
+    "tax.withholding_basis_lines:withholding_basis_lines_source_guard",
+    "tax.withholding_certificate_lines:withholding_certificate_lines_cross_row_guard",
+    "tax.withholding_certificates:withholding_certificates_cross_row_guard",
+    "tax.withholding_deposit_lines:withholding_deposit_lines_cross_row_guard",
+    "tax.withholding_deposits:withholding_deposits_cross_row_guard",
+    "tax.withholding_statement_lines:withholding_statement_lines_cross_row_guard",
+    "tax.withholding_statements:withholding_statements_cross_row_guard",
+    "tax.withholdings:withholdings_cross_row_guard"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "fixed_empty_search_path": true,
+    "function_schema": "erp_compliance_commands",
+    "private_command_scopes": true,
+    "runtime_commands": [
+      "add_recall_batch",
+      "activate_storage_rule",
+      "approve_destruction",
+      "approve_expense_claim",
+      "ingest_temperature_reading",
+      "post_destruction",
+      "post_expense_claim",
+      "post_recall_inventory_action",
+      "record_controlled_substance_entry",
+      "submit_expense_claim",
+      "verify_organization_fiscal_tax_fact",
+      "post_withholding",
+      "reverse_withholding",
+      "post_withholding_deposit",
+      "file_withholding_statement",
+      "import_withholding_certificate"
+    ]
+  },
+  "source_manifest": "../commands_finance/finance-command-manifest.json"
+}

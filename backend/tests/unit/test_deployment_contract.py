@@ -47,7 +47,9 @@ def test_cloud_run_template_is_mumbai_bounded_and_probed():
 
 def test_render_blueprint_is_manual_free_and_health_checked():
     blueprint = _read("render.yaml")
-    backend, frontend = blueprint.split("  - type: web", 2)[1:]
+    services = blueprint.split("  - type: web")
+    backend = next(service for service in services if "aasopharma-api-pilot" in service)
+    frontend = next(service for service in services if "aasopharma-erp-pilot" in service)
 
     assert "name: aasopharma-api-pilot" in backend
     assert "runtime: docker" in backend
@@ -71,9 +73,35 @@ def test_render_blueprint_is_manual_free_and_health_checked():
     assert "source: /*" in frontend
     assert "destination: /index.html" in frontend
     assert 'autoDeployTrigger: "off"' in frontend
+    assert 'key: NODE_VERSION' in frontend
+    assert 'value: "22"' in frontend
     assert "key: REACT_APP_API_BASE_URL" in frontend
     assert "key: REACT_APP_SUPABASE_URL" in frontend
     assert "key: REACT_APP_SUPABASE_ANON_KEY" in frontend
+
+
+def test_render_mcp_service_is_isolated_minimal_and_fail_closed():
+    blueprint = _read("render.yaml")
+    service = blueprint.split("name: aasopharma-mcp-pilot", 1)[1]
+
+    assert "dockerfilePath: ./backend/mcp_runtime/Dockerfile" in service
+    assert "dockerContext: ./backend/mcp_runtime" in service
+    assert "healthCheckPath: /ready" in service
+    assert 'autoDeployTrigger: "off"' in service
+    for name in (
+        "SUPABASE_OAUTH_ISSUER",
+        "MCP_RESOURCE_SERVER_URL",
+        "ERP_API_BASE_URL",
+        "MCP_INTERNAL_SERVICE_TOKEN",
+        "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+    ):
+        block = service.split(f"key: {name}", 1)[1].split("- key:", 1)[0]
+        assert "sync: false" in block
+        assert "value:" not in block
+    assert "key: SUPABASE_OAUTH_AUDIENCE" not in service
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in service
+    assert "key: APP_ENV" not in service
+    assert "key: ENV" not in service
 
 
 def test_render_blueprint_contains_no_runtime_secret_values():
@@ -85,7 +113,6 @@ def test_render_blueprint_contains_no_runtime_secret_values():
         "DATABASE_URL",
         "JWT_SECRET_KEY",
         "SUPABASE_ANON_KEY",
-        "SUPABASE_SERVICE_ROLE_KEY",
         "SMTP_USER",
         "SMTP_PASSWORD",
     )
@@ -123,7 +150,7 @@ def test_render_readiness_requires_database_without_replacing_liveness():
     assert 'content={"status": "not_ready"}' in main
     assert "/health" in dockerfile
     assert "healthCheckPath: /ready" in blueprint
-    assert provisioner.count('"healthCheckPath": "/ready"') == 2
+    assert provisioner.count('"healthCheckPath": "/ready"') == 3
 
 
 def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
@@ -136,8 +163,10 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
     assert "github.ref == 'refs/heads/main'" in job
     for dependency in (
         "backend-unit",
+        "canonical-postgres15",
         "frontend",
         "frontend-dependency-audit",
+        "frontend-toolchain-dependency-audit",
         "mcp-sdk-compatibility",
         "production-blockers",
     ):
@@ -145,8 +174,10 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
     assert 'commitId' in job
     assert "$GITHUB_SHA" in job
     assert '"$RENDER_API_URL/ready"' in job
+    assert '"$RENDER_MCP_URL/ready"' in job
     assert "secrets.RENDER_API_KEY" in job
     assert "vars.RENDER_API_SERVICE_ID" in job
+    assert "vars.RENDER_MCP_SERVICE_ID" in job
     assert "vars.RENDER_FRONTEND_SERVICE_ID" in job
 
 
@@ -156,9 +187,38 @@ def test_frontend_builds_use_the_reviewed_node_runtime():
     package = _read("frontend/package.json")
 
     assert 'node-version: "20"' not in workflow
-    assert workflow.count('node-version: "22"') == 2
+    assert workflow.count('node-version: "22"') == 3
     assert 'key: NODE_VERSION\n        value: "22"' in blueprint
     assert '"node": ">=22 <25"' in package
+
+
+def test_production_blockers_target_canonical_promotion_not_retired_bootstrap():
+    workflow = _read(".github/workflows/production-readiness.yml")
+    job = workflow.split("  production-blockers:", 1)[1].split(
+        "  canonical-postgres15:", 1
+    )[0]
+
+    for required in (
+        "schema_readiness.py --validate-authority",
+        "validate_canonical_model.py",
+        "check_canonical_artifacts.py",
+        "package_canonical_baseline_migration.py",
+        "app_data_contract_gate.py --contract-only",
+        "mcp_operator_action_contract.py",
+        "generate_canonical_baseline.py",
+        "canonical_promotion_readiness.py",
+        "tax_provider_operational_readiness.py",
+        "test_implementation_audit.py",
+    ):
+        assert required in job
+
+    for legacy_diagnostic in (
+        "audit_schema.py",
+        "transaction_integrity_audit.py",
+        "contract_consistency_audit.py",
+        "payment_idempotency_readiness.py",
+    ):
+        assert legacy_diagnostic not in job
 
 
 def test_production_database_configuration_fails_closed():
@@ -181,6 +241,8 @@ def test_production_auth_and_origin_configuration_fails_closed():
 def test_render_frontend_has_only_public_supabase_auth_configuration():
     blueprint = _read("render.yaml")
     frontend = blueprint.split("name: aasopharma-erp-pilot", 1)[1]
+
+    assert "key: NODE_VERSION\n        value: \"22\"" in frontend
 
     for name in (
         "REACT_APP_API_BASE_URL",
@@ -221,6 +283,7 @@ def test_frontend_clean_install_has_an_explicit_cra_peer_policy():
     package = _read("frontend/package.json")
 
     assert npmrc.strip() == "legacy-peer-deps=true"
+    assert '"node": ">=22 <25"' in package
     assert '"jest-watch-typeahead"' not in package
 
 
@@ -242,7 +305,6 @@ def test_runtime_credentials_only_use_secret_manager_references():
         "JWT_SECRET_KEY",
         "SUPABASE_URL",
         "SUPABASE_ANON_KEY",
-        "SUPABASE_SERVICE_ROLE_KEY",
         "SMTP_USER",
         "SMTP_PASSWORD",
     )
@@ -252,6 +314,9 @@ def test_runtime_credentials_only_use_secret_manager_references():
         assert "valueFrom:" in block, name
         assert "secretKeyRef:" in block, name
         assert re.search(r"\n\s+value:", block) is None, name
+
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in template
+    assert "- name: ENV" not in template
 
 
 def test_cloudflare_pages_build_has_spa_fallback_and_public_api_config_only():
@@ -274,3 +339,13 @@ def test_mcp_shares_the_api_container_or_remains_an_explicit_release_gate():
     else:
         assert "`/mcp` check must fail release if the transport is absent" in runbook
         assert "Do not expose\n`/mcp` publicly" in runbook
+
+
+def test_production_runbook_matches_manual_render_and_fail_closed_migration() -> None:
+    runbook = _read("docs/deployment/production.md")
+
+    assert "Render auto-deploy is disabled" in runbook
+    assert "deploy-render-pilot" in runbook
+    assert "alembic downgrade -1" not in runbook
+    assert "alembic downgrade abc123" not in runbook
+    assert "no downgrade" in runbook

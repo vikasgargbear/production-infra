@@ -1,0 +1,2291 @@
+{
+  "baseline_integration": {
+    "catalog_sha256": "ed41ed6c81bc3c3657975dc33ce531d673318d7c907e07257ab8ca319dc21264",
+    "mapping_file": "baseline-platform-enforcements.json",
+    "mapping_sha256": "d05860264ed4bc9a91cb06549f4d9a015d743dfc4209ac1b1b5319e970551251",
+    "resolved_platform_blocker_count": 115,
+    "resolved_platform_blockers": {
+      "rls_helper": 1,
+      "rls_policy": 110,
+      "roles_grants": 4
+    }
+  },
+  "catalog_sha256": "ed41ed6c81bc3c3657975dc33ce531d673318d7c907e07257ab8ca319dc21264",
+  "catalog_table_count": 110,
+  "contract_version": "1.0.0",
+  "identity_provisioning": {
+    "path": "Bounded erp_migration_owner transaction creates organization, initial user/membership and organization-scoped access grant atomically.",
+    "runtime_organization_insert": false
+  },
+  "identity_sequences": {
+    "count": 0,
+    "reason": "Canonical keys are UUID or controlled natural codes; no serial/identity/nextval defaults exist.",
+    "runtime_sequence_grants": []
+  },
+  "postgres15_execution_gate": {
+    "fixture": "test_rls_negative.sql",
+    "live_database_allowed": false,
+    "server_major": 15,
+    "status": "required_on_disposable_clean_database"
+  },
+  "postgresql": "15+",
+  "runtime_roles": {
+    "application_privilege_role": "erp_app",
+    "migration_owner": "erp_migration_owner",
+    "runtime_login_role": "erp_runtime"
+  },
+  "session_context": {
+    "activation_authority": "verified Supabase auth user plus requested organization; membership is resolved internally",
+    "auth_user_setting": "app.auth_user_id",
+    "membership_setting": "app.membership_id",
+    "missing_or_invalid_behavior": "authorization failure before tenant context is activated",
+    "organization_setting": "app.org_id",
+    "required_scope": "SET LOCAL inside every runtime transaction",
+    "user_setting": "app.user_id"
+  },
+  "status": "reviewed_not_applied",
+  "tables": [
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "replaceable_consent_scope",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "automation.agent_grant_capabilities",
+      "tenant_class": "tenant_association",
+      "write_permission": "automation.agent_grant.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "mutable_consent_grant",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "automation.agent_grants",
+      "tenant_class": "tenant_direct",
+      "write_permission": "automation.agent_grant.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_decision",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "automation.command_approvals",
+      "tenant_class": "tenant_direct",
+      "write_permission": "automation.command.approve"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "guarded_command_state",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "automation.command_requests",
+      "tenant_class": "tenant_direct",
+      "write_permission": "automation.command.execute"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "issued_then_consumed_authority",
+      "mutation_enforcement": "restricted_security_definer_commands_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "calculation.artifacts",
+      "tenant_class": "tenant_direct",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "catalog.categories",
+      "tenant_class": "tenant_direct",
+      "write_permission": "catalog.category.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_regulated_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "catalog.commercial_charge_tax_profiles",
+      "tenant_class": "tenant_direct",
+      "write_permission": "catalog.product.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_reference",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "catalog.ingredients",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_regulated_composition",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "catalog.product_ingredients",
+      "tenant_class": "tenant_association",
+      "write_permission": "catalog.product.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_regulated_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "catalog.products",
+      "tenant_class": "tenant_direct",
+      "write_permission": "catalog.product.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_reference",
+      "mutation_enforcement": "application_seed_migration_owned_read_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "application_seed",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "catalog.units_of_measure",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_regulated_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "catalog.uom_conversions",
+      "tenant_class": "tenant_direct",
+      "write_permission": "catalog.product.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_regulatory_reference",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "compliance.controlled_movement_rule_versions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_regulatory_register",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "compliance.controlled_substance_entries",
+      "tenant_class": "tenant_direct",
+      "write_permission": "compliance.controlled_substance.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "approval_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "compliance.destructions",
+      "tenant_class": "tenant_direct",
+      "write_permission": "compliance.destruction.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "mutable_regulatory_evidence",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "compliance.licenses",
+      "tenant_class": "tenant_direct",
+      "write_permission": "compliance.license.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_regulated_association",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "compliance.recall_batches",
+      "tenant_class": "tenant_association",
+      "write_permission": "compliance.recall.execute"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "regulated_workflow",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "compliance.recalls",
+      "tenant_class": "tenant_direct",
+      "write_permission": "compliance.recall.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_regulatory_evidence",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "compliance.storage_rule_versions",
+      "tenant_class": "tenant_direct",
+      "write_permission": "compliance.license.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_sensor_fact",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "compliance.temperature_readings",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.temperature.ingest"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "mutable_authorization",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.access_grants",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.access.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_evidence_metadata",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.attachments",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.attachment.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_event",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "core.audit_events",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.audit.append"
+    },
+    {
+      "branch_scope_column": "id",
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.branches",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.branch.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "approval_then_terminal_privacy_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.data_retention_cases",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.retention.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "atomic_counter",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.document_sequences",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.sequence.allocate"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "claim_then_terminal",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.idempotency_keys",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.idempotency.claim"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_authorization",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.memberships",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.access.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "owner_bootstrap_runtime_update_no_delete",
+      "policies": [
+        "SELECT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "organization_membership",
+      "runtime_grants": [
+        "SELECT",
+        "UPDATE"
+      ],
+      "table": "core.organizations",
+      "tenant_class": "global_identity_root",
+      "write_permission": "core.organization.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_then_delivery_state",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.outbox_events",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.outbox.deliver"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_reference",
+      "mutation_enforcement": "application_seed_migration_owned_read_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "application_seed",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "core.permissions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_reference_release",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "core.reference_data_releases",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "replaceable_authorization_link",
+      "mutation_enforcement": "reviewed_replaceable_hard_delete",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "DELETE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "DELETE"
+      ],
+      "table": "core.role_permissions",
+      "tenant_class": "tenant_association",
+      "write_permission": "core.access.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_authorization",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.roles",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.access.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "mutable_configuration",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.settings",
+      "tenant_class": "tenant_direct",
+      "write_permission": "core.settings.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_identity_profile",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "user_shared_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "core.users",
+      "tenant_class": "global_identity_root",
+      "write_permission": "core.user.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_event",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "finance.accounting_events",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.accounting.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.accounts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.account.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "draft_composition_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.adjustment_note_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.adjustment_note.edit"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "draft_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.adjustment_notes",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.adjustment_note.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_settlement",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.allocations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.payment.allocate"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.bank_accounts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.bank_account.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_import_line",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "finance.bank_statement_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.bank_statement.parse"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "import_then_close",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.bank_statements",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.bank_statement.import"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "draft_composition_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.expense_claim_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.expense.edit"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "approval_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.expense_claims",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.expense.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "draft_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.journal_entries",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.journal.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "draft_composition_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.journal_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.journal.edit"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_then_settlement_state",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.open_items",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.open_item.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "draft_then_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.payments",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.payment.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_reconciliation",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "finance.reconciliation_matches",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.bank_reconcile"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "hr.departments",
+      "tenant_class": "tenant_direct",
+      "write_permission": "hr.department.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "mutable_sensitive_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "hr.employees",
+      "tenant_class": "tenant_direct",
+      "write_permission": "hr.employee.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "regulated_master_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "inventory.batches",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.batch.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "inventory.inventory_document_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.document.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "inventory.inventory_documents",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.document.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "master_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "inventory.locations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.location.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "reservation_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "inventory.reservations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.reservation.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "projector_only_rebuildable",
+      "mutation_enforcement": "reviewed_projection_rebuild",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "table": "inventory.stock_balances",
+      "tenant_class": "tenant_projection",
+      "write_permission": "inventory.projector.write"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "append_only_posting_fact",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "inventory.stock_ledger_entries",
+      "tenant_class": "tenant_direct",
+      "write_permission": "inventory.document.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.addresses",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.party.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_personal_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.contacts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.party.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_financial_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.customer_accounts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.customer.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.parties",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.party.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_financial_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.supplier_accounts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.supplier.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "temporal_regulated_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "parties.tax_registrations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "parties.tax_registration.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.goods_receipt_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.receipt.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.goods_receipts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.receipt.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_allocation",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.purchase_order_advance_allocations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "finance.payment.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.purchase_order_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.order.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.purchase_orders",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.order.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.purchase_return_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.return.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.purchase_returns",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.return.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.supplier_invoice_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.invoice.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "auditable_allocation_append_only_after_post",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.supplier_invoice_receipt_allocations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.invoice.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "procurement.supplier_invoices",
+      "tenant_class": "tenant_direct",
+      "write_permission": "procurement.invoice.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.dispatch_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.dispatch.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.dispatches",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.dispatch.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "allocation_append_only_posted",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.invoice_dispatch_allocations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.invoice.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "fiscal_document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.invoice_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.invoice.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "fiscal_document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.invoices",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.invoice.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "document_child_approved_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.order_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.order.manage"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "document_state_machine",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.orders",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.order.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "fiscal_document_child_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.return_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.return.post"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "fiscal_document_state_machine_posted_immutable",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "sales.returns",
+      "tenant_class": "tenant_direct",
+      "write_permission": "sales.return.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_tax_snapshot",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "tax.documents",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.tax_document.post"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_regulatory_reference",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.einvoice_rule_versions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "provider_evidence_state_machine",
+      "mutation_enforcement": "isolated_provider_security_definer_commands_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.einvoices",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.einvoice.generate"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "provider_evidence_state_machine",
+      "mutation_enforcement": "isolated_provider_security_definer_commands_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.eway_bills",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.eway_bill.generate"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_regulatory_reference",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.gst_adjustment_rule_versions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_regulatory_evidence",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.organization_fiscal_tax_facts",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.registration.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_external_line",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "tax.portal_document_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.tax.portal.parse"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_external_import",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.portal_documents",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.portal.import"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "immutable_reconciliation_result",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.reconciliation_items",
+      "tenant_class": "tenant_direct",
+      "write_permission": "internal.tax.reconciliation.write"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "run_then_terminal",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.reconciliation_runs",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.reconciliation.run"
+    },
+    {
+      "branch_scope_column": "branch_id",
+      "force_rls": true,
+      "mutation_class": "temporal_regulatory_association",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.registration_branches",
+      "tenant_class": "tenant_association",
+      "write_permission": "tax.registration.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "mutable_regulatory_master",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.registrations",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.registration.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "return_composition_link",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.return_documents",
+      "tenant_class": "tenant_association",
+      "write_permission": "tax.return.compose"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "controlled_period",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.return_periods",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.return_period.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "draft_then_filed",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.returns",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.return.file"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "migration_owned_reference",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.tax_code_versions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_fact",
+      "mutation_enforcement": "database_privilege_insert_only",
+      "policies": [
+        "SELECT",
+        "INSERT"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT"
+      ],
+      "table": "tax.withholding_basis_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_membership",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_certificate_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_authority_artifact",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_certificates",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_allocation",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_deposit_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_authority_artifact",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_deposits",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": false,
+      "mutation_class": "regulated_import",
+      "mutation_enforcement": "regulated_import_security_definer_only",
+      "policies": [
+        "SELECT"
+      ],
+      "population_mode": "regulated_import",
+      "rls_class": "global_reference_read_only",
+      "runtime_grants": [
+        "SELECT"
+      ],
+      "table": "tax.withholding_rule_versions",
+      "tenant_class": "global_reference",
+      "write_permission": null
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_membership",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_statement_lines",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_authority_artifact",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholding_statements",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    },
+    {
+      "branch_scope_column": null,
+      "force_rls": true,
+      "mutation_class": "append_only_statutory_settlement",
+      "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
+      "policies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "population_mode": null,
+      "rls_class": "tenant_membership",
+      "runtime_grants": [
+        "SELECT",
+        "INSERT",
+        "UPDATE"
+      ],
+      "table": "tax.withholdings",
+      "tenant_class": "tenant_direct",
+      "write_permission": "tax.withholding.manage"
+    }
+  ]
+}

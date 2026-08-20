@@ -11,15 +11,19 @@ services:
     envVars:
       - key: APP_ENV
         value: production
-      - key: ENV
-        value: production
-      - key: DEBUG
-        value: "false"
       - key: LOG_LEVEL
         value: INFO
       - key: LOG_FORMAT
         value: json
       - key: DATABASE_URL
+        sync: false
+      - key: ERP_CALCULATOR_DATABASE_URL
+        sync: false
+      - key: TAX_PROVIDER_DATABASE_URL
+        sync: false
+      - key: TAX_PROVIDER_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: TAX_PROVIDER_INTERNAL_HMAC_SECRET
         sync: false
       - key: JWT_SECRET_KEY
         sync: false
@@ -31,7 +35,9 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: MCP_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS
         sync: false
       - key: SMTP_HOST
         sync: false
@@ -40,6 +46,27 @@ services:
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
+        sync: false
+
+  - type: web
+    name: aasopharma-mcp-pilot
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/mcp_runtime/Dockerfile
+    dockerContext: ./backend/mcp_runtime
+    healthCheckPath: /ready
+    autoDeployTrigger: "off"
+    envVars:
+      - key: SUPABASE_OAUTH_ISSUER
+        sync: false
+      - key: MCP_RESOURCE_SERVER_URL
+        sync: false
+      - key: ERP_API_BASE_URL
+        sync: false
+      - key: MCP_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS
         sync: false
 
   - type: web

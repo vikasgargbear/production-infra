@@ -34,7 +34,9 @@ def test_repository_readiness_claim_is_fail_closed():
         assert report.ready, [issue.code for issue in report.issues]
     else:
         assert not report.ready
-        assert any(issue.code == "authority_unbaselined" for issue in report.issues)
+        assert any(
+            issue.code == "authority_not_production_ready" for issue in report.issues
+        )
 
 
 def test_missing_deploy_include_is_reported(tmp_path: Path):
@@ -52,18 +54,33 @@ def test_repository_source_classification_is_exhaustive_and_machine_readable():
     authority = schema_readiness.load_authority(REPO_ROOT)
     classification = schema_readiness.load_source_classification(authority, REPO_ROOT)
 
-    assert classification["readiness_state"] == "unbaselined"
-    assert classification["competing_authority_count"] == 13
-    assert len(classification["competing_authorities"]) == 13
+    assert classification["readiness_state"] == "migrating"
+    assert classification["competing_authority_count"] == 16
+    assert len(classification["competing_authorities"]) == 16
     assert sum(
         len(group["paths"]) for group in classification["competing_authorities"]
-    ) == 14
+    ) == 17
     assert classification["broken_deployment_include_count"] == 37
     assert sum(
         len(group["includes"])
         for group in classification["broken_deployment_include_groups"]
     ) == 37
     assert not schema_readiness.check_source_classification(authority, REPO_ROOT)
+
+
+def test_repository_reset_authority_contract_is_structurally_ready():
+    authority = schema_readiness.load_authority(REPO_ROOT)
+    classification = schema_readiness.load_source_classification(authority, REPO_ROOT)
+    canonical_sources = {
+        source["path"]: source for source in classification["canonical_sources"]
+    }
+
+    assert authority["canonical_migration_root"] == "backend/alembic"
+    assert canonical_sources["backend/alembic"]["role"] == (
+        "hash-bound-canonical-production-migration-authority"
+    )
+    assert canonical_sources["database/02-tables"]["role"] == "legacy-bootstrap-only"
+    assert not schema_readiness.audit_authority_contract(REPO_ROOT)
 
 
 def test_repository_deployment_entrypoint_is_explicitly_fail_closed():

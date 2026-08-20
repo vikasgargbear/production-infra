@@ -2,10 +2,9 @@
 
 ## Decision
 
-Build MCP as a separately deployable backend module over the same versioned
-application services used by the REST API. Host that module in the existing
-FastAPI Render web service for the internal pilot; split it into a separate
-service only when scaling, isolation, or release evidence justifies the cost.
+Build MCP as a separately deployable Python 3.11 service over a hidden,
+allowlisted backend read contract. Keep the official SDK dependency set
+isolated from the legacy FastAPI process.
 MCP must never call PostgreSQL, database functions, or route implementation
 helpers directly.
 
@@ -30,34 +29,30 @@ enforces these rules in the backend rather than only in agent instructions.
 registry. It annotates OpenAPI only after verifying that the declared route,
 HTTP method, `PermissionChecker`, and JWT-derived organization context agree.
 The initial allowlist contains three bounded reads: product search, supplier
-search, and GST settings. OpenAPI explicitly reports that MCP transport is not
-implemented and that no write operation is exported.
+search, and GST settings. The isolated runtime exports exactly those three
+tools and no write operation.
 
-This is a contract gate for a future adapter, not an MCP server. Additions must
-pass the registry tests and the delivery gates below; do not infer that another
-GET route is safe merely because it appears in OpenAPI.
+The registry remains the allowlist gate for the MCP server. Additions must pass
+the registry tests and delivery gates below; another GET is not safe merely
+because it appears in OpenAPI.
 
-There is no `/mcp` route today. The official Python SDK 2.0 dependency floor
-conflicts with the repository's pinned Pydantic, PyJWT, multipart, and Uvicorn
-versions. The `mcp-sdk-compatibility` CI job now installs the official SDK in an
-isolated Python 3.11 environment, constructs its stateless JSON Streamable HTTP
-ASGI application, reads the SDK's installed dependency metadata, and verifies
-the exact three-tool registry. This executable gate proves the SDK surface
-without importing incompatible dependencies into the production FastAPI
-process. It intentionally keeps `mcp_transport_implemented` false.
+`backend/mcp_runtime` provides `/mcp`, `/health`, and fail-closed `/ready` in an
+isolated Python 3.11 image. CI constructs the official SDK stateless Streamable
+HTTP application and runs no-network auth, grant, and transport tests without
+changing legacy dependency pins.
 
-The existing ERP HS256 access token is valid for protected REST calls, but it
-is not an MCP audience-restricted OAuth grant and carries no consented MCP
-scopes. Registry `oauth_scope` values are policy metadata, not issued grants;
-the adapter must not treat them as user consent. Product and supplier reads
-already have service functions, while GST settings assembly remains owned by
-its FastAPI route. That route logic must move behind a tested application
-operation before an MCP tool can call it without coupling to HTTP handlers.
-Supabase's OAuth 2.1 server solves authorization-server discovery, PKCE, consent,
-DCR, and token rotation, but the application still needs asymmetric JWT/JWKS
-validation, a consent UI, protected-resource metadata, ERP membership mapping,
-and negative tenant/RBAC tests. The exact implementation and hosting gates are
-recorded in [`hosting-options-2026-08.md`](hosting-options-2026-08.md).
+Supabase OAuth tokens are verified asymmetrically through issuer discovery and
+JWKS. They are never forwarded to ERP. The backend mints a five-minute
+`canonical_mcp_delegation_v1` token from `core` and `automation` UUID facts;
+each hidden read revalidates active organization, user, membership, exact agent
+capability, live RBAC permission, expiry, and branch scope before activating
+canonical RLS and querying `catalog`, `parties`, or `tax` facts. Public legacy
+routes are not part of this path.
+
+Hosted readiness remains blocked: Supabase DCR is disabled, the repository has
+no hosted consent/approval UI, canonical deployment is unverified, and real
+ChatGPT/Claude staging tests have not run. See
+[`render-mcp.md`](../deployment/render-mcp.md).
 
 ## Contract boundary
 
@@ -152,40 +147,22 @@ field is authorized and required.
 
 ## Authentication and scopes
 
-Remote MCP should use the protocol's current authorization profile and a
-standards-based authorization server. Tokens are audience-restricted to the MCP
-server, short-lived, revocable, and bound to an installation/user. The adapter
-exchanges or delegates that grant for a backend credential; it must not forward
-an arbitrary client token to internal services.
+Remote MCP uses Supabase's authorization server. For the current pilot its
+access-token audience is the literal `authenticated`; a custom MCP audience is
+invalid without a separately reviewed Custom Access Token Hook. Tokens remain
+bound to a pre-registered installation/user, and the adapter never forwards the
+OAuth bearer to internal reads.
 
 `org_id`, user identity, branch access, and role come from the verified grant
 and backend membership lookup. An LLM argument, header such as `X-Org-Id`,
 prompt text, saved resource URI, or model memory can never select a tenant.
 
-Use granular scopes that map to existing RBAC permissions, for example:
-
-```text
-erp.context.read
-erp.master.read
-erp.inventory.read
-erp.sales.read
-erp.sales.order.write
-erp.sales.invoice.write
-erp.procurement.read
-erp.procurement.write
-erp.finance.read
-erp.finance.payment.write
-erp.gst.read
-erp.gst.export
-erp.compliance.read
-erp.audit.read
-```
-
-Scopes are an outer ceiling, not the authorization decision. Every call also
-checks active user membership, role permission, organization, branch access,
-record status, separation-of-duties rules, and field-level policy. Service or
-support accounts receive separate grants and may not impersonate a user without
-an auditable delegation record.
+Supabase custom `erp.*` scopes are not supported. Require only the standard
+`openid offline_access` scopes; `offline_access` permits reviewed clients to
+refresh long-lived connections. OAuth scopes authenticate the client and user,
+but never authorize an ERP operation. `automation.agent_grant_capabilities`
+holds the exact operation consent, while `core.role_permissions` independently
+holds live RBAC. Every call revalidates both.
 
 ## Organization and branch context
 
@@ -222,22 +199,33 @@ Rules:
 | W3 regulated/external | Post/cancel document, GST export/file, payment reversal, recall action | Strong approval, separation of duties where configured, immutable audit; keep filing/external submission out of v1 |
 
 Do not rely on a host application's generic "approve tool" UI. For W2/W3, the
-backend issues a short-lived, single-use preview:
+backend issues a short-lived, single-use command preview. The exact planned
+business actions and schemas are checked in as
+[`mcp-operator-actions.json`](mcp-operator-actions.json); they remain absent
+from the live MCP registry until every release gate in that contract passes.
+The same contract lists bounded resolution reads for customer, location,
+stock/batch, source sales and purchase documents, open items, and explicit
+branch/currency settlement choices. Natural operator language is resolved
+through those reads to opaque canonical IDs without inventing a bank identity
+for cash. Zero or multiple matches stop preparation instead of selecting a
+likely row.
 
 ```json
 {
-  "preview_id": "prv_...",
-  "payload_hash": "sha256:...",
+  "command_request_id": "018f...",
+  "preview_hash": "sha256:...",
   "expires_at": "2026-08-19T12:05:00Z",
-  "impact": {"currency": "INR", "total": "1180.00", "tax": "180.00"},
-  "warnings": [],
+  "financial_impact": {"currency": "INR", "total": "1180.00", "tax": "180.00"},
+  "policy_warnings": [],
   "required_approvals": ["initiating_user"]
 }
 ```
 
-The commit tool accepts only `preview_id`, `approval_token`,
-`idempotency_key`, and `expected_version`. It reloads all source records,
-recomputes totals, verifies the payload hash and permission, and commits the
+The shared approval tool binds an authorized human decision to exactly one
+`command_request_id` and `preview_hash`; it cannot alter business input. The
+execution tool accepts only `command_request_id`, `preview_hash`, and
+`idempotency_key`. It reloads source versions, recomputes totals and policy,
+verifies the hash and permission, consumes approval once, and commits the
 business change, idempotency result, audit event, and outbox event in one
 transaction. Changed or expired inputs require a new preview.
 

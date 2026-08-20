@@ -96,7 +96,7 @@ def test_live_schema_evidence_is_narrow_and_does_not_claim_baseline():
         == "blocked_pending_deployed_role_and_cross_tenant_proof"
     )
     assert evidence["tenant_isolation"]["force_rls_enabled"] == 0
-    assert authority["readiness_state"] == "unbaselined"
+    assert authority["readiness_state"] == "migrating"
     assert authority["latest_live_capture_evidence"] == "database/live-schema-evidence.json"
 
 

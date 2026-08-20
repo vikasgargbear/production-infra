@@ -123,12 +123,10 @@ export interface Customer {
     is_active?: boolean;
     customer_code?: string;
 
-    // Business & Loyalty
+    // Business
     business_type?: string;
     customer_category?: string;
     total_business_amount?: number;
-    loyalty_tier?: string;
-    loyalty_points?: number;
 
     // Additional Documents/Details
     drug_license_validity?: string;

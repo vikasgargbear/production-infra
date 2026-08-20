@@ -120,52 +120,84 @@ export interface ProductBatch {
   pack_type?: string;
 }
 
+export const productKindSchema = z.enum(['medicine', 'medical_device', 'consumable']);
+
 /**
- * Product creation input
+ * Product master mutations create and edit draft identity only. Tax, Drugs
+ * Rules schedule, NDPS, Schedule H2, composition, price and opening stock are
+ * deliberately separate reviewed commands.
  */
-export interface ProductCreateInput {
+export const productDraftBaseSchema = z.object({
+  product_name: z.string().trim().min(1).max(255),
+  product_code: z.string().trim().min(1).max(64)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/).optional(),
+  generic_name: z.string().trim().max(255).optional(),
+  brand: z.string().trim().max(100).optional(),
+  manufacturer: z.string().trim().max(200).optional(),
+  category_id: z.number().int().positive().optional(),
+  type_id: z.number().int().positive().optional(),
+  product_kind: productKindSchema.default('medicine'),
+  reorder_level: z.number().nonnegative().optional(),
+  min_stock_quantity: z.number().nonnegative().optional(),
+  max_stock_quantity: z.number().nonnegative().optional(),
+  maintain_batch: z.boolean().default(true),
+  maintain_expiry: z.boolean().default(true),
+}).strict().superRefine((data, context) => {
+  if (
+    data.min_stock_quantity !== undefined &&
+    data.max_stock_quantity !== undefined &&
+    data.min_stock_quantity > data.max_stock_quantity
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['min_stock_quantity'],
+      message: 'Minimum stock cannot exceed maximum stock',
+    });
+  }
+});
+
+export const productCreateSchema = productDraftBaseSchema;
+
+export const productUpdateSchema = z.object({
+  product_name: z.string().trim().min(1).max(255).optional(),
+  generic_name: z.string().trim().max(255).optional(),
+  brand: z.string().trim().max(100).optional(),
+  manufacturer: z.string().trim().max(200).optional(),
+  category_id: z.number().int().positive().optional(),
+  type_id: z.number().int().positive().optional(),
+  product_kind: productKindSchema.optional(),
+  reorder_level: z.number().nonnegative().optional(),
+  min_stock_quantity: z.number().nonnegative().optional(),
+  max_stock_quantity: z.number().nonnegative().optional(),
+  maintain_batch: z.boolean().optional(),
+  maintain_expiry: z.boolean().optional(),
+}).strict().superRefine((data, context) => {
+  if (Object.keys(data).length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one product field is required' });
+  }
+  if (
+    data.min_stock_quantity !== undefined &&
+    data.max_stock_quantity !== undefined &&
+    data.min_stock_quantity > data.max_stock_quantity
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['min_stock_quantity'],
+      message: 'Minimum stock cannot exceed maximum stock',
+    });
+  }
+});
+
+export type ProductCreateInput = z.infer<typeof productCreateSchema>;
+export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+export interface ProductMutationResponse {
+  product_id: number;
+  product_code: string;
   product_name: string;
-  product_code?: string;
-  manufacturer: string;
-  hsn_code: string;
-  category?: string;
-  salt_composition?: string;
-
-  // Pricing
-  mrp: number;
-  sale_price: number;
-  cost_per_unit: number;
-  gst_percent: number;
-
-  // Units
-  base_unit: string;
-  sale_unit?: string;
-
-  // Pack configuration
-  pack_input?: string;
-  pack_quantity?: number;
-  pack_multiplier?: number;
-
-  // Optional pharmaceutical details
-  drug_schedule?: 'G' | 'H' | 'H1' | 'X' | 'OTC';
-  requires_prescription?: boolean;
-  controlled_substance?: boolean;
-  dosage_instructions?: string;
-  storage_instructions?: string;
-
-  // Optional physical details
-  generic_name?: string;
-  packer?: string;
-  country_of_origin?: string;
-  weight?: number;
-  weight_unit?: 'g' | 'kg' | 'mg';
-  pack_form?: string;
+  lifecycle_status: 'draft';
+  message: string;
 }
-
-/**
- * Product update input (all fields optional)
- */
-export interface ProductUpdateInput extends Partial<ProductCreateInput> { }
 
 /**
  * Product search parameters

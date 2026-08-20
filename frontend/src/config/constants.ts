@@ -81,10 +81,3 @@ export const DATE_FORMATS = {
   DATETIME: 'DD/MM/YYYY HH:mm',
   TIME: 'HH:mm'
 };
-
-// Feature Flags (from environment)
-export const FEATURES = {
-  ENABLE_GST: process.env.REACT_APP_ENABLE_GST === 'true',
-  ENABLE_MULTI_BRANCH: process.env.REACT_APP_ENABLE_MULTI_BRANCH === 'true',
-  ENABLE_BARCODE: process.env.REACT_APP_ENABLE_BARCODE === 'true'
-};

@@ -1,0 +1,405 @@
+{
+  "blocked_count": 0,
+  "blocked_invariants": {},
+  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "dispatcher": {
+    "blocked_prepare_capabilities": [
+      "inventory.destruction.prepare",
+      "inventory.transfer.prepare"
+    ],
+    "capability_operation_map": {
+      "finance.customer_receipt.prepare": "finance.payment.post",
+      "finance.supplier_advance.prepare": "finance.supplier_advance.post",
+      "finance.supplier_payment.prepare": "finance.payment.post",
+      "inventory.adjustment.prepare": "inventory.document.post",
+      "inventory.destruction.prepare": "compliance.destruction.post",
+      "inventory.transfer.prepare": "inventory.document.post",
+      "procurement.goods_receipt.prepare": "procurement.receipt.post",
+      "procurement.purchase_order.prepare": "procurement.purchase_order.approve",
+      "procurement.purchase_return.prepare": "procurement.purchase_return.post",
+      "procurement.supplier_invoice.prepare": "procurement.supplier_invoice.post",
+      "sales.dispatch.prepare": "sales.dispatch.post",
+      "sales.invoice.prepare": "sales.invoice.post",
+      "sales.order.prepare": "sales.order.approve",
+      "sales.return.prepare": "sales.return.post"
+    },
+    "customer_receipt_pilot_scope": {
+      "required_matching": [
+        "active_customer_and_posted_sales_invoice_receivables",
+        "unique_positive_allocations_exactly_equal_payment",
+        "active_reconcilable_bank_asset",
+        "canonical_branch_accounts_receivable_role",
+        "exact_two_line_bank_debit_and_party_receivable_credit",
+        "duplicate_bank_reference_date_amount_rejection",
+        "execute_time_synthetic_allocation_state_recheck"
+      ],
+      "supported_currency": "INR",
+      "supported_payment_methods": [
+        "bank_transfer",
+        "card",
+        "upi"
+      ],
+      "unsupported_fail_closed": [
+        "cash_section_269st_or_cash_account_without_authority",
+        "cheque_without_account_payee_evidence",
+        "foreign_currency",
+        "advance_or_unapplied_receipt",
+        "customer_deducted_tds_without_form16a_26as_authority"
+      ]
+    },
+    "dynamic_sql": false,
+    "executable_prepare_capabilities": [
+      "finance.customer_receipt.prepare",
+      "finance.supplier_advance.prepare",
+      "finance.supplier_payment.prepare",
+      "inventory.adjustment.prepare",
+      "procurement.goods_receipt.prepare",
+      "procurement.purchase_order.prepare",
+      "procurement.purchase_return.prepare",
+      "procurement.supplier_invoice.prepare",
+      "sales.dispatch.prepare",
+      "sales.invoice.prepare",
+      "sales.order.prepare",
+      "sales.return.prepare"
+    ],
+    "execution_operations": [
+      "automation.agent_grant.revoke",
+      "finance.payment.post",
+      "finance.supplier_advance.post",
+      "inventory.document.post",
+      "procurement.purchase_order.approve",
+      "procurement.receipt.post",
+      "procurement.purchase_return.post",
+      "procurement.supplier_invoice.post",
+      "sales.dispatch.post",
+      "sales.invoice.post",
+      "sales.order.approve",
+      "sales.return.post"
+    ],
+    "goods_receipt_pilot_scope": {
+      "costing_method": "moving_weighted_average",
+      "required_batch_facts": [
+        "manufacturer_batch_number",
+        "manufactured_on_when_present",
+        "exclusive_expiry_date",
+        "tax_inclusive_inr_mrp",
+        "effective_mrp_uom_conversion"
+      ],
+      "supported_po_supply_types": [
+        "intra_state",
+        "inter_state"
+      ],
+      "supported_qc_statuses": [
+        "accepted",
+        "partial"
+      ],
+      "tax_effect": "reference_only_no_payable_or_itc",
+      "unsupported_fail_closed": [
+        "fully_rejected_or_free_only_receipt",
+        "H_H1_X_NDPS_or_controlled_product",
+        "import_sez_or_reverse_charge_po",
+        "missing_branch_or_supplier_forms_20B_and_21B"
+      ]
+    },
+    "inventory_adjustment_pilot_scope": {
+      "required_matching": [
+        "verified_retained_unique_inventory_cycle_count_sheet",
+        "active_physical_counter_and_distinct_command_approver",
+        "existing_positive_owned_stock_balance_after_last_ledger_movement",
+        "released_unexpired_manufacturer_batch_without_active_recall",
+        "active_same_branch_saleable_non_cold_location",
+        "effective_product_uom_conversion_and_exact_base_count",
+        "branch_forms_20b_and_21b_for_medicine_custody",
+        "no_pending_inventory_document_for_the_lot",
+        "atomic_count_gain_ledger_and_two_line_inventory_valuation_journal"
+      ],
+      "supported_currency": "INR",
+      "supported_effect": "same_day_positive_cycle_count_gain_only",
+      "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
+      "unsupported_fail_closed": [
+        "zero_loss_or_mixed_variance",
+        "backdated_or_stale_count",
+        "cold_chain_h_h1_x_ndps_or_recalled_product",
+        "unowned_zero_balance_or_pending_source_stock",
+        "damage_expiry_theft_or_quality_loss",
+        "stock_count_reversal"
+      ],
+      "valuation": "locked_current_moving_weighted_average"
+    },
+    "inventory_destruction_blockers": {
+      "missing_authorities": [
+        "typed_biomedical_waste_or_pollution_control_authorization",
+        "typed_authorized_processor_facility_and_manifest_chain",
+        "reviewed_destruction_method_rule",
+        "section_17_5_h_itc_reversal_and_tax_reporting_fact",
+        "positive_gst_noncreditable_inventory_mwa_capitalization_parity",
+        "atomic_inventory_write_off_journal_and_regulatory_register_companions"
+      ],
+      "nominal_zero_tax_pilot_rejected": "unreachable_from_current_eligible_only_supplier_invoice_operator_slice",
+      "status": "unavailable_fail_closed"
+    },
+    "inventory_transfer_blockers": {
+      "distinct_gst_registration_missing_authorities": [
+        "schedule_i_distinct_person_supply_classification",
+        "rule_28_valuation_and_output_gst_calculation",
+        "outward_tax_invoice_and_destination_itc_evidence"
+      ],
+      "missing_authorities": [
+        "dispatch_stock_in_transit_and_destination_acceptance_lifecycle",
+        "pre_movement_eway_provider_authority",
+        "exact_source_and_destination_branch_consent",
+        "atomic_branch_inventory_asset_accounting_event",
+        "paired_source_and_destination_drug_licence_and_cold_chain_evidence",
+        "typed_physical_return_or_compensating_reversal"
+      ],
+      "nominal_same_registration_pilot_rejected": "atomic_transfer_out_and_transfer_in_cannot_prove_transit_or_destination_acceptance",
+      "status": "unavailable_fail_closed"
+    },
+    "mcp_mounted": false,
+    "purchase_order_pilot_scope": {
+      "supported_supplier_taxpayer_types": [
+        "regular",
+        "casual"
+      ],
+      "supported_supply_types": [
+        "intra_state",
+        "inter_state"
+      ],
+      "supported_tax_charge_mechanisms": [
+        "normal"
+      ],
+      "unsupported_fail_closed": [
+        "import",
+        "sez",
+        "reverse_charge",
+        "composition_or_unregistered_supplier"
+      ]
+    },
+    "purchase_return_pilot_scope": {
+      "required_lineage": [
+        "posted_supplier_invoice_receipt_allocation",
+        "one_unique_supplier_invoice_line_per_command",
+        "one_exact_batch_at_original_goods_receipt_location",
+        "separate_billed_and_free_cumulative_ceilings",
+        "current_moving_weighted_average_issue_value"
+      ],
+      "statutory_evidence": "one_exact_parsed_gstr2b_supplier_credit_note",
+      "supported_reasons": [
+        "wrong_supply",
+        "excess_supply"
+      ],
+      "supported_return_source_kinds": [
+        "invoiced"
+      ],
+      "supported_supply_types": [
+        "intra_state",
+        "inter_state"
+      ],
+      "supported_tax_charge_mechanisms": [
+        "normal"
+      ],
+      "unsupported_fail_closed": [
+        "uninvoiced_return",
+        "import_sez_or_reverse_charge",
+        "expired_recalled_damaged_or_quarantined_stock",
+        "multi_batch_or_direct_return",
+        "posted_return_reversal"
+      ]
+    },
+    "registered_prepare_capabilities": [
+      "finance.customer_receipt.prepare",
+      "finance.supplier_advance.prepare",
+      "finance.supplier_payment.prepare",
+      "inventory.adjustment.prepare",
+      "inventory.destruction.prepare",
+      "inventory.transfer.prepare",
+      "procurement.goods_receipt.prepare",
+      "procurement.purchase_order.prepare",
+      "procurement.purchase_return.prepare",
+      "procurement.supplier_invoice.prepare",
+      "sales.dispatch.prepare",
+      "sales.invoice.prepare",
+      "sales.order.prepare",
+      "sales.return.prepare"
+    ],
+    "sales_invoice_pilot_scope": {
+      "supported_supply_types": [
+        "intra_state",
+        "inter_state",
+        "sez"
+      ],
+      "supported_tax_charge_mechanisms": [
+        "normal"
+      ],
+      "supported_zero_rated_payment_modes": [
+        "not_applicable",
+        "with_igst"
+      ],
+      "unsupported_fail_closed": [
+        "export",
+        "outward_reverse_charge",
+        "sez_without_payment_without_effective_lut_bond_evidence"
+      ]
+    },
+    "sales_return_pilot_scope": {
+      "required_matching": [
+        "one_unique_original_invoice_line_and_dispatch_allocation",
+        "separate_billed_and_free_cumulative_ceilings",
+        "exact_original_batch_and_outbound_ledger_cost",
+        "effective_reason_specific_gst_adjustment_rule"
+      ],
+      "supported_disposition": "return_to_stock_into_non_saleable_quarantine",
+      "supported_fulfillment_source": "dispatch_allocated",
+      "supported_gst_tax_treatments": [
+        "statutory",
+        "commercial_only"
+      ],
+      "unsupported_fail_closed": [
+        "direct_issue",
+        "multiple_batches_for_one_invoice_line",
+        "saleable_location_auto_release",
+        "outward_reverse_charge",
+        "statutory_unregistered_recipient_or_missing_itc_reversal_evidence",
+        "late_statutory_credit_without_matching_authority",
+        "posted_return_reversal"
+      ]
+    },
+    "supplier_advance_pilot_scope": {
+      "gst_treatment": "no_gst_on_goods_advance_notification_66_2017",
+      "required_matching": [
+        "active_resident_supplier_with_verified_operative_pan_and_retained_evidence",
+        "approved_domestic_normal_charge_purchase_order",
+        "purchase_of_goods_withholding_nature_snapshot",
+        "verified_prior_fy_turnover_at_or_below_inr_10_crore",
+        "verified_gst_tds_notified_deductor_false",
+        "gross_equals_cash_and_remaining_po_line_net_value_ceiling",
+        "active_reconcilable_bank_asset_and_supplier_prepayment_role",
+        "duplicate_bank_reference_date_amount_rejection",
+        "execute_time_prior_advance_and_source_recheck"
+      ],
+      "supported_cardinality": "one_product_purchase_order_line_per_payment",
+      "supported_currency": "INR",
+      "supported_payment_methods": [
+        "bank_transfer",
+        "upi"
+      ],
+      "unsupported_fail_closed": [
+        "section_194q_or_other_withholding_applicable",
+        "gst_tds_notified_deductor",
+        "non_resident_or_unverified_supplier_tax_profile",
+        "cash_cheque_card_or_foreign_currency",
+        "multiple_po_line_allocations",
+        "received_or_invoiced_po",
+        "advance_application_or_reversal"
+      ]
+    },
+    "supplier_invoice_pilot_scope": {
+      "itc_basis": "explicit_human_attestation_taxable_resale_not_blocked_under_section_17",
+      "landed_cost_effect": "zero_exact_receipt_cost_match",
+      "required_matching": [
+        "one_purchase_order",
+        "exact_posted_grn_set",
+        "separate_billed_and_free_receipt_ceilings",
+        "one_unique_parsed_gstr2b_row"
+      ],
+      "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+      "supported_supply_types": [
+        "intra_state",
+        "inter_state"
+      ],
+      "supported_tax_charge_mechanisms": [
+        "normal"
+      ],
+      "unsupported_fail_closed": [
+        "import",
+        "sez",
+        "reverse_charge",
+        "composition_or_unregistered_supplier",
+        "direct_unreceived_product_lines",
+        "price_variance_or_capitalized_charge",
+        "ineligible_blocked_or_deferred_itc",
+        "withholding"
+      ]
+    },
+    "supplier_payment_pilot_scope": {
+      "required_matching": [
+        "active_resident_supplier_with_verified_operative_pan_and_retained_evidence",
+        "posted_domestic_normal_charge_product_supplier_invoice",
+        "purchase_of_goods_withholding_nature_snapshot",
+        "verified_payment_and_each_invoice_credit_fy_turnover_at_or_below_inr_10_crore",
+        "verified_payment_and_each_invoice_credit_fy_gst_tds_notified_deductor_false",
+        "unique_positive_payable_allocations_exactly_equal_gross_and_cash",
+        "canonical_branch_accounts_payable_and_reconcilable_bank_asset",
+        "permanent_normalized_bank_reference_consumption",
+        "execute_time_allocation_fiscal_fact_and_applicable_advance_state_recheck"
+      ],
+      "supported_currency": "INR",
+      "supported_payment_methods": [
+        "bank_transfer",
+        "upi"
+      ],
+      "unsupported_fail_closed": [
+        "section_194q_or_other_withholding_applicable",
+        "gst_tds_notified_deductor",
+        "charge_line_or_non_goods_invoice",
+        "supplier_advance_withholding_adjustment_or_credit_netting",
+        "cash_cheque_card_or_foreign_currency",
+        "operator_payment_reversal_or_reconciled_bank_reversal"
+      ]
+    },
+    "unsupported_operations": "fail_closed"
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-automation-command-enforcements.json",
+  "mapping_sha256": "f2e6c3f2d6df1837f43f1390207c1e4906921e7dc95e3a9e8cf1d9165536861b",
+  "postgresql": "15+",
+  "resolved_count": 3,
+  "resolved_invariants": [
+    "automation.agent_grant_capabilities:agent_grant_capabilities_revocation",
+    "automation.command_requests:command_execution_guard",
+    "automation.command_requests:command_request_matches_grant"
+  ],
+  "reviewed_count": 3,
+  "security": {
+    "calculator_commands": [
+      "persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_sales_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_supplier_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_supplier_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_sales_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,jsonb)"
+    ],
+    "calculator_role": "erp_calculator",
+    "fixed_empty_search_path": true,
+    "function_schema": "erp_automation_commands",
+    "runtime_commands": [
+      "approve_operator_command(uuid,uuid,uuid,bytea,bytea,timestamptz)",
+      "execute_approved_command(uuid,uuid)",
+      "persist_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "persist_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_supplier_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "persist_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,timestamptz)",
+      "resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)",
+      "resolve_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)"
+    ],
+    "runtime_role": "erp_runtime",
+    "scope_table_private": true
+  }
+}

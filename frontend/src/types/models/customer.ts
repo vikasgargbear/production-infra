@@ -36,7 +36,6 @@ export interface Customer {
   route_id?: number;
   area_code?: string;
   assigned_salesperson_id?: number;
-  price_list_id?: number;
   discount_group_id?: number;
 
   // Credit management (all nullable)
@@ -72,10 +71,6 @@ export interface Customer {
   blacklisted?: boolean;
   blacklist_reason?: string;
   blacklist_date?: string | Date;
-
-  // Loyalty (nullable)
-  loyalty_points?: number;
-  loyalty_tier?: string;
 
   // Notes (nullable)
   internal_notes?: string;

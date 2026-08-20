@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aasopharma.internal/schemas/calculation-output-v1.schema.json",
+  "title": "AASOPharma canonical trade calculation output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "aggregate_version", "currency_code", "engine_version", "gst_tax_treatment", "lines", "operation",
+    "resource_id", "resource_type", "ruleset_version", "schema", "schema_version",
+    "serializer_version", "totals"
+  ],
+  "properties": {
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "currency_code": {"const": "INR"},
+    "engine_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "gst_tax_treatment": {"enum": ["statutory", "commercial_only"]},
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/line"}
+    },
+    "operation": {"$ref": "#/$defs/operation"},
+    "resource_id": {"type": "string", "format": "uuid"},
+    "resource_type": {"$ref": "#/$defs/resourceType"},
+    "ruleset_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "schema": {"const": "aasopharma.trade-calculation-output"},
+    "schema_version": {"const": "1"},
+    "serializer_version": {"const": "aasopharma-jcs-decimal-v1"},
+    "totals": {"$ref": "#/$defs/totals"}
+  },
+  "$defs": {
+    "decimal": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+    "operation": {
+      "enum": [
+        "sales.order.approve", "sales.invoice.post", "sales.return.post",
+        "procurement.purchase_order.approve", "procurement.supplier_invoice.post",
+        "procurement.purchase_return.post", "finance.adjustment_note.post"
+      ]
+    },
+    "resourceType": {
+      "enum": [
+        "sales_order", "sales_invoice", "sales_return", "purchase_order",
+        "supplier_invoice", "purchase_return", "adjustment_note"
+      ]
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cess_amount", "cess_rate", "cgst_amount", "cgst_rate",
+        "document_discount_amount", "document_taxable_discount_amount",
+        "final_residual", "gross_amount", "igst_amount", "igst_rate",
+        "line_discount_amount", "line_id", "line_kind", "line_taxable_discount_amount",
+        "line_total", "net_value_amount", "recipient_assessed_tax_amount",
+        "sgst_amount", "sgst_rate", "gst_taxable_value"
+      ],
+      "properties": {
+        "cess_amount": {"$ref": "#/$defs/decimal"},
+        "cess_rate": {"$ref": "#/$defs/decimal"},
+        "cgst_amount": {"$ref": "#/$defs/decimal"},
+        "cgst_rate": {"$ref": "#/$defs/decimal"},
+        "document_discount_amount": {"$ref": "#/$defs/decimal"},
+        "document_taxable_discount_amount": {"$ref": "#/$defs/decimal"},
+        "final_residual": {"type": "boolean"},
+        "gross_amount": {"$ref": "#/$defs/decimal"},
+        "igst_amount": {"$ref": "#/$defs/decimal"},
+        "igst_rate": {"$ref": "#/$defs/decimal"},
+        "line_discount_amount": {"$ref": "#/$defs/decimal"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "line_kind": {"enum": ["product", "charge"]},
+        "line_taxable_discount_amount": {"$ref": "#/$defs/decimal"},
+        "line_total": {"$ref": "#/$defs/decimal"},
+        "net_value_amount": {"$ref": "#/$defs/decimal"},
+        "recipient_assessed_tax_amount": {"$ref": "#/$defs/decimal"},
+        "sgst_amount": {"$ref": "#/$defs/decimal"},
+        "sgst_rate": {"$ref": "#/$defs/decimal"},
+        "gst_taxable_value": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cess_total", "cgst_total", "charges_total", "discount_total", "grand_total",
+        "gst_taxable_total", "igst_total", "net_value_total", "pre_round_total",
+        "recipient_assessed_tax_total", "rounding_adjustment", "sgst_total", "subtotal"
+      ],
+      "properties": {
+        "cess_total": {"$ref": "#/$defs/decimal"},
+        "cgst_total": {"$ref": "#/$defs/decimal"},
+        "charges_total": {"$ref": "#/$defs/decimal"},
+        "discount_total": {"$ref": "#/$defs/decimal"},
+        "grand_total": {"$ref": "#/$defs/decimal"},
+        "gst_taxable_total": {"$ref": "#/$defs/decimal"},
+        "igst_total": {"$ref": "#/$defs/decimal"},
+        "net_value_total": {"$ref": "#/$defs/decimal"},
+        "pre_round_total": {"$ref": "#/$defs/decimal"},
+        "recipient_assessed_tax_total": {"$ref": "#/$defs/decimal"},
+        "rounding_adjustment": {"$ref": "#/$defs/decimal"},
+        "sgst_total": {"$ref": "#/$defs/decimal"},
+        "subtotal": {"$ref": "#/$defs/decimal"}
+      }
+    }
+  }
+}

@@ -15,26 +15,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from uuid import UUID
 import logging
-import re
 
-from ...compliance.gst_service import GSTService
 from ...document_number_service import DocumentNumberService
 from .....core.utils.constants import (
-    ProductDefaults, PackDefaults, PricingDefaults, DateDefaults,
-    TaxRates, SourceType,
+    ProductDefaults, PackDefaults,
 )
 
 logger = logging.getLogger(__name__)
-
-# Aliases for backward compatibility within this file
-DEFAULT_HSN_PHARMA = ProductDefaults.HSN_PHARMA
-DEFAULT_HSN_GENERAL = ProductDefaults.HSN_GENERAL
-DEFAULT_BASE_UOM = ProductDefaults.DEFAULT_BASE_UOM
-DEFAULT_CONVERSION_FACTOR = 1
-DEFAULT_CESS_RATE = Decimal(str(ProductDefaults.DEFAULT_CESS_RATE))
-GST_RATES = TaxRates.VALID_SLABS
-PRODUCT_CODE_PREFIX = "PROD"
-
 
 class ProductService:
     """
@@ -44,56 +31,6 @@ class ProductService:
     - org_id: Always (hard tenant boundary)
     - branch_id: Based on user's branch_scope
     """
-    
-    # --- Validation Methods ---
-    
-    @staticmethod
-    def validate_product_data(product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Validate product data including HSN and GST.
-        Uses GSTService for GST slab validation.
-        """
-        errors = []
-        validated_data = product_data.copy()
-        
-        # Validate product name (required)
-        product_name = product_data.get("product_name")
-        if not product_name or not product_name.strip():
-            errors.append("Product name is required")
-        
-        # Validate HSN code format (4-8 digits)
-        hsn = product_data.get("hsn_code")
-        if hsn:
-            hsn = str(hsn).strip()
-            if not re.match(r"^\d{4,8}$", hsn):
-                errors.append("Invalid HSN code format (must be 4-8 digits)")
-            else:
-                validated_data["hsn_code"] = hsn
-        else:
-            # Default to pharma HSN
-            validated_data["hsn_code"] = DEFAULT_HSN_PHARMA
-        
-        # Validate GST rate using approved slabs
-        gst = product_data.get("gst_rate") or product_data.get("gst_percent")
-        if gst is not None:
-            try:
-                gst_value = int(gst)
-                if gst_value not in GST_RATES:
-                    errors.append(f"Invalid GST rate {gst_value}%. Must be one of: {GST_RATES}")
-                else:
-                    validated_data["gst_percent"] = gst_value
-            except (ValueError, TypeError):
-                errors.append(f"GST rate must be a number")
-        
-        # Validate base UOM
-        if not product_data.get("base_uom"):
-            validated_data["base_uom"] = DEFAULT_BASE_UOM
-        
-        return {
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "data": validated_data
-        }
     
     @staticmethod
     def check_duplicate_product(
@@ -173,7 +110,7 @@ class ProductService:
         **additional_fields
     ) -> int:
         """
-        Look up existing product by exact name match or create a new one.
+        Look up an approved purchasable product by exact name match.
         TenantAwareSession auto-filters by org_id for SELECT.
         
         For pharma products: We DON'T do partial matching.
@@ -184,7 +121,7 @@ class ProductService:
             db: Database session
             org_id: Organization ID
             product_name: Product name (exact match required)
-            hsn_code: HSN code (optional, defaults to 30049099 for pharma)
+            hsn_code: Ignored legacy argument; never used to classify a product
             user_id: User creating the product (for audit)
             **additional_fields: Any additional product fields
         
@@ -196,6 +133,8 @@ class ProductService:
         existing_product = db.execute(text("""
             SELECT product_id FROM inventory.products
             WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
+            AND is_active = true
+            AND is_purchasable = true
             LIMIT 1
         """), {"product_name": product_name}).fetchone()
         
@@ -203,140 +142,10 @@ class ProductService:
             logger.info(f"Found existing product: {product_name} (ID: {existing_product.product_id})")
             return existing_product.product_id
         
-        # Product doesn't exist - create it
-        logger.info(f"Creating new product: {product_name}")
-        return ProductService.create_product(
-            db=db,
-            org_id=org_id,
-            product_name=product_name,
-            hsn_code=hsn_code,
-            user_id=user_id,
-            **additional_fields
+        raise ValueError(
+            "Product does not exist. Create and classify a product draft through "
+            "the product API before using it in a purchase document."
         )
-    
-    @staticmethod
-    def create_product(
-        db: Session,
-        org_id: str,
-        product_name: str,
-        hsn_code: Optional[str] = None,
-        user_id: Optional[int] = None,
-        **additional_fields
-    ) -> int:
-        """
-        Create a new product with validation.
-        org_id parameter needed for INSERT (creating new record).
-        
-        Args:
-            db: Database session
-            org_id: Organization ID
-            product_name: Product name
-            hsn_code: HSN code (optional)
-            user_id: User creating the product
-            **additional_fields: Additional product attributes
-        
-        Returns:
-            product_id
-        """
-        try:
-            # Get or create a default category
-            category_id = ProductService._get_or_create_default_category(db, org_id)
-            
-            # Generate product code using service method if not provided
-            product_code = additional_fields.get('product_code')
-            if not product_code:
-                product_code = ProductService.generate_product_code(db, org_id, product_name)
-            
-            # Use provided HSN or default pharma HSN (using constant)
-            hsn = hsn_code or additional_fields.get('hsn_code') or DEFAULT_HSN_PHARMA
-            
-            # Prepare product data (using constants for defaults)
-            product_data = {
-                "org_id": org_id,
-                "product_name": product_name,
-                "product_code": product_code,
-                "category_id": category_id,
-                "hsn_code": hsn,
-                "is_active": additional_fields.get('is_active', True),
-                # Optional fields
-                "manufacturer": additional_fields.get('manufacturer'),
-                "brand": additional_fields.get('brand'),
-                "product_group": additional_fields.get('product_group'),
-                "product_class": additional_fields.get('product_class'),
-                "product_type": additional_fields.get('product_type'),
-                "description": additional_fields.get('description'),
-                "base_uom": additional_fields.get('base_uom', DEFAULT_BASE_UOM),
-                "alt_uom": additional_fields.get('alt_uom'),
-                "conversion_factor": additional_fields.get('conversion_factor', DEFAULT_CONVERSION_FACTOR),
-                "gst_rate": additional_fields.get('gst_rate'),
-                "cess_rate": additional_fields.get('cess_rate', DEFAULT_CESS_RATE),
-                "minimum_stock": additional_fields.get('minimum_stock'),
-                "reorder_level": additional_fields.get('reorder_level'),
-                "is_prescription_required": additional_fields.get('is_prescription_required', False),
-                "is_narcotics": additional_fields.get('is_narcotics', False)
-            }
-            
-            # Remove None values
-            product_data = {k: v for k, v in product_data.items() if v is not None}
-            
-            # Create the product - org_id needed for INSERT
-            new_product = db.execute(text("""
-                INSERT INTO inventory.products (
-                    org_id, product_name, product_code,
-                    category_id, hsn_code, is_active, 
-                    manufacturer, brand, product_group, product_class, product_type,
-                    description, base_uom, alt_uom, conversion_factor,
-                    gst_rate, cess_rate, minimum_stock, reorder_level,
-                    is_prescription_required, is_narcotics,
-                    created_at
-                ) VALUES (
-                    :org_id, :product_name, :product_code,
-                    :category_id, :hsn_code, :is_active,
-                    :manufacturer, :brand, :product_group, :product_class, :product_type,
-                    :description, :base_uom, :alt_uom, :conversion_factor,
-                    :gst_rate, :cess_rate, :minimum_stock, :reorder_level,
-                    :is_prescription_required, :is_narcotics,
-                    CURRENT_TIMESTAMP
-                ) RETURNING product_id
-            """), product_data).fetchone()
-            
-            product_id = new_product.product_id
-            logger.info(f"Created product {product_name} with ID {product_id}")
-            return product_id
-            
-        except Exception as e:
-            logger.error(f"Error creating product: {str(e)}")
-            raise
-    
-    @staticmethod
-    def _get_or_create_default_category(db: Session, org_id: str) -> int:
-        """
-        Get default category or create one if it doesn't exist.
-        TenantAwareSession auto-filters by org_id for SELECT.
-        
-        Returns:
-            category_id
-        """
-        # Try to get existing category
-        category_result = db.execute(text("""
-            SELECT category_id FROM inventory.product_categories 
-            ORDER BY category_id
-            LIMIT 1
-        """)).fetchone()
-        
-        if category_result:
-            return category_result.category_id
-        
-        # Create a default "General" category - org_id needed for INSERT
-        new_category = db.execute(text("""
-            INSERT INTO inventory.product_categories (
-                org_id, category_name, category_code, is_active
-            ) VALUES (
-                :org_id, 'General', 'GEN', true
-            ) RETURNING category_id
-        """), {"org_id": org_id}).fetchone()
-        
-        return new_category.category_id if new_category else None
     
     @staticmethod
     def get_product(db: Session, product_id: int, org_id: str) -> Optional[Dict[str, Any]]:
@@ -489,6 +298,8 @@ class ProductService:
                     ORDER BY created_at DESC LIMIT 1
                 )
             WHERE p.org_id = :org_id
+                AND p.is_active = true
+                AND p.is_purchasable = true
                 AND (
                     LOWER(TRIM(p.product_name)) = LOWER(TRIM(:exact_name))
                     OR LOWER(p.product_name) LIKE LOWER(:pattern)
@@ -546,6 +357,8 @@ class ProductService:
                 FROM inventory.products
                 WHERE LOWER(TRIM(product_name)) = ANY(:names)
                 AND org_id = :org_id
+                AND is_active = true
+                AND is_purchasable = true
             """), {"names": product_names, "org_id": org_id})
             
             for row in result:
@@ -661,7 +474,8 @@ class ProductService:
         search: Optional[str] = None,
         manufacturer: Optional[str] = None,
         product_type: Optional[str] = None,
-        include_stock: bool = True
+        include_stock: bool = True,
+        include_inactive: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         List products with filters and pagination.
@@ -709,9 +523,12 @@ class ProductService:
             SELECT {base_fields}{stock_fields}
             FROM inventory.products p
             LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
-            WHERE p.is_active = true
+            WHERE 1=1
         """
         params: Dict[str, Any] = {}
+
+        if not include_inactive:
+            query += " AND p.is_active = true"
         
         if category_id:
             query += " AND p.category_id = :category_id"
@@ -770,7 +587,9 @@ class ProductService:
                 AND p.org_id = b.org_id
                 AND b.batch_status = 'active'
                 AND b.quantity_available > 0
-            WHERE (p.product_name ILIKE :search 
+            WHERE p.is_active = true
+                AND p.is_saleable = true
+                AND (p.product_name ILIKE :search
                 OR p.brand ILIKE :search 
                 OR p.manufacturer ILIKE :search
                 OR p.hsn_code ILIKE :search
@@ -781,7 +600,7 @@ class ProductService:
             ORDER BY p.product_name
             LIMIT :limit OFFSET :offset
         """), {"search": f"%{q}%", "limit": limit, "offset": offset})
-        
+
         return [dict(row._mapping) for row in result]
     
     @staticmethod
@@ -807,7 +626,8 @@ class ProductService:
                 pc.category_name
             FROM inventory.products p
             LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
-            WHERE 1=1
+            WHERE p.is_active = true
+                AND p.is_saleable = true
         """
         params: Dict[str, Any] = {}
         
@@ -991,6 +811,7 @@ class ProductService:
                 AND p.org_id = b.org_id
                 AND b.batch_status = 'active'
             WHERE p.is_active = true
+                AND p.is_saleable = true
         """
         params = {"limit": limit, "offset": offset}
         
@@ -1136,17 +957,19 @@ class ProductService:
         result = db.execute(text("""
             INSERT INTO inventory.products (
                 org_id, product_code, product_name, generic_name,
-                brand, manufacturer, category_id, product_type,
+                brand, manufacturer, category_id, type_id, product_type,
                 hsn_code, gst_percent, composition, strength,
                 reorder_level, min_stock_quantity, max_stock_quantity,
-                is_active, is_saleable, maintain_batch,
+                is_active, is_saleable, is_purchasable,
+                maintain_batch, maintain_expiry,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :product_code, :product_name, :generic_name,
-                :brand, :manufacturer, :category_id, :product_type,
+                :brand, :manufacturer, :category_id, :type_id, :product_type,
                 :hsn_code, :gst_percent, CAST(:composition AS jsonb), :strength,
                 :reorder_level, :min_stock_quantity, :max_stock_quantity,
-                :is_active, :is_saleable, :maintain_batch,
+                :is_active, :is_saleable, :is_purchasable,
+                :maintain_batch, :maintain_expiry,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id
         """), {
@@ -1157,17 +980,20 @@ class ProductService:
             "brand": product_data.get("brand"),
             "manufacturer": product_data.get("manufacturer"),
             "category_id": product_data.get("category_id"),
+            "type_id": product_data.get("type_id"),
             "product_type": product_data.get("product_type", ProductDefaults.DEFAULT_PRODUCT_TYPE),
-            "hsn_code": product_data.get("hsn_code", DEFAULT_HSN_PHARMA),
-            "gst_percent": product_data.get("gst_percent", ProductDefaults.DEFAULT_GST_PERCENT),
+            "hsn_code": product_data.get("hsn_code"),
+            "gst_percent": product_data.get("gst_percent"),
             "composition": product_data.get("composition", "{}"),
             "strength": product_data.get("strength"),
             "reorder_level": product_data.get("reorder_level"),
             "min_stock_quantity": product_data.get("min_stock_quantity"),
             "max_stock_quantity": product_data.get("max_stock_quantity"),
             "is_active": product_data.get("is_active", True),
-            "is_saleable": product_data.get("is_saleable", True),
-            "maintain_batch": product_data.get("maintain_batch", True)
+            "is_saleable": product_data.get("is_saleable", False),
+            "is_purchasable": product_data.get("is_purchasable", False),
+            "maintain_batch": product_data.get("maintain_batch", True),
+            "maintain_expiry": product_data.get("maintain_expiry", True),
         })
         return result.scalar()
     
@@ -1375,4 +1201,3 @@ class ProductService:
         
         result = db.execute(text(query), params)
         return [dict(row._mapping) for row in result.fetchall()]
-

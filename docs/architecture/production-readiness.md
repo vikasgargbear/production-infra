@@ -88,9 +88,12 @@ override the database, transaction, browser, or live-environment gates below.
 11. The 2026-08-19 clean GitHub production-only audit reports zero
     vulnerabilities after retiring the unused router, upgrading the PDF stack,
     and pinning SheetJS CE 0.20.3 from its official distribution with integrity
-    verification. The full install still reports 56 advisories confined to the
-    legacy CRA/development toolchain; removing that debt requires the planned
-    frontend build-system migration.
+    verification. The remaining alerts are tracked separately as build/test
+    toolchain exposure. After the generated `fast-uri` update, 57 development
+    alerts remain: 2 critical, 28 high, 22 moderate, and 5 low. High or critical
+    toolchain advisories now fail closed and block Render deployment. The exact
+    classification and CRA migration release condition are in
+    `frontend-dependency-security.md`.
 
 ## Required commands
 

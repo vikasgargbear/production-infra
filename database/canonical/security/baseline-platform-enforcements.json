@@ -1,0 +1,1645 @@
+{
+  "enforcements": [],
+  "mapping_version": "1.0.0",
+  "platform_enforcements": [
+    {
+      "category": "roles_grants",
+      "key": "grants:runtime",
+      "requirement_sha256": "a61320ae038be17c84f9f8a9e855f50be30c716ac4b557e686077adeed78aec0",
+      "reviewed": true,
+      "statements": [
+        "REVOKE \"erp_migration_owner\" FROM \"erp_app\", \"erp_runtime\";",
+        "ALTER SCHEMA \"automation\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"automation\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"automation\" TO \"erp_app\";",
+        "ALTER SCHEMA \"calculation\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"calculation\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"calculation\" TO \"erp_app\";",
+        "ALTER SCHEMA \"catalog\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"catalog\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"catalog\" TO \"erp_app\";",
+        "ALTER SCHEMA \"compliance\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"compliance\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"compliance\" TO \"erp_app\";",
+        "ALTER SCHEMA \"core\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"core\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"core\" TO \"erp_app\";",
+        "ALTER SCHEMA \"finance\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"finance\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"finance\" TO \"erp_app\";",
+        "ALTER SCHEMA \"hr\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"hr\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"hr\" TO \"erp_app\";",
+        "ALTER SCHEMA \"inventory\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"inventory\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"inventory\" TO \"erp_app\";",
+        "ALTER SCHEMA \"parties\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"parties\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"parties\" TO \"erp_app\";",
+        "ALTER SCHEMA \"procurement\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"procurement\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"procurement\" TO \"erp_app\";",
+        "ALTER SCHEMA \"sales\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"sales\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"sales\" TO \"erp_app\";",
+        "ALTER SCHEMA \"tax\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"tax\" FROM PUBLIC;",
+        "GRANT USAGE ON SCHEMA \"tax\" TO \"erp_app\";",
+        "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\";",
+        "ALTER TABLE \"automation\".\"agent_grant_capabilities\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"automation\".\"agent_grant_capabilities\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"automation\".\"agent_grant_capabilities\" TO \"erp_app\";",
+        "ALTER TABLE \"automation\".\"agent_grants\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"automation\".\"agent_grants\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"automation\".\"agent_grants\" TO \"erp_app\";",
+        "ALTER TABLE \"automation\".\"command_approvals\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"automation\".\"command_approvals\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"automation\".\"command_approvals\" TO \"erp_app\";",
+        "ALTER TABLE \"automation\".\"command_requests\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"automation\".\"command_requests\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"automation\".\"command_requests\" TO \"erp_app\";",
+        "ALTER TABLE \"calculation\".\"artifacts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"calculation\".\"artifacts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"calculation\".\"artifacts\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"categories\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"categories\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"catalog\".\"categories\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"commercial_charge_tax_profiles\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"commercial_charge_tax_profiles\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"catalog\".\"commercial_charge_tax_profiles\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"ingredients\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"ingredients\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"catalog\".\"ingredients\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"product_ingredients\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"product_ingredients\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"catalog\".\"product_ingredients\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"products\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"products\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"catalog\".\"products\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"units_of_measure\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"units_of_measure\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"catalog\".\"units_of_measure\" TO \"erp_app\";",
+        "ALTER TABLE \"catalog\".\"uom_conversions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"catalog\".\"uom_conversions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"catalog\".\"uom_conversions\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"controlled_movement_rule_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"controlled_movement_rule_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"compliance\".\"controlled_movement_rule_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"controlled_substance_entries\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"controlled_substance_entries\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"compliance\".\"controlled_substance_entries\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"destructions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"destructions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"compliance\".\"destructions\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"licenses\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"licenses\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"compliance\".\"licenses\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"recall_batches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"recall_batches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"compliance\".\"recall_batches\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"recalls\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"recalls\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"compliance\".\"recalls\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"storage_rule_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"storage_rule_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"compliance\".\"storage_rule_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"compliance\".\"temperature_readings\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"compliance\".\"temperature_readings\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"compliance\".\"temperature_readings\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"access_grants\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"access_grants\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"access_grants\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"attachments\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"attachments\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"attachments\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"audit_events\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"audit_events\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"core\".\"audit_events\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"branches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"branches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"branches\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"data_retention_cases\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"data_retention_cases\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"data_retention_cases\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"document_sequences\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"document_sequences\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"document_sequences\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"idempotency_keys\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"idempotency_keys\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"idempotency_keys\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"memberships\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"memberships\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"memberships\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"organizations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"organizations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, UPDATE ON TABLE \"core\".\"organizations\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"outbox_events\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"outbox_events\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"outbox_events\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"permissions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"permissions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"core\".\"permissions\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"reference_data_releases\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"reference_data_releases\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"core\".\"reference_data_releases\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"role_permissions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"role_permissions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, DELETE ON TABLE \"core\".\"role_permissions\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"roles\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"roles\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"roles\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"settings\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"settings\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"settings\" TO \"erp_app\";",
+        "ALTER TABLE \"core\".\"users\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"core\".\"users\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"core\".\"users\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"accounting_events\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"accounting_events\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"finance\".\"accounting_events\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"accounts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"accounts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"accounts\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"adjustment_note_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"adjustment_note_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"adjustment_note_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"adjustment_notes\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"adjustment_notes\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"adjustment_notes\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"allocations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"allocations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"allocations\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"bank_accounts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"bank_accounts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"bank_accounts\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"bank_statement_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"bank_statement_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"finance\".\"bank_statement_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"bank_statements\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"bank_statements\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"bank_statements\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"expense_claim_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"expense_claim_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"expense_claim_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"expense_claims\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"expense_claims\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"expense_claims\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"journal_entries\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"journal_entries\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"journal_entries\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"journal_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"journal_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"journal_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"open_items\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"open_items\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"open_items\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"payments\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"payments\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"payments\" TO \"erp_app\";",
+        "ALTER TABLE \"finance\".\"reconciliation_matches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"finance\".\"reconciliation_matches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"finance\".\"reconciliation_matches\" TO \"erp_app\";",
+        "ALTER TABLE \"hr\".\"departments\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"hr\".\"departments\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"hr\".\"departments\" TO \"erp_app\";",
+        "ALTER TABLE \"hr\".\"employees\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"hr\".\"employees\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"hr\".\"employees\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"batches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"batches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"inventory\".\"batches\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"inventory_document_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"inventory_document_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"inventory\".\"inventory_document_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"inventory_documents\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"inventory_documents\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"inventory\".\"inventory_documents\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"locations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"locations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"inventory\".\"locations\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"reservations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"reservations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"inventory\".\"reservations\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"stock_balances\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"stock_balances\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"inventory\".\"stock_balances\" TO \"erp_app\";",
+        "ALTER TABLE \"inventory\".\"stock_ledger_entries\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"inventory\".\"stock_ledger_entries\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"inventory\".\"stock_ledger_entries\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"addresses\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"addresses\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"addresses\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"contacts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"contacts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"contacts\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"customer_accounts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"customer_accounts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"customer_accounts\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"parties\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"parties\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"parties\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"supplier_accounts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"supplier_accounts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"supplier_accounts\" TO \"erp_app\";",
+        "ALTER TABLE \"parties\".\"tax_registrations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"parties\".\"tax_registrations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"parties\".\"tax_registrations\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"goods_receipt_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"goods_receipt_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"goods_receipt_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"goods_receipts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"goods_receipts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"goods_receipts\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"purchase_order_advance_allocations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"purchase_order_advance_allocations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"purchase_order_advance_allocations\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"purchase_order_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"purchase_order_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"purchase_order_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"purchase_orders\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"purchase_orders\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"purchase_orders\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"purchase_return_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"purchase_return_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"purchase_return_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"purchase_returns\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"purchase_returns\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"purchase_returns\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"supplier_invoice_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"supplier_invoice_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"supplier_invoice_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"supplier_invoice_receipt_allocations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"supplier_invoice_receipt_allocations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"supplier_invoice_receipt_allocations\" TO \"erp_app\";",
+        "ALTER TABLE \"procurement\".\"supplier_invoices\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"procurement\".\"supplier_invoices\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"procurement\".\"supplier_invoices\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"dispatch_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"dispatch_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"dispatch_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"dispatches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"dispatches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"dispatches\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"invoice_dispatch_allocations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"invoice_dispatch_allocations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"invoice_dispatch_allocations\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"invoice_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"invoice_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"invoice_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"invoices\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"invoices\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"invoices\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"order_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"order_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"order_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"orders\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"orders\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"orders\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"return_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"return_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"return_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"sales\".\"returns\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"sales\".\"returns\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"sales\".\"returns\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"documents\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"documents\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"tax\".\"documents\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"einvoice_rule_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"einvoice_rule_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"einvoice_rule_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"einvoices\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"einvoices\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"einvoices\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"eway_bills\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"eway_bills\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"eway_bills\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"gst_adjustment_rule_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"gst_adjustment_rule_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"gst_adjustment_rule_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"organization_fiscal_tax_facts\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"organization_fiscal_tax_facts\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"organization_fiscal_tax_facts\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"portal_document_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"portal_document_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"tax\".\"portal_document_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"portal_documents\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"portal_documents\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"portal_documents\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"reconciliation_items\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"reconciliation_items\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"reconciliation_items\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"reconciliation_runs\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"reconciliation_runs\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"reconciliation_runs\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"registration_branches\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"registration_branches\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"registration_branches\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"registrations\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"registrations\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"registrations\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"return_documents\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"return_documents\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"return_documents\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"return_periods\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"return_periods\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"return_periods\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"returns\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"returns\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"returns\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"tax_code_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"tax_code_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"tax_code_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_basis_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_basis_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT ON TABLE \"tax\".\"withholding_basis_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_certificate_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_certificate_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_certificate_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_certificates\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_certificates\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_certificates\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_deposit_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_deposit_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_deposit_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_deposits\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_deposits\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_deposits\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_rule_versions\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_rule_versions\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT ON TABLE \"tax\".\"withholding_rule_versions\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_statement_lines\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_statement_lines\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_statement_lines\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholding_statements\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholding_statements\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholding_statements\" TO \"erp_app\";",
+        "ALTER TABLE \"tax\".\"withholdings\" OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON TABLE \"tax\".\"withholdings\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "GRANT SELECT, INSERT, UPDATE ON TABLE \"tax\".\"withholdings\" TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"current_org_id\"() TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"current_membership_id\"() TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"current_actor_is_active\"() TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"activate_context\"(uuid, uuid) TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"current_user_id\"() TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"can_access_branch\"(uuid) TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"has_permission\"(text, uuid) TO \"erp_app\";",
+        "GRANT EXECUTE ON FUNCTION \"erp_security\".\"can_view_user\"(uuid) TO \"erp_app\";",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"automation\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"calculation\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"catalog\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"compliance\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"core\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"finance\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"hr\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"inventory\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"parties\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"procurement\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"sales\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"tax\" REVOKE ALL ON TABLES FROM PUBLIC;",
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
+      ]
+    },
+    {
+      "category": "rls_helper",
+      "key": "rls_helper:tenant_context",
+      "requirement_sha256": "483282b02b1e69e62e6059a589c6408fee7ac76934b959534b0032cfd6fc6586",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_security\".\"current_org_id\"()\nRETURNS uuid\nLANGUAGE plpgsql\nSTABLE\nSECURITY INVOKER\nSET search_path = pg_catalog\nAS $function$\nDECLARE\n    value text;\nBEGIN\n    value := pg_catalog.current_setting('app.org_id', true);\n    IF value IS NULL OR pg_catalog.btrim(value) = '' THEN\n        RETURN NULL;\n    END IF;\n    BEGIN\n        RETURN value::uuid;\n    EXCEPTION WHEN invalid_text_representation THEN\n        RETURN NULL;\n    END;\nEND;\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"current_membership_id\"()\nRETURNS uuid\nLANGUAGE plpgsql\nSTABLE\nSECURITY INVOKER\nSET search_path = pg_catalog\nAS $function$\nDECLARE\n    value text;\nBEGIN\n    value := pg_catalog.current_setting('app.membership_id', true);\n    IF value IS NULL OR pg_catalog.btrim(value) = '' THEN\n        RETURN NULL;\n    END IF;\n    BEGIN\n        RETURN value::uuid;\n    EXCEPTION WHEN invalid_text_representation THEN\n        RETURN NULL;\n    END;\nEND;\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"is_active_membership\"(organization_id uuid, membership_id uuid)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT organization_id IS NOT NULL\n       AND membership_id IS NOT NULL\n       AND EXISTS (\n            SELECT 1\n              FROM core.memberships AS membership\n              JOIN core.organizations AS organization\n                ON organization.id = membership.org_id\n             WHERE membership.org_id = organization_id\n               AND membership.id = membership_id\n               AND membership.status = 'active'\n               AND membership.joined_at IS NOT NULL\n               AND membership.revoked_at IS NULL\n               AND organization.status = 'active'\n       );\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"current_actor_is_active\"()\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT erp_security.is_active_membership(\n        erp_security.current_org_id(),\n        erp_security.current_membership_id()\n    );\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"activate_context\"(verified_auth_user_id uuid, requested_organization_id uuid)\nRETURNS void\nLANGUAGE plpgsql\nVOLATILE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\nDECLARE\n    resolved_user_id uuid;\n    resolved_membership_id uuid;\nBEGIN\n    IF verified_auth_user_id IS NULL OR requested_organization_id IS NULL THEN\n        RAISE EXCEPTION 'invalid or inactive ERP authenticated organization membership'\n            USING ERRCODE = '42501';\n    END IF;\n\n    BEGIN\n        SELECT user_row.id, membership.id\n          INTO STRICT resolved_user_id, resolved_membership_id\n          FROM core.users AS user_row\n          JOIN core.memberships AS membership\n            ON membership.user_id = user_row.id\n          JOIN core.organizations AS organization\n            ON organization.id = membership.org_id\n         WHERE user_row.auth_user_id = verified_auth_user_id\n           AND user_row.status = 'active'\n           AND membership.org_id = requested_organization_id\n           AND membership.status = 'active'\n           AND membership.joined_at IS NOT NULL\n           AND membership.revoked_at IS NULL\n           AND organization.status = 'active';\n    EXCEPTION\n        WHEN NO_DATA_FOUND OR TOO_MANY_ROWS THEN\n            RAISE EXCEPTION 'invalid or inactive ERP authenticated organization membership'\n                USING ERRCODE = '42501';\n    END;\n\n    PERFORM pg_catalog.set_config('app.auth_user_id', verified_auth_user_id::text, true);\n    PERFORM pg_catalog.set_config('app.user_id', resolved_user_id::text, true);\n    PERFORM pg_catalog.set_config('app.org_id', requested_organization_id::text, true);\n    PERFORM pg_catalog.set_config('app.membership_id', resolved_membership_id::text, true);\nEND;\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"current_user_id\"()\nRETURNS uuid\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT membership.user_id\n      FROM core.memberships AS membership\n     WHERE membership.org_id = erp_security.current_org_id()\n       AND membership.id = erp_security.current_membership_id()\n       AND membership.status = 'active'\n       AND erp_security.current_actor_is_active();\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"can_access_branch\"(target_branch_id uuid)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT erp_security.is_active_membership(\n               erp_security.current_org_id(), erp_security.current_membership_id()\n           )\n       AND (\n            target_branch_id IS NULL\n            OR EXISTS (\n                SELECT 1\n                  FROM core.access_grants AS grant_row\n                  JOIN core.roles AS role_row\n                    ON role_row.org_id = grant_row.org_id\n                   AND role_row.id = grant_row.role_id\n                 WHERE grant_row.org_id = erp_security.current_org_id()\n                   AND grant_row.membership_id = erp_security.current_membership_id()\n                   AND grant_row.status = 'active'\n                   AND role_row.status = 'active'\n                   AND grant_row.valid_from_at <= pg_catalog.transaction_timestamp()\n                   AND (grant_row.expires_at IS NULL OR grant_row.expires_at > pg_catalog.transaction_timestamp())\n                   AND (\n                        grant_row.scope_kind = 'organization'\n                        OR (grant_row.scope_kind = 'branch' AND grant_row.branch_id = target_branch_id)\n                   )\n            )\n       );\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"has_permission\"(permission_code text, target_branch_id uuid DEFAULT NULL)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT erp_security.is_active_membership(\n               erp_security.current_org_id(), erp_security.current_membership_id()\n           )\n       AND EXISTS (\n            SELECT 1\n              FROM core.access_grants AS grant_row\n              JOIN core.roles AS role_row\n                ON role_row.org_id = grant_row.org_id\n               AND role_row.id = grant_row.role_id\n              JOIN core.role_permissions AS role_permission\n                ON role_permission.org_id = role_row.org_id\n               AND role_permission.role_id = role_row.id\n              JOIN core.permissions AS permission_row\n                ON permission_row.code = role_permission.permission_code\n             WHERE grant_row.org_id = erp_security.current_org_id()\n               AND grant_row.membership_id = erp_security.current_membership_id()\n               AND grant_row.status = 'active'\n               AND role_row.status = 'active'\n               AND permission_row.status = 'active'\n               AND role_permission.permission_code = permission_code\n               AND grant_row.valid_from_at <= pg_catalog.transaction_timestamp()\n               AND (grant_row.expires_at IS NULL OR grant_row.expires_at > pg_catalog.transaction_timestamp())\n               AND (\n                    (target_branch_id IS NULL AND grant_row.scope_kind = 'organization')\n                    OR (\n                        target_branch_id IS NOT NULL\n                        AND (\n                            grant_row.scope_kind = 'organization'\n                            OR (grant_row.scope_kind = 'branch' AND grant_row.branch_id = target_branch_id)\n                        )\n                    )\n               )\n       );\n$function$;",
+        "CREATE FUNCTION \"erp_security\".\"can_view_user\"(target_user_id uuid)\nRETURNS boolean\nLANGUAGE sql\nSTABLE\nSECURITY DEFINER\nSET search_path = pg_catalog\nSET row_security = off\nAS $function$\n    SELECT erp_security.is_active_membership(\n               erp_security.current_org_id(), erp_security.current_membership_id()\n           )\n       AND EXISTS (\n            SELECT 1\n              FROM core.memberships AS actor_membership\n              JOIN core.memberships AS target_membership\n                ON target_membership.org_id = actor_membership.org_id\n             WHERE actor_membership.org_id = erp_security.current_org_id()\n               AND actor_membership.id = erp_security.current_membership_id()\n               AND actor_membership.status = 'active'\n               AND target_membership.user_id = target_user_id\n       );\n$function$;",
+        "ALTER FUNCTION \"erp_security\".\"is_active_membership\"(uuid, uuid) OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"is_active_membership\"(uuid, uuid) FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+        "ALTER FUNCTION \"erp_security\".\"current_org_id\"() OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"current_org_id\"() FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"current_membership_id\"() OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"current_membership_id\"() FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"current_actor_is_active\"() OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"current_actor_is_active\"() FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"activate_context\"(uuid, uuid) OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"activate_context\"(uuid, uuid) FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"current_user_id\"() OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"current_user_id\"() FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"can_access_branch\"(uuid) OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"can_access_branch\"(uuid) FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"has_permission\"(text, uuid) OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"has_permission\"(text, uuid) FROM PUBLIC;",
+        "ALTER FUNCTION \"erp_security\".\"can_view_user\"(uuid) OWNER TO \"erp_migration_owner\";",
+        "REVOKE ALL ON FUNCTION \"erp_security\".\"can_view_user\"(uuid) FROM PUBLIC;"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:automation.agent_grant_capabilities",
+      "requirement_sha256": "7f795001ae138ed107d356a5d2d9a9d18915a149dd0deded3f54f3dc9f0b2545",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"automation\".\"agent_grant_capabilities\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"automation\".\"agent_grant_capabilities\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('automation.agent_grant.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"automation\".\"agent_grant_capabilities\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('automation.agent_grant.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('automation.agent_grant.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:automation.agent_grants",
+      "requirement_sha256": "8e812fb5060b9dd443566c7c7bad69b36ffd94a0d6e3d2d5d0bdda96b939642b",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"automation\".\"agent_grants\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"automation\".\"agent_grants\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.agent_grant.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"automation\".\"agent_grants\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.agent_grant.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.agent_grant.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:automation.command_approvals",
+      "requirement_sha256": "f92706c1a3d90589219db3d0b4c6c097dcee3532ed9c9f35a3e5aaf876c66ac6",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"automation\".\"command_approvals\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"automation\".\"command_approvals\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('automation.command.approve', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:automation.command_requests",
+      "requirement_sha256": "856f7560026409d9807523769a1e423744f4e5573c09b7040ff3224116b4bb6c",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"automation\".\"command_requests\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"automation\".\"command_requests\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.command.execute', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"automation\".\"command_requests\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.command.execute', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('automation.command.execute', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:calculation.artifacts",
+      "requirement_sha256": "eb82a949ad1cd02f465f728e55236b134dca5b117d176c9538527456500eb5b3",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"calculation\".\"artifacts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.categories",
+      "requirement_sha256": "a9f793573c48fa55fe75d73b6f6dc746f8a532f95d38ac0cd3541914fe468974",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"categories\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"catalog\".\"categories\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.category.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"catalog\".\"categories\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.category.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.category.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.commercial_charge_tax_profiles",
+      "requirement_sha256": "522a6457ec763a207e0fd18422f8ce39a8bdfc7be3e0582f3af269e105c24de8",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"commercial_charge_tax_profiles\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"catalog\".\"commercial_charge_tax_profiles\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"catalog\".\"commercial_charge_tax_profiles\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.ingredients",
+      "requirement_sha256": "5cef8bf24aedcf29ca4e46e235a936bc224a3186e72900928f67161b980e6684",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"ingredients\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.product_ingredients",
+      "requirement_sha256": "4fd6054bea83f5f7ccc6febac884ffc4f58c328e992d052aeb7f1912f4855c48",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"product_ingredients\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"catalog\".\"product_ingredients\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"catalog\".\"product_ingredients\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.products",
+      "requirement_sha256": "e0d5a5c4fa5b89706eca93a1d3c1752031b91751821d82a44933d859f50b5468",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"products\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"catalog\".\"products\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"catalog\".\"products\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.units_of_measure",
+      "requirement_sha256": "32162a384bb4d1edd1f75a3ca6ded399d3a8dc3231f0dff8995c7ea26dfc8266",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"units_of_measure\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:catalog.uom_conversions",
+      "requirement_sha256": "c4136669dad0f1789bd2edfd60056dac0a9a12d2f19fc3feb2a1aa2f2ff5f244",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"catalog\".\"uom_conversions\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"catalog\".\"uom_conversions\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"catalog\".\"uom_conversions\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('catalog.product.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.controlled_movement_rule_versions",
+      "requirement_sha256": "279c106627dd9f79a1cfcf63b16dfe5deea561b82f9c7b1f7914490a945e0acb",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"controlled_movement_rule_versions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.controlled_substance_entries",
+      "requirement_sha256": "c58ceec5115b70f2eab8b4b205603bfbbe5657538435c65a7b48c6a30fc019e5",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"controlled_substance_entries\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"controlled_substance_entries\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.controlled_substance.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.destructions",
+      "requirement_sha256": "8c5233a1bfeb504f25fb56a0af56b388ba0c6dd82fadff4da84161ce931af685",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"destructions\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"destructions\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.destruction.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"compliance\".\"destructions\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.destruction.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.destruction.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.licenses",
+      "requirement_sha256": "1b238f9009f5137ae20dffec5935b9514afb5ec0649f8705acffea676f9fd6c2",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"licenses\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"licenses\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('compliance.license.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"compliance\".\"licenses\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('compliance.license.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('compliance.license.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.recall_batches",
+      "requirement_sha256": "a0ea2f8d13bef3847a7c0f21d89a53fff66746517440ccfa42bbbd4d4819c576",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"recall_batches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"recall_batches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.execute', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"compliance\".\"recall_batches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.execute', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.execute', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.recalls",
+      "requirement_sha256": "8037ebf3a3c702ff4306d8cd8fd394810f74deab616808eca0c662399e87b3e5",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"recalls\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"recalls\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"compliance\".\"recalls\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.recall.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.storage_rule_versions",
+      "requirement_sha256": "3e6d06c1aee3761f5a349acdebefa573ebc46cfa29e02142aa5ed388bbb01ca9",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"storage_rule_versions\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"storage_rule_versions\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.license.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"compliance\".\"storage_rule_versions\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.license.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('compliance.license.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:compliance.temperature_readings",
+      "requirement_sha256": "8c9828e0979f6c4e5eb28533acd15ab2d2e5b42bb76afde10065d4b9c8865346",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"compliance\".\"temperature_readings\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"compliance\".\"temperature_readings\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.temperature.ingest', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.access_grants",
+      "requirement_sha256": "69749d43e67fe514b09e24b8ed4b4d33b4fdf6805c2acc19f0df6025cb319f66",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"access_grants\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"access_grants\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.access.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"access_grants\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.access.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.access.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.attachments",
+      "requirement_sha256": "256205a0fff022f02f3455fa1f95dfb17428cad7a31fe2b695de9a6d810b94b9",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"attachments\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"attachments\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.attachment.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"attachments\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.attachment.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.attachment.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.audit_events",
+      "requirement_sha256": "6ecf824feed1620f72103f647911f8a1d8c54c482be1005148e3d96eba16b4da",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"audit_events\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"audit_events\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.audit.append', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.branches",
+      "requirement_sha256": "4233bdd240e41dac1c82c146d7ff6954fce8a7c821fb9d50290cdc53ff8e48ed",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"branches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"branches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"id\") AND erp_security.has_permission('core.branch.manage', \"id\"));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"branches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"id\") AND erp_security.has_permission('core.branch.manage', \"id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"id\") AND erp_security.has_permission('core.branch.manage', \"id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.data_retention_cases",
+      "requirement_sha256": "80492447275eb18145d945b3084eae017714fb73f93fb8d2692def41a432415a",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"data_retention_cases\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"data_retention_cases\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.retention.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"data_retention_cases\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.retention.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.retention.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.document_sequences",
+      "requirement_sha256": "55ea4fff75541ab8b132e79620926037a7a12721a4ecc93cd3e33f739d3c99c1",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"document_sequences\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"document_sequences\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('internal.sequence.allocate', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"document_sequences\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('internal.sequence.allocate', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('internal.sequence.allocate', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.idempotency_keys",
+      "requirement_sha256": "a7eb23db669481aa31b6451d44d4e65f3175882f7c2e89d9ff0cb2a07e96b3e8",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"idempotency_keys\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"idempotency_keys\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.idempotency.claim', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"idempotency_keys\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.idempotency.claim', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.idempotency.claim', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.memberships",
+      "requirement_sha256": "2e9319184d1e5e57126038ff37c8c1dedba6d61f7ad76273d5d8fbe40de51825",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"memberships\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"memberships\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"memberships\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.organizations",
+      "requirement_sha256": "90ddc125f8cef7f937499ecea43160ee764981def1f489d094458819418238bd",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"organizations\" FOR SELECT TO \"erp_app\" USING (\"id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"organizations\" FOR UPDATE TO \"erp_app\" USING (\"id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.organization.manage', NULL::uuid)) WITH CHECK (\"id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.organization.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.outbox_events",
+      "requirement_sha256": "a3033014a82087f75959de915eb851cf64a1deab39fff6e5389750fd9ff43fab",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"outbox_events\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"outbox_events\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.outbox.deliver', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"outbox_events\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.outbox.deliver', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.outbox.deliver', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.permissions",
+      "requirement_sha256": "a4e5547f4f6f8196f6b4b23da0fcac2f0629a957a2379044ac280564ece55234",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"permissions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.reference_data_releases",
+      "requirement_sha256": "c3fb065b4980f368446352655abf598bf5f22b23616760b15d49a5ea8376ed9b",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"reference_data_releases\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.role_permissions",
+      "requirement_sha256": "b88b759784e8ae53b2f9f6cc708b0f91212ce46a0d8690a44e574b6272975d06",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"role_permissions\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"role_permissions\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_delete\" ON \"core\".\"role_permissions\" FOR DELETE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.roles",
+      "requirement_sha256": "19dc293189c05003acdd6a4e070117f432a880d14ad28ecae1746ff6188e4dfd",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"roles\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"roles\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"roles\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('core.access.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.settings",
+      "requirement_sha256": "3e0ab80c7923950a4d29506df427d97617922836799ed890a2d372447cbff307",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"settings\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"settings\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.settings.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"settings\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.settings.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('core.settings.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:core.users",
+      "requirement_sha256": "876586b88bd035fb2e387f0188c8fd68039af724c6c7eb3f97944dcd663ae1bc",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"core\".\"users\" FOR SELECT TO \"erp_app\" USING (erp_security.can_view_user(\"id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"core\".\"users\" FOR INSERT TO \"erp_app\" WITH CHECK (erp_security.current_actor_is_active() AND erp_security.has_permission('core.user.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"core\".\"users\" FOR UPDATE TO \"erp_app\" USING (erp_security.can_view_user(\"id\") AND erp_security.has_permission('core.user.manage', NULL::uuid)) WITH CHECK (erp_security.can_view_user(\"id\") AND erp_security.has_permission('core.user.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.accounting_events",
+      "requirement_sha256": "27d1b218031d4a3576c6fe1ceac56d80de4146b7e422872d53f494dbc7e1326d",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"accounting_events\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"accounting_events\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.accounting.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.accounts",
+      "requirement_sha256": "5868066f4b8d83fa57b4550ccc92ac5071004876b0b60722223f8f28fcd6c2d0",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"accounts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"accounts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.account.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"accounts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.account.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.account.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.adjustment_note_lines",
+      "requirement_sha256": "6d542ce9491ff72a5fa1288f0619130bfecafe7b3b5e7c76463a1b3db4c0ad89",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"adjustment_note_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"adjustment_note_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.edit', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"adjustment_note_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.edit', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.edit', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.adjustment_notes",
+      "requirement_sha256": "dadf8075ec4a035d93082bd34173167ed4829b2cffc3ddf3d9222efb08dc6efb",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"adjustment_notes\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"adjustment_notes\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"adjustment_notes\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.adjustment_note.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.allocations",
+      "requirement_sha256": "91f7c6aa4aed637fb5bbbd7e40e4b34fa2c90795830594b905d6ce396b4cfe76",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"allocations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"allocations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.payment.allocate', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"allocations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.payment.allocate', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.payment.allocate', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.bank_accounts",
+      "requirement_sha256": "7fd92c04ce7f72f0770e386310a9d4b34d76a258abaeaa58b4031a029f7571f8",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"bank_accounts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"bank_accounts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_account.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"bank_accounts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_account.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_account.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.bank_statement_lines",
+      "requirement_sha256": "b77f2f79264396d518bd1c629cff58bb5cd5469dcf154c90a8cd7e06f599a101",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"bank_statement_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"bank_statement_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.bank_statement.parse', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.bank_statements",
+      "requirement_sha256": "2891bb1d8e10647fd14ebc189cc285e696f76674e0b2ee42b09fb9e789e2a1aa",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"bank_statements\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"bank_statements\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_statement.import', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"bank_statements\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_statement.import', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_statement.import', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.expense_claim_lines",
+      "requirement_sha256": "764a1d81340fb7cf3fbcaea02bba878cebeb8fae89a0de5ed0e4d1bf4a3629ac",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"expense_claim_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"expense_claim_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.edit', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"expense_claim_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.edit', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.edit', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.expense_claims",
+      "requirement_sha256": "968905e09e4e281388a0cbab1ccd3d2b8cdfca29aab9427a47697f21e70affa4",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"expense_claims\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"expense_claims\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"expense_claims\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.expense.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.journal_entries",
+      "requirement_sha256": "c630e1091487c1ed2bfdc4d9dec3c423f4436c93dd44ee57c971767436a2e48a",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"journal_entries\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"journal_entries\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.journal.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"journal_entries\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.journal.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.journal.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.journal_lines",
+      "requirement_sha256": "625ba1ff7a03ae1747b1cc7dfb97fa5177782f1c3bf19fd69e61de9459e1fdd0",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"journal_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"journal_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.journal.edit', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"journal_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.journal.edit', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.journal.edit', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.open_items",
+      "requirement_sha256": "7eeb3403f4fa28953f103f1cebdc15e9a1dd87166185668d7e6f23fe10e8843d",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"open_items\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"open_items\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.open_item.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"open_items\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.open_item.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.open_item.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.payments",
+      "requirement_sha256": "97d8a53ae0d4b50bfadc186347b6ad10d15465d600db719419e59d7fe8590e46",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"payments\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"payments\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"payments\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:finance.reconciliation_matches",
+      "requirement_sha256": "2c1aa709b3381129aa3544824140550db989e3d00058c48db02a080a0b48912e",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"finance\".\"reconciliation_matches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"finance\".\"reconciliation_matches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_reconcile', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"finance\".\"reconciliation_matches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_reconcile', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('finance.bank_reconcile', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:hr.departments",
+      "requirement_sha256": "f76e85c8a73c60bc58cc30fbfc6563acd941baf5ced82d5dcdca9a21a2ad5d3f",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"hr\".\"departments\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"hr\".\"departments\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('hr.department.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"hr\".\"departments\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('hr.department.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('hr.department.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:hr.employees",
+      "requirement_sha256": "236341209ef344cfb79c007e9e1fae6f9f08c5857112a84fe2450fd4bd24c677",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"hr\".\"employees\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"hr\".\"employees\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('hr.employee.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"hr\".\"employees\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('hr.employee.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('hr.employee.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.batches",
+      "requirement_sha256": "2f6e82f33ce4b0e0265a47e71d3b97edab937a376b36218cc18033082f8bcb55",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"batches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"batches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.batch.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"batches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.batch.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.batch.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.inventory_document_lines",
+      "requirement_sha256": "504325a29f5d3eec65fd56eaac4f75c423b19019390c53edff2cac414fa6862c",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"inventory_document_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"inventory_document_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.document.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"inventory_document_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.document.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('inventory.document.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.inventory_documents",
+      "requirement_sha256": "418276e0135f0fa8773d70451b693fc6e302ed02b4ac4c7c7bb4f81bb82c5574",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"inventory_documents\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"inventory_documents\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.document.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"inventory_documents\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.document.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.document.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.locations",
+      "requirement_sha256": "b03156acd59d83693a8c470ff359738bf9a3101cc402488856ac1d4c5ac01745",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"locations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"locations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.location.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"locations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.location.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.location.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.reservations",
+      "requirement_sha256": "d38ee148d0867b5a2e6f3b332b32e3ab7698c2ab0cfb9e4756c88c00fd1ccd56",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"reservations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"reservations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.reservation.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"reservations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.reservation.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.reservation.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.stock_balances",
+      "requirement_sha256": "e326c2faab1d2c58d67ac162411616bf1ed407bcd2ecc7643c534e6be8c97fab",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"stock_balances\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"stock_balances\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.projector.write', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"inventory\".\"stock_balances\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.projector.write', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.projector.write', \"branch_id\"));",
+        "CREATE POLICY \"erp_delete\" ON \"inventory\".\"stock_balances\" FOR DELETE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.projector.write', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:inventory.stock_ledger_entries",
+      "requirement_sha256": "17a4a85c353c7b39fdb861561022825e16b8148d1a4d93edcaa0ea83a102c5e4",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"inventory\".\"stock_ledger_entries\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"inventory\".\"stock_ledger_entries\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('inventory.document.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.addresses",
+      "requirement_sha256": "04ac968b273ec756c9e3a8392139536f3905eee32f137d4cf85023aada25f91d",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"addresses\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"addresses\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"addresses\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.contacts",
+      "requirement_sha256": "1b4e4821a10ca32025e1b6c052ec652e2afb452a8113ff960dc90a83c7c71530",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"contacts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"contacts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"contacts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.customer_accounts",
+      "requirement_sha256": "befa4bbd4f71c483f9095097b9731727a34d23140361046b9167b92ca71d1fd9",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"customer_accounts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"customer_accounts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.customer.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"customer_accounts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.customer.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.customer.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.parties",
+      "requirement_sha256": "85c480a1f8a2d6cc16ba3eeebf101617233d839db4d6d1f663d57417ad0f3ea9",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"parties\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"parties\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"parties\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.party.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.supplier_accounts",
+      "requirement_sha256": "15266d6ddd8261d47d455088ea17c31c18badb2c6e9a83e9e074bf1b8d565fe6",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"supplier_accounts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"supplier_accounts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.supplier.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"supplier_accounts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.supplier.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.supplier.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:parties.tax_registrations",
+      "requirement_sha256": "ea1f5d6713a5232530dc527f89e9aab87a894b9d357a8e5e148b7f02a34dd086",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"parties\".\"tax_registrations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"parties\".\"tax_registrations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.tax_registration.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"parties\".\"tax_registrations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.tax_registration.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('parties.tax_registration.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.goods_receipt_lines",
+      "requirement_sha256": "b92b33a5c8c9a9deffa5413f8fb82e2df1d5a12d409c07d39c0c87ab0f70b4a3",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"goods_receipt_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"goods_receipt_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.receipt.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"goods_receipt_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.receipt.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.receipt.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.goods_receipts",
+      "requirement_sha256": "23b2c3aa7f384d7d0f6edf818153a0e0845243154adcb167a732d1e15ebeeccf",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"goods_receipts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"goods_receipts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.receipt.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"goods_receipts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.receipt.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.receipt.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.purchase_order_advance_allocations",
+      "requirement_sha256": "23f9ed75b6fca8897fd8e1928e554a0b81549f361e2913afb30d6842f505e438",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"purchase_order_advance_allocations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"purchase_order_advance_allocations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"purchase_order_advance_allocations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('finance.payment.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.purchase_order_lines",
+      "requirement_sha256": "16481651668fc4e1ce5515a13b10e1f33c269dfbe5ef552032e1fd467f789bc1",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"purchase_order_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"purchase_order_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.order.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"purchase_order_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.order.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.order.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.purchase_orders",
+      "requirement_sha256": "f56dbad3bb3e88d0b352c7e570de8579bbb07f2f5d4184fcab0156f8db393126",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"purchase_orders\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"purchase_orders\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.order.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"purchase_orders\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.order.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.order.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.purchase_return_lines",
+      "requirement_sha256": "316abfa7ddb2645db692402febbbabeb2f2b460518d7c1d759552373eb260777",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"purchase_return_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"purchase_return_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.return.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"purchase_return_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.return.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.return.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.purchase_returns",
+      "requirement_sha256": "5d5d1de676f86dba996060fe5492fbe2e7bd75d6ae4c26e89fd5329cec07e598",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"purchase_returns\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"purchase_returns\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.return.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"purchase_returns\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.return.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.return.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.supplier_invoice_lines",
+      "requirement_sha256": "c98f2a176877f58220969e4d2e75296c56ed2a43bd3a4b67fc7a92d057f30c14",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"supplier_invoice_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"supplier_invoice_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"supplier_invoice_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.supplier_invoice_receipt_allocations",
+      "requirement_sha256": "2de61f2e8965345a25080e0d8b8f6b0e8141ac85a3a959d1db983f441bad6b9d",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"supplier_invoice_receipt_allocations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"supplier_invoice_receipt_allocations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"supplier_invoice_receipt_allocations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('procurement.invoice.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:procurement.supplier_invoices",
+      "requirement_sha256": "d7856847aa233a36ddf9d1d51a5ee05e552b0719e49570dc790ef6f62d01221e",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"procurement\".\"supplier_invoices\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"procurement\".\"supplier_invoices\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.invoice.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"procurement\".\"supplier_invoices\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.invoice.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('procurement.invoice.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.dispatch_lines",
+      "requirement_sha256": "7c2706679afbc6308a0c445a90557cfb37d4ccea5f997436de8399cbab589b42",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"dispatch_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"dispatch_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.dispatch.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"dispatch_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.dispatch.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.dispatch.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.dispatches",
+      "requirement_sha256": "4a5944c50eca348307a3b84d4127d491e80f39135a65b245ad99ae384553c1c9",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"dispatches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"dispatches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.dispatch.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"dispatches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.dispatch.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.dispatch.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.invoice_dispatch_allocations",
+      "requirement_sha256": "07e6b1a41ff775c9d44845a711e56be138b91b34b75b2edf38804a02d77badb4",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"invoice_dispatch_allocations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"invoice_dispatch_allocations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"invoice_dispatch_allocations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.invoice_lines",
+      "requirement_sha256": "8cd1edcbfb9925f3a9b7dfa664f97db77b5b6b69adcc96c447c766d579acb7aa",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"invoice_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"invoice_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"invoice_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.invoice.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.invoices",
+      "requirement_sha256": "c9a2b00cfcfef42cfcdadd71d42e715d0e022deb7015ba187b6df26e7f5f7909",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"invoices\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"invoices\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.invoice.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"invoices\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.invoice.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.invoice.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.order_lines",
+      "requirement_sha256": "cd41161c6a9b52ccf06e129cd03ee17cd58e4941ffe27a10c61e70dc6f769530",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"order_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"order_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.order.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"order_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.order.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.order.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.orders",
+      "requirement_sha256": "2494cb5d3f7bfd9915bfc917a13c5739ab218caaa96462deb342a0718c11f602",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"orders\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"orders\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.order.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"orders\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.order.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.order.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.return_lines",
+      "requirement_sha256": "8df842089d0fb1da2c26bac206483821544585b39cebcd44e8a1d08b70841d70",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"return_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"return_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.return.post', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"return_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.return.post', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('sales.return.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:sales.returns",
+      "requirement_sha256": "23b2792f3302b8bc410f07a059dd5d46e466439b756929e82ad92c172eb44fec",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"sales\".\"returns\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"sales\".\"returns\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.return.post', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"sales\".\"returns\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.return.post', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('sales.return.post', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.documents",
+      "requirement_sha256": "566f7f8e9c9f704d7e57e3f712307efa078db2a0452a0a840587b5c15bf03133",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"documents\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"documents\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.tax_document.post', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.einvoice_rule_versions",
+      "requirement_sha256": "c1afcb118a2ff3937a88c08b212601c45159277498db2e43a6b93cf9a1b05fea",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"einvoice_rule_versions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.einvoices",
+      "requirement_sha256": "956afb82559b71b92ac7f5570eaa276929952a380c0750ee429d924e5a151c4c",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"einvoices\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.eway_bills",
+      "requirement_sha256": "0a8a020ddf7d1fa2362261b0fd00e54f18f387d1ae09fbe6dd4451653362d1b1",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"eway_bills\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.gst_adjustment_rule_versions",
+      "requirement_sha256": "bca4191018ddb713b57999dfe6c915da2cf35296436c63d47e3f7563fae1e022",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"gst_adjustment_rule_versions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.organization_fiscal_tax_facts",
+      "requirement_sha256": "9d07ec78b53d4530ef832669174e0ae208e2bc0e9034bd19ea03ee7a970a8d23",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"organization_fiscal_tax_facts\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"organization_fiscal_tax_facts\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"organization_fiscal_tax_facts\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.portal_document_lines",
+      "requirement_sha256": "8269e9058d267de78fe2985bf35ad5965944de94e897d5cbe14213a28e4408cc",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"portal_document_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"portal_document_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.tax.portal.parse', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.portal_documents",
+      "requirement_sha256": "3bd38bb35f86b039daea1254231ed3e905be9710b01fead53ecb1365deaeebdc",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"portal_documents\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"portal_documents\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.portal.import', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"portal_documents\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.portal.import', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.portal.import', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.reconciliation_items",
+      "requirement_sha256": "e4fda013031339e20f259b7e4dffcaafd4373927ec7683d1fd36827d464d5cb2",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"reconciliation_items\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"reconciliation_items\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.tax.reconciliation.write', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"reconciliation_items\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.tax.reconciliation.write', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('internal.tax.reconciliation.write', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.reconciliation_runs",
+      "requirement_sha256": "3eb5d01e131459a170c6b13800d498c53650ca1744ad623b21deb0f87f37c1c6",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"reconciliation_runs\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"reconciliation_runs\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.reconciliation.run', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"reconciliation_runs\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.reconciliation.run', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.reconciliation.run', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.registration_branches",
+      "requirement_sha256": "2f1fa8e76f4f43de10e8d10b54bc6d983e4fbb5e15a5f55a1e5a7ac9e4d572e1",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"registration_branches\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\"));",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"registration_branches\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('tax.registration.manage', \"branch_id\"));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"registration_branches\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('tax.registration.manage', \"branch_id\")) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.can_access_branch(\"branch_id\") AND erp_security.has_permission('tax.registration.manage', \"branch_id\"));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.registrations",
+      "requirement_sha256": "7bffbd99f7b6954b6d23f3f81197483eb26f23d6710edac42bde39a41bed99f6",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"registrations\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"registrations\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"registrations\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.registration.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.return_documents",
+      "requirement_sha256": "d0eb61139679fa65da987484596061c592831f0f7b5673f4e768af6f11a199dd",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"return_documents\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"return_documents\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.compose', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"return_documents\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.compose', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.compose', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.return_periods",
+      "requirement_sha256": "9b90c067dfde063bd534dc2a074a7226125242bd4514598e1db7be4e2de1b959",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"return_periods\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"return_periods\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return_period.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"return_periods\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return_period.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return_period.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.returns",
+      "requirement_sha256": "82ffb93d8ff1b41345eb99eef56be71d018bef2dd7265e76e5707dc31cc17afc",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"returns\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"returns\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.file', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"returns\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.file', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.return.file', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.tax_code_versions",
+      "requirement_sha256": "7c657997bfc78a2f440527f0522e5db174e2fc28f654fc209fef4f1b9e64ae32",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"tax_code_versions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_basis_lines",
+      "requirement_sha256": "81fd37a98de9cb585304725fd70a4e873c780dc859889a0d61c633a1a0120da5",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_basis_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_basis_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_certificate_lines",
+      "requirement_sha256": "2927b77ba3772a1322f85c3f93a0d984345a46ce13339facd8ec176a40eb37dd",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_certificate_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_certificate_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_certificate_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_certificates",
+      "requirement_sha256": "8cba567fc32e47ce63b3bf847ad81003be778d0f39d8060b851c994b3a4cc846",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_certificates\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_certificates\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_certificates\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_deposit_lines",
+      "requirement_sha256": "994a37550bc5d48d94fd4b4f71ef26d1870a0ac480f3a99ccd4ebd331606ca71",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_deposit_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_deposit_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_deposit_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_deposits",
+      "requirement_sha256": "903be38583a3a46ab357c28d1b34576324da675d8b662a2af049ffa72aa7db15",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_deposits\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_deposits\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_deposits\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_rule_versions",
+      "requirement_sha256": "602937e03b9a3996accd898c22078f58c28126d0031902b2cd8c064ea4c21cf7",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_rule_versions\" FOR SELECT TO \"erp_app\" USING (true);"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_statement_lines",
+      "requirement_sha256": "f329f1219ef96cf08992149386dd9f6c1b219298f55291744aca4540a4f6d452",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_statement_lines\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_statement_lines\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_statement_lines\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholding_statements",
+      "requirement_sha256": "157dce19cb6c8633d78c77e7f254954c8e8d31bfa5385f2e1c57d7936c4326a4",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholding_statements\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholding_statements\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholding_statements\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "rls_policy",
+      "key": "rls_policy:tax.withholdings",
+      "requirement_sha256": "7dd393afde296901add95c6b2a7080fa26eb1d5bfce23cdc9abf4e6d0c9c549a",
+      "reviewed": true,
+      "statements": [
+        "CREATE POLICY \"erp_select\" ON \"tax\".\"withholdings\" FOR SELECT TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active());",
+        "CREATE POLICY \"erp_insert\" ON \"tax\".\"withholdings\" FOR INSERT TO \"erp_app\" WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));",
+        "CREATE POLICY \"erp_update\" ON \"tax\".\"withholdings\" FOR UPDATE TO \"erp_app\" USING (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK (\"org_id\" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));"
+      ]
+    },
+    {
+      "category": "roles_grants",
+      "key": "role:erp_app",
+      "requirement_sha256": "1b34ccff14b438d7aa1e3efec28b948588866f36cfbe031de7e951f53c419e7d",
+      "reviewed": true,
+      "statements": [
+        "CREATE ROLE \"erp_app\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS;"
+      ]
+    },
+    {
+      "category": "roles_grants",
+      "key": "role:erp_runtime",
+      "requirement_sha256": "75a749c5dc4e66a392ef1561d426d7847733bbc94866f389e397193e955fddd8",
+      "reviewed": true,
+      "statements": [
+        "CREATE ROLE \"erp_runtime\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS;",
+        "GRANT \"erp_app\" TO \"erp_runtime\";"
+      ]
+    },
+    {
+      "category": "roles_grants",
+      "key": "role:migration_owner",
+      "requirement_sha256": "5ed33796be5e10d580a9db7ee5f23ee0d9bdf0887fb5caae9f1582eedfa92ca2",
+      "reviewed": true,
+      "statements": [
+        "CREATE ROLE \"erp_migration_owner\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT BYPASSRLS;",
+        "REVOKE CREATE ON SCHEMA \"public\" FROM PUBLIC;",
+        "CREATE SCHEMA \"erp_security\" AUTHORIZATION \"erp_migration_owner\";",
+        "REVOKE ALL ON SCHEMA \"erp_security\" FROM PUBLIC;"
+      ]
+    }
+  ]
+}

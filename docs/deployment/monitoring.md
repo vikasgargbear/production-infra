@@ -211,7 +211,7 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN"),
-    environment=os.environ.get("ENVIRONMENT", "development"),
+    environment=os.environ.get("APP_ENV", "development"),
     traces_sample_rate=0.1,  # 10% of transactions
     integrations=[
         FastApiIntegration(),

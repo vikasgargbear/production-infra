@@ -1,0 +1,87 @@
+{
+  "blocked_count": 17,
+  "blocked_invariants": {
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_landed_cost_allocation": {
+      "reason": "The catalog still lacks an approved eligible variance/capitalized-charge allocation fact. A command cannot reconstruct legal allocation authority from invoice totals."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_invariant_2": {
+      "reason": "The inventory command enforces one reversal and implemented dispatch/receipt ownership, but sales-return, purchase-return, supplier-invoice-cost, and destruction commands are not all present; global posted-source ownership cannot yet be claimed."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_landed_cost": {
+      "reason": "Landed-cost posting remains fail-closed until eligible price variance and capitalized charge pools are persisted and approved."
+    },
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_landed_cost": {
+      "reason": "The projector supports quantity/value folding, but value-adjustment entry creation remains blocked without the landed-cost allocation authority."
+    },
+    "procurement.purchase_order_advance_allocations:purchase_order_advance_allocations_cross_row_guard": {
+      "reason": "The inventory writer does not own supplier-payment, prepayment open-item, or withholding basis orchestration; a dedicated locked advance command is required."
+    },
+    "procurement.purchase_order_lines:procurement_purchase_order_lines_invariant_1": {
+      "reason": "PostgreSQL has no reviewed implementation of the canonical Decimal engine and the catalog has no database-recomputable calculation digest."
+    },
+    "procurement.purchase_orders:procurement_purchase_orders_invariant_1": {
+      "reason": "Approval remains blocked until PostgreSQL can recompute the exact canonical Decimal outputs, including paise residual allocation."
+    },
+    "procurement.purchase_return_lines:procurement_purchase_return_lines_invariant_1": {
+      "reason": "The row has no explicit final-residual marker and no persisted original component allocation authority, so exact cumulative reversal intent cannot be proved for every partial return."
+    },
+    "procurement.purchase_returns:procurement_purchase_returns_invariant_1": {
+      "reason": "A complete return command still needs exact Decimal reversal proof plus typed tax, payable, accounting, and inventory facts."
+    },
+    "procurement.supplier_invoice_lines:procurement_supplier_invoice_lines_invariant_1": {
+      "reason": "The database cannot yet recompute the canonical Decimal engine or prove eligible capitalize-versus-expense allocation pools."
+    },
+    "procurement.supplier_invoices:procurement_supplier_invoices_invariant_1": {
+      "reason": "Supplier invoice posting remains blocked on Decimal equivalence and approved landed-cost allocation authority."
+    },
+    "sales.invoice_lines:sales_invoice_lines_invariant_1": {
+      "reason": "PostgreSQL has no reviewed implementation of the canonical Decimal engine and the catalog has no database-recomputable calculation digest."
+    },
+    "sales.invoices:sales_invoices_invariant_1": {
+      "reason": "Invoice posting remains blocked until exact Decimal recomputation can precede typed tax, receivable, accounting, and outbox fan-out."
+    },
+    "sales.order_lines:sales_order_lines_invariant_1": {
+      "reason": "PostgreSQL has no reviewed implementation of the canonical Decimal engine and the catalog has no database-recomputable calculation digest."
+    },
+    "sales.orders:sales_orders_invariant_1": {
+      "reason": "Approval remains blocked until PostgreSQL can recompute the exact canonical Decimal outputs, including paise residual allocation."
+    },
+    "sales.return_lines:sales_return_lines_invariant_1": {
+      "reason": "The row has no explicit final-residual marker and no persisted original component allocation authority, so exact cumulative reversal intent cannot be proved for every partial return."
+    },
+    "sales.returns:sales_returns_invariant_1": {
+      "reason": "A complete return command still needs exact Decimal reversal proof plus typed tax, receivable, accounting, and inventory facts."
+    }
+  },
+  "limitations": [
+    "No landed-cost posting until approved eligible allocation pools are persisted.",
+    "No order, invoice, supplier-invoice, or return posting until canonical Decimal equivalence is database-verifiable.",
+    "PostgreSQL 15 numeric arithmetic is exact, but reproducing the Python engine's residual-allocation order requires a separately reviewed SQL engine and vectors."
+  ],
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-trade-command-enforcements.json",
+  "mapping_sha256": "a48268094c91bff0b9ffa73d77f2d959a774f2adacfa97c28e637f5f4d6144af",
+  "ownership": {
+    "idempotency_claim_owner": "erp_trade_commands.claim",
+    "inventory_ledger_writer_count": 1,
+    "inventory_projector_writer_count": 1,
+    "runtime_commands": [
+      "erp_trade_commands.post_inventory_document",
+      "erp_trade_commands.post_dispatch",
+      "erp_trade_commands.post_goods_receipt"
+    ]
+  },
+  "postgresql": "15+",
+  "resolved_count": 9,
+  "resolved_invariants": [
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_invariant_1",
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_invariant_2",
+    "inventory.inventory_documents:inventory_inventory_documents_invariant_1",
+    "inventory.inventory_documents:inventory_inventory_documents_physical_logistics",
+    "inventory.stock_balances:inventory_stock_balances_invariant_1",
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_invariant_1",
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_invariant_2",
+    "procurement.goods_receipts:procurement_goods_receipts_invariant_1",
+    "sales.dispatches:sales_dispatches_invariant_1"
+  ]
+}

@@ -129,9 +129,12 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/pharmacy_dev
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=development
-      - DEBUG=true
+      - APP_ENV=development
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=http://localhost:3000
+      - APP_URL=http://localhost:3000
     volumes:
       - ./backend:/app
     depends_on:
@@ -190,11 +193,12 @@ services:
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - ENVIRONMENT=production
-      - DEBUG=false
+      - APP_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - APP_URL=${APP_URL}
     deploy:
       replicas: 2
       resources:
@@ -380,17 +384,15 @@ docker system prune -a
 # Database (internal Docker network)
 DATABASE_URL=postgresql://postgres:strongpassword@db:5432/pharmacy
 
-# Redis
-REDIS_URL=redis://redis:6379/0
-
 # Security
-SECRET_KEY=your-production-secret-key
 JWT_SECRET_KEY=your-jwt-secret-key
 
 # App
-ENVIRONMENT=production
-DEBUG=false
-ALLOWED_ORIGINS=https://app.yourdomain.com
+APP_ENV=production
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+CORS_ORIGINS=https://app.yourdomain.com
+APP_URL=https://app.yourdomain.com
 ```
 
 ### Using .env Files

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus,
   Package,
   Users,
   FileText,
@@ -14,7 +13,6 @@ import {
   // Medical/Pharma Icons
   Pill,
   Heart,
-  Stethoscope,
   Activity,
   Zap,
   Bell,
@@ -27,7 +25,6 @@ import {
   Cross,
   ChevronRight,
   ChevronDown,
-  Star,
   Globe,
   BadgeCheck,
   Lock,
@@ -71,7 +68,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
 
   // Mock data for demonstration
   const quickStats = {
-    prescriptions: { count: 47, trend: '+12%', color: 'teal' },
     lowStock: { count: 8, trend: 'urgent', color: 'red' },
     pendingOrders: { count: 23, trend: '+5', color: 'blue' },
     expiryAlerts: { count: 12, trend: '7 days', color: 'amber' }
@@ -80,7 +76,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
   const complianceStatus = {
     dgft: { status: 'valid', expiry: '2024-12-31', color: 'green' },
     gst: { status: 'filed', expiry: '2024-09-15', color: 'green' },
-    narcotic: { status: 'updated', expiry: '2024-10-01', color: 'green' },
     license: { status: 'expires', expiry: '2024-11-15', color: 'amber' }
   };
 
@@ -94,44 +89,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
 
   // Pharma-specific menu organization
   const menuSections = [
-    {
-      id: 'prescription',
-      title: 'Prescription Management',
-      description: 'Handle prescriptions & dispensing',
-      icon: Stethoscope,
-      items: [
-        {
-          id: 'home',
-          label: 'Dashboard',
-          icon: Activity,
-          count: null,
-          description: 'Medical overview dashboard'
-        },
-        {
-          id: 'quick-prescription',
-          label: 'Quick Prescription',
-          icon: Plus,
-          count: null,
-          description: 'Rapid prescription entry',
-          highlight: true
-        },
-        {
-          id: 'prescriptions',
-          label: 'Today\'s Prescriptions',
-          icon: FileCheck,
-          count: '47',
-          description: 'Daily prescription log',
-          status: 'active'
-        },
-        {
-          id: 'drug-interaction',
-          label: 'Drug Interaction Check',
-          icon: AlertTriangle,
-          count: null,
-          description: 'Safety verification tool'
-        }
-      ]
-    },
     {
       id: 'inventory',
       title: 'Pharmaceutical Inventory',
@@ -191,13 +148,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           description: 'Insurance claim management'
         },
         {
-          id: 'loyalty',
-          label: 'Loyalty Program',
-          icon: Star,
-          count: '89%',
-          description: 'Patient retention program'
-        },
-        {
           id: 'whatsapp',
           label: 'Patient Communication',
           icon: MessageSquare,
@@ -228,13 +178,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           count: 'Filed',
           description: 'Tax compliance status',
           status: 'active'
-        },
-        {
-          id: 'narcotic-register',
-          label: 'Narcotic Register',
-          icon: Lock,
-          count: 'Updated',
-          description: 'Controlled substance tracking'
         },
         {
           id: 'license-tracker',
@@ -287,13 +230,6 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
           icon: Pill,
           count: null,
           description: 'Comprehensive drug database'
-        },
-        {
-          id: 'clinical-decision',
-          label: 'Clinical Decision Support',
-          icon: Stethoscope,
-          count: null,
-          description: 'Medical decision assistance'
         },
         {
           id: 'cold-chain',
@@ -404,9 +340,7 @@ const Sidebar = ({ activeTab, onTabChange, className = '' }) => {
       {expandedSections.quickActions && (
         <div className="space-y-2 mt-3">
           {[
-            { id: 'quick-prescription', label: 'New Prescription', icon: Plus, color: 'teal' },
             { id: 'emergency-stock', label: 'Emergency Stock', icon: AlertCircle, color: 'red' },
-            { id: 'drug-interaction', label: 'Drug Checker', icon: Shield, color: 'blue' },
             { id: 'batch-expiry', label: 'Batch Expiry', icon: Timer, color: 'amber' }
           ].map((action) => {
             const IconComponent = action.icon;
