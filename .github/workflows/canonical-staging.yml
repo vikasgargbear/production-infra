@@ -390,7 +390,7 @@ jobs:
         run: |
           set -euo pipefail
           allocator_current=$(psql -X -A -t -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" -c \
-            "SELECT pg_catalog.position('pg_catalog.greatest(sequence.padding::integer' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::pg_catalog.regprocedure)) > 0")
+            "SELECT pg_catalog.strpos(pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::pg_catalog.regprocedure), 'pg_catalog.greatest(sequence.padding::integer') > 0")
           if [ "$allocator_current" = t ]; then
             echo "Reviewed document sequence allocator is already current"
             exit 0
