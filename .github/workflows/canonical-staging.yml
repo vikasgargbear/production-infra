@@ -282,7 +282,18 @@ jobs:
                    WHERE table_schema IN (
                      'core','parties','catalog','hr','inventory','sales',
                      'procurement','finance','tax','compliance','automation','calculation'
-                   ) AND table_type='BASE TABLE') AS table_count
+                   ) AND table_type='BASE TABLE') AS table_count,
+                 (SELECT count(*)::integer FROM pg_catalog.pg_roles
+                   WHERE rolname IN (
+                     'erp_runtime','erp_calculator','erp_tax_provider',
+                     'erp_regulatory_importer'
+                   )) AS isolated_role_count,
+                 (SELECT count(*)::integer FROM pg_catalog.pg_roles
+                   WHERE rolname IN (
+                     'erp_runtime','erp_calculator','erp_tax_provider',
+                     'erp_regulatory_importer'
+                   ) AND (rolsuper OR rolcreaterole OR rolbypassrls OR NOT rolcanlogin)
+                 ) AS unsafe_role_count
             FROM public.alembic_version AS revision
            WHERE revision.version_num='20260820_0001'
           SQL
@@ -294,7 +305,7 @@ jobs:
             --data "$(jq -nc --arg query "$baseline_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$baseline_state" \
-            && jq -e '.. | objects | select(.version_num? == "20260820_0001" and ((.table_count? // "") | tostring) == "110")' \
+            && jq -e '.. | objects | select(.version_num? == "20260820_0001" and ((.table_count? // "") | tostring) == "110" and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
               "$baseline_state" >/dev/null; then
             echo "Control plane verified exact canonical revision and topology; Alembic is already current"
             baseline_applied=true
@@ -355,11 +366,6 @@ jobs:
                  'canonical_staging_ci','canonical_staging_verify',
                  'canonical_demo_importer','canonical_demo_runtime'
                )
-               OR (
-                 activity.usename='postgres'
-                 AND activity.application_name IN ('','psql')
-                 AND activity.backend_start<transaction_timestamp()-interval '5 minutes'
-               )
              )
              AND pg_terminate_backend(activity.pid)
           SQL
@@ -413,55 +419,12 @@ jobs:
 
           import psycopg2
 
-          def connect_with_retry(url):
-              last_error = None
-              for attempt in range(1, 19):
-                  try:
-                      return psycopg2.connect(url)
-                  except Exception as exc:
-                      last_error = exc
-                      if attempt < 18:
-                          time.sleep(5)
-              raise last_error
-
           expected_roles = {
               "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
               "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
               "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
-          with connect_with_retry(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
-              with connection.cursor() as cursor:
-                  cursor.execute("SELECT version_num FROM public.alembic_version")
-                  revision = cursor.fetchone()
-                  assert revision == ("20260820_0001",), revision
-                  cursor.execute(
-                      """
-                      SELECT count(*)
-                        FROM information_schema.tables
-                       WHERE table_schema IN (
-                         'core','parties','catalog','hr','inventory','sales',
-                         'procurement','finance','tax','compliance','automation','calculation'
-                       )
-                         AND table_type = 'BASE TABLE'
-                      """
-                  )
-                  table_count = cursor.fetchone()
-                  assert table_count == (110,), table_count
-                  cursor.execute(
-                      """
-                      SELECT rolname, rolsuper, rolcreaterole, rolbypassrls, rolcanlogin
-                        FROM pg_catalog.pg_roles
-                       WHERE rolname = ANY(%s)
-                       ORDER BY rolname
-                      """,
-                      (list(expected_roles),),
-                  )
-                  rows = cursor.fetchall()
-                  assert len(rows) == 4, rows
-                  assert all(not superuser and not createrole and not bypassrls and canlogin
-                             for _, superuser, createrole, bypassrls, canlogin in rows), rows
-
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
           host = os.environ["SUPABASE_POOLER_HOST"]
           port = os.environ["SUPABASE_POOLER_PORT"]

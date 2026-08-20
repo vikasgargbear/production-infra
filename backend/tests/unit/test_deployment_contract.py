@@ -214,8 +214,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "rotate_role_passwords:" in workflow
     assert "if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
-    assert 'assert len(rows) == 4' in workflow
-    assert "def connect_with_retry(url):" in workflow
+    assert "isolated_role_count" in workflow
+    assert "unsafe_role_count" in workflow
     assert "Run canonical rollback fixtures on live free staging" in workflow
     assert "PGCONNECT_TIMEOUT=15" in workflow
     assert "statement_timeout=120000" in workflow
