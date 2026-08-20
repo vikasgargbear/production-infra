@@ -205,6 +205,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
     assert "if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in workflow
+    assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
+    assert 'assert len(rows) == 4' in workflow
     assert "Run canonical rollback fixtures on live free staging" in workflow
     assert "test \"$fixture_count\" = 14" in workflow
     assert "REVOKE erp_migration_owner, erp_runtime FROM postgres" in workflow

@@ -324,6 +324,7 @@ jobs:
               "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
               "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
+              "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
           with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
               connection.autocommit = True
@@ -349,6 +350,7 @@ jobs:
               "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
               "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
+              "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
           with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
               with connection.cursor() as cursor:
@@ -378,7 +380,7 @@ jobs:
                       (list(expected_roles),),
                   )
                   rows = cursor.fetchall()
-                  assert len(rows) == 3, rows
+                  assert len(rows) == 4, rows
                   assert all(not superuser and not createrole and not bypassrls and canlogin
                              for _, superuser, createrole, bypassrls, canlogin in rows), rows
 
@@ -572,22 +574,6 @@ jobs:
           trap cleanup_demo_role_membership EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
             -c 'GRANT erp_migration_owner TO postgres' >/dev/null
-
-          python3 - <<'PY'
-          import os
-          import psycopg2
-          from psycopg2 import sql
-
-          with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
-              connection.autocommit = True
-              with connection.cursor() as cursor:
-                  cursor.execute(
-                      sql.SQL("ALTER ROLE {} PASSWORD %s").format(
-                          sql.Identifier("erp_regulatory_importer")
-                      ),
-                      (os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],),
-                  )
-          PY
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
           importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
