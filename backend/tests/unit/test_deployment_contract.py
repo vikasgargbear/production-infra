@@ -339,6 +339,29 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "inventory.adjustment.prepare",
     ):
         assert operation in provisioner
+    for reconciliation in (
+        "purchase_order_reconciliation",
+        "supplier_advance_reconciliation",
+        "goods_receipt_reconciliation",
+        "supplier_invoice_reconciliation",
+        "supplier_payment_reconciliation",
+        "sales_order_reconciliation",
+        "sales_dispatch_reconciliation",
+        "sales_invoice_reconciliation",
+        "customer_receipt_reconciliation",
+        "sales_return_reconciliation",
+        "purchase_return_reconciliation",
+        "inventory_adjustment_reconciliation",
+        "unavailable_action_reconciliation",
+    ):
+        assert reconciliation in provisioner
+    assert "import_gst_adjustment_rule_release" in provisioner
+    assert "gst-council-return-of-goods-faq.pdf" in provisioner
+    assert '"gst_tax_treatment": "statutory"' in provisioner
+    assert "supplier_challan_number" in provisioner
+    assert "dispatch_delivery_challan_number" in provisioner
+    assert "purchase_return_delivery_challan_number" in provisioner
+    assert "COMMAND_ADAPTER_UNAVAILABLE" in provisioner
     reconciliation = provisioner.split("def reconcile", 1)[1].split("\ndef main", 1)[0]
     assert "order_row.subtotal" in reconciliation
     assert "order_row.gst_taxable_total" in reconciliation

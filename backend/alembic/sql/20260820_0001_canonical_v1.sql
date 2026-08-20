@@ -25469,6 +25469,7 @@ INSERT INTO catalog.units_of_measure
     (code, name, symbol, dimension, decimal_places)
 VALUES
     ('EA', 'Each', 'ea', 'count', 0),
+    ('PK', 'Pack', 'pk', 'count', 3),
     ('KG', 'Kilogram', 'kg', 'mass', 6),
     ('G', 'Gram', 'g', 'mass', 6),
     ('MG', 'Milligram', 'mg', 'mass', 6),
@@ -25485,6 +25486,7 @@ BEGIN
          EXCEPT
          SELECT code, name, symbol, dimension, decimal_places, 'active'::text
          FROM (VALUES ('EA', 'Each', 'ea', 'count', 0),
+    ('PK', 'Pack', 'pk', 'count', 3),
     ('KG', 'Kilogram', 'kg', 'mass', 6),
     ('G', 'Gram', 'g', 'mass', 6),
     ('MG', 'Milligram', 'mg', 'mass', 6),
@@ -25497,6 +25499,7 @@ BEGIN
         UNION ALL
         (SELECT code, name, symbol, dimension, decimal_places, 'active'::text
          FROM (VALUES ('EA', 'Each', 'ea', 'count', 0),
+    ('PK', 'Pack', 'pk', 'count', 3),
     ('KG', 'Kilogram', 'kg', 'mass', 6),
     ('G', 'Gram', 'g', 'mass', 6),
     ('MG', 'Milligram', 'mg', 'mass', 6),
@@ -25509,7 +25512,7 @@ BEGIN
          EXCEPT
          SELECT code, name, symbol, dimension, decimal_places, status FROM catalog.units_of_measure)
     ) THEN
-        RAISE EXCEPTION 'catalog.units_of_measure does not exactly match canonical-uom-v1.0.0';
+        RAISE EXCEPTION 'catalog.units_of_measure does not exactly match canonical-uom-v1.1.0';
     END IF;
 END
 $canonical_uom_seed_verify$;

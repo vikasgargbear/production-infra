@@ -100,7 +100,7 @@ def test_bootstrap_seeds_are_exact_and_regulated_ledgers_deploy_empty() -> None:
     assert manifest["seed_authorities"]["core.permissions"]["authority_kind"] == "application_contract"
     assert len(manifest["seed_authorities"]["core.permissions"]["dataset_sha256"]) == 64
     assert manifest["seed_authorities"]["catalog.units_of_measure"]["exact_codes"] == [
-        "EA", "KG", "G", "MG", "MCG", "L", "ML", "M", "CM", "MM"
+        "EA", "PK", "KG", "G", "MG", "MCG", "L", "ML", "M", "CM", "MM"
     ]
     assert len(manifest["seed_authorities"]["catalog.units_of_measure"]["dataset_sha256"]) == 64
     seed_sql = "\n".join(

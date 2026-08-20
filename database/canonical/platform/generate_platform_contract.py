@@ -190,6 +190,7 @@ CANONICAL_OPERATOR_PERMISSIONS = {
 
 UOM_ROWS = (
     ("EA", "Each", "ea", "count", 0),
+    ("PK", "Pack", "pk", "count", 3),
     ("KG", "Kilogram", "kg", "mass", 6),
     ("G", "Gram", "g", "mass", 6),
     ("MG", "Milligram", "mg", "mass", 6),
@@ -350,7 +351,7 @@ BEGIN
          EXCEPT
          SELECT code, name, symbol, dimension, decimal_places, status FROM catalog.units_of_measure)
     ) THEN
-        RAISE EXCEPTION 'catalog.units_of_measure does not exactly match canonical-uom-v1.0.0';
+        RAISE EXCEPTION 'catalog.units_of_measure does not exactly match canonical-uom-v1.1.0';
     END IF;
 END
 $canonical_uom_seed_verify$;""",
@@ -528,7 +529,7 @@ def generated_artifacts() -> tuple[str, str, str]:
                 "exact_codes": [row[0] for row in permission_rows],
             },
             "catalog.units_of_measure": {
-                "authority": "canonical-uom-v1.0.0",
+                "authority": "canonical-uom-v1.1.0",
                 "authority_kind": "application_bootstrap_vocabulary",
                 "dataset_sha256": hashlib.sha256(
                     _canonical_json(UOM_ROWS).encode("utf-8")
