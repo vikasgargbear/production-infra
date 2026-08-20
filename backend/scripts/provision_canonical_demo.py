@@ -1595,7 +1595,6 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
     portal_credit_note_line_id = demo_run_uuid("gstr2b-credit-note-line")
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
-        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
         for setting, value in (
             ("app.org_id", IDS["org"]),
             ("app.membership_id", IDS["reviewer_membership"]),

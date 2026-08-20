@@ -365,6 +365,10 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "erp_finance_commands.parse_portal_document" in provisioner
     assert "'imported'" in provisioner
     assert "portal lines require parser command provenance" not in provisioner
+    portal_seed = provisioner.split("def seed_supplier_invoice_portal_evidence", 1)[1].split(
+        "\ndef seed_purchase_return_portal_evidence", 1
+    )[0]
+    assert "SET CONSTRAINTS ALL DEFERRED" not in portal_seed
     for operation in (
         "sales.dispatch.prepare",
         "sales.invoice.prepare",
