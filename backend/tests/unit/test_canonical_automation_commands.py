@@ -460,6 +460,35 @@ def test_calculated_prepares_bind_commands_to_persisted_document_versions() -> N
             f"{variable}.id,{variable}.row_version)"
         ) in compact_mapping
 
+    execute_start = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."execute_approved_command"'
+    )
+    execute_end = mapping.index("\nREVOKE ALL ON FUNCTION", execute_start)
+    execute_sql = mapping[execute_start:execute_end]
+    calculated_execute_branches = (
+        ("procurement.purchase_order.approve", "purchase_order", "purchase_order"),
+        ("procurement.supplier_invoice.post", "supplier_invoice", "supplier_invoice"),
+        ("sales.invoice.post", "sales_invoice", "sales_invoice"),
+        ("sales.return.post", "sales_return", "sales_return"),
+        ("procurement.purchase_return.post", "purchase_return", "purchase_return"),
+    )
+    for operation, resource_type, variable in calculated_execute_branches:
+        branch_start = execute_sql.index(f"request_row.operation='{operation}'")
+        branch_end = execute_sql.find("ELSIF request_row.operation=", branch_start + 1)
+        if branch_end == -1:
+            branch_end = execute_sql.index("\n    ELSE", branch_start)
+        branch = "".join(execute_sql[branch_start:branch_end].split())
+        assert (
+            f'"aggregate_version_hash"(\'{resource_type}\','
+            f"{variable}.id,{variable}.row_version)"
+        ) in branch
+    receipt_start = execute_sql.index("request_row.operation='procurement.receipt.post'")
+    receipt_end = execute_sql.index("ELSIF request_row.operation=", receipt_start + 1)
+    receipt_branch = execute_sql[receipt_start:receipt_end]
+    assert "preview_document->'source_versions'" in receipt_branch
+    assert "extensions.digest(" in receipt_branch
+    assert "supplier_invoice.id" not in receipt_branch
+
 
 def test_every_executable_prepare_sets_request_context_before_command_persistence() -> None:
     mapping = _sql()

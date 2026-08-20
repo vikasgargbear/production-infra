@@ -263,6 +263,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "/database/query/read-only" in reconciliation
     assert "Control plane verified reviewed command definitions are already current" in reconciliation
     assert "purchase_order.id,purchase_order.row_version" in reconciliation
+    assert "supplier_invoice.id,supplier_invoice.row_version" in reconciliation
+    assert "sales_invoice.id,sales_invoice.row_version" in reconciliation
+    assert "sales_return.id,sales_return.row_version" in reconciliation
+    assert "purchase_return.id,purchase_return.row_version" in reconciliation
     assert ".core_current? == true and .automation_current? == true" in reconciliation
     assert ".trade_current? == true and .compliance_current? == true" in reconciliation
     assert ".plumbing_current? == true" in reconciliation
