@@ -426,6 +426,27 @@ def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() 
         assert fragment in mapping
 
 
+def test_sales_invoice_dispatch_accumulator_is_declared_in_its_own_resolver() -> None:
+    mapping = _sql()
+    invoice_start = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."resolve_sales_invoice_prepare"'
+    )
+    invoice_end = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."assert_sales_invoice_draft"',
+        invoice_start,
+    )
+    dispatch_start = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."resolve_sales_dispatch_prepare"'
+    )
+    dispatch_end = mapping.index(
+        'CREATE FUNCTION "erp_automation_commands"."assert_sales_dispatch_draft"',
+        dispatch_start,
+    )
+
+    assert "dispatch_tracker jsonb:='{}'::jsonb" in mapping[invoice_start:invoice_end]
+    assert "dispatch_tracker jsonb:='{}'::jsonb" not in mapping[dispatch_start:dispatch_end]
+
+
 def test_sales_dispatch_prepare_and_execute_are_closed_typed_and_atomic() -> None:
     mapping = _sql()
     for fragment in (

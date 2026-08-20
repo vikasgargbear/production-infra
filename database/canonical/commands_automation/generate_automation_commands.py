@@ -306,7 +306,6 @@ DECLARE
     resolved_allocations jsonb;
     source_versions jsonb:='[]'::jsonb;
     allocation_tracker jsonb:='{}'::jsonb;
-    dispatch_tracker jsonb:='{}'::jsonb;
     requested_billed numeric(20,6);
     requested_free numeric(20,6);
     allocated_billed numeric(20,6);
@@ -2173,6 +2172,7 @@ DECLARE
     resolved_allocations jsonb;
     source_versions jsonb:='[]'::jsonb;
     allocation_tracker jsonb:='{}'::jsonb;
+    dispatch_tracker jsonb:='{}'::jsonb;
     billed numeric(20,6);
     free numeric(20,6);
     base_billed numeric(20,6);
