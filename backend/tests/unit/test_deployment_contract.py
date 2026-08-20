@@ -241,6 +241,9 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "calculator.rollback()" in preflight
     assert "resolve_sales_order_prepare" in preflight
     assert "calculation_documents" in preflight
+    assert 'join_transaction_mode="create_savepoint"' in preflight
+    assert "outer_transaction.rollback()" in preflight
+    assert "SqlAlchemyOperatorActionService" in preflight
 
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():

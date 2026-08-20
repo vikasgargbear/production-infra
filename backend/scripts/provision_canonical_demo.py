@@ -17,7 +17,7 @@ from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import jwt
 import pdfplumber
@@ -668,7 +668,13 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     backend_root = str(Path(__file__).resolve().parents[1])
     if backend_root not in sys.path:
         sys.path.insert(0, backend_root)
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.domain.operator_actions.contract import ACTION_POLICIES
+    from app.domain.operator_actions.models import ActionContext
     from app.infrastructure.operator_actions.sales_order import calculation_documents
+    from app.infrastructure.operator_actions.service import SqlAlchemyOperatorActionService
 
     _calculation_input, calculation_output = calculation_documents(
         request_document, resolution, order_id=order_id
@@ -683,7 +689,48 @@ def preflight_sales_order(payload: dict[str, Any], evidence_dir: Path) -> None:
     (evidence_dir / "canonical-demo-sales-order-preflight.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    print("canonical demo sales-order resolver and Decimal preflight passed")
+
+    engine = create_engine(required("ERP_CALCULATOR_DATABASE_URL"), pool_pre_ping=True)
+    try:
+        with engine.connect() as connection:
+            outer_transaction = connection.begin()
+            try:
+                service = SqlAlchemyOperatorActionService(
+                    calculator_factory=lambda: Session(
+                        bind=connection, join_transaction_mode="create_savepoint"
+                    ),
+                    runtime_principal_configured=True,
+                )
+                prepared = service.prepare(
+                    policy=ACTION_POLICIES["sales.order.prepare"],
+                    payload={
+                        key: value
+                        for key, value in payload.items()
+                        if key != "idempotency_key"
+                    },
+                    idempotency_key=payload["idempotency_key"],
+                    context=ActionContext(
+                        auth_user_id=UUID(IDS["auth_user"]),
+                        user_id=UUID(IDS["user"]),
+                        organization_id=UUID(IDS["org"]),
+                        membership_id=UUID(IDS["membership"]),
+                        agent_grant_id=UUID(IDS["agent_grant"]),
+                        client_id=CLIENT_ID,
+                        operation_key="sales.order.prepare",
+                        permission="sales.order.create",
+                        branch_ids=(UUID(IDS["branch"]),),
+                        organization_scope=True,
+                    ),
+                )
+                if prepared.command_request_id is None or not prepared.preview_hash.startswith(
+                    "sha256:"
+                ):
+                    raise RuntimeError("sales-order persistence preflight returned invalid evidence")
+            finally:
+                outer_transaction.rollback()
+    finally:
+        engine.dispose()
+    print("canonical demo sales-order resolver, Decimal, and rollback persistence preflight passed")
 
 
 def exercise_sales_order(
