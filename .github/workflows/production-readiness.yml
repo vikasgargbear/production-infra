@@ -30,7 +30,18 @@ jobs:
       - name: Verify SDK ASGI surface, dependency boundary, and read-only registry
         run: python backend/scripts/mcp_runtime_gate.py --probe-sdk
       - name: Run isolated MCP auth, grant, and transport tests without network
-        run: PYTHONPATH=backend/mcp_runtime pytest -q backend/mcp_runtime/tests
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          PYTHONPATH=backend/mcp_runtime pytest -q backend/mcp_runtime/tests 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=MCP compatibility failure::{text}")
+          PY
+            exit 1
+          }
 
   backend-unit:
     runs-on: ubuntu-latest
@@ -45,7 +56,18 @@ jobs:
             backend/requirements-dev.txt
       - run: pip install -r backend/requirements-dev.txt
       - name: Audit backend runtime dependencies
-        run: pip-audit -r backend/requirements.txt
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          pip-audit -r backend/requirements.txt 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Backend dependency audit failure::{text}")
+          PY
+            exit 1
+          }
       - run: PYTHONPATH=backend pytest -q backend/tests/unit
       - name: Validate the canonical topology, column catalog, and app ownership map
         run: |
@@ -112,7 +134,18 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --ignore-scripts
       - name: Reject high or critical build and test dependency advisories
-        run: npm audit --audit-level=high
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          npm audit --audit-level=high 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Frontend toolchain audit failure::{text}")
+          PY
+            exit 1
+          }
 
   deploy-render-pilot:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -293,7 +326,18 @@ jobs:
           python database/canonical/security/generate_security_contract.py --check
           python database/canonical/platform/generate_platform_contract.py --check
       - name: Generate only a fully reviewed baseline, apply it, and run negative fixtures
-        run: bash database/canonical/ci/run_postgres15_gate.sh
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          bash database/canonical/ci/run_postgres15_gate.sh 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical PostgreSQL 15 failure::{text}")
+          PY
+            exit 1
+          }
 
   canonical-alembic-postgres15:
     runs-on: ubuntu-latest
@@ -327,7 +371,18 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r backend/requirements.txt
       - name: Apply the hash-bound Alembic baseline twice and run every fixture
-        run: bash database/canonical/ci/run_alembic_postgres15_gate.sh
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          bash database/canonical/ci/run_alembic_postgres15_gate.sh 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical Alembic PostgreSQL 15 failure::{text}")
+          PY
+            exit 1
+          }
 
   live-erp:
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
