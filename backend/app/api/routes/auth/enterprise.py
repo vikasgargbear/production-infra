@@ -106,7 +106,7 @@ async def verify_token(
         - exp: Token expiry timestamp
     """
     from ....core.auth.jwt_auth import decode_jwt
-    from jose import JWTError
+    from jwt import InvalidTokenError as JWTError
     
     if credentials is None:
         raise HTTPException(

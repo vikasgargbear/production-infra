@@ -18,7 +18,11 @@ def _requirements(path: Path) -> dict[str, str]:
 
 def test_runtime_dependencies_pin_reviewed_patched_releases() -> None:
     runtime = _requirements(ROOT / "backend" / "requirements.txt")
-    assert runtime["python-jose[cryptography]"] == "3.4.0"
+    assert runtime["pyjwt[crypto]"] == "2.13.0"
+    assert "python-jose[cryptography]" not in runtime
+    assert runtime["fastapi"] == "0.141.1"
+    assert runtime["pydantic"] == "2.13.4"
+    assert runtime["pdfplumber"] == "0.11.10"
     assert runtime["python-multipart"] == "0.0.32"
     assert runtime["pillow"] == "12.3.0"
     assert runtime["requests"] == "2.34.2"

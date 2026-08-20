@@ -36,7 +36,7 @@ jobs:
           PYTHONPATH=backend/mcp_runtime pytest -q backend/mcp_runtime/tests 2>&1 | tee "$log_file" || {
             python - "$log_file" <<'PY'
           import pathlib, sys
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=MCP compatibility failure::{text}")
           PY
@@ -62,7 +62,7 @@ jobs:
           pip-audit -r backend/requirements.txt 2>&1 | tee "$log_file" || {
             python - "$log_file" <<'PY'
           import pathlib, sys
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Backend dependency audit failure::{text}")
           PY
@@ -140,7 +140,7 @@ jobs:
           npm audit --audit-level=high 2>&1 | tee "$log_file" || {
             python - "$log_file" <<'PY'
           import pathlib, sys
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Frontend toolchain audit failure::{text}")
           PY
@@ -332,7 +332,7 @@ jobs:
           bash database/canonical/ci/run_postgres15_gate.sh 2>&1 | tee "$log_file" || {
             python - "$log_file" <<'PY'
           import pathlib, sys
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical PostgreSQL 15 failure::{text}")
           PY
@@ -377,7 +377,7 @@ jobs:
           bash database/canonical/ci/run_alembic_postgres15_gate.sh 2>&1 | tee "$log_file" || {
             python - "$log_file" <<'PY'
           import pathlib, sys
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-50000:]
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical Alembic PostgreSQL 15 failure::{text}")
           PY

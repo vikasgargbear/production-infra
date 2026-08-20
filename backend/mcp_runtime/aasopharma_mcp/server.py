@@ -10,7 +10,6 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Route
 
 from .auth import SupabaseTokenVerifier
 from .config import Settings
@@ -75,9 +74,11 @@ def create_app(
             OPERATIONS["erp_gst_settings_get"], _access_token(), {},
         )
 
+    @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "service": "aasopharma-mcp"})
 
+    @server.custom_route("/ready", methods=["GET"])
     async def ready(_: Request) -> JSONResponse:
         try:
             await token_verifier.readiness()
@@ -93,8 +94,4 @@ def create_app(
         json_response=True,
         streamable_http_path="/mcp",
         host=config.bind_host,
-        custom_starlette_routes=[
-            Route("/health", health, methods=["GET"]),
-            Route("/ready", ready, methods=["GET"]),
-        ],
     )

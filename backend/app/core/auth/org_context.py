@@ -15,7 +15,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List
 from uuid import UUID
 from enum import Enum
-from jose import JWTError
+from jwt import InvalidTokenError as JWTError
 import logging
 
 from .jwt_auth import decode_jwt  # Single source of truth

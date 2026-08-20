@@ -104,11 +104,12 @@ the conditional Render release probe pass, publish it to ChatGPT or Claude, or c
 `mcp_transport_implemented` to true until the transport and OAuth integration
 below are implemented and tested.
 
-The official Python MCP SDK cannot be added safely as a one-line dependency in
-the shared FastAPI environment. The current stable `mcp==2.0.0` requires at least
+The official Python MCP SDK remains isolated from the API even where selected
+dependency versions overlap. The current stable `mcp==2.0.0` requires at least
 `pydantic>=2.12.0`, `PyJWT[crypto]>=2.13.0`, `python-multipart>=0.0.9`, and
-`uvicorn>=0.31.1`. This repository pins `pydantic==2.5.0`, `PyJWT==2.8.0`,
-`python-multipart==0.0.6`, and `uvicorn==0.24.0`. The workstation interpreter
+`uvicorn>=0.31.1`. The API now pins reviewed patched Pydantic, PyJWT, and
+python-multipart releases, but still has an independent FastAPI lifecycle and
+does not carry the MCP SDK or its transport dependencies. The workstation interpreter
 and existing virtual environment remain Python 3.9.6, while Render/Docker and
 CI target Python 3.11. The `mcp-sdk-compatibility` CI job installs the official
 SDK from `backend/mcp_runtime/requirements.txt` in an isolated Python 3.11 job,

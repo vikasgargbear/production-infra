@@ -114,7 +114,9 @@ def test_revision_is_static_and_downgrade_is_fail_closed() -> None:
 
     assert 'revision = "20260820_0001"' in revision
     assert "down_revision = None" in revision
-    assert "connection.exec_driver_sql(sql)" in revision
+    assert "connection.connection.cursor()" in revision
+    assert "cursor.execute(sql)" in revision
+    assert "cursor.close()" in revision
     assert "CanonicalBaselineError" in revision.split("def downgrade", 1)[1]
     assert "COPY . ." in dockerfile
     assert (

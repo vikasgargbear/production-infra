@@ -31,7 +31,11 @@ def upgrade() -> None:
     require_approved_hash(manifest)
     connection = op.get_bind()
     require_bootstrap_migration_principal(connection)
-    connection.exec_driver_sql(sql)
+    cursor = connection.connection.cursor()
+    try:
+        cursor.execute(sql)
+    finally:
+        cursor.close()
 
 
 def downgrade() -> None:

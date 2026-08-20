@@ -19,7 +19,7 @@ def _token(algorithm: str = "RS256", kid: str | None = "key-1") -> str:
     header = {"alg": algorithm, "typ": "JWT"}
     if kid is not None:
         header["kid"] = kid
-    return f"{_part(header)}.{_part({'sub': 'ignored'})}.signature"
+    return f"{_part(header)}.{_part({'sub': 'ignored'})}.c2lnbmF0dXJl"
 
 
 class Resolver:

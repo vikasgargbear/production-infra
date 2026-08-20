@@ -5,7 +5,8 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -83,7 +84,7 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
         algorithms=[ALGORITHM],
         audience=TOKEN_AUDIENCE,
         issuer=TOKEN_ISSUER,
-        options={"require_exp": True, "require_iat": True, "require_sub": True},
+        options={"require": ["exp", "iat", "sub"]},
     )
     if payload.get("token_use") != "access":
         raise JWTError("Invalid token use")

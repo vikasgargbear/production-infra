@@ -6,7 +6,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, Depends, status, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from jose import JWTError
+from jwt import InvalidTokenError as JWTError
 import json
 import logging
 

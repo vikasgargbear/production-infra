@@ -13,7 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import JWTError
+from jwt import InvalidTokenError as JWTError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ....core.auth.jwt_auth import decode_jwt
