@@ -25305,7 +25305,7 @@ CREATE POLICY "erp_update" ON "tax"."withholdings" FOR UPDATE TO "erp_app" USING
 -- Reviewed global reference seeds
 -- Reviewed platform enforcement: global_reference_seed:catalog.units_of_measure
 INSERT INTO catalog.units_of_measure
-    (code, name, symbol, dimension, decimal_places, status)
+    (code, name, symbol, dimension, decimal_places)
 VALUES
     ('EA', 'Each', 'ea', 'count', 0),
     ('KG', 'Kilogram', 'kg', 'mass', 6),
@@ -25354,7 +25354,7 @@ END
 $canonical_uom_seed_verify$;
 -- Reviewed platform enforcement: global_reference_seed:core.permissions
 INSERT INTO core.permissions
-    (code, domain, action, risk_class, description, status)
+    (code, domain, action, risk_class, description)
 VALUES
     ('automation.agent_grant.manage', 'automation', 'agent_grant.manage', 'access_administration', 'Authorize the canonical automation.agent_grant.manage operation.'),
     ('automation.command.approve', 'automation', 'command.approve', 'consequential_write', 'Authorize the canonical automation.command.approve operation.'),

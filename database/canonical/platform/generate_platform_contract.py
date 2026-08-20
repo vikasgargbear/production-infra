@@ -267,7 +267,7 @@ def _permission_seed_statements(rows: tuple[tuple[str, str, str, str, str], ...]
     values = _values(rows)
     return [
         f"""INSERT INTO core.permissions
-    (code, domain, action, risk_class, description, status)
+    (code, domain, action, risk_class, description)
 VALUES
     {values};""",
         f"""DO $canonical_permission_seed_verify$
@@ -294,7 +294,7 @@ def _uom_seed_statements() -> list[str]:
     values = _values(UOM_ROWS)
     return [
         f"""INSERT INTO catalog.units_of_measure
-    (code, name, symbol, dimension, decimal_places, status)
+    (code, name, symbol, dimension, decimal_places)
 VALUES
     {values};""",
         f"""DO $canonical_uom_seed_verify$

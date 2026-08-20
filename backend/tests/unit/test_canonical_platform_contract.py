@@ -76,7 +76,7 @@ def test_preflights_cover_exact_schema_set_and_auth_uuid_key() -> None:
 
 def test_bootstrap_seeds_are_exact_and_regulated_ledgers_deploy_empty() -> None:
     generator = _load_generator()
-    manifest_text, _mapping_text, _trigger_sql = generator.generated_artifacts()
+    manifest_text, mapping_text, _trigger_sql = generator.generated_artifacts()
     manifest = json.loads(manifest_text)
     catalog, _requirements, _catalog_hash = generator.load_catalog()
     permission_codes = {
@@ -92,6 +92,16 @@ def test_bootstrap_seeds_are_exact_and_regulated_ledgers_deploy_empty() -> None:
         "EA", "KG", "G", "MG", "MCG", "L", "ML", "M", "CM", "MM"
     ]
     assert len(manifest["seed_authorities"]["catalog.units_of_measure"]["dataset_sha256"]) == 64
+    seed_sql = "\n".join(
+        statement
+        for entry in json.loads(mapping_text)["platform_enforcements"]
+        if entry["category"] == "global_reference_seed"
+        for statement in entry["statements"]
+    )
+    assert "(code, domain, action, risk_class, description)\nVALUES" in seed_sql
+    assert "(code, name, symbol, dimension, decimal_places)\nVALUES" in seed_sql
+    assert "(code, domain, action, risk_class, description, status)\nVALUES" not in seed_sql
+    assert "(code, name, symbol, dimension, decimal_places, status)\nVALUES" not in seed_sql
     for table in (
         "core.reference_data_releases",
         "catalog.ingredients",
