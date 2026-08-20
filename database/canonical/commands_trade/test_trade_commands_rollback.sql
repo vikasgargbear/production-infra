@@ -40,6 +40,13 @@ VALUES ('91000000-0000-7000-8000-000000000007');
 
 SET LOCAL ROLE "erp_migration_owner";
 
+SELECT pg_catalog.set_config(
+    'app.org_id','91000000-0000-7000-8000-000000000002',true
+);
+SELECT pg_catalog.set_config(
+    'app.request_id','91000000-0000-7000-8000-000000000008',true
+);
+
 INSERT INTO core.users (id,auth_user_id,display_name,status)
 VALUES (
     '91000000-0000-7000-8000-000000000001',

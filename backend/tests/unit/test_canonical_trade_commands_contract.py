@@ -109,6 +109,8 @@ def test_security_definer_commands_recheck_live_permission_and_branch_scope() ->
     assert "revoked trade permission remained executable" in fixture
     assert "EXCEPTION WHEN insufficient_privilege" in fixture
     assert "trade permission authority does not reject revoked or expired grants" in fixture
+    assert "'app.org_id','91000000-0000-7000-8000-000000000002',true" in fixture
+    assert "'app.request_id','91000000-0000-7000-8000-000000000008',true" in fixture
     assert "grant_row.status = 'active'" in security_text
     assert "grant_row.expires_at > pg_catalog.transaction_timestamp()" in security_text
 
