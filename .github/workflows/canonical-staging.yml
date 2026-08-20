@@ -178,6 +178,8 @@ jobs:
           echo "::add-mask::$psycopg_database_url"
           echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
           echo "PSYCOPG_DATABASE_URL=$psycopg_database_url" >> "$GITHUB_ENV"
+          echo "CANONICAL_ACTIVE_POOLER_PORT=$SUPABASE_SESSION_POOLER_PORT" >> "$GITHUB_ENV"
+          echo "CANONICAL_ACTIVE_POOLER_MODE=session" >> "$GITHUB_ENV"
 
       - name: Reset canonical data on the pinned disposable project
         if: inputs.reset_disposable_data == true
@@ -535,32 +537,56 @@ jobs:
           }
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
           host = os.environ["SUPABASE_POOLER_HOST"]
-          port = os.environ["SUPABASE_SESSION_POOLER_PORT"]
-          pending_roles = dict(expected_roles)
-          last_errors = {}
-          for attempt in range(1, 6):
-              for role, password in tuple(pending_roles.items()):
-                  url = (
-                      f"postgresql://{role}.{ref}:{quote(password, safe='')}"
-                      f"@{host}:{port}/postgres?sslmode=require&connect_timeout=5&application_name=canonical_staging_verify"
-                  )
-                  try:
-                      with psycopg2.connect(url, connect_timeout=5) as connection:
-                          with connection.cursor() as cursor:
-                              cursor.execute(
-                                  "SELECT current_user, rolsuper, rolbypassrls "
-                                  "FROM pg_catalog.pg_roles WHERE rolname = current_user"
-                              )
-                              posture = cursor.fetchone()
-                              assert posture == (role, False, False), posture
-                      pending_roles.pop(role)
-                      last_errors.pop(role, None)
-                  except Exception as exc:
-                      last_errors[role] = exc
+          def verify_roles(port):
+              pending_roles = dict(expected_roles)
+              last_errors = {}
+              for attempt in range(1, 3):
+                  for role, password in tuple(pending_roles.items()):
+                      url = (
+                          f"postgresql://{role}.{ref}:{quote(password, safe='')}"
+                          f"@{host}:{port}/postgres?sslmode=require&connect_timeout=5&application_name=canonical_staging_verify"
+                      )
+                      try:
+                          with psycopg2.connect(url, connect_timeout=5) as connection:
+                              with connection.cursor() as cursor:
+                                  cursor.execute(
+                                      "SELECT current_user, rolsuper, rolbypassrls "
+                                      "FROM pg_catalog.pg_roles WHERE rolname = current_user"
+                                  )
+                                  posture = cursor.fetchone()
+                                  assert posture == (role, False, False), posture
+                          pending_roles.pop(role)
+                          last_errors.pop(role, None)
+                      except Exception as exc:
+                          last_errors[role] = exc
+                  if not pending_roles:
+                      break
+                  if attempt < 2:
+                      time.sleep(5)
+              return pending_roles, last_errors
+
+          session_port = os.environ["SUPABASE_SESSION_POOLER_PORT"]
+          pending_roles, last_errors = verify_roles(session_port)
+          if pending_roles:
+              transaction_port = os.environ["SUPABASE_POOLER_PORT"]
+              pending_roles, last_errors = verify_roles(transaction_port)
               if not pending_roles:
-                  break
-              if attempt < 5:
-                  time.sleep(5)
+                  admin_password = quote(os.environ["SUPABASE_DB_PASSWORD"], safe="")
+                  psycopg_url = (
+                      f"postgresql://postgres.{ref}:{admin_password}@{host}:{transaction_port}"
+                      "/postgres?sslmode=require&connect_timeout=15&application_name=canonical_staging_ci"
+                  )
+                  sqlalchemy_url = "postgresql+psycopg2://" + psycopg_url.removeprefix(
+                      "postgresql://"
+                  )
+                  print(f"::add-mask::{psycopg_url}")
+                  print(f"::add-mask::{sqlalchemy_url}")
+                  with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+                      env_file.write(f"PSYCOPG_DATABASE_URL={psycopg_url}\n")
+                      env_file.write(f"DATABASE_URL={sqlalchemy_url}\n")
+                      env_file.write(f"CANONICAL_ACTIVE_POOLER_PORT={transaction_port}\n")
+                      env_file.write("CANONICAL_ACTIVE_POOLER_MODE=transaction\n")
+                  print("Transaction pooler selected after session-mode verification failed")
           if pending_roles:
               role = sorted(pending_roles)[0]
               last_error = last_errors[role]
@@ -632,7 +658,7 @@ jobs:
         run: |
           set -euo pipefail
           host="$SUPABASE_POOLER_HOST"
-          port="$SUPABASE_SESSION_POOLER_PORT"
+          port="$CANONICAL_ACTIVE_POOLER_PORT"
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
           provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
@@ -732,12 +758,12 @@ jobs:
             -c 'GRANT erp_migration_owner TO postgres' >/dev/null
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
-          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
+          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${CANONICAL_ACTIVE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
           echo "::add-mask::$importer_url"
           export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
 
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_runtime"
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${CANONICAL_ACTIVE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_runtime"
           echo "::add-mask::$runtime_url"
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
           export CANONICAL_DEMO_API_URL
@@ -766,11 +792,13 @@ jobs:
             --arg revision "20260820_0001" \
             --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
             --arg commit_sha "$GITHUB_SHA" \
+            --arg pooler_mode "$CANONICAL_ACTIVE_POOLER_MODE" \
             '{
               project_ref: $project_ref,
               revision: $revision,
-              approved_sha256: $approved_sha256,
-              commit_sha: $commit_sha,
+               approved_sha256: $approved_sha256,
+               commit_sha: $commit_sha,
+               pooler_mode: $pooler_mode,
               canonical_table_count: 110,
               result: "baseline_and_isolated_roles_verified"
             }' > staging-evidence/canonical-staging-baseline.json

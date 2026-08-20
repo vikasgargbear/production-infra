@@ -207,7 +207,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
-    assert workflow.count("connect_timeout=15") == 6
+    assert workflow.count("connect_timeout=15") == 7
     assert "application_name=canonical_staging_ci" in workflow
     assert "application_name=canonical_staging_verify" in workflow
     assert "for attempt in $(seq 1 30)" in workflow
@@ -238,9 +238,17 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "if attempt < 5" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
+    assert "def verify_roles(port)" in workflow
+    assert "for attempt in range(1, 3)" in workflow
     assert "pending_roles = dict(expected_roles)" in workflow
     assert "if not pending_roles" in workflow
     assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
+    assert "Transaction pooler selected after session-mode verification failed" in workflow
+    assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow
+    assert "CANONICAL_ACTIVE_POOLER_MODE" in workflow
+    assert 'port="$CANONICAL_ACTIVE_POOLER_PORT"' in workflow
+    assert "${CANONICAL_ACTIVE_POOLER_PORT}/postgres" in workflow
+    assert 'pooler_mode: $pooler_mode' in workflow
     assert "/database/query\"" not in workflow
     reconciliation = workflow.split(
         "Reconcile reviewed command definitions on pre-cutover staging", 1
