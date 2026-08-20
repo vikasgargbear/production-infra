@@ -35,12 +35,24 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO insecure_count
-      FROM pg_catalog.pg_proc procedure
+     FROM pg_catalog.pg_proc procedure
       JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_commercial_commands'
-       AND (NOT procedure.prosecdef OR NOT coalesce(procedure.proconfig,'{}'::text[]) @> ARRAY['search_path=']);
+       AND (
+           NOT coalesce(procedure.proconfig,'{}'::text[]) @> ARRAY['search_path=']
+           OR (procedure.proname IN ('guard_posted_sales_invoice_lines',
+                                     'guard_posted_supplier_invoice_lines',
+                                     'guard_posted_sales_return_lines',
+                                     'guard_posted_purchase_return_lines')
+               AND procedure.prosecdef)
+           OR (procedure.proname NOT IN ('guard_posted_sales_invoice_lines',
+                                         'guard_posted_supplier_invoice_lines',
+                                         'guard_posted_sales_return_lines',
+                                         'guard_posted_purchase_return_lines')
+               AND NOT procedure.prosecdef)
+       );
     IF insecure_count<>0 THEN
-        RAISE EXCEPTION 'commercial functions must be security definer with an empty fixed search_path';
+        RAISE EXCEPTION 'commercial functions do not match reviewed security modes and empty fixed search_path';
     END IF;
 
     SELECT pg_catalog.pg_get_functiondef(procedure.oid) INTO STRICT sales_return_body
