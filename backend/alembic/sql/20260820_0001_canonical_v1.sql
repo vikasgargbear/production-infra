@@ -23009,13 +23009,6 @@ EXCLUDE USING gist (
     gstin WITH =,
     daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&
 ) WHERE (status = 'active');
-ALTER TABLE "tax"."registrations"
-ADD CONSTRAINT "registrations_branch_period_excl"
-EXCLUDE USING gist (
-    org_id WITH =,
-    branch_id WITH =,
-    daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&
-) WHERE (status = 'active' AND branch_id IS NOT NULL);
 CREATE FUNCTION "erp_finance_invariants"."guard_tax_registration_identity"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -23028,9 +23021,9 @@ BEGIN
     END IF;
     IF TG_OP='DELETE' THEN RETURN OLD; END IF;
     IF TG_OP='UPDATE' AND EXISTS (SELECT 1 FROM tax.documents WHERE org_id=OLD.org_id AND registration_id=OLD.id)
-       AND ROW(NEW.branch_id,NEW.gstin,NEW.legal_name,NEW.state_code,NEW.registration_type,
+       AND ROW(NEW.gstin,NEW.legal_name,NEW.state_code,NEW.registration_type,
                NEW.business_vertical_code,NEW.effective_from,NEW.effective_to)
-       IS DISTINCT FROM ROW(OLD.branch_id,OLD.gstin,OLD.legal_name,OLD.state_code,OLD.registration_type,
+       IS DISTINCT FROM ROW(OLD.gstin,OLD.legal_name,OLD.state_code,OLD.registration_type,
                OLD.business_vertical_code,OLD.effective_from,OLD.effective_to) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted tax registration identity is immutable';
     END IF;

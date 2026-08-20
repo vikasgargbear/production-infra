@@ -70,6 +70,8 @@ def test_sql_has_fixed_invoker_boundary_and_no_runtime_callable_helpers() -> Non
     assert "SET search_path = ''" in sql
     assert "EXECUTE format" not in sql
     assert "IF NOT EXISTS" not in sql.upper()
+    assert "registrations_branch_period_excl" not in sql
+    assert "ROW(NEW.branch_id,NEW.gstin" not in sql
     assert 'REVOKE ALL ON FUNCTION' in sql
     assert 'FROM PUBLIC, "erp_app", "erp_runtime"' in sql
     assert json.loads((ROOT / "finance-invariants-manifest.json").read_text())["security"][
