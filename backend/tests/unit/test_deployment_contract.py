@@ -223,20 +223,18 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     )[1].split("Reconcile reviewed command definitions", 1)[0]
     assert "inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true" in role_provisioning
     assert "inputs.provision_demo_data" not in role_provisioning
-    assert "ROTATE_ROLE_PASSWORDS: ${{ inputs.rotate_role_passwords || inputs.reset_disposable_data }}" in workflow
-    assert 'rotate_passwords = os.environ["ROTATE_ROLE_PASSWORDS"].lower() == "true"' in workflow
-    assert "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s" in workflow
-    assert "if rotate_passwords" in workflow
-    assert 'sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s")' in workflow
-    assert 'sql.SQL("ALTER ROLE {} LOGIN")' in workflow
-    assert "elif posture[0] is not True" in workflow
+    assert 'f"{os.environ[\'CANONICAL_STAGING_PROJECT_REF\']}/database/query"' in workflow
+    assert 'json.dumps({"query": query, "read_only": False})' in workflow
+    assert '"Authorization": f"Bearer {os.environ[\'SUPABASE_ACCESS_TOKEN\']}"' in workflow
+    assert 're.fullmatch(r"[A-Za-z0-9_-]{48,96}", password)' in workflow
+    assert "ALTER ROLE" in role_provisioning
+    assert "urllib.request.urlopen(request, timeout=20)" in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
-    assert "for attempt in range(1, 6)" in workflow
+    assert "for attempt in range(1, 4)" in role_provisioning
     assert "range(1, 61)" not in workflow
     assert "range(1, 19)" not in workflow
     assert "seq 1 60" not in workflow
-    assert 'os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5' in workflow
-    assert "if attempt < 5" in workflow
+    assert "if attempt < 3" in role_provisioning
     assert "Allow rotated credentials to propagate through Supavisor" in workflow
     assert "run: sleep 125" in workflow
     assert "restart_requested" not in workflow
@@ -254,7 +252,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'port="$CANONICAL_ACTIVE_POOLER_PORT"' in workflow
     assert "${CANONICAL_ACTIVE_POOLER_PORT}/postgres" in workflow
     assert 'pooler_mode: $pooler_mode' in workflow
-    assert "/database/query\"" not in workflow
+    assert workflow.count("/database/query\"") == 1
     reconciliation = workflow.split(
         "Reconcile reviewed command definitions on pre-cutover staging", 1
     )[1].split("Verify baseline topology", 1)[0]

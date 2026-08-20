@@ -405,15 +405,15 @@ jobs:
 
       - name: Provision isolated staging login credentials
         if: inputs.rotate_role_passwords == true || inputs.reset_disposable_data == true
-        env:
-          ROTATE_ROLE_PASSWORDS: ${{ inputs.rotate_role_passwords || inputs.reset_disposable_data }}
         run: |
           python3 - <<'PY'
+          import json
           import os
-          import psycopg2
+          import re
           import sys
           import time
-          from psycopg2 import sql
+          import urllib.error
+          import urllib.request
 
           roles = {
               "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
@@ -421,36 +421,40 @@ jobs:
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
               "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
-          rotate_passwords = os.environ["ROTATE_ROLE_PASSWORDS"].lower() == "true"
+          for role, password in roles.items():
+              if not re.fullmatch(r"[A-Za-z0-9_-]{48,96}", password):
+                  raise RuntimeError(f"{role} secret is not a valid generated staging credential")
+
+          query = "\n".join(
+              f'ALTER ROLE "{role}" LOGIN PASSWORD \'{password}\';'
+              for role, password in roles.items()
+          )
+          endpoint = (
+              "https://api.supabase.com/v1/projects/"
+              f"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/database/query"
+          )
+          request = urllib.request.Request(
+              endpoint,
+              data=json.dumps({"query": query, "read_only": False}).encode(),
+              headers={
+                  "Authorization": f"Bearer {os.environ['SUPABASE_ACCESS_TOKEN']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
           last_error = None
-          for attempt in range(1, 6):
+          for attempt in range(1, 4):
               try:
-                  with psycopg2.connect(
-                      os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5
-                  ) as connection:
-                      with connection.cursor() as cursor:
-                          for role, password in roles.items():
-                              cursor.execute(
-                                  "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s",
-                                  (role,),
-                              )
-                              posture = cursor.fetchone()
-                              if posture is None:
-                                  raise RuntimeError(f"reviewed staging role is missing: {role}")
-                              if rotate_passwords:
-                                  cursor.execute(
-                                      sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
-                                      (password,),
-                                  )
-                              elif posture[0] is not True:
-                                  cursor.execute(
-                                      sql.SQL("ALTER ROLE {} LOGIN").format(sql.Identifier(role))
-                                  )
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      if response.status != 201:
+                          raise RuntimeError(
+                              f"Supabase management SQL returned HTTP {response.status}"
+                          )
                   last_error = None
                   break
               except Exception as exc:
                   last_error = exc
-                  if attempt < 5:
+                  if attempt < 3:
                       time.sleep(5)
           if last_error is not None:
               message = str(last_error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
