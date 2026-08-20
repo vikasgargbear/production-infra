@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "catalog_sha256": "aecae18fda425151ccf6e10128acae315826dd85f33961f3e51895e89cdec6a4",
   "dispatcher": {
     "blocked_prepare_capabilities": [
       "inventory.destruction.prepare",

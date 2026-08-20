@@ -104,7 +104,7 @@
     "core.audit_events": "audit chain cannot trigger itself",
     "inventory.stock_balances": "rebuildable projection is evidenced by its stock ledger source"
   },
-  "catalog_sha256": "934d42cb52f1587676e8e7728329fd83fdc95b88c941ea5633878b296152d835",
+  "catalog_sha256": "aecae18fda425151ccf6e10128acae315826dd85f33961f3e51895e89cdec6a4",
   "hash_contract": "pg-jsonb-sha256-v1",
   "immutable_bindings": [
     "automation.command_approvals",

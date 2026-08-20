@@ -1,5 +1,5 @@
 {
-  "catalog_sha256": "1d1d251a68360d819f35f245ed5a205901b1b95ac4d424924dbd7be51fa833c9",
+  "catalog_sha256": "b0b4870b08eb4e99451a688172c9dc944f7da4c9880b33301c1beaab28e13874",
   "contract_version": "1.0.0",
   "field_count": 2327,
   "naming_contract": {
@@ -11842,6 +11842,7 @@
           "allowed_values": [
             "cbic",
             "cdsco",
+            "gst_council",
             "gst_portal",
             "gstn",
             "income_tax_department",
@@ -11852,7 +11853,7 @@
           ],
           "data_classification": "public_reference",
           "default": null,
-          "definition": "Persisted source authority owned by the Immutable reviewed source and exact-set identity for one deployed global regulatory reference dataset fact; interpretation is constrained by this table's checks and invariants. Allowed values: cbic, cdsco, gst_portal, gstn, income_tax_department, revenue_department.",
+          "definition": "Persisted source authority owned by the Immutable reviewed source and exact-set identity for one deployed global regulatory reference dataset fact; interpretation is constrained by this table's checks and invariants. Allowed values: cbic, cdsco, gst_council, gst_portal, gstn, income_tax_department, revenue_department.",
           "definition_source": "generic_inference",
           "do_not_confuse_with": null,
           "foreign_key": null,

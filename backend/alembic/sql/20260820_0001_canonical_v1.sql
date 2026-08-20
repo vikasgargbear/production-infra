@@ -2919,7 +2919,7 @@ ALTER TABLE "core"."organizations" ADD CONSTRAINT "organizations_row_version_ck"
 ALTER TABLE "core"."organizations" ADD CONSTRAINT "organizations_status_ck" CHECK (status IN ('provisioning','active','suspended','closed'));
 ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_dataset_hash_uq" UNIQUE ("dataset_kind", "dataset_sha256");
 ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_version_uq" UNIQUE ("dataset_kind", "ruleset_version");
-ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_authority_ck" CHECK ((dataset_kind='ingredient_classification' AND source_authority='cdsco') OR (dataset_kind='hsn_sac_tax' AND source_authority IN ('gst_portal','cbic','gstn')) OR (dataset_kind='withholding_rules' AND source_authority IN ('income_tax_department','cbic')) OR (dataset_kind='controlled_movement_rules' AND source_authority IN ('cdsco','revenue_department')) OR (dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND source_authority IN ('gst_portal','cbic','gstn')));
+ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_authority_ck" CHECK ((dataset_kind='ingredient_classification' AND source_authority='cdsco') OR (dataset_kind='hsn_sac_tax' AND source_authority IN ('gst_portal','gst_council','cbic','gstn')) OR (dataset_kind='withholding_rules' AND source_authority IN ('income_tax_department','cbic')) OR (dataset_kind='controlled_movement_rules' AND source_authority IN ('cdsco','revenue_department')) OR (dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND source_authority IN ('gst_portal','gst_council','cbic','gstn')));
 ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_count_ck" CHECK (record_count > 0);
 ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_dates_ck" CHECK (publication_date <= effective_from AND (effective_to IS NULL OR effective_to >= effective_from) AND reviewed_at <= created_at);
 ALTER TABLE "core"."reference_data_releases" ADD CONSTRAINT "reference_data_releases_hash_ck" CHECK (octet_length(source_document_sha256)=32 AND octet_length(dataset_sha256)=32);
@@ -14390,6 +14390,8 @@ BEGIN
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*cdsco\.gov\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gst_portal'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*gst\.gov\.in(/|$)')
+            OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gst_council'
+                AND p_source_uri ~ '^https://([a-z0-9-]+\.)*gstcouncil\.gov\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='cbic'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*cbic-gst\.gov\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gstn'
@@ -14405,6 +14407,8 @@ BEGIN
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*dor\.gov\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gst_portal'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*gst\.gov\.in(/|$)')
+            OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gst_council'
+                AND p_source_uri ~ '^https://([a-z0-9-]+\.)*gstcouncil\.gov\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='cbic'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\.)*cbic-gst\.gov\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gstn'

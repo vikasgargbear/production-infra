@@ -501,6 +501,8 @@ BEGIN
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*cdsco\\.gov\\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gst_portal'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*gst\\.gov\\.in(/|$)')
+            OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gst_council'
+                AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*gstcouncil\\.gov\\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='cbic'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*cbic-gst\\.gov\\.in(/|$)')
             OR (p_dataset_kind='hsn_sac_tax' AND p_source_authority='gstn'
@@ -516,6 +518,8 @@ BEGIN
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*dor\\.gov\\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gst_portal'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*gst\\.gov\\.in(/|$)')
+            OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gst_council'
+                AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*gstcouncil\\.gov\\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='cbic'
                 AND p_source_uri ~ '^https://([a-z0-9-]+\\.)*cbic-gst\\.gov\\.in(/|$)')
             OR (p_dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND p_source_authority='gstn'

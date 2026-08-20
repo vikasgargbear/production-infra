@@ -13,18 +13,22 @@ import json
 import os
 import re
 import sys
+from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import jwt
+import pdfplumber
 import psycopg2
 import requests
 
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
-SOURCE_URI = "https://cbic-gst.gov.in/gst-goods-services-rates.html"
+SOURCE_URI = "https://gstcouncil.gov.in/sites/default/files/2024-09/02_2024_ctr_eng.pdf"
 SOURCE_RETRIEVED_ON = date(2026, 8, 20)
+SOURCE_PUBLICATION_DATE = date(2024, 7, 12)
+SOURCE_EFFECTIVE_FROM = date(2024, 7, 15)
 CLIENT_ID = "aasopharma-canonical-staging-demo"
 
 IDS = {
@@ -82,7 +86,7 @@ def assert_target() -> None:
         raise RuntimeError("refusing to provision demo data in a production project")
 
 
-def fetch_cbic_source(evidence_dir: Path) -> bytes:
+def fetch_official_source(evidence_dir: Path) -> bytes:
     response = requests.get(
         SOURCE_URI,
         timeout=60,
@@ -92,11 +96,20 @@ def fetch_cbic_source(evidence_dir: Path) -> bytes:
     source = response.content
     if not 10_000 <= len(source) <= 100 * 1024 * 1024:
         raise RuntimeError("CBIC rate source has an unexpected size")
-    text = re.sub(r"\s+", " ", source.decode("utf-8", errors="ignore"))
-    required_fragments = ("4820", "Registers", "18%")
+    if not source.startswith(b"%PDF"):
+        raise RuntimeError("GST Council source is not a PDF")
+    with pdfplumber.open(BytesIO(source)) as document:
+        text = re.sub(r"\s+", " ", " ".join(page.extract_text() or "" for page in document.pages))
+    required_fragments = (
+        "Notification No. 02/2024-Central Tax (Rate)",
+        "4819 10",
+        "4819 20",
+        "Cartons, boxes and cases",
+        "15th day of July, 2024",
+    )
     if any(fragment.lower() not in text.lower() for fragment in required_fragments):
-        raise RuntimeError("CBIC source does not contain the reviewed HSN 4820 rate evidence")
-    path = evidence_dir / "cbic-gst-goods-services-rates.html"
+        raise RuntimeError("GST Council notification lacks the reviewed HSN 4819 rate evidence")
+    path = evidence_dir / "gst-council-notification-02-2024.pdf"
     path.write_bytes(source)
     return source
 
@@ -275,17 +288,17 @@ def canonical_dataset_bytes(connection) -> bytes:
     dataset = [
         {
             "id": IDS["tax_version"],
-            "code": "4820",
+            "code": "481910",
             "code_kind": "hsn",
             "version_number": "1",
-            "description": "Registers, account books and similar paper stationery (demo subset)",
-            "effective_from": SOURCE_RETRIEVED_ON.isoformat(),
+            "description": "Cartons, boxes and cases of corrugated paper or paper board (demo subset)",
+            "effective_from": SOURCE_EFFECTIVE_FROM.isoformat(),
             "effective_to": "",
             "taxability": "taxable",
             "default_supply_type": "goods",
-            "cgst_rate": "9",
-            "sgst_rate": "9",
-            "igst_rate": "18",
+            "cgst_rate": "6",
+            "sgst_rate": "6",
+            "igst_rate": "12",
             "cess_rate": "0",
         }
     ]
@@ -304,8 +317,8 @@ def import_tax_release(connection, source: bytes, dataset_bytes: bytes) -> None:
             cursor.execute(
                 """
                 SELECT count(*) FROM tax.tax_code_versions
-                 WHERE id=%s AND release_id=%s AND code='4820'
-                   AND cgst_rate=9 AND sgst_rate=9 AND igst_rate=18 AND cess_rate=0
+                 WHERE id=%s AND release_id=%s AND code='481910'
+                   AND cgst_rate=6 AND sgst_rate=6 AND igst_rate=12 AND cess_rate=0
                    AND status='active'
                 """,
                 (IDS["tax_version"], IDS["tax_release"]),
@@ -316,23 +329,23 @@ def import_tax_release(connection, source: bytes, dataset_bytes: bytes) -> None:
         cursor.execute(
             """
             SELECT erp_regulatory_commands.import_tax_release(
-                %s, %s, 'cbic', %s, 'github-actions-artifact', %s, 'text/html',
+                %s, %s, 'gst_council', %s, 'github-actions-artifact', %s, 'application/pdf',
                 %s, %s, 'github-actions-artifact', %s, %s, %s,
                 %s, %s, NULL, %s, transaction_timestamp(), %s
             )
             """,
             (
                 IDS["tax_release"],
-                "demo-cbic-current-rates-2026-08-20",
+                "demo-gst-council-notification-02-2024",
                 SOURCE_URI,
-                f"canonical-demo-{os.getenv('GITHUB_RUN_ID', 'local')}/cbic-gst-goods-services-rates.html",
+                f"canonical-demo-{os.getenv('GITHUB_RUN_ID', 'local')}/gst-council-notification-02-2024.pdf",
                 psycopg2.Binary(source),
                 psycopg2.Binary(hashlib.sha256(source).digest()),
-                f"canonical-demo-{os.getenv('GITHUB_RUN_ID', 'local')}/hsn-4820-demo.json",
+                f"canonical-demo-{os.getenv('GITHUB_RUN_ID', 'local')}/hsn-481910-demo.json",
                 psycopg2.Binary(dataset_bytes),
                 psycopg2.Binary(hashlib.sha256(dataset_bytes).digest()),
-                SOURCE_RETRIEVED_ON,
-                SOURCE_RETRIEVED_ON,
+                SOURCE_PUBLICATION_DATE,
+                SOURCE_EFFECTIVE_FROM,
                 IDS["user"],
                 IDS["request"],
             ),
@@ -445,9 +458,9 @@ def seed_business_master(connection) -> None:
                 cold_chain_required, status,
                 created_by_membership_id, updated_by_membership_id
             ) VALUES (
-                %s, %s, 'DEMO-REGISTER-4820', 'consumable',
-                'Synthetic Pharmacy Billing Register', 'Paper register book',
-                %s, 'EA', '4820', false, 'draft', %s, %s
+                %s, %s, 'DEMO-CARTON-481910', 'consumable',
+                'Synthetic Corrugated Pharmacy Packing Carton', 'Paperboard carton',
+                %s, 'EA', '481910', false, 'draft', %s, %s
             ) ON CONFLICT (org_id, id) DO NOTHING
             """,
             (
@@ -653,13 +666,13 @@ def main() -> int:
     assert_target()
     evidence_dir = Path(required("CANONICAL_DEMO_EVIDENCE_DIR"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    source = fetch_cbic_source(evidence_dir)
+    source = fetch_official_source(evidence_dir)
 
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         bootstrap_identity(bootstrap)
     with psycopg2.connect(required("ERP_REGULATORY_IMPORTER_DATABASE_URL")) as importer:
         dataset_bytes = canonical_dataset_bytes(importer)
-        (evidence_dir / "hsn-4820-demo.json").write_bytes(dataset_bytes)
+        (evidence_dir / "hsn-481910-demo.json").write_bytes(dataset_bytes)
         import_tax_release(importer, source, dataset_bytes)
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         seed_business_master(bootstrap)
@@ -676,7 +689,7 @@ def main() -> int:
         "official_source_uri": SOURCE_URI,
         "official_source_sha256": hashlib.sha256(source).hexdigest(),
         "dataset_sha256": hashlib.sha256(
-            (evidence_dir / "hsn-4820-demo.json").read_bytes()
+            (evidence_dir / "hsn-481910-demo.json").read_bytes()
         ).hexdigest(),
         "reference_scope": "demo subset; not a complete production tax dataset",
         "transaction_scope": "sales.order prepare/approve/execute",
