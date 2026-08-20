@@ -40,8 +40,8 @@ CANONICAL_BASELINE_APPROVED_SHA256=$(
 )
 
 test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "20260820_0001"
-test "$(psql -X -Atqc \"SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass\")" = "true|true"
-test "$(psql -X -Atqc \"SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')\")" = "f"
+test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity::text FROM pg_catalog.pg_class WHERE oid='public.alembic_version'::regclass")" = "true|true"
+test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
 
 fixture_count=0
 while IFS= read -r fixture; do
