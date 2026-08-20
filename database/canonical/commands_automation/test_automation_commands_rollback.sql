@@ -25,7 +25,7 @@ BEGIN
                                  'resolve_sales_invoice_prepare','resolve_purchase_order_prepare',
                                  'resolve_supplier_invoice_prepare','resolve_sales_return_prepare')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
-    IF runtime_count<>11 THEN
+    IF runtime_count<>10 THEN
         RAISE EXCEPTION 'expected ten reviewed runtime automation commands, found %',runtime_count;
     END IF;
 
@@ -55,7 +55,7 @@ BEGIN
                                  'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
                                  'resolve_sales_return_prepare','persist_sales_return_prepare')
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
-    IF calculator_count<>12 THEN
+    IF calculator_count<>10 THEN
         RAISE EXCEPTION 'expected ten reviewed calculator automation commands, found %',calculator_count;
     END IF;
 
