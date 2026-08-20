@@ -13,6 +13,12 @@ VALUES
 
 SET LOCAL ROLE "erp_migration_owner";
 
+-- Global bootstrap rows still require a deterministic tenant/request audit
+-- envelope. The referenced organization is inserted below in this deferred
+-- transaction; runtime identity is tested separately after bootstrap.
+SELECT set_config('app.org_id', '10000000-0000-7000-8000-000000000001', true);
+SELECT set_config('app.request_id', '90000000-0000-7000-8000-000000000010', true);
+
 INSERT INTO core.users (id, auth_user_id, display_name, status)
 VALUES
     (
