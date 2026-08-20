@@ -23,10 +23,15 @@ BEGIN
                                  'resolve_goods_receipt_prepare','persist_goods_receipt_prepare',
                                  'resolve_sales_dispatch_prepare','persist_sales_dispatch_prepare',
                                  'resolve_sales_invoice_prepare','resolve_purchase_order_prepare',
-                                 'resolve_supplier_invoice_prepare','resolve_sales_return_prepare')
+                                 'resolve_supplier_invoice_prepare','resolve_sales_return_prepare',
+                                 'resolve_purchase_return_prepare',
+                                 'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
+                                 'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
+                                 'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
+                                 'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
-    IF runtime_count<>10 THEN
-        RAISE EXCEPTION 'expected ten reviewed runtime automation commands, found %',runtime_count;
+    IF runtime_count<>19 THEN
+        RAISE EXCEPTION 'expected nineteen reviewed runtime automation commands, found %',runtime_count;
     END IF;
 
     SELECT count(*) INTO bad_count
@@ -37,7 +42,12 @@ BEGIN
                                      'resolve_goods_receipt_prepare','persist_goods_receipt_prepare',
                                      'resolve_sales_dispatch_prepare','persist_sales_dispatch_prepare',
                                      'resolve_sales_invoice_prepare','resolve_purchase_order_prepare',
-                                     'resolve_supplier_invoice_prepare','resolve_sales_return_prepare')
+                                     'resolve_supplier_invoice_prepare','resolve_sales_return_prepare',
+                                     'resolve_purchase_return_prepare',
+                                     'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
+                                     'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
+                                     'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
+                                     'resolve_inventory_adjustment_prepare','persist_inventory_adjustment_prepare')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
@@ -53,10 +63,11 @@ BEGIN
                                  'resolve_sales_invoice_prepare','persist_sales_invoice_prepare',
                                  'resolve_purchase_order_prepare','persist_purchase_order_prepare',
                                  'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
-                                 'resolve_sales_return_prepare','persist_sales_return_prepare')
+                                 'resolve_sales_return_prepare','persist_sales_return_prepare',
+                                 'resolve_purchase_return_prepare','persist_purchase_return_prepare')
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
-    IF calculator_count<>10 THEN
-        RAISE EXCEPTION 'expected ten reviewed calculator automation commands, found %',calculator_count;
+    IF calculator_count<>12 THEN
+        RAISE EXCEPTION 'expected twelve reviewed calculator automation commands, found %',calculator_count;
     END IF;
 
     SELECT count(*) INTO bad_count
@@ -67,7 +78,8 @@ BEGIN
                                      'resolve_sales_invoice_prepare','persist_sales_invoice_prepare',
                                      'resolve_purchase_order_prepare','persist_purchase_order_prepare',
                                      'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
-                                     'resolve_sales_return_prepare','persist_sales_return_prepare')
+                                     'resolve_sales_return_prepare','persist_sales_return_prepare',
+                                     'resolve_purchase_return_prepare','persist_purchase_return_prepare')
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
     IF bad_count<>0 THEN
         RAISE EXCEPTION 'calculator can execute an unreviewed automation helper';
