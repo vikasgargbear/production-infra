@@ -1086,25 +1086,6 @@ def seed_end_to_end_master(connection) -> None:
                 (IDS["org"], IDS["quarantine_location"], IDS["branch"], "QUAR-DEMO", "Demo returned quarantine", "quarantine", False, IDS["reviewer_membership"], IDS["reviewer_membership"]),
             ],
         )
-        cursor.execute(
-            """
-            INSERT INTO tax.organization_fiscal_tax_facts (
-                org_id,id,fiscal_year_start_year,effective_from,effective_to,
-                organization_person_type,prior_fiscal_year_turnover,
-                gst_tds_notified_deductor,einvoice_exemption_code,
-                evidence_attachment_id,verified_at,verified_by_membership_id,status,
-                created_by_membership_id
-            ) VALUES (
-                %s,%s,2026,DATE '2026-04-01',DATE '2027-03-31','company',50000000,
-                false,'NONE',%s,transaction_timestamp(),%s,'active',%s
-            ) ON CONFLICT (org_id,id) DO NOTHING
-            """,
-            (
-                IDS["org"], IDS["fiscal_tax_fact"], IDS["fiscal_fact_evidence"],
-                IDS["reviewer_membership"], IDS["reviewer_membership"],
-            ),
-        )
-
         sequence_types = {
             "sales_dispatch": "DEMO-SD-",
             "sales_invoice": "DEMO-SI-",
@@ -1136,6 +1117,45 @@ def seed_end_to_end_master(connection) -> None:
                 for document_type, prefix in sorted(sequence_types.items())
             ],
         )
+
+
+def verify_fiscal_tax_fact(connection) -> None:
+    """Create the fiscal fact through its maker-checker command boundary."""
+
+    key_bytes = b"canonical-demo-fiscal-tax-fact-v1"
+    request_bytes = json.dumps(
+        {
+            "fact_id": IDS["fiscal_tax_fact"],
+            "fiscal_year_start_year": 2026,
+            "organization_person_type": "company",
+            "prior_fiscal_year_turnover": "50000000.00",
+            "gst_tds_notified_deductor": False,
+            "evidence_attachment_id": IDS["fiscal_fact_evidence"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["operator_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT erp_compliance_commands.verify_organization_fiscal_tax_fact(
+                %s,%s,%s,2026,'company',50000000,false,NULL,%s,%s,%s,
+                transaction_timestamp() + interval '30 minutes'
+            )
+            """,
+            (
+                IDS["org"], IDS["fiscal_tax_fact"], IDS["operator_membership"],
+                IDS["fiscal_fact_evidence"],
+                psycopg2.Binary(hashlib.sha256(key_bytes).digest()),
+                psycopg2.Binary(hashlib.sha256(request_bytes).digest()),
+            ),
+        )
+        if cursor.fetchone() != (IDS["fiscal_tax_fact"],):
+            raise RuntimeError("fiscal tax fact verification returned an unexpected resource")
 
 
 def activate_demo_product(connection) -> None:
@@ -2573,6 +2593,7 @@ def main() -> int:
         seed_business_master(bootstrap)
         seed_end_to_end_master(bootstrap)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
+        verify_fiscal_tax_fact(runtime)
         activate_demo_product(runtime)
 
     purchase_payload = purchase_order_payload()
