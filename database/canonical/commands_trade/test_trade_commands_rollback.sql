@@ -96,7 +96,7 @@ VALUES (
 );
 
 INSERT INTO core.access_grants (
-    org_id,id,membership_id,role_id,scope_kind,branch_id,valid_from,status,
+    org_id,id,membership_id,role_id,scope_kind,branch_id,valid_from_at,status,
     created_by_membership_id
 ) VALUES (
     '91000000-0000-7000-8000-000000000002','91000000-0000-7000-8000-000000000006',

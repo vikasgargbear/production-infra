@@ -114,6 +114,8 @@ def test_security_definer_commands_recheck_live_permission_and_branch_scope() ->
     assert "ALTER TABLE core.organizations DISABLE TRIGGER USER" in fixture
     assert fixture.index("DISABLE TRIGGER USER") < fixture.index("INSERT INTO core.organizations")
     assert "ENABLE TRIGGER USER" not in fixture
+    assert "valid_from_at" in fixture
+    assert "valid_from," not in fixture
     assert "grant_row.status = 'active'" in security_text
     assert "grant_row.expires_at > pg_catalog.transaction_timestamp()" in security_text
 
