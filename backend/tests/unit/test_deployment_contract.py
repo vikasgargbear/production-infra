@@ -315,6 +315,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
 
+    workflow = _read(".github/workflows/canonical-staging.yml")
+    assert "https://api.render.com/v1/logs" in workflow
+    assert "Canonical API Render traceback" in workflow
+    assert "postgresql://<redacted>@" in workflow
+
 
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     workflow = _read(".github/workflows/canonical-staging.yml")

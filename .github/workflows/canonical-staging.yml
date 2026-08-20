@@ -776,6 +776,18 @@ jobs:
 
           demo_log=$(mktemp)
           if ! python3 backend/scripts/provision_canonical_demo.py 2>&1 | tee "$demo_log"; then
+            api_service_id=$(jq -er '.services["aasopharma-api-pilot"].id' \
+              staging-evidence/render-pilot.json)
+            render_log=$(mktemp)
+            curl --fail --silent --show-error --get \
+              --header "Authorization: Bearer $RENDER_API_KEY" \
+              --data-urlencode 'ownerId=tea-da2nh58ae00c73ciaqog' \
+              --data-urlencode "resource=$api_service_id" \
+              --data-urlencode 'level=error' \
+              --data-urlencode 'type=app' \
+              --data-urlencode 'direction=backward' \
+              --data-urlencode 'limit=20' \
+              'https://api.render.com/v1/logs' > "$render_log" || true
             python3 - "$demo_log" <<'PY'
           import pathlib
           import sys
@@ -783,6 +795,33 @@ jobs:
           detail = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
           detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical demo provisioning failed::{detail}")
+          PY
+            python3 - "$render_log" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          try:
+              document = json.loads(raw)
+              entries = document.get("logs", []) if isinstance(document, dict) else []
+              detail = "\n".join(
+                  f"{entry.get('timestamp', '')} {entry.get('message', '')}"
+                  for entry in entries[-8:]
+                  if isinstance(entry, dict)
+              ) or raw
+          except json.JSONDecodeError:
+              detail = raw
+          detail = re.sub(
+              r"postgres(?:ql)?(?:\+psycopg2)?://[^@\s]+@",
+              "postgresql://<redacted>@",
+              detail,
+              flags=re.IGNORECASE,
+          )
+          detail = re.sub(r"Bearer\s+\S+", "Bearer <redacted>", detail)
+          detail = detail[-3500:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical API Render traceback::{detail}")
           PY
             exit 1
           fi
