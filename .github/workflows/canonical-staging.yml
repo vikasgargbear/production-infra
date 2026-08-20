@@ -460,7 +460,18 @@ jobs:
           export CANONICAL_DEMO_API_URL
           CANONICAL_DEMO_API_URL=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot.json)
 
-          python3 backend/scripts/provision_canonical_demo.py
+          demo_log=$(mktemp)
+          if ! python3 backend/scripts/provision_canonical_demo.py 2>&1 | tee "$demo_log"; then
+            python3 - "$demo_log" <<'PY'
+          import pathlib
+          import sys
+
+          detail = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical demo provisioning failed::{detail}")
+          PY
+            exit 1
+          fi
 
       - name: Publish staging baseline evidence
         run: |
