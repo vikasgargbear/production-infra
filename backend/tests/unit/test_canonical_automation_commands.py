@@ -454,6 +454,40 @@ def test_calculated_prepares_bind_commands_to_persisted_document_versions() -> N
         ) in compact_mapping
 
 
+def test_every_executable_prepare_sets_request_context_before_command_persistence() -> None:
+    mapping = _sql()
+    request_id_prepares = {
+        "sales_dispatch",
+        "purchase_order",
+        "goods_receipt",
+        "supplier_invoice",
+        "sales_invoice",
+        "sales_order",
+        "sales_return",
+        "purchase_return",
+    }
+    command_id_prepares = {
+        "inventory_adjustment",
+        "supplier_payment",
+        "supplier_advance",
+        "customer_receipt",
+    }
+    for resource_type in sorted(request_id_prepares | command_id_prepares):
+        start = mapping.index(
+            f'CREATE FUNCTION "erp_automation_commands"."persist_{resource_type}_prepare"'
+        )
+        end = mapping.index("\nREVOKE ALL ON FUNCTION", start)
+        function_sql = mapping[start:end]
+        expected_id = (
+            "request_id::text" if resource_type in request_id_prepares else "command_id::text"
+        )
+        request_context_at = function_sql.index(
+            f"pg_catalog.set_config('app.request_id',{expected_id},true)"
+        )
+        command_at = function_sql.index('"prepare_operator_command"')
+        assert request_context_at < command_at
+
+
 def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() -> None:
     mapping = _sql()
     assert mapping.count(

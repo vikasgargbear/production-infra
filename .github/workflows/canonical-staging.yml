@@ -516,7 +516,14 @@ jobs:
                  position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0 AS plumbing_current,
                  position('controlled_batched_movement' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AS inventory_adjustment_risk_current,
                  position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS purchase_order_binding_current,
-                 position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0 AS calculated_guard_current
+                 position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0 AS calculated_guard_current,
+                 (SELECT count(*)=5 AND pg_catalog.bool_and(position('set_config(''app.request_id''' IN pg_catalog.pg_get_functiondef(proc.oid))>0)
+                    FROM pg_catalog.pg_proc AS proc
+                    JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
+                   WHERE namespace.nspname='erp_automation_commands'
+                     AND proc.proname IN ('persist_supplier_invoice_prepare','persist_inventory_adjustment_prepare',
+                                          'persist_supplier_payment_prepare','persist_supplier_advance_prepare',
+                                          'persist_customer_receipt_prepare')) AS runtime_prepare_context_current
           SQL
           )
           if curl --fail --silent --show-error \
@@ -526,7 +533,7 @@ jobs:
             --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$definition_state" \
-            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .compliance_current? == true and .plumbing_current? == true and .inventory_adjustment_risk_current? == true and .purchase_order_binding_current? == true and .calculated_guard_current? == true)' \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .compliance_current? == true and .plumbing_current? == true and .inventory_adjustment_risk_current? == true and .purchase_order_binding_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
               "$definition_state" >/dev/null; then
             echo "Control plane verified reviewed command definitions are already current"
             exit 0
@@ -570,6 +577,19 @@ jobs:
                   "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
                   'CREATE FUNCTION "erp_automation_commands"."guard_command_request_match"',
               ),
+              *(
+                  (
+                      "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
+                      f'CREATE FUNCTION "erp_automation_commands"."{function_name}"',
+                  )
+                  for function_name in (
+                      "persist_supplier_invoice_prepare",
+                      "persist_inventory_adjustment_prepare",
+                      "persist_supplier_payment_prepare",
+                      "persist_supplier_advance_prepare",
+                      "persist_customer_receipt_prepare",
+                  )
+              ),
           )
           selected = []
           for path, prefix in targets:
@@ -605,8 +625,8 @@ jobs:
           psql -X --single-transaction -v ON_ERROR_STOP=1 \
             "$PSYCOPG_DATABASE_URL" -f "$reconciliation_sql" >/dev/null
           test "$(psql -X -Atqc \
-            "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0 AND position('''purchase_order'',purchase_order.id,purchase_order.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0, position('controlled_batched_movement' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0, position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0, position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0" \
-            "$PSYCOPG_DATABASE_URL")" = "t|t|t|t|t|t|t|t"
+            "SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0, position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0 AND position('''purchase_order'',purchase_order.id,purchase_order.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0, position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0, position('controlled_batched_movement' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0, position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0, position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0, (SELECT count(*)=5 AND pg_catalog.bool_and(position('set_config(''app.request_id''' IN pg_catalog.pg_get_functiondef(proc.oid))>0) FROM pg_catalog.pg_proc AS proc JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace WHERE namespace.nspname='erp_automation_commands' AND proc.proname IN ('persist_supplier_invoice_prepare','persist_inventory_adjustment_prepare','persist_supplier_payment_prepare','persist_supplier_advance_prepare','persist_customer_receipt_prepare'))" \
+            "$PSYCOPG_DATABASE_URL")" = "t|t|t|t|t|t|t|t|t"
           cleanup_migration_membership
           trap - EXIT
 

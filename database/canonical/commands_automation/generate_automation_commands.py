@@ -2009,6 +2009,7 @@ BEGIN
     output_document:=pg_catalog.convert_from(calculation_output_bytes,'UTF8')::jsonb;
     current_resolution:="{SCHEMA}"."resolve_supplier_invoice_prepare"(organization_id,membership_id,auth_user_id,application_user_id,
       grant_id,caller_client_id,supplier_invoice_id,request_document);
+    PERFORM pg_catalog.set_config('app.request_id',request_id::text,true);
     IF current_resolution IS DISTINCT FROM resolved_document OR output_document->>'operation'<>'procurement.supplier_invoice.post'
        OR output_document->>'resource_type'<>'supplier_invoice' OR output_document->>'resource_id'<>supplier_invoice_id::text
        OR preview_document->>'itc_eligibility_basis'<>'taxable_resale_not_blocked_under_section_17'
@@ -4008,6 +4009,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cycle-count runtime persistence boundary is invalid'; END IF;
   current_resolution:="{SCHEMA}"."resolve_inventory_adjustment_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,inventory_document_id,request_document);
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
   IF current_resolution IS DISTINCT FROM resolved_document
      OR preview_document->>'operation'<>'inventory.document.post'
      OR preview_document->>'capability_code'<>'inventory.adjustment.prepare'
@@ -5254,6 +5256,7 @@ BEGIN
   preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
   current_resolution:="{SCHEMA}"."resolve_supplier_payment_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
   IF current_resolution IS DISTINCT FROM resolved_document OR request_document->>'payment_id' IS DISTINCT FROM payment_id::text
      OR request_document->>'journal_id' IS DISTINCT FROM journal_id::text OR request_document->>'event_id' IS DISTINCT FROM event_id::text
      OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'
@@ -5521,6 +5524,7 @@ BEGIN
   preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
   current_resolution:="{SCHEMA}"."resolve_supplier_advance_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
   IF current_resolution IS DISTINCT FROM resolved_document OR request_document->>'payment_id' IS DISTINCT FROM payment_id::text
      OR request_document->>'journal_id' IS DISTINCT FROM journal_id::text OR request_document->>'event_id' IS DISTINCT FROM event_id::text
      OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'
@@ -5777,6 +5781,7 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer receipt persistence requires UTF-8 JSON'; END;
   current_resolution:="{SCHEMA}"."resolve_customer_receipt_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
   IF current_resolution IS DISTINCT FROM resolved_document OR request_document->>'payment_id' IS DISTINCT FROM payment_id::text
      OR request_document->>'journal_id' IS DISTINCT FROM journal_id::text OR request_document->>'event_id' IS DISTINCT FROM event_id::text
      OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'

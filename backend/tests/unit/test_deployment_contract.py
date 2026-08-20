@@ -275,13 +275,22 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
-    assert '"t|t|t|t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
     assert "persist_purchase_order_prepare" in reconciliation
     assert "purchase_order_binding_current" in reconciliation
     assert "guard_command_request_match" in reconciliation
     assert "calculated_guard_current" in reconciliation
+    assert "runtime_prepare_context_current" in reconciliation
+    for function_name in (
+        "persist_supplier_invoice_prepare",
+        "persist_inventory_adjustment_prepare",
+        "persist_supplier_payment_prepare",
+        "persist_supplier_advance_prepare",
+        "persist_customer_receipt_prepare",
+    ):
+        assert function_name in reconciliation
     assert "SET ROLE erp_migration_owner" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET FALSE" in reconciliation
