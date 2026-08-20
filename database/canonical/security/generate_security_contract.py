@@ -605,6 +605,7 @@ def _function_ownership_sql() -> list[str]:
         statements.extend(
             [
                 f'REVOKE ALL ON FUNCTION {signature} FROM PUBLIC;',
+                f'GRANT EXECUTE ON FUNCTION {signature} TO "erp_app";',
                 f'ALTER FUNCTION {signature} OWNER TO "erp_migration_owner";',
             ]
         )
@@ -615,13 +616,6 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
     statements: list[str] = [
         'REVOKE "erp_migration_owner" FROM "erp_app", "erp_runtime";',
     ]
-    for schema in schemas:
-        statements.append(
-            f'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;'
-        )
-    statements.append(
-        'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;'
-    )
     for schema in schemas:
         statements.extend(
             [
@@ -640,8 +634,15 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
                 f'ALTER TABLE {table} OWNER TO "erp_migration_owner";',
             ]
         )
-    for signature in RUNTIME_FUNCTION_SIGNATURES:
-        statements.append(f'GRANT EXECUTE ON FUNCTION {signature} TO "erp_app";')
+    statements.append('SET LOCAL ROLE "erp_migration_owner";')
+    for schema in schemas:
+        statements.append(
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;'
+        )
+    statements.append(
+        'ALTER DEFAULT PRIVILEGES IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;'
+    )
+    statements.append("RESET ROLE;")
     return statements
 
 
@@ -757,14 +758,6 @@ def generate_sql(manifest: dict[str, Any]) -> str:
         "",
     ]
     for schema in schemas:
-        lines.append(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;"
-        )
-    lines.append(
-        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
-    )
-    lines.append("")
-    for schema in schemas:
         lines.extend(
             [
                 f"REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;",
@@ -788,13 +781,20 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     lines.extend(_function_sql())
     lines.append("")
     lines.extend(_function_ownership_sql())
-    for signature in RUNTIME_FUNCTION_SIGNATURES:
-        lines.append(f'GRANT EXECUTE ON FUNCTION {signature} TO "erp_app";')
     lines.append("")
 
     for mapping in mappings:
         lines.extend(_table_policy_sql(mapping))
     lines.append("")
+    lines.append('SET LOCAL ROLE "erp_migration_owner";')
+    for schema in schemas:
+        lines.append(
+            f"ALTER DEFAULT PRIVILEGES IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;"
+        )
+    lines.append(
+        "ALTER DEFAULT PRIVILEGES IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
+    )
+    lines.append("RESET ROLE;")
     lines.append('REVOKE "erp_migration_owner" FROM CURRENT_USER;')
     lines.extend(["", "COMMIT;"])
     lines.append("")
