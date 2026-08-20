@@ -221,10 +221,12 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "inputs.provision_demo_data == true" in workflow
     assert 'sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s")' in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
-    assert 'f"{os.environ[\'CANONICAL_STAGING_PROJECT_REF\']}/database/query"' in workflow
-    assert '"read_only": False' in workflow
-    assert 'ALTER ROLE "{role}" LOGIN PASSWORD' in workflow
-    assert "authenticated Management API" in workflow
+    assert "for attempt in range(1, 61)" in workflow
+    assert 'os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5' in workflow
+    assert "if attempt == 3 and not restart_requested" in workflow
+    assert "f\"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/restart\"" in workflow
+    assert "time.sleep(60)" in workflow
+    assert "/database/query\"" not in workflow
     assert "isolated_role_count" in workflow
     assert "unsafe_role_count" in workflow
     baseline_query = workflow.split("baseline_query=$(cat", 1)[1].split("SQL\n", 1)[0]
