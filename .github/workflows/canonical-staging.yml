@@ -394,10 +394,13 @@ jobs:
         run: |
           python3 - <<'PY'
           import os
+          import json
           import psycopg2
           import sys
           import time
+          import urllib.request
           from psycopg2 import sql
+          from psycopg2.extensions import adapt
 
           roles = {
               "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
@@ -422,12 +425,40 @@ jobs:
                   if attempt < 18:
                       time.sleep(5)
           if last_error is not None:
-              message = str(last_error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(
-                  f"::error title=Canonical staging role connection failed::{message}",
-                  file=sys.stderr,
+              # Supavisor can temporarily lose its backend route after a project
+              # restart. Restore only the four reviewed logins through Supabase's
+              # authenticated Management API, then require real session-pooler
+              # authentication in the next step.
+              statements = []
+              for role, password in roles.items():
+                  password_literal = adapt(password).getquoted().decode("utf-8")
+                  statements.append(f'ALTER ROLE "{role}" LOGIN PASSWORD {password_literal}')
+              request = urllib.request.Request(
+                  "https://api.supabase.com/v1/projects/"
+                  f"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/database/query",
+                  data=json.dumps(
+                      {"query": ";\n".join(statements), "read_only": False}
+                  ).encode("utf-8"),
+                  headers={
+                      "Authorization": f"Bearer {os.environ['SUPABASE_ACCESS_TOKEN']}",
+                      "Content-Type": "application/json",
+                  },
+                  method="POST",
               )
-              raise last_error
+              try:
+                  with urllib.request.urlopen(request, timeout=120) as response:
+                      if response.status != 201:
+                          raise RuntimeError(
+                              f"role restoration returned HTTP {response.status}"
+                          )
+                      response.read()
+              except Exception as exc:
+                  message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(
+                      f"::error title=Canonical staging role restoration failed::{message}",
+                      file=sys.stderr,
+                  )
+                  raise
           PY
 
       - name: Verify baseline topology and isolated role posture
