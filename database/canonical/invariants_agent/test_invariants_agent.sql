@@ -151,7 +151,7 @@ BEGIN
         UPDATE core.audit_events SET summary = 'tampered'
          WHERE id = '10000000-0000-0000-0000-000000000040';
         RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'audit update was accepted';
-    EXCEPTION WHEN check_violation THEN
+    EXCEPTION WHEN integrity_constraint_violation THEN
         NULL;
     END;
 END
