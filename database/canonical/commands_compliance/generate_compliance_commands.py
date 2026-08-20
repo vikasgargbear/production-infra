@@ -119,7 +119,7 @@ END
 ''',
         ),
         *_function(
-            '"claim"(organization_id uuid, actor_id uuid, operation_name varchar, key_hash bytea, request_hash bytea, expires_at timestamptz, OUT claim_id uuid, OUT replay_resource_id uuid)',
+            '"claim"(organization_id uuid, actor_id uuid, operation_name varchar, key_hash bytea, request_hash bytea, expires_at timestamptz, OUT p_claim_id uuid, OUT p_replay_resource_id uuid)',
             "record",
             '''
 DECLARE existing core.idempotency_keys%ROWTYPE;
@@ -139,12 +139,12 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='idempotency key payload mismatch';
     END IF;
     IF existing.status='succeeded' THEN
-        claim_id:=existing.id; replay_resource_id:=existing.resource_id; RETURN;
+        p_claim_id:=existing.id; p_replay_resource_id:=existing.resource_id; RETURN;
     END IF;
     IF existing.status<>'claimed' OR existing.expires_at<=pg_catalog.transaction_timestamp() THEN
         RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='idempotency claim is not executable';
     END IF;
-    claim_id:=existing.id; replay_resource_id:=NULL;
+    p_claim_id:=existing.id; p_replay_resource_id:=NULL;
 END
 ''',
         ),

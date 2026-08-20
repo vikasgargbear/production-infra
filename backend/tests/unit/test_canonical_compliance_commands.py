@@ -54,6 +54,8 @@ def test_commands_are_private_idempotent_and_fixed_search_path() -> None:
     assert mapping.count("GRANT EXECUTE ON FUNCTION") == len(manifest["security"]["runtime_commands"])
     assert "EXECUTE FORMAT" not in mapping.upper()
     assert "IF NOT EXISTS" not in mapping.upper()
+    assert "OUT p_claim_id uuid, OUT p_replay_resource_id uuid" in mapping
+    assert mapping.count("SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id") == 16
 
 
 def test_goods_advance_non_withholding_uses_exact_verified_fiscal_fact_names() -> None:
