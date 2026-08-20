@@ -34,6 +34,8 @@ def test_generated_automation_artifacts_are_current() -> None:
     assert mapping == (ROOT / "baseline-automation-command-enforcements.json").read_text()
     assert manifest == (ROOT / "automation-command-manifest.json").read_text()
     assert "pg_catalog.extract(" not in mapping
+    assert "pg_catalog.least(" not in mapping
+    assert "pg_catalog.greatest(" not in mapping
     assert "pg_catalog.date_part('month'" in mapping
 
 

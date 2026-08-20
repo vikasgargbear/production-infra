@@ -5565,7 +5565,7 @@ BEGIN
             organization_id,request_row.target_resource_id,calculation_artifact.id,actor_id,
             calculation_artifact.request_id,request_row.id,request_row.idempotency_key_hash,
             request_row.request_hash,
-            pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at)
+            least(request_row.expires_at,calculation_artifact.expires_at)
         );
       WHEN 'procurement.purchase_order.approve' THEN
         PERFORM pg_catalog.set_config('app.request_id',calculation_artifact.request_id::text,true);
@@ -5573,7 +5573,7 @@ BEGIN
           organization_id,request_row.target_resource_id,calculation_artifact.id,actor_id,
           calculation_artifact.request_id,request_row.id,request_row.idempotency_key_hash,
           request_row.request_hash,
-          pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at));
+          least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'procurement.receipt.post' THEN
         PERFORM erp_trade_commands.post_goods_receipt(
           organization_id,request_row.target_resource_id,inventory_document_id,actor_id,
@@ -5595,7 +5595,7 @@ BEGIN
           (request_document->>'tax_document_id')::uuid,(request_document->>'journal_id')::uuid,
           invoice_journal_number,(request_document->>'event_id')::uuid,(request_document->>'open_item_id')::uuid,
           NULL::uuid,NULL::bytea,NULL::bytea,request_row.idempotency_key_hash,request_row.request_hash,
-          pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at));
+          least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'sales.dispatch.post' THEN
         PERFORM erp_trade_commands.post_dispatch(
           organization_id,request_row.target_resource_id,inventory_document_id,actor_id,
@@ -5634,7 +5634,7 @@ BEGIN
           (request_document->>'tax_document_id')::uuid,(request_document->>'journal_id')::uuid,
           invoice_journal_number,(request_document->>'event_id')::uuid,(request_document->>'open_item_id')::uuid,
           inventory_document_id,request_row.idempotency_key_hash,request_row.request_hash,
-          pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at));
+          least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'sales.return.post' THEN
         SELECT sequence.id INTO STRICT valuation_sequence_id FROM core.document_sequences sequence
          WHERE sequence.org_id=organization_id AND sequence.branch_id=request_row.branch_id
@@ -5653,7 +5653,7 @@ BEGIN
           (request_document->>'journal_id')::uuid,invoice_journal_number,(request_document->>'event_id')::uuid,
           (request_document->>'allocation_id')::uuid,(request_document->>'residual_open_item_id')::uuid,
           inventory_document_id,request_row.idempotency_key_hash,request_row.request_hash,
-          pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at));
+          least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'procurement.purchase_return.post' THEN
         SELECT sequence.id INTO STRICT valuation_sequence_id FROM core.document_sequences sequence
          WHERE sequence.org_id=organization_id AND sequence.branch_id=request_row.branch_id
@@ -5672,7 +5672,7 @@ BEGIN
           (request_document->>'journal_id')::uuid,invoice_journal_number,(request_document->>'event_id')::uuid,
           (request_document->>'allocation_id')::uuid,(request_document->>'residual_open_item_id')::uuid,
           inventory_document_id,request_row.idempotency_key_hash,request_row.request_hash,
-          pg_catalog.least(request_row.expires_at,calculation_artifact.expires_at));
+          least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'finance.payment.post' THEN
         IF request_row.capability_code NOT IN ('finance.customer_receipt.prepare','finance.supplier_payment.prepare') THEN
           RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='finance payment operation has no reviewed capability-specific dispatcher'; END IF;
@@ -13751,7 +13751,7 @@ BEGIN
     END IF;
     allocated_number := sequence.prefix || pg_catalog.lpad(
         sequence.next_value::text,
-        pg_catalog.greatest(sequence.padding::integer,pg_catalog.length(sequence.next_value::text)),
+        greatest(sequence.padding::integer,pg_catalog.length(sequence.next_value::text)),
         '0'
     ) || sequence.suffix;
     INSERT INTO "erp_core_commands"."command_scopes" VALUES

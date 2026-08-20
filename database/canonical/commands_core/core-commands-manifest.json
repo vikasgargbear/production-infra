@@ -22,7 +22,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-core-command-enforcements.json",
-  "mapping_sha256": "717ae9e809bf761e030352cecb461d3d9e13ec00e32e1da332b7f68839a6d134",
+  "mapping_sha256": "a2db9cb66f2eee3c62283cbddeda9b0a232c82762ce9bc4ec1bb40008d6c096d",
   "postgresql": "15+",
   "resolved_count": 7,
   "resolved_invariants": [
