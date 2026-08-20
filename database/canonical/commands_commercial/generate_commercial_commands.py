@@ -1650,8 +1650,8 @@ def _return_command(*, sales: bool) -> list[str]:
     IF invoiced AND adjustment_rule.deadline_policy='days_after_original' THEN
       adjustment_deadline:={original_date}+adjustment_rule.deadline_days;
     ELSIF invoiced AND adjustment_rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date((pg_catalog.extract(year FROM {original_date})::integer+
-        CASE WHEN pg_catalog.extract(month FROM {original_date})>=4 THEN 1 ELSE 0 END),11,30);
+      adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',{original_date})::integer+
+        CASE WHEN pg_catalog.date_part('month',{original_date})>=4 THEN 1 ELSE 0 END),11,30);
       SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
@@ -2136,8 +2136,8 @@ BEGIN
     IF adjustment_rule.deadline_policy='days_after_original' THEN
       adjustment_deadline:=original_document_date+adjustment_rule.deadline_days;
     ELSIF adjustment_rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date((pg_catalog.extract(year FROM original_document_date)::integer+
-        CASE WHEN pg_catalog.extract(month FROM original_document_date)>=4 THEN 1 ELSE 0 END),11,30);
+      adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',original_document_date)::integer+
+        CASE WHEN pg_catalog.date_part('month',original_document_date)>=4 THEN 1 ELSE 0 END),11,30);
       SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id

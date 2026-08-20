@@ -7765,9 +7765,9 @@ BEGIN
     VALUES(organization_id,supplier_invoice_id,(resolved_document->>'branch_id')::uuid,(resolved_document->>'supplier_account_id')::uuid,
       (resolved_document->>'buyer_tax_registration_id')::uuid,(resolved_document->>'supplier_tax_registration_id')::uuid,
       request_document->>'supplier_invoice_number',(resolved_document->>'invoice_date')::date,(resolved_document->>'received_date')::date,
-      (resolved_document->>'due_date')::date,CASE WHEN pg_catalog.extract(month FROM (resolved_document->>'invoice_date')::date)>=4
-        THEN pg_catalog.extract(year FROM (resolved_document->>'invoice_date')::date)::integer
-        ELSE pg_catalog.extract(year FROM (resolved_document->>'invoice_date')::date)::integer-1 END,'approved',
+      (resolved_document->>'due_date')::date,CASE WHEN pg_catalog.date_part('month',(resolved_document->>'invoice_date')::date)>=4
+        THEN pg_catalog.date_part('year',(resolved_document->>'invoice_date')::date)::integer
+        ELSE pg_catalog.date_part('year',(resolved_document->>'invoice_date')::date)::integer-1 END,'approved',
       resolved_document->>'supply_type','not_applicable','normal',resolved_document->>'place_of_supply_state_code',output_document->>'ruleset_version',
       request_document->'document_discount'->>'document_discount_kind',request_document->'document_discount'->>'document_discount_basis',
       (request_document->'document_discount'->>'document_discount_value')::numeric,resolved_document->>'supplier_legal_name',
@@ -9292,8 +9292,8 @@ BEGIN
         AND verified_at<=(request_document->>'recipient_itc_reversal_confirmed_at')::timestamptz FOR SHARE;
       IF rule.deadline_policy='days_after_original' THEN adjustment_deadline:=invoice.invoice_date+rule.deadline_days;
       ELSIF rule.deadline_policy='november_30_following_fy' THEN
-        adjustment_deadline:=pg_catalog.make_date(pg_catalog.extract(year FROM invoice.invoice_date)::integer+
-          CASE WHEN pg_catalog.extract(month FROM invoice.invoice_date)>=4 THEN 1 ELSE 0 END,11,30);
+        adjustment_deadline:=pg_catalog.make_date(pg_catalog.date_part('year',invoice.invoice_date)::integer+
+          CASE WHEN pg_catalog.date_part('month',invoice.invoice_date)>=4 THEN 1 ELSE 0 END,11,30);
         SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
           FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
          WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
@@ -9734,8 +9734,8 @@ BEGIN
     IF candidate_count<>1 THEN RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='supplier credit note is ambiguous across parsed GSTR-2B evidence'; END IF;
     IF rule.deadline_policy='days_after_original' THEN adjustment_deadline:=invoice.supplier_invoice_date+rule.deadline_days;
     ELSIF rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date(pg_catalog.extract(year FROM invoice.supplier_invoice_date)::integer+
-        CASE WHEN pg_catalog.extract(month FROM invoice.supplier_invoice_date)>=4 THEN 1 ELSE 0 END,11,30);
+      adjustment_deadline:=pg_catalog.make_date(pg_catalog.date_part('year',invoice.supplier_invoice_date)::integer+
+        CASE WHEN pg_catalog.date_part('month',invoice.supplier_invoice_date)>=4 THEN 1 ELSE 0 END,11,30);
     END IF;
     IF adjustment_deadline IS NOT NULL AND return_date>adjustment_deadline THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='statutory purchase return is after the exact effective-rule deadline'; END IF;
@@ -15464,8 +15464,8 @@ BEGIN
     IF adjustment_rule.deadline_policy='days_after_original' THEN
       adjustment_deadline:=original_document_date+adjustment_rule.deadline_days;
     ELSIF adjustment_rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date((pg_catalog.extract(year FROM original_document_date)::integer+
-        CASE WHEN pg_catalog.extract(month FROM original_document_date)>=4 THEN 1 ELSE 0 END),11,30);
+      adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',original_document_date)::integer+
+        CASE WHEN pg_catalog.date_part('month',original_document_date)>=4 THEN 1 ELSE 0 END),11,30);
       SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
@@ -19469,8 +19469,8 @@ BEGIN
     IF invoiced AND adjustment_rule.deadline_policy='days_after_original' THEN
       adjustment_deadline:=original.supplier_invoice_date+adjustment_rule.deadline_days;
     ELSIF invoiced AND adjustment_rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date((pg_catalog.extract(year FROM original.supplier_invoice_date)::integer+
-        CASE WHEN pg_catalog.extract(month FROM original.supplier_invoice_date)>=4 THEN 1 ELSE 0 END),11,30);
+      adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',original.supplier_invoice_date)::integer+
+        CASE WHEN pg_catalog.date_part('month',original.supplier_invoice_date)>=4 THEN 1 ELSE 0 END),11,30);
       SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
@@ -21364,8 +21364,8 @@ BEGIN
     IF invoiced AND adjustment_rule.deadline_policy='days_after_original' THEN
       adjustment_deadline:=original.invoice_date+adjustment_rule.deadline_days;
     ELSIF invoiced AND adjustment_rule.deadline_policy='november_30_following_fy' THEN
-      adjustment_deadline:=pg_catalog.make_date((pg_catalog.extract(year FROM original.invoice_date)::integer+
-        CASE WHEN pg_catalog.extract(month FROM original.invoice_date)>=4 THEN 1 ELSE 0 END),11,30);
+      adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',original.invoice_date)::integer+
+        CASE WHEN pg_catalog.date_part('month',original.invoice_date)>=4 THEN 1 ELSE 0 END),11,30);
       SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
