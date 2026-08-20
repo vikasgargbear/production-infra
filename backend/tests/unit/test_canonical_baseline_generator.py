@@ -228,8 +228,8 @@ def test_dependency_order_handles_fk_cycles_deterministically() -> None:
     assert generator._dependency_order(tables) == ("erp.a", "erp.b", "erp.c")
 
 
-def test_invariant_owned_roles_are_provisioned_before_dependent_grants() -> None:
-    roles, remaining = generator._partition_auxiliary_roles(
+def test_invariant_owned_prerequisites_are_provisioned_before_dependents() -> None:
+    roles, extensions, remaining = generator._partition_auxiliary_prerequisites(
         (
             (
                 "automation.command_requests:guard",
@@ -242,10 +242,19 @@ def test_invariant_owned_roles_are_provisioned_before_dependent_grants() -> None
                     'REVOKE "erp_app" FROM "erp_calculator";',
                 ),
             ),
+            (
+                "catalog.product_ingredients:period_guard",
+                (
+                    'CREATE EXTENSION "btree_gist" WITH SCHEMA "public";',
+                    'ALTER TABLE "catalog"."product_ingredients" '
+                    'ADD CONSTRAINT "period_guard" EXCLUDE USING gist ("org_id" WITH =);',
+                ),
+            ),
         )
     )
 
     assert roles == ('CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER;',)
+    assert extensions == ('CREATE EXTENSION "btree_gist" WITH SCHEMA "public";',)
     assert remaining == (
         (
             "automation.command_requests:guard",
@@ -255,7 +264,31 @@ def test_invariant_owned_roles_are_provisioned_before_dependent_grants() -> None
             "calculation.artifacts:authority",
             ('REVOKE "erp_app" FROM "erp_calculator";',),
         ),
+        (
+            "catalog.product_ingredients:period_guard",
+            (
+                'ALTER TABLE "catalog"."product_ingredients" '
+                'ADD CONSTRAINT "period_guard" EXCLUDE USING gist ("org_id" WITH =);',
+            ),
+        ),
     )
+
+
+def test_btree_gist_is_provisioned_before_every_gist_exclusion(catalog) -> None:
+    mappings = generator._merge_reviewed_mappings(
+        [
+            generator._load_enforcement_mapping(path)
+            for path in generator._discover_enforcement_mapping_paths(CANONICAL_ROOT)
+        ]
+    )
+    sql = generator.generate_baseline(
+        catalog,
+        enforcement_mapping=mappings.invariants,
+        platform_mapping=mappings.platform,
+    ).sql
+
+    assert sql.count('CREATE EXTENSION "btree_gist"') == 1
+    assert sql.index('CREATE EXTENSION "btree_gist"') < sql.index("EXCLUDE USING gist")
 
 
 def test_mapping_must_match_invariant_method_and_exact_requirement_text(catalog) -> None:

@@ -191,6 +191,9 @@ CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
 CREATE ROLE "erp_regulatory_importer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE "erp_tax_provider" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 
+-- Reviewed extension provisioning
+CREATE EXTENSION "btree_gist" WITH SCHEMA "public";
+
 -- Canonical schemas
 CREATE SCHEMA "core";
 CREATE SCHEMA "parties";
@@ -12075,7 +12078,6 @@ REVOKE ALL ON FUNCTION "erp_invariants_agent"."guard_active_medicine_composition
 CREATE CONSTRAINT TRIGGER "products_active_composition_ct" AFTER INSERT OR UPDATE ON "catalog"."products" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_invariants_agent"."guard_active_medicine_composition"();
 CREATE CONSTRAINT TRIGGER "product_ingredients_active_composition_ct" AFTER INSERT OR UPDATE OR DELETE ON "catalog"."product_ingredients" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_invariants_agent"."guard_active_medicine_composition"();
 -- Reviewed enforcement: catalog.product_ingredients:product_ingredients_no_overlap
-CREATE EXTENSION "btree_gist" WITH SCHEMA "public";
 ALTER TABLE "catalog"."product_ingredients"
 ADD CONSTRAINT "product_ingredients_period_excl"
 EXCLUDE USING gist (
