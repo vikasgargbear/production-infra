@@ -616,6 +616,13 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
         'REVOKE "erp_migration_owner" FROM "erp_app", "erp_runtime";',
     ]
     for schema in schemas:
+        statements.append(
+            f'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;'
+        )
+    statements.append(
+        'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;'
+    )
+    for schema in schemas:
         statements.extend(
             [
                 f'REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;',
@@ -635,13 +642,6 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
         )
     for signature in RUNTIME_FUNCTION_SIGNATURES:
         statements.append(f'GRANT EXECUTE ON FUNCTION {signature} TO "erp_app";')
-    for schema in schemas:
-        statements.append(
-            f'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;'
-        )
-    statements.append(
-        'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;'
-    )
     return statements
 
 
@@ -757,6 +757,14 @@ def generate_sql(manifest: dict[str, Any]) -> str:
         "",
     ]
     for schema in schemas:
+        lines.append(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;"
+        )
+    lines.append(
+        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
+    )
+    lines.append("")
+    for schema in schemas:
         lines.extend(
             [
                 f"REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;",
@@ -787,13 +795,6 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     for mapping in mappings:
         lines.extend(_table_policy_sql(mapping))
     lines.append("")
-    for schema in schemas:
-        lines.append(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;"
-        )
-    lines.append(
-        "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
-    )
     lines.append('REVOKE "erp_migration_owner" FROM CURRENT_USER;')
     lines.extend(["", "COMMIT;"])
     lines.append("")

@@ -62,8 +62,13 @@ def test_bootstrap_acl_changes_precede_managed_owner_transfer() -> None:
     table_owner = (
         'ALTER TABLE "core"."organizations" OWNER TO "erp_migration_owner";'
     )
+    default_privileges = (
+        'ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "core" '
+        'REVOKE ALL ON TABLES FROM PUBLIC;'
+    )
     assert sql.index(schema_acl) < sql.index(schema_owner)
     assert sql.index(table_acl) < sql.index(table_owner)
+    assert sql.index(default_privileges) < sql.index(schema_owner)
     assert sql.index('GRANT "erp_migration_owner" TO CURRENT_USER;') < sql.index(
         'CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";'
     )

@@ -17,6 +17,20 @@ CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;
 GRANT USAGE ON SCHEMA "erp_security" TO "erp_app";
 
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "automation" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "calculation" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "catalog" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "compliance" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "core" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "finance" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "hr" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "inventory" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "parties" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "procurement" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "sales" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "tax" REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
 REVOKE ALL ON SCHEMA "automation" FROM PUBLIC;
 GRANT USAGE ON SCHEMA "automation" TO "erp_app";
 ALTER SCHEMA "automation" OWNER TO "erp_migration_owner";
@@ -1154,19 +1168,6 @@ CREATE POLICY "erp_select" ON "tax"."withholdings" FOR SELECT TO "erp_app" USING
 CREATE POLICY "erp_insert" ON "tax"."withholdings" FOR INSERT TO "erp_app" WITH CHECK ("org_id" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));
 CREATE POLICY "erp_update" ON "tax"."withholdings" FOR UPDATE TO "erp_app" USING ("org_id" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid)) WITH CHECK ("org_id" = erp_security.current_org_id() AND erp_security.current_actor_is_active() AND erp_security.has_permission('tax.withholding.manage', NULL::uuid));
 
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "automation" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "calculation" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "catalog" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "compliance" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "core" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "finance" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "hr" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "inventory" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "parties" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "procurement" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "sales" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "tax" REVOKE ALL ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE "erp_migration_owner" IN SCHEMA "erp_security" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 REVOKE "erp_migration_owner" FROM CURRENT_USER;
 
 COMMIT;
