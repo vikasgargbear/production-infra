@@ -279,7 +279,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "controlled_batched_movement" in reconciliation
     assert "persist_purchase_order_prepare" in reconciliation
     assert "purchase_order_binding_current" in reconciliation
-    assert "guard_command_request_exact_capability" in reconciliation
+    assert "guard_command_request_match" in reconciliation
     assert "calculated_guard_current" in reconciliation
     assert "SET ROLE erp_migration_owner" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
