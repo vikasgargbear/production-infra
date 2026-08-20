@@ -129,6 +129,7 @@ jobs:
           test "$pooler_port" = 6543
           echo "SUPABASE_POOLER_HOST=$pooler_host" >> "$GITHUB_ENV"
           echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
+          echo "SUPABASE_SESSION_POOLER_PORT=5432" >> "$GITHUB_ENV"
 
       - name: Restart the pinned free staging database
         if: inputs.restart_staging_database == true
@@ -393,7 +394,7 @@ jobs:
           }
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
           host = os.environ["SUPABASE_POOLER_HOST"]
-          port = os.environ["SUPABASE_POOLER_PORT"]
+          port = os.environ["SUPABASE_SESSION_POOLER_PORT"]
           for role, password in expected_roles.items():
               url = (
                   f"postgresql://{role}.{ref}:{quote(password, safe='')}"
@@ -485,7 +486,7 @@ jobs:
         run: |
           set -euo pipefail
           host="$SUPABASE_POOLER_HOST"
-          port="$SUPABASE_POOLER_PORT"
+          port="$SUPABASE_SESSION_POOLER_PORT"
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
           provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
@@ -585,12 +586,12 @@ jobs:
             -c 'GRANT erp_migration_owner TO postgres' >/dev/null
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
-          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
+          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
           echo "::add-mask::$importer_url"
           export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
 
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_runtime"
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_runtime"
           echo "::add-mask::$runtime_url"
           export ERP_RUNTIME_DATABASE_URL="$runtime_url"
           export CANONICAL_DEMO_API_URL

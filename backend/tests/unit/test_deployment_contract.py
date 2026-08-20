@@ -196,8 +196,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "/database/query/read-only" in workflow
     assert "Control plane verified exact canonical revision and topology" in workflow
     assert 'test "$pooler_port" = 6543' in workflow
-    assert "SUPABASE_SESSION_POOLER_PORT" not in workflow
+    assert 'echo "SUPABASE_SESSION_POOLER_PORT=5432"' in workflow
     assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres" in workflow
+    assert "@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres" in workflow
     assert "SUPABASE_POOLER_HOST" in workflow
     assert "SUPABASE_POOLER_PORT" in workflow
     assert "pooler.supabase.com:5432" not in workflow
