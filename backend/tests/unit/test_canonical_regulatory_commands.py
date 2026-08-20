@@ -199,6 +199,12 @@ def test_empty_regulated_ledgers_fail_closed_at_activation_and_posting() -> None
     ):
         assert source_date in sql
     assert '"product_ready"(NEW.org_id,product_id,effective_date)' in sql
+    assert "product.product_kind<>'medicine' OR EXISTS" in sql
+    product_use = sql.split('"guard_product_use"()', 1)[1].split(
+        'sales_order_lines_product_reference_guard', 1
+    )[0]
+    assert "IF product.product_kind='medicine' THEN" in product_use
+    assert product_use.count('"assert_reference_readiness"(CURRENT_DATE)') == 1
 
 
 def test_mapping_removes_exactly_five_current_catalog_blockers() -> None:

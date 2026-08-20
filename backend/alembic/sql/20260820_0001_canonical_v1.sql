@@ -14048,11 +14048,13 @@ BEGIN
     RETURN EXISTS (
       SELECT 1 FROM catalog.products AS product
        WHERE product.org_id=organization_id AND product.id=product_id AND product.status='active'
-         AND EXISTS (
+         AND (
+           product.product_kind<>'medicine' OR EXISTS (
            SELECT 1 FROM core.reference_data_releases AS release
             WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
               AND release.ruleset_version=product.regulatory_ruleset_version
               AND effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
+           )
          )
          AND EXISTS (
            SELECT 1 FROM tax.tax_code_versions AS tax_version
@@ -14262,18 +14264,20 @@ AS $function$
 DECLARE product catalog.products%ROWTYPE;
 BEGIN
     IF NEW.product_id IS NULL THEN RETURN NEW; END IF;
-    PERFORM "erp_regulatory_commands"."assert_reference_readiness"(CURRENT_DATE);
     SELECT * INTO product FROM catalog.products
      WHERE org_id=NEW.org_id AND id=NEW.product_id FOR SHARE;
     IF NOT FOUND OR product.status<>'active' THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sale or receipt requires an active product';
     END IF;
-    PERFORM 1 FROM core.reference_data_releases AS release
-       WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
-         AND release.ruleset_version=product.regulatory_ruleset_version
-         AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date);
-    IF NOT FOUND THEN
-      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='product ingredient classification release is no longer active';
+    IF product.product_kind='medicine' THEN
+      PERFORM "erp_regulatory_commands"."assert_reference_readiness"(CURRENT_DATE);
+      PERFORM 1 FROM core.reference_data_releases AS release
+         WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
+           AND release.ruleset_version=product.regulatory_ruleset_version
+           AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date);
+      IF NOT FOUND THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='product ingredient classification release is no longer active';
+      END IF;
     END IF;
     PERFORM 1 FROM tax.tax_code_versions AS tax_version
       JOIN core.reference_data_releases AS release ON release.id=tax_version.release_id
@@ -14304,57 +14308,47 @@ SECURITY DEFINER
 SET search_path = ''
 AS $function$
 #variable_conflict use_variable
-DECLARE has_product boolean:=false; stale_product boolean:=false; effective_date date;
+DECLARE stale_product boolean:=false; effective_date date;
 BEGIN
     IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
     CASE TG_TABLE_SCHEMA||'.'||TG_TABLE_NAME
       WHEN 'sales.orders' THEN
         IF NEW.status<>'approved' THEN RETURN NEW; END IF;
         effective_date:=NEW.order_date;
-        SELECT EXISTS(SELECT 1 FROM sales.order_lines WHERE org_id=NEW.org_id AND order_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM sales.order_lines WHERE org_id=NEW.org_id AND order_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM sales.order_lines WHERE org_id=NEW.org_id AND order_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'sales.invoices' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
         effective_date:=NEW.invoice_date;
-        SELECT EXISTS(SELECT 1 FROM sales.invoice_lines WHERE org_id=NEW.org_id AND invoice_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM sales.invoice_lines WHERE org_id=NEW.org_id AND invoice_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM sales.invoice_lines WHERE org_id=NEW.org_id AND invoice_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'sales.returns' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
         effective_date:=NEW.return_date;
-        SELECT EXISTS(SELECT 1 FROM sales.return_lines WHERE org_id=NEW.org_id AND return_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM sales.return_lines WHERE org_id=NEW.org_id AND return_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM sales.return_lines WHERE org_id=NEW.org_id AND return_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.purchase_orders' THEN
         IF NEW.status<>'approved' THEN RETURN NEW; END IF;
         effective_date:=NEW.order_date;
-        SELECT EXISTS(SELECT 1 FROM procurement.purchase_order_lines WHERE org_id=NEW.org_id AND purchase_order_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM procurement.purchase_order_lines WHERE org_id=NEW.org_id AND purchase_order_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM procurement.purchase_order_lines WHERE org_id=NEW.org_id AND purchase_order_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.goods_receipts' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
         effective_date:=NEW.received_at::date;
-        SELECT EXISTS(SELECT 1 FROM procurement.goods_receipt_lines WHERE org_id=NEW.org_id AND goods_receipt_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM procurement.goods_receipt_lines WHERE org_id=NEW.org_id AND goods_receipt_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM procurement.goods_receipt_lines WHERE org_id=NEW.org_id AND goods_receipt_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.supplier_invoices' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
         effective_date:=NEW.supplier_invoice_date;
-        SELECT EXISTS(SELECT 1 FROM procurement.supplier_invoice_lines WHERE org_id=NEW.org_id AND supplier_invoice_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM procurement.supplier_invoice_lines WHERE org_id=NEW.org_id AND supplier_invoice_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM procurement.supplier_invoice_lines WHERE org_id=NEW.org_id AND supplier_invoice_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.purchase_returns' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
         effective_date:=NEW.return_date;
-        SELECT EXISTS(SELECT 1 FROM procurement.purchase_return_lines WHERE org_id=NEW.org_id AND purchase_return_id=NEW.id AND product_id IS NOT NULL),
-               EXISTS(SELECT 1 FROM procurement.purchase_return_lines WHERE org_id=NEW.org_id AND purchase_return_id=NEW.id AND product_id IS NOT NULL
-                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO has_product,stale_product;
+        SELECT EXISTS(SELECT 1 FROM procurement.purchase_return_lines WHERE org_id=NEW.org_id AND purchase_return_id=NEW.id AND product_id IS NOT NULL
+                 AND NOT "erp_regulatory_commands"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       ELSE RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='unsupported regulatory posting guard binding';
     END CASE;
-    IF has_product THEN
-      PERFORM "erp_regulatory_commands"."assert_reference_readiness"(effective_date);
-    END IF;
     IF stale_product THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posting product lacks active reviewed regulatory reference authority';
     END IF;
