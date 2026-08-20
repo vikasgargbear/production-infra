@@ -181,7 +181,7 @@ jobs:
         run: |
           set -euo pipefail
           reset_log=$(mktemp)
-          psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >>"$reset_log" 2>&1 <<'SQL'
+          if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
           DO $quiesce_canonical_logins$
           DECLARE
             role_name text;
@@ -204,6 +204,17 @@ jobs:
                'erp_tax_provider'
              );
           SQL
+          then
+            python3 - "$reset_log" <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical login quiesce failure::{text}")
+          PY
+            exit 1
+          fi
           if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
           BEGIN;
           DO $adopt_canonical_roles$
