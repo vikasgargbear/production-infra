@@ -540,7 +540,7 @@ def test_return_population_portal_and_reconciliation_are_relational() -> None:
 
     assert membership["tenant_class"] == "tenant_association"
     assert membership["primary_key"] == ["org_id", "return_id", "tax_document_id"]
-    assert portal["mutation_class"] == "immutable_external_import"
+    assert portal["mutation_class"] == "guarded_external_import"
     assert {"source_attachment_id", "source_sha256"} <= _columns(portal).keys()
     assert "immutable" in _cross_row_rules(portal).lower()
     assert {"portal_document_id", "source_row_hash"} <= _columns(portal_line).keys()

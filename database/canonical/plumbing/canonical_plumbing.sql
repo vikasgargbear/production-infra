@@ -372,8 +372,6 @@ CREATE TRIGGER "tax_documents_immutable_trg" BEFORE UPDATE OR DELETE ON "tax"."d
 
 CREATE TRIGGER "tax_portal_document_lines_immutable_trg" BEFORE UPDATE OR DELETE ON "tax"."portal_document_lines" FOR EACH ROW EXECUTE FUNCTION "erp_plumbing"."reject_row_mutation"();
 
-CREATE TRIGGER "tax_portal_documents_immutable_trg" BEFORE UPDATE OR DELETE ON "tax"."portal_documents" FOR EACH ROW EXECUTE FUNCTION "erp_plumbing"."reject_row_mutation"();
-
 CREATE TRIGGER "tax_reconciliation_items_immutable_trg" BEFORE UPDATE OR DELETE ON "tax"."reconciliation_items" FOR EACH ROW EXECUTE FUNCTION "erp_plumbing"."reject_row_mutation"();
 
 CREATE TRIGGER "tax_return_documents_immutable_trg" BEFORE UPDATE OR DELETE ON "tax"."return_documents" FOR EACH ROW EXECUTE FUNCTION "erp_plumbing"."reject_row_mutation"();

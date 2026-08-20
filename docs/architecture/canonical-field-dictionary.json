@@ -1,5 +1,5 @@
 {
-  "catalog_sha256": "b0b4870b08eb4e99451a688172c9dc944f7da4c9880b33301c1beaab28e13874",
+  "catalog_sha256": "c382735e57ef2b4a4c5ecfface75cb432ca79170055296584e837b08a28e262a",
   "contract_version": "1.0.0",
   "field_count": 2327,
   "naming_contract": {
@@ -41995,7 +41995,7 @@
           "parsed->superseded"
         ]
       },
-      "mutation_class": "immutable_external_import",
+      "mutation_class": "guarded_external_import",
       "name": "tax.portal_documents",
       "retention": {
         "class": "gst_portal_evidence",

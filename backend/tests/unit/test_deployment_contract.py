@@ -284,11 +284,13 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "terminal_response_body" in reconciliation
     assert "goods_receipt_post_current" in reconciliation
     assert "v_purchase_order_id" in reconciliation
+    assert "portal_parser_ownership_current" in reconciliation
+    assert "DROP TRIGGER IF EXISTS tax_portal_documents_immutable_trg" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
     assert "trade_trigger_helpers_current" in reconciliation
     assert "guard_source_inventory_ownership" in reconciliation
     assert "guard_posted_landed_allocation" in reconciliation
-    assert '"t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t|t|t|t|t|t|t"' in reconciliation
     assert "resolve_inventory_adjustment_prepare" in reconciliation
     assert "controlled_batched_movement" in reconciliation
     assert "resolve_goods_receipt_prepare" in reconciliation

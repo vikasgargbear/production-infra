@@ -1,6 +1,6 @@
 {
   "baseline_integration": {
-    "catalog_sha256": "72ba19903909d9802288bc710683ca5ef9e4fa3fe42c756516580cc69d441e1f",
+    "catalog_sha256": "e2f908741acf454236a12114acf3e22dc3d5f23725086b15d9c79e31e8eada66",
     "mapping_file": "baseline-platform-enforcements.json",
     "mapping_sha256": "b9105bdcf470481135299a92f5e35c2a8cff3c65a8daaf5f0af02e431a6e9294",
     "resolved_platform_blocker_count": 115,
@@ -10,7 +10,7 @@
       "roles_grants": 4
     }
   },
-  "catalog_sha256": "72ba19903909d9802288bc710683ca5ef9e4fa3fe42c756516580cc69d441e1f",
+  "catalog_sha256": "e2f908741acf454236a12114acf3e22dc3d5f23725086b15d9c79e31e8eada66",
   "catalog_table_count": 110,
   "contract_version": "1.0.0",
   "identity_provisioning": {
@@ -1922,7 +1922,7 @@
     {
       "branch_scope_column": null,
       "force_rls": true,
-      "mutation_class": "immutable_external_import",
+      "mutation_class": "guarded_external_import",
       "mutation_enforcement": "retained_update_no_delete_with_trigger_guard_pending",
       "policies": [
         "SELECT",

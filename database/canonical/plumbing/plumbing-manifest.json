@@ -104,7 +104,7 @@
     "core.audit_events": "audit chain cannot trigger itself",
     "inventory.stock_balances": "rebuildable projection is evidenced by its stock ledger source"
   },
-  "catalog_sha256": "aecae18fda425151ccf6e10128acae315826dd85f33961f3e51895e89cdec6a4",
+  "catalog_sha256": "65165bd8f0befe3901907f7018fcd2c4dc6eb10886e8302511630001720b1d47",
   "hash_contract": "pg-jsonb-sha256-v1",
   "immutable_bindings": [
     "automation.command_approvals",
@@ -121,7 +121,6 @@
     "sales.invoice_dispatch_allocations",
     "tax.documents",
     "tax.portal_document_lines",
-    "tax.portal_documents",
     "tax.reconciliation_items",
     "tax.return_documents",
     "tax.withholding_certificates",
@@ -129,7 +128,7 @@
     "tax.withholding_statements"
   ],
   "manifest_version": "1.0.0",
-  "mapping_sha256": "4004fc706c74a87c6f78be7ff68fc4db0ad4d007730924452e0ac593d061f470",
+  "mapping_sha256": "8e51d8f35b159035cd1c48298d645818e9a319f0dc66892538f6d97af281deb1",
   "outbox_bindings": {
     "automation.command_requests": {
       "aggregate_type": "command",

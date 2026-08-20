@@ -59,6 +59,7 @@ def test_immutable_bindings_follow_reviewed_mutation_classes():
     }
     manifest = json.loads((ROOT / "plumbing-manifest.json").read_text())
     assert set(manifest["immutable_bindings"]) == expected
+    assert "tax.portal_documents" not in manifest["immutable_bindings"]
 
 
 def test_audit_and_outbox_sql_are_private_bounded_and_transactional():

@@ -2262,7 +2262,7 @@
       "name": "tax.portal_documents",
       "fact_owner": "Immutable GST portal source file with bounded parsing lifecycle",
       "tenant_class": "tenant_direct",
-      "mutation_class": "immutable_external_import",
+      "mutation_class": "guarded_external_import",
       "lifecycle": {
         "state_column": "status",
         "states": [
