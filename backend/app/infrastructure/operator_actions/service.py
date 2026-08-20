@@ -268,7 +268,8 @@ _EXECUTION_SNAPSHOT_SQL = text(
 )
 
 _SET_COMMAND_CONTEXT_SQL = text(
-    "SELECT pg_catalog.set_config('app.command_request_id', :command_request_id, true)"
+    "SELECT pg_catalog.set_config("
+    "'app.command_request_id', CAST(:command_request_id AS text), true)"
 )
 
 _EXECUTE_COMMAND_SQL = text(

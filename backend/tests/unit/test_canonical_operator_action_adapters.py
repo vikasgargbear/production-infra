@@ -3134,6 +3134,14 @@ def test_approval_calls_only_reviewed_command_in_one_transaction():
     assert len(approve_parameters["idempotency_key_hash"]) == 32
 
 
+def test_command_context_casts_uuid_to_postgres_text_setting():
+    from app.infrastructure.operator_actions.service import _SET_COMMAND_CONTEXT_SQL
+
+    sql = str(_SET_COMMAND_CONTEXT_SQL)
+    assert "CAST(:command_request_id AS text)" in sql
+    assert "set_config('app.command_request_id'" in sql
+
+
 def test_status_rejects_changed_branch_scope_before_reading_command():
     command_request_id = uuid4()
     granted_branch = uuid4()
