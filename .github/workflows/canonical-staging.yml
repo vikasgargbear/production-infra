@@ -1,0 +1,201 @@
+name: Canonical free staging baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY_FREE_CANONICAL_STAGING
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-free-staging
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    env:
+      CANONICAL_BASELINE_APPROVED_SHA256: ${{ vars.CANONICAL_BASELINE_APPROVED_SHA256 }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+      ERP_CALCULATOR_PASSWORD: ${{ secrets.ERP_CALCULATOR_PASSWORD }}
+      ERP_TAX_PROVIDER_PASSWORD: ${{ secrets.ERP_TAX_PROVIDER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Refuse any target except the reviewed free staging project
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = DEPLOY_FREE_CANONICAL_STAGING
+          test -n "$CANONICAL_STAGING_PROJECT_REF"
+          test -n "$CANONICAL_PRODUCTION_PROJECT_REFS"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo "staging project appears in the production denylist" >&2
+              exit 2
+              ;;
+          esac
+
+          project_json=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
+          test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
+          test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
+          test "$(jq -r .region <<<"$project_json")" = ap-south-1
+
+      - name: Install the reviewed migration toolchain
+        run: pip install -r backend/requirements.txt
+
+      - name: Verify generated authority before network writes
+        run: |
+          python3 backend/scripts/check_canonical_artifacts.py
+          python3 backend/scripts/package_canonical_baseline_migration.py
+          python3 backend/scripts/generate_canonical_data_dictionary.py \
+            --check docs/architecture/canonical-field-dictionary.json
+          python3 backend/scripts/validate_canonical_model.py
+          python3 database/canonical/domains/validate_domain_catalog.py
+
+      - name: Build and mask the staging bootstrap connection
+        run: |
+          set -euo pipefail
+          encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+          database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
+          echo "::add-mask::$database_url"
+          echo "::add-mask::$psycopg_database_url"
+          echo "DATABASE_URL=$database_url" >> "$GITHUB_ENV"
+          echo "PSYCOPG_DATABASE_URL=$psycopg_database_url" >> "$GITHUB_ENV"
+
+      - name: Apply the approved baseline twice
+        run: |
+          set -euo pipefail
+          package_hash=$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)
+          test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
+          (
+            cd backend
+            alembic -c alembic.ini upgrade head
+            alembic -c alembic.ini upgrade head
+          )
+
+      - name: Provision isolated staging login credentials
+        run: |
+          python3 - <<'PY'
+          import os
+          import psycopg2
+          from psycopg2 import sql
+
+          roles = {
+              "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
+              "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
+              "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
+          }
+          with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
+              connection.autocommit = True
+              with connection.cursor() as cursor:
+                  for role, password in roles.items():
+                      cursor.execute(
+                          sql.SQL("ALTER ROLE {} PASSWORD %s").format(sql.Identifier(role)),
+                          (password,),
+                      )
+          PY
+
+      - name: Verify baseline topology and isolated role posture
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import quote
+
+          import psycopg2
+
+          expected_roles = {
+              "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
+              "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
+              "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
+          }
+          with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
+              with connection.cursor() as cursor:
+                  cursor.execute("SELECT version_num FROM public.alembic_version")
+                  assert cursor.fetchone() == ("20260820_0001",)
+                  cursor.execute(
+                      """
+                      SELECT count(*)
+                        FROM information_schema.tables
+                       WHERE table_schema IN (
+                         'core','parties','catalog','hr','inventory','sales',
+                         'procurement','finance','tax','compliance','automation','calculation'
+                       )
+                         AND table_type = 'BASE TABLE'
+                      """
+                  )
+                  assert cursor.fetchone() == (110,)
+                  cursor.execute(
+                      """
+                      SELECT rolname, rolsuper, rolcreaterole, rolbypassrls, rolcanlogin
+                        FROM pg_catalog.pg_roles
+                       WHERE rolname = ANY(%s)
+                       ORDER BY rolname
+                      """,
+                      (list(expected_roles),),
+                  )
+                  rows = cursor.fetchall()
+                  assert len(rows) == 3
+                  assert all(not superuser and not createrole and not bypassrls and canlogin
+                             for _, superuser, createrole, bypassrls, canlogin in rows)
+
+          ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
+          host = "aws-0-ap-south-1.pooler.supabase.com"
+          for role, password in expected_roles.items():
+              url = (
+                  f"postgresql://{role}.{ref}:{quote(password, safe='')}"
+                  f"@{host}:5432/postgres?sslmode=require"
+              )
+              with psycopg2.connect(url) as connection:
+                  with connection.cursor() as cursor:
+                      cursor.execute(
+                          "SELECT current_user, rolsuper, rolbypassrls "
+                          "FROM pg_catalog.pg_roles WHERE rolname = current_user"
+                      )
+                      assert cursor.fetchone() == (role, False, False)
+          PY
+
+      - name: Publish staging baseline evidence
+        run: |
+          mkdir -p staging-evidence
+          jq -n \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg revision "20260820_0001" \
+            --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
+            --arg commit_sha "$GITHUB_SHA" \
+            '{
+              project_ref: $project_ref,
+              revision: $revision,
+              approved_sha256: $approved_sha256,
+              commit_sha: $commit_sha,
+              canonical_table_count: 110,
+              result: "baseline_and_isolated_roles_verified"
+            }' > staging-evidence/canonical-staging-baseline.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-staging-baseline-${{ github.run_id }}
+          path: staging-evidence/canonical-staging-baseline.json
+          if-no-files-found: error
+          retention-days: 14
