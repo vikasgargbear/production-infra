@@ -12382,9 +12382,16 @@ SECURITY DEFINER
 SET search_path = ''
 AS $function$
 #variable_conflict use_variable
+DECLARE response_body bytea;
 BEGIN
+    response_body := pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object(
+        'resource_type',p_resource_type,'resource_id',p_resource_id
+      )::text,'UTF8');
     UPDATE core.idempotency_keys SET status='succeeded',resource_type=p_resource_type,
-      resource_id=p_resource_id,completed_at=pg_catalog.transaction_timestamp()
+      resource_id=p_resource_id,response_status=200,response_media_type='application/json',
+      response_body=response_body,response_hash=extensions.digest(response_body,'sha256'),
+      completed_at=pg_catalog.transaction_timestamp()
      WHERE org_id=organization_id AND id=p_claim_id AND status='claimed';
     IF NOT FOUND THEN
         RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='idempotency claim completion failed';
@@ -17068,9 +17075,16 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+DECLARE response_body bytea;
 BEGIN
+    response_body := pg_catalog.convert_to(
+      pg_catalog.jsonb_build_object(
+        'resource_type',p_resource_type,'resource_id',p_resource_id
+      )::text,'UTF8');
     UPDATE core.idempotency_keys
        SET status='succeeded',resource_type=p_resource_type,resource_id=p_resource_id,
+           response_status=200,response_media_type='application/json',
+           response_body=response_body,response_hash=extensions.digest(response_body,'sha256'),
            completed_at=pg_catalog.transaction_timestamp()
      WHERE org_id=p_org_id AND id=p_claim_id AND status='claimed';
     IF NOT FOUND THEN

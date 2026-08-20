@@ -84,6 +84,8 @@ def test_commands_claim_idempotency_and_do_not_fake_calculation_or_landed_cost()
     mapping_text = (ROOT / "baseline-trade-command-enforcements.json").read_text()
     manifest = json.loads((ROOT / "trade-commands-manifest.json").read_text())
     assert "ON CONFLICT (org_id,actor_membership_id,operation,idempotency_key_hash) DO NOTHING" in mapping_text
+    assert "response_status=200,response_media_type='application/json'" in mapping_text
+    assert "response_hash=extensions.digest(response_body,'sha256')" in mapping_text
     assert "request_hash IS DISTINCT FROM p_request_hash" in mapping_text
     assert "document_type='cost_adjustment'" in mapping_text
     limitations = " ".join(manifest["limitations"])
