@@ -517,6 +517,7 @@ jobs:
                    AND position('''sales_return'',sales_return.id,sales_return.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
                    AND position('''purchase_return'',purchase_return.id,purchase_return.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0 AS automation_current,
                  position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
+                 position('v_purchase_order_id' IN pg_catalog.pg_get_functiondef('erp_trade_commands.post_goods_receipt(uuid,uuid,uuid,uuid,bytea,bytea,timestamptz)'::regprocedure))>0 AS goods_receipt_post_current,
                  position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS compliance_current,
                  position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0 AS plumbing_current,
                  position('SECURITY DEFINER' IN pg_catalog.pg_get_functiondef('erp_trade_commands_v2.guard_source_inventory_ownership()'::regprocedure))>0
@@ -548,7 +549,7 @@ jobs:
             --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
             >"$definition_state" \
-            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
+            && jq -e '.. | objects | select(.core_current? == true and .automation_current? == true and .trade_current? == true and .goods_receipt_post_current? == true and .compliance_current? == true and .plumbing_current? == true and .trade_trigger_helpers_current? == true and .inventory_adjustment_risk_current? == true and .goods_receipt_date_current? == true and .purchase_order_binding_current? == true and .calculated_guard_current? == true and .runtime_prepare_context_current? == true)' \
               "$definition_state" >/dev/null; then
             echo "Control plane verified reviewed command definitions are already current"
             exit 0
@@ -571,6 +572,10 @@ jobs:
               (
                   "database/canonical/commands_trade/baseline-trade-command-enforcements.json",
                   'CREATE FUNCTION "erp_trade_commands"."finish_claim"',
+              ),
+              (
+                  "database/canonical/commands_trade/baseline-trade-command-enforcements.json",
+                  'CREATE FUNCTION "erp_trade_commands"."post_goods_receipt"',
               ),
               (
                   "database/canonical/commands_compliance/baseline-compliance-command-enforcements.json",

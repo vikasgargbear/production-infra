@@ -26,6 +26,19 @@ def test_generated_trade_command_artifacts_are_current() -> None:
     assert manifest == (ROOT / "trade-commands-manifest.json").read_text()
 
 
+def test_goods_receipt_posting_uses_an_unambiguous_purchase_order_variable() -> None:
+    mapping = json.loads((ROOT / "baseline-trade-command-enforcements.json").read_text())
+    function_sql = next(
+        statement
+        for enforcement in mapping["enforcements"]
+        for statement in enforcement["statements"]
+        if 'CREATE FUNCTION "erp_trade_commands"."post_goods_receipt"' in statement
+    )
+    assert "v_purchase_order_id uuid" in function_sql
+    assert "ordered.purchase_order_id=v_purchase_order_id" in function_sql
+    assert "ordered.purchase_order_id=purchase_order_id" not in function_sql
+
+
 def test_command_mapping_is_disjoint_and_partitions_prior_blockers() -> None:
     mapping = json.loads((ROOT / "baseline-trade-command-enforcements.json").read_text())
     manifest = json.loads((ROOT / "trade-commands-manifest.json").read_text())

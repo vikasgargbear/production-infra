@@ -790,7 +790,7 @@ END
             "uuid",
             """
 DECLARE claim_id uuid; replay_id uuid; source procurement.goods_receipts%ROWTYPE;
-        purchase_order_id uuid; purchase_order_count integer; remaining_count integer;
+        v_purchase_order_id uuid; purchase_order_count integer; remaining_count integer;
 BEGIN
     PERFORM erp_trade_commands.assert_context(p_org_id,p_actor_id);
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(
@@ -806,14 +806,14 @@ BEGIN
       JOIN procurement.purchase_order_lines line ON line.org_id=receipt_line.org_id
        AND line.id=receipt_line.purchase_order_line_id
      WHERE receipt_line.org_id=p_org_id AND receipt_line.goods_receipt_id=p_goods_receipt_id;
-    SELECT line.purchase_order_id INTO purchase_order_id
+    SELECT line.purchase_order_id INTO v_purchase_order_id
       FROM procurement.goods_receipt_lines receipt_line
       JOIN procurement.purchase_order_lines line ON line.org_id=receipt_line.org_id
        AND line.id=receipt_line.purchase_order_line_id
      WHERE receipt_line.org_id=p_org_id AND receipt_line.goods_receipt_id=p_goods_receipt_id
      LIMIT 1;
     PERFORM 1 FROM procurement.purchase_orders purchase_order
-     WHERE purchase_order.org_id=p_org_id AND purchase_order.id=purchase_order_id
+     WHERE purchase_order.org_id=p_org_id AND purchase_order.id=v_purchase_order_id
        AND purchase_order.branch_id=source.branch_id
        AND purchase_order.supplier_account_id=source.supplier_account_id
        AND purchase_order.status IN ('approved','partially_received')
@@ -823,7 +823,7 @@ BEGIN
     END IF;
     IF EXISTS (
       SELECT 1 FROM procurement.purchase_order_lines ordered
-       WHERE ordered.org_id=p_org_id AND ordered.purchase_order_id=purchase_order_id
+       WHERE ordered.org_id=p_org_id AND ordered.purchase_order_id=v_purchase_order_id
          AND ordered.line_kind='product' AND (
            COALESCE((SELECT sum(receipt_line.base_accepted_quantity)
                        FROM procurement.goods_receipt_lines receipt_line
@@ -853,7 +853,7 @@ BEGIN
       WHERE org_id=p_org_id AND id=p_goods_receipt_id AND status='approved';
     SELECT count(*) INTO remaining_count
       FROM procurement.purchase_order_lines ordered
-     WHERE ordered.org_id=p_org_id AND ordered.purchase_order_id=purchase_order_id
+     WHERE ordered.org_id=p_org_id AND ordered.purchase_order_id=v_purchase_order_id
        AND ordered.line_kind='product' AND (
          COALESCE((SELECT sum(receipt_line.base_accepted_quantity)
                      FROM procurement.goods_receipt_lines receipt_line
@@ -874,7 +874,7 @@ BEGIN
        SET status=CASE WHEN remaining_count=0 THEN 'received' ELSE 'partially_received' END,
            updated_at=pg_catalog.transaction_timestamp(),updated_by_membership_id=p_actor_id,
            row_version=row_version+1
-     WHERE org_id=p_org_id AND id=purchase_order_id AND status IN ('approved','partially_received');
+     WHERE org_id=p_org_id AND id=v_purchase_order_id AND status IN ('approved','partially_received');
     IF NOT FOUND THEN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase order receipt lifecycle changed during posting';
     END IF;

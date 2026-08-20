@@ -269,16 +269,21 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "sales_return.id,sales_return.row_version" in reconciliation
     assert "purchase_return.id,purchase_return.row_version" in reconciliation
     assert ".core_current? == true and .automation_current? == true" in reconciliation
-    assert ".trade_current? == true and .compliance_current? == true" in reconciliation
+    assert ".trade_current? == true" in reconciliation
+    assert ".goods_receipt_post_current? == true" in reconciliation
+    assert ".compliance_current? == true" in reconciliation
     assert ".plumbing_current? == true" in reconciliation
     assert reconciliation.count("CREATE OR REPLACE FUNCTION") == 1
     assert '"erp_core_commands"."allocate_document_number"' in reconciliation
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert '"erp_trade_commands"."finish_claim"' in reconciliation
+    assert '"erp_trade_commands"."post_goods_receipt"' in reconciliation
     assert '"erp_compliance_commands"."finish_claim"' in reconciliation
     assert '"erp_plumbing"."enqueue_state_outbox"' in reconciliation
     assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
+    assert "goods_receipt_post_current" in reconciliation
+    assert "v_purchase_order_id" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
     assert "trade_trigger_helpers_current" in reconciliation
     assert "guard_source_inventory_ownership" in reconciliation

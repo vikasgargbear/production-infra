@@ -550,6 +550,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "14823a7251ef0560381db3e1311a82f8a77f907812eb631a7a753a800bcca2b2",
+  "source_manifest_sha256": "890371017592614e3cf0aeaee1a6039d3ec6d1f395eced9505491b665d8c8553",
   "target_resolved_count_after_catalog_correction": 11
 }
