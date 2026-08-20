@@ -390,6 +390,9 @@ def test_calculation_issue_atomically_links_exact_command_evidence() -> None:
 
 def test_sales_order_prepare_resolves_and_persists_only_canonical_typed_facts() -> None:
     mapping = _sql()
+    assert mapping.count(
+        "IS DISTINCT FROM\n          (CASE WHEN resolved_document->>'supply_type'="
+    ) == 3
     for fragment in (
         '"resolve_sales_order_prepare"',
         '"persist_sales_order_prepare"',

@@ -1065,7 +1065,7 @@ BEGIN
        OR input_document#>>'{{document,tax_charge_mechanism}}'<>'normal'
        OR input_document#>>'{{document,zero_rated_mode}}'<>'not_applicable'
        OR input_document#>>'{{document,gst_type}}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR output_document->>'ruleset_version' IS DISTINCT FROM resolved_document->>'ruleset_version'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>pg_catalog.jsonb_array_length(resolved_document->'lines') THEN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-order resolution, legal scope, or calculation changed'; END IF;
@@ -2808,7 +2808,7 @@ BEGIN
        OR input_document#>>'{{document,tax_charge_mechanism}}'<>'normal'
        OR input_document#>>'{{document,zero_rated_mode}}' IS DISTINCT FROM resolved_document->>'zero_rated_payment_mode'
        OR input_document#>>'{{document,gst_type}}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR output_document->>'ruleset_version' IS DISTINCT FROM resolved_document->>'ruleset_version'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>pg_catalog.jsonb_array_length(resolved_document->'lines') THEN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-invoice resolution, legal scope, or calculation output changed'; END IF;
@@ -3554,7 +3554,7 @@ BEGIN
        OR input_document->>'serializer_version'<>'aasopharma-jcs-decimal-v1'
        OR input_document#>>'{{document,zero_rated_mode}}' IS DISTINCT FROM resolved_document->>'zero_rated_payment_mode'
        OR input_document#>>'{{document,gst_type}}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR pg_catalog.jsonb_typeof(output_document->'lines')<>'array'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>
           pg_catalog.jsonb_array_length(resolved_document->'lines')

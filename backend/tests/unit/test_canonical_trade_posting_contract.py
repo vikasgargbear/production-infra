@@ -139,6 +139,13 @@ def test_calculation_authority_is_consumed_only_where_all_effects_are_available(
 
 def test_order_approvals_compare_fixed_input_output_and_consume_once() -> None:
     text = (ROOT / "baseline-trade-posting-enforcements.json").read_text()
+    sql = "\n".join(
+        statement
+        for entry in json.loads(text)["enforcements"]
+        for statement in entry["statements"]
+    )
+    assert "IS DISTINCT FROM\n          (CASE WHEN header.supply_type=" in sql
+    assert "END) IS DISTINCT FROM header.document_discount_basis" in sql
     for token in (
         "erp_calculation_authority.consume_artifact(",
         "artifact.input_bytes",

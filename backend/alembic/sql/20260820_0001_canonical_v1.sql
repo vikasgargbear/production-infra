@@ -6358,7 +6358,7 @@ BEGIN
        OR input_document->>'serializer_version'<>'aasopharma-jcs-decimal-v1'
        OR input_document#>>'{document,zero_rated_mode}' IS DISTINCT FROM resolved_document->>'zero_rated_payment_mode'
        OR input_document#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR pg_catalog.jsonb_typeof(output_document->'lines')<>'array'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>
           pg_catalog.jsonb_array_length(resolved_document->'lines')
@@ -6766,7 +6766,7 @@ BEGIN
        OR input_document#>>'{document,tax_charge_mechanism}'<>'normal'
        OR input_document#>>'{document,zero_rated_mode}'<>'not_applicable'
        OR input_document#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR output_document->>'ruleset_version' IS DISTINCT FROM resolved_document->>'ruleset_version'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>pg_catalog.jsonb_array_length(resolved_document->'lines') THEN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='purchase-order resolution, legal scope, or calculation changed'; END IF;
@@ -9068,7 +9068,7 @@ BEGIN
        OR input_document#>>'{document,tax_charge_mechanism}'<>'normal'
        OR input_document#>>'{document,zero_rated_mode}' IS DISTINCT FROM resolved_document->>'zero_rated_payment_mode'
        OR input_document#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN resolved_document->>'supply_type'='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR output_document->>'ruleset_version' IS DISTINCT FROM resolved_document->>'ruleset_version'
        OR pg_catalog.jsonb_array_length(output_document->'lines')<>pg_catalog.jsonb_array_length(resolved_document->'lines') THEN
       RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='sales-invoice resolution, legal scope, or calculation output changed'; END IF;
@@ -18840,15 +18840,15 @@ BEGIN
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR p_input#>>'{document,zero_rated_mode}' IS DISTINCT FROM header.zero_rated_payment_mode
        OR p_input#>>'{document,tax_charge_mechanism}' IS DISTINCT FROM header.tax_charge_mechanism
        OR p_input#>>'{document,rounding_policy}' IS DISTINCT FROM header.rounding_policy
        OR p_input#>>'{document,document_discount,kind}' IS DISTINCT FROM header.document_discount_kind
-       OR CASE p_input#>>'{document,document_discount,basis}'
+       OR (CASE p_input#>>'{document,document_discount,basis}'
             WHEN 'pre_tax_value' THEN 'taxable_value'
             ELSE p_input#>>'{document,document_discount,basis}'
-          END IS DISTINCT FROM header.document_discount_basis
+          END) IS DISTINCT FROM header.document_discount_basis
        OR (p_input#>>'{document,document_discount,value}')::numeric IS DISTINCT FROM header.document_discount_value
        OR ROW(
           (p_output#>>'{totals,subtotal}')::numeric,
@@ -19813,15 +19813,15 @@ BEGIN
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR p_input#>>'{document,zero_rated_mode}' IS DISTINCT FROM header.zero_rated_payment_mode
        OR p_input#>>'{document,tax_charge_mechanism}' IS DISTINCT FROM header.tax_charge_mechanism
        OR p_input#>>'{document,rounding_policy}' IS DISTINCT FROM header.rounding_policy
        OR p_input#>>'{document,document_discount,kind}' IS DISTINCT FROM header.document_discount_kind
-       OR CASE p_input#>>'{document,document_discount,basis}'
+       OR (CASE p_input#>>'{document,document_discount,basis}'
             WHEN 'pre_tax_value' THEN 'taxable_value'
             ELSE p_input#>>'{document,document_discount,basis}'
-          END IS DISTINCT FROM header.document_discount_basis
+          END) IS DISTINCT FROM header.document_discount_basis
        OR (p_input#>>'{document,document_discount,value}')::numeric IS DISTINCT FROM header.document_discount_value
        OR ROW(
           (p_output#>>'{totals,subtotal}')::numeric,
@@ -20337,15 +20337,15 @@ BEGIN
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR p_input#>>'{document,zero_rated_mode}' IS DISTINCT FROM header.zero_rated_payment_mode
        OR p_input#>>'{document,tax_charge_mechanism}' IS DISTINCT FROM header.tax_charge_mechanism
        OR p_input#>>'{document,rounding_policy}' IS DISTINCT FROM header.rounding_policy
        OR p_input#>>'{document,document_discount,kind}' IS DISTINCT FROM header.document_discount_kind
-       OR CASE p_input#>>'{document,document_discount,basis}'
+       OR (CASE p_input#>>'{document,document_discount,basis}'
             WHEN 'pre_tax_value' THEN 'taxable_value'
             ELSE p_input#>>'{document,document_discount,basis}'
-          END IS DISTINCT FROM header.document_discount_basis
+          END) IS DISTINCT FROM header.document_discount_basis
        OR (p_input#>>'{document,document_discount,value}')::numeric IS DISTINCT FROM header.document_discount_value
        OR ROW(
           (p_output#>>'{totals,subtotal}')::numeric,
@@ -20765,15 +20765,15 @@ BEGIN
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{document,gst_type}' IS DISTINCT FROM
-          CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR p_input#>>'{document,zero_rated_mode}' IS DISTINCT FROM header.zero_rated_payment_mode
        OR p_input#>>'{document,tax_charge_mechanism}' IS DISTINCT FROM header.tax_charge_mechanism
        OR p_input#>>'{document,rounding_policy}' IS DISTINCT FROM header.rounding_policy
        OR p_input#>>'{document,document_discount,kind}' IS DISTINCT FROM header.document_discount_kind
-       OR CASE p_input#>>'{document,document_discount,basis}'
+       OR (CASE p_input#>>'{document,document_discount,basis}'
             WHEN 'pre_tax_value' THEN 'taxable_value'
             ELSE p_input#>>'{document,document_discount,basis}'
-          END IS DISTINCT FROM header.document_discount_basis
+          END) IS DISTINCT FROM header.document_discount_basis
        OR (p_input#>>'{document,document_discount,value}')::numeric IS DISTINCT FROM header.document_discount_value
        OR ROW(
           (p_output#>>'{totals,subtotal}')::numeric,

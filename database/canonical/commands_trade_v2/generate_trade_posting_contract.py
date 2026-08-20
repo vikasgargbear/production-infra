@@ -769,15 +769,15 @@ BEGIN
        OR p_output->>'ruleset_version' IS DISTINCT FROM header.calculation_ruleset_version
        OR p_output->>'currency_code' IS DISTINCT FROM header.currency_code
        OR p_input#>>'{{document,gst_type}}' IS DISTINCT FROM
-          CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END
+          (CASE WHEN header.supply_type='intra_state' THEN 'intra_state' ELSE 'inter_state' END)
        OR p_input#>>'{{document,zero_rated_mode}}' IS DISTINCT FROM header.zero_rated_payment_mode
        OR p_input#>>'{{document,tax_charge_mechanism}}' IS DISTINCT FROM header.tax_charge_mechanism
        OR p_input#>>'{{document,rounding_policy}}' IS DISTINCT FROM header.rounding_policy
        OR p_input#>>'{{document,document_discount,kind}}' IS DISTINCT FROM header.document_discount_kind
-       OR CASE p_input#>>'{{document,document_discount,basis}}'
+       OR (CASE p_input#>>'{{document,document_discount,basis}}'
             WHEN 'pre_tax_value' THEN 'taxable_value'
             ELSE p_input#>>'{{document,document_discount,basis}}'
-          END IS DISTINCT FROM header.document_discount_basis
+          END) IS DISTINCT FROM header.document_discount_basis
        OR (p_input#>>'{{document,document_discount,value}}')::numeric IS DISTINCT FROM header.document_discount_value
        OR ROW(
           (p_output#>>'{{totals,subtotal}}')::numeric,
