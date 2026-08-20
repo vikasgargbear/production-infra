@@ -187,6 +187,9 @@ CREATE ROLE "erp_migration_owner" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE IN
 REVOKE CREATE ON SCHEMA "public" FROM PUBLIC;
 CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;
+CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+CREATE ROLE "erp_regulatory_importer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+CREATE ROLE "erp_tax_provider" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 
 -- Canonical schemas
 CREATE SCHEMA "core";
@@ -11385,7 +11388,6 @@ END
 $calculation_crypto_preflight$;
 CREATE SCHEMA "erp_calculation_authority" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_calculation_authority" FROM PUBLIC, "erp_app", "erp_runtime";
-CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 REVOKE "erp_migration_owner", "erp_app" FROM "erp_calculator";
 REVOKE ALL ON TABLE "calculation"."artifacts" FROM PUBLIC, "erp_app", "erp_runtime", "erp_calculator";
 GRANT USAGE ON SCHEMA "erp_calculation_authority" TO "erp_calculator";
@@ -13935,7 +13937,6 @@ ALTER FUNCTION "erp_stable_invariants"."guard_outbox_delivery"() OWNER TO "erp_m
 REVOKE ALL ON FUNCTION "erp_stable_invariants"."guard_outbox_delivery"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "outbox_delivery_guard_ct" AFTER INSERT OR UPDATE OR DELETE ON "core"."outbox_events" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_stable_invariants"."guard_outbox_delivery"();
 -- Reviewed enforcement: core.reference_data_releases:reference_data_release_import
-CREATE ROLE "erp_regulatory_importer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE SCHEMA "erp_regulatory_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_regulatory_commands" FROM PUBLIC, "erp_app", "erp_runtime", "erp_regulatory_importer";
 GRANT USAGE ON SCHEMA "erp_regulatory_commands" TO "erp_app", "erp_regulatory_importer";
@@ -21728,7 +21729,6 @@ REVOKE ALL ON FUNCTION "erp_regulatory_commands"."import_einvoice_rule_release"(
 GRANT EXECUTE ON FUNCTION "erp_regulatory_commands"."import_einvoice_rule_release"(p_release_id uuid, p_ruleset_version varchar, p_source_authority text, p_source_uri text, p_source_storage_bucket text, p_source_storage_object_path text, p_source_media_type varchar, p_source_bytes bytea, p_source_sha256 bytea, p_dataset_storage_bucket text, p_dataset_storage_object_path text, p_dataset_bytes bytea, p_dataset_sha256 bytea, p_publication_date date, p_effective_from date, p_effective_to date, p_reviewed_by_user_id uuid, p_reviewed_at timestamptz, p_request_id uuid) TO "erp_regulatory_importer";
 COMMENT ON TABLE "tax"."einvoice_rule_versions" IS 'Imported only through erp_regulatory_commands exact-set release authority';
 -- Reviewed enforcement: tax.einvoices:einvoices_cross_row_guard
-CREATE ROLE "erp_tax_provider" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE SCHEMA "erp_tax_provider_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_tax_provider_commands" FROM PUBLIC, "erp_app", "erp_runtime", "erp_tax_provider";
 GRANT USAGE ON SCHEMA "erp_tax_provider_commands" TO "erp_app", "erp_tax_provider";

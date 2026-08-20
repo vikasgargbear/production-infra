@@ -228,6 +228,36 @@ def test_dependency_order_handles_fk_cycles_deterministically() -> None:
     assert generator._dependency_order(tables) == ("erp.a", "erp.b", "erp.c")
 
 
+def test_invariant_owned_roles_are_provisioned_before_dependent_grants() -> None:
+    roles, remaining = generator._partition_auxiliary_roles(
+        (
+            (
+                "automation.command_requests:guard",
+                ('GRANT USAGE ON SCHEMA "erp" TO "erp_calculator";',),
+            ),
+            (
+                "calculation.artifacts:authority",
+                (
+                    'CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER;',
+                    'REVOKE "erp_app" FROM "erp_calculator";',
+                ),
+            ),
+        )
+    )
+
+    assert roles == ('CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER;',)
+    assert remaining == (
+        (
+            "automation.command_requests:guard",
+            ('GRANT USAGE ON SCHEMA "erp" TO "erp_calculator";',),
+        ),
+        (
+            "calculation.artifacts:authority",
+            ('REVOKE "erp_app" FROM "erp_calculator";',),
+        ),
+    )
+
+
 def test_mapping_must_match_invariant_method_and_exact_requirement_text(catalog) -> None:
     table = next(table for table in catalog.tables if table.get("cross_row_invariants"))
     invariant = table["cross_row_invariants"][0]

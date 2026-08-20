@@ -676,6 +676,23 @@ def _section(title: str, statements: Iterable[str]) -> list[str]:
     return [f"-- {title}", *rendered, ""]
 
 
+def _partition_auxiliary_roles(
+    resolved_invariants: Sequence[tuple[str, tuple[str, ...]]],
+) -> tuple[tuple[str, ...], tuple[tuple[str, tuple[str, ...]], ...]]:
+    """Provision invariant-owned login roles before any reviewed grant references them."""
+    roles: list[str] = []
+    remaining: list[tuple[str, tuple[str, ...]]] = []
+    for key, statements in resolved_invariants:
+        invariant_statements: list[str] = []
+        for statement in statements:
+            if statement.startswith('CREATE ROLE "'):
+                roles.append(statement)
+            else:
+                invariant_statements.append(statement)
+        remaining.append((key, tuple(invariant_statements)))
+    return tuple(roles), tuple(remaining)
+
+
 def generate_baseline(
     catalog: Catalog,
     *,
@@ -751,10 +768,18 @@ def generate_baseline(
             yield f"-- Reviewed platform enforcement: {key}"
             yield from statements
 
+    auxiliary_roles, resolved_invariants = _partition_auxiliary_roles(
+        resolved_invariants
+    )
     lines.extend(
         _section("Reviewed deployment preflight", platform_statements("preflight"))
     )
-    lines.extend(_section("Reviewed role provisioning", platform_statements("roles")))
+    lines.extend(
+        _section(
+            "Reviewed role provisioning",
+            (*platform_statements("roles"), *auxiliary_roles),
+        )
+    )
     lines.extend(
         _section(
             "Canonical schemas",
