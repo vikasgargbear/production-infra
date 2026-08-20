@@ -597,15 +597,15 @@ def _function_ownership_sql() -> list[str]:
     for signature in PRIVATE_FUNCTION_SIGNATURES:
         statements.extend(
             [
-                f'ALTER FUNCTION {signature} OWNER TO "erp_migration_owner";',
                 f'REVOKE ALL ON FUNCTION {signature} FROM PUBLIC, "erp_app", "erp_runtime";',
+                f'ALTER FUNCTION {signature} OWNER TO "erp_migration_owner";',
             ]
         )
     for signature in RUNTIME_FUNCTION_SIGNATURES:
         statements.extend(
             [
-                f'ALTER FUNCTION {signature} OWNER TO "erp_migration_owner";',
                 f'REVOKE ALL ON FUNCTION {signature} FROM PUBLIC;',
+                f'ALTER FUNCTION {signature} OWNER TO "erp_migration_owner";',
             ]
         )
     return statements
@@ -618,9 +618,9 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
     for schema in schemas:
         statements.extend(
             [
-                f'ALTER SCHEMA {_quote(schema)} OWNER TO "erp_migration_owner";',
                 f'REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;',
                 f'GRANT USAGE ON SCHEMA {_quote(schema)} TO "erp_app";',
+                f'ALTER SCHEMA {_quote(schema)} OWNER TO "erp_migration_owner";',
             ]
         )
     statements.append('GRANT USAGE ON SCHEMA "erp_security" TO "erp_app";')
@@ -628,9 +628,9 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
         table = _qualified(mapping["table"])
         statements.extend(
             [
-                f'ALTER TABLE {table} OWNER TO "erp_migration_owner";',
                 f'REVOKE ALL ON TABLE {table} FROM PUBLIC, "erp_app", "erp_runtime";',
                 f'GRANT {", ".join(mapping["runtime_grants"])} ON TABLE {table} TO "erp_app";',
+                f'ALTER TABLE {table} OWNER TO "erp_migration_owner";',
             ]
         )
     for signature in RUNTIME_FUNCTION_SIGNATURES:
@@ -744,6 +744,7 @@ def generate_sql(manifest: dict[str, Any]) -> str:
         "BEGIN;",
         "",
         "CREATE ROLE \"erp_migration_owner\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT BYPASSRLS;",
+        "GRANT \"erp_migration_owner\" TO CURRENT_USER;",
         "CREATE ROLE \"erp_app\" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS;",
         "CREATE ROLE \"erp_runtime\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOBYPASSRLS;",
         "GRANT \"erp_app\" TO \"erp_runtime\";",
@@ -758,19 +759,21 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     for schema in schemas:
         lines.extend(
             [
-                f"ALTER SCHEMA {_quote(schema)} OWNER TO \"erp_migration_owner\";",
                 f"REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;",
                 f"GRANT USAGE ON SCHEMA {_quote(schema)} TO \"erp_app\";",
+                f"ALTER SCHEMA {_quote(schema)} OWNER TO \"erp_migration_owner\";",
             ]
         )
     lines.append("")
 
     for mapping in mappings:
         table = _qualified(mapping["table"])
+        privileges = ", ".join(mapping["runtime_grants"])
         lines.extend(
             [
-                f"ALTER TABLE {table} OWNER TO \"erp_migration_owner\";",
                 f"REVOKE ALL ON TABLE {table} FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
+                f"GRANT {privileges} ON TABLE {table} TO \"erp_app\";",
+                f"ALTER TABLE {table} OWNER TO \"erp_migration_owner\";",
             ]
         )
     lines.append("")
@@ -784,11 +787,6 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     for mapping in mappings:
         lines.extend(_table_policy_sql(mapping))
     lines.append("")
-    for mapping in mappings:
-        table = _qualified(mapping["table"])
-        privileges = ", ".join(mapping["runtime_grants"])
-        lines.append(f"GRANT {privileges} ON TABLE {table} TO \"erp_app\";")
-    lines.append("")
     for schema in schemas:
         lines.append(
             f"ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA {_quote(schema)} REVOKE ALL ON TABLES FROM PUBLIC;"
@@ -796,6 +794,7 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     lines.append(
         "ALTER DEFAULT PRIVILEGES FOR ROLE \"erp_migration_owner\" IN SCHEMA \"erp_security\" REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;"
     )
+    lines.append('REVOKE "erp_migration_owner" FROM CURRENT_USER;')
     lines.extend(["", "COMMIT;"])
     lines.append("")
     return "\n".join(lines)

@@ -2,7 +2,7 @@
   "baseline_integration": {
     "catalog_sha256": "ed41ed6c81bc3c3657975dc33ce531d673318d7c907e07257ab8ca319dc21264",
     "mapping_file": "baseline-platform-enforcements.json",
-    "mapping_sha256": "116f2b492adc76f7740d4130ba5bef1059a2e30a11192905b68b8700ea0718d2",
+    "mapping_sha256": "32fa9568758107990f994ba580d9ad1d8b9d8f46d5c8074a35feac4dea0a4305",
     "resolved_platform_blocker_count": 115,
     "resolved_platform_blockers": {
       "rls_helper": 1,

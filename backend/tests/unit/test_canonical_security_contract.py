@@ -53,6 +53,25 @@ def test_roles_are_non_owning_at_runtime_and_have_no_rls_bypass() -> None:
     assert sql.rstrip().endswith("COMMIT;")
 
 
+def test_bootstrap_acl_changes_precede_managed_owner_transfer() -> None:
+    sql = (SECURITY_ROOT / "canonical_rls.sql").read_text(encoding="utf-8")
+
+    schema_acl = 'GRANT USAGE ON SCHEMA "core" TO "erp_app";'
+    schema_owner = 'ALTER SCHEMA "core" OWNER TO "erp_migration_owner";'
+    table_acl = 'GRANT SELECT, UPDATE ON TABLE "core"."organizations" TO "erp_app";'
+    table_owner = (
+        'ALTER TABLE "core"."organizations" OWNER TO "erp_migration_owner";'
+    )
+    assert sql.index(schema_acl) < sql.index(schema_owner)
+    assert sql.index(table_acl) < sql.index(table_owner)
+    assert sql.index('GRANT "erp_migration_owner" TO CURRENT_USER;') < sql.index(
+        'CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";'
+    )
+    assert sql.index('REVOKE "erp_migration_owner" FROM CURRENT_USER;') < sql.rindex(
+        "COMMIT;"
+    )
+
+
 def test_every_table_has_reviewed_grants_and_policy_shape() -> None:
     generator = _load_generator()
     _contract, tables, _catalog_hash = generator.load_catalog()
