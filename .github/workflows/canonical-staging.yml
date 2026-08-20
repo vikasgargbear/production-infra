@@ -953,9 +953,12 @@ jobs:
           if ! python3 backend/scripts/provision_canonical_demo.py 2>&1 | tee "$demo_log"; then
             python3 - "$demo_log" <<'PY'
           import pathlib
+          import re
           import sys
 
-          detail = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          headlines = re.findall(r"(?m)^canonical demo provisioning failed:.*$", raw)
+          detail = ((headlines[-1] + "\n") if headlines else "") + raw[-2800:]
           detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Canonical demo provisioning failed::{detail}")
           PY

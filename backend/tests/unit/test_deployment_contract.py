@@ -289,6 +289,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "rolsuper OR rolcreaterole OR rolbypassrls" in baseline_query
     assert "NOT rolcanlogin" not in baseline_query
     assert "Run canonical rollback fixtures on live free staging" in workflow
+    assert 're.findall(r"(?m)^canonical demo provisioning failed:.*$", raw)' in workflow
     assert "PGCONNECT_TIMEOUT=15" in workflow
     assert "statement_timeout=120000" in workflow
     assert "lock_timeout=15000" in workflow
