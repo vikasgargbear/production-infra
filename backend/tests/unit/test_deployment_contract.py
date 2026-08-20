@@ -263,8 +263,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"erp_core_commands"."allocate_document_number"' in reconciliation
     assert '"erp_automation_commands"."execute_approved_command"' in reconciliation
     assert "SET ROLE erp_migration_owner" in reconciliation
-    assert "GRANT erp_migration_owner TO postgres" in reconciliation
-    assert "REVOKE erp_migration_owner FROM postgres" in reconciliation
+    assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
+    assert "GRANT erp_migration_owner TO postgres WITH SET FALSE" in reconciliation
     assert "--single-transaction" in reconciliation
     assert "pg_catalog.greatest(" in reconciliation
     assert "pg_catalog.least(" in reconciliation
@@ -278,7 +278,14 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "statement_timeout=120000" in workflow
     assert "lock_timeout=15000" in workflow
     assert "test \"$fixture_count\" = 14" in workflow
-    assert "REVOKE erp_migration_owner, erp_runtime FROM postgres" in workflow
+    assert (
+        "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE"
+        in workflow
+    )
+    assert (
+        "GRANT erp_migration_owner, erp_runtime TO postgres WITH SET FALSE"
+        in workflow
+    )
     assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
 
 

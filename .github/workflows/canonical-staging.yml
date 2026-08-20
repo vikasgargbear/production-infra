@@ -506,11 +506,12 @@ jobs:
           PY
           cleanup_migration_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-              -c 'REVOKE erp_migration_owner FROM postgres' >/dev/null 2>&1 || true
+              -c 'GRANT erp_migration_owner TO postgres WITH SET FALSE' \
+              >/dev/null 2>&1 || true
           }
           trap cleanup_migration_membership EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner TO postgres' >/dev/null
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE' >/dev/null
           psql -X --single-transaction -v ON_ERROR_STOP=1 \
             "$PSYCOPG_DATABASE_URL" -f "$reconciliation_sql" >/dev/null
           test "$(psql -X -Atqc \
@@ -608,12 +609,13 @@ jobs:
           export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
           cleanup_role_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-              -c 'REVOKE erp_migration_owner, erp_runtime FROM postgres' \
+              -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH SET FALSE' \
               >/dev/null 2>&1 || true
           }
           trap cleanup_role_membership EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner, erp_runtime TO postgres' >/dev/null
+            -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE' \
+            >/dev/null
 
           fixture_count=0
           while IFS= read -r fixture; do
@@ -753,12 +755,12 @@ jobs:
           test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
           cleanup_demo_role_membership() {
             psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-              -c 'REVOKE erp_migration_owner FROM postgres' \
+              -c 'GRANT erp_migration_owner TO postgres WITH SET FALSE' \
               >/dev/null 2>&1 || true
           }
           trap cleanup_demo_role_membership EXIT
           psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner TO postgres' >/dev/null
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE' >/dev/null
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
           importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${CANONICAL_ACTIVE_POOLER_PORT}/postgres?sslmode=require&connect_timeout=15&application_name=canonical_demo_importer"
