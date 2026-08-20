@@ -226,6 +226,8 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "if attempt == 3 and not restart_requested" in workflow
     assert "f\"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/restart\"" in workflow
     assert "if not 200 <= response.status < 300" in workflow
+    assert "except Exception as restart_error" in workflow
+    assert "Canonical staging restart deferred" in workflow
     assert "time.sleep(60)" in workflow
     assert "/database/query\"" not in workflow
     reconciliation = workflow.split(
