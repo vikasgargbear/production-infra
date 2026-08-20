@@ -397,7 +397,6 @@ jobs:
           import psycopg2
           import sys
           import time
-          import urllib.request
           from psycopg2 import sql
 
           roles = {
@@ -407,8 +406,7 @@ jobs:
               "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
           last_error = None
-          restart_requested = False
-          for attempt in range(1, 61):
+          for attempt in range(1, 6):
               try:
                   with psycopg2.connect(
                       os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5
@@ -423,32 +421,8 @@ jobs:
                   break
               except Exception as exc:
                   last_error = exc
-                  if attempt == 3 and not restart_requested:
-                      restart_requested = True
-                      try:
-                          request = urllib.request.Request(
-                              "https://api.supabase.com/v1/projects/"
-                              f"{os.environ['CANONICAL_STAGING_PROJECT_REF']}/restart",
-                              headers={
-                                  "Authorization": f"Bearer {os.environ['SUPABASE_ACCESS_TOKEN']}"
-                              },
-                              method="POST",
-                          )
-                          with urllib.request.urlopen(request, timeout=120) as response:
-                              if not 200 <= response.status < 300:
-                                  raise RuntimeError(
-                                      f"staging restart returned HTTP {response.status}"
-                                  )
-                              response.read()
-                      except Exception as restart_error:
-                          detail = str(restart_error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                          print(
-                              f"::notice title=Canonical staging restart deferred::{detail}",
-                              file=sys.stderr,
-                          )
-                      time.sleep(60)
-                  elif attempt < 60:
-                      time.sleep(10)
+                  if attempt < 5:
+                      time.sleep(5)
           if last_error is not None:
               message = str(last_error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(
