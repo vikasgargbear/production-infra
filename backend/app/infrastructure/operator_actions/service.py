@@ -536,7 +536,7 @@ class SqlAlchemyOperatorActionService:
                     uuid5(NAMESPACE_URL, identity + f":charge-line:{index}")
                 ),
             }
-            for index, line in enumerate(payload.get("charge_lines", ()), start=1)
+            for index, line in enumerate(payload.get("charge_lines") or (), start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
         key_hash = hashlib.sha256(idempotency_key.encode("utf-8")).digest()
@@ -839,7 +839,7 @@ class SqlAlchemyOperatorActionService:
                 ),
             }
             for index, line in enumerate(
-                payload.get("expense_charge_lines", ()), start=1
+                payload.get("expense_charge_lines") or (), start=1
             )
         ]
         request_bytes = canonical_json_bytes(normalized)
@@ -1047,7 +1047,7 @@ class SqlAlchemyOperatorActionService:
                     uuid5(NAMESPACE_URL, identity + f":charge-line:{index}")
                 ),
             }
-            for index, line in enumerate(payload.get("charge_lines", ()), start=1)
+            for index, line in enumerate(payload.get("charge_lines") or (), start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
         request_hash = hashlib.sha256(request_bytes).hexdigest()
@@ -1514,7 +1514,7 @@ class SqlAlchemyOperatorActionService:
                     uuid5(NAMESPACE_URL, identity + f":charge-line:{index}")
                 ),
             }
-            for index, line in enumerate(payload.get("charge_lines", ()), start=1)
+            for index, line in enumerate(payload.get("charge_lines") or (), start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
         request_hash = hashlib.sha256(request_bytes).hexdigest()

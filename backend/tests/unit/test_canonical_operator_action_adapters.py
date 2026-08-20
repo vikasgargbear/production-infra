@@ -141,8 +141,56 @@ class FakeCalculatorSession:
         if "resolve_sales_order_prepare" in sql:
             request = json.loads(params["request_json"])
             line = request["lines"][0]
-            charge = request["charge_lines"][0]
             tax_release_id = str(uuid4())
+            resolved_lines = [{
+                "line_number": 1,
+                "line_kind": "product",
+                "line_id": line["line_id"],
+                "product_id": line["product_id"],
+                "product_row_version": 6,
+                "hsn_code": "3004",
+                "uom_conversion_id": line["uom_conversion_id"],
+                "uom_code": "BOX",
+                "to_uom_code": "TABLET",
+                "multiplier": "10.000000",
+                "uom_valid_from": "2026-04-01",
+                "uom_valid_until": None,
+                "tax_code_version_id": str(uuid4()),
+                "tax_version_number": 8,
+                "tax_effective_from": "2026-04-01",
+                "tax_effective_to": None,
+                "tax_release_id": tax_release_id,
+                "tax_release_ruleset_version": "gst-rules-1",
+                "taxability": "taxable",
+                "gst_rate": "18.000000",
+                "cess_rate": "0.000000",
+                "ruleset_version": "gst-rules-1",
+                "input": line,
+            }]
+            if request["charge_lines"]:
+                charge = request["charge_lines"][0]
+                resolved_lines.append({
+                    "line_number": 2,
+                    "line_kind": "charge",
+                    "line_id": charge["line_id"],
+                    "charge_code": charge["charge_code"],
+                    "charge_tax_profile_id": str(uuid4()),
+                    "charge_tax_profile_row_version": 2,
+                    "charge_tax_profile_effective_from": "2026-04-01",
+                    "charge_tax_profile_effective_to": None,
+                    "sac_code": "9965",
+                    "tax_code_version_id": str(uuid4()),
+                    "tax_version_number": 3,
+                    "tax_effective_from": "2026-04-01",
+                    "tax_effective_to": None,
+                    "tax_release_id": tax_release_id,
+                    "tax_release_ruleset_version": "gst-rules-1",
+                    "taxability": "taxable",
+                    "gst_rate": "18.000000",
+                    "cess_rate": "0.000000",
+                    "ruleset_version": "gst-rules-1",
+                    "input": charge,
+                })
             return FakeResult(
                 ({
                     "resolution": {
@@ -164,52 +212,7 @@ class FakeCalculatorSession:
                         "shipping_state_code": "29",
                         "order_date": request["order_date"],
                         "ruleset_version": "gst-rules-1",
-                        "lines": [{
-                            "line_number": 1,
-                            "line_kind": "product",
-                            "line_id": line["line_id"],
-                            "product_id": line["product_id"],
-                            "product_row_version": 6,
-                            "hsn_code": "3004",
-                            "uom_conversion_id": line["uom_conversion_id"],
-                            "uom_code": "BOX",
-                            "to_uom_code": "TABLET",
-                            "multiplier": "10.000000",
-                            "uom_valid_from": "2026-04-01",
-                            "uom_valid_until": None,
-                            "tax_code_version_id": str(uuid4()),
-                            "tax_version_number": 8,
-                            "tax_effective_from": "2026-04-01",
-                            "tax_effective_to": None,
-                            "tax_release_id": tax_release_id,
-                            "tax_release_ruleset_version": "gst-rules-1",
-                            "taxability": "taxable",
-                            "gst_rate": "18.000000",
-                            "cess_rate": "0.000000",
-                            "ruleset_version": "gst-rules-1",
-                            "input": line,
-                        }, {
-                            "line_number": 2,
-                            "line_kind": "charge",
-                            "line_id": charge["line_id"],
-                            "charge_code": charge["charge_code"],
-                            "charge_tax_profile_id": str(uuid4()),
-                            "charge_tax_profile_row_version": 2,
-                            "charge_tax_profile_effective_from": "2026-04-01",
-                            "charge_tax_profile_effective_to": None,
-                            "sac_code": "9965",
-                            "tax_code_version_id": str(uuid4()),
-                            "tax_version_number": 3,
-                            "tax_effective_from": "2026-04-01",
-                            "tax_effective_to": None,
-                            "tax_release_id": tax_release_id,
-                            "tax_release_ruleset_version": "gst-rules-1",
-                            "taxability": "taxable",
-                            "gst_rate": "18.000000",
-                            "cess_rate": "0.000000",
-                            "ruleset_version": "gst-rules-1",
-                            "input": charge,
-                        }],
+                        "lines": resolved_lines,
                     }
                 },)
             )
@@ -1855,7 +1858,18 @@ def test_unavailable_prepare_never_opens_a_database_session():
     assert calls == []
 
 
-def test_sales_order_prepare_uses_one_isolated_calculator_transaction():
+@pytest.mark.parametrize(
+    ("charge_lines", "expected_total"),
+    (([{
+        "charge_code": "freight",
+        "quoted_amount": "10.00",
+        "price_basis": "tax_exclusive",
+        "document_discount_eligible": True,
+    }], "365.80"), (None, "354.00")),
+)
+def test_sales_order_prepare_uses_one_isolated_calculator_transaction(
+    charge_lines, expected_total
+):
     session = FakeCalculatorSession()
     context = _context(branch_ids=())
     branch_id = uuid4()
@@ -1898,12 +1912,7 @@ def test_sales_order_prepare_uses_one_isolated_calculator_transaction():
             },
             "document_discount_eligible": True,
         }],
-        "charge_lines": [{
-            "charge_code": "freight",
-            "quoted_amount": "10.00",
-            "price_basis": "tax_exclusive",
-            "document_discount_eligible": True,
-        }],
+        "charge_lines": charge_lines,
     }
 
     prepared = service.prepare(
@@ -1915,7 +1924,7 @@ def test_sales_order_prepare_uses_one_isolated_calculator_transaction():
 
     assert prepared.command_type == "sales.order.approve"
     assert prepared.preview_hash.startswith("sha256:")
-    assert prepared.financial_impact[0]["grand_total"] == "365.80"
+    assert prepared.financial_impact[0]["grand_total"] == expected_total
     assert session.transaction_entries == session.transaction_exits == 1
     assert len(session.executions) == 2
     sql = "\n".join(statement for statement, _ in session.executions)
@@ -1930,10 +1939,14 @@ def test_sales_order_prepare_uses_one_isolated_calculator_transaction():
     assert "unit_id" not in request["lines"][0]
     assert "quantity" not in request["lines"][0]
     assert "unit_price" not in request["lines"][0]
-    assert request["charge_lines"][0]["charge_code"] == "freight"
-    assert request["charge_lines"][0]["quoted_amount"] == "10.00"
-    assert prepared.source_versions[-1]["resource_type"] == "charge"
-    assert prepared.source_versions[-1]["charge_code"] == "freight"
+    if charge_lines:
+        assert request["charge_lines"][0]["charge_code"] == "freight"
+        assert request["charge_lines"][0]["quoted_amount"] == "10.00"
+        assert prepared.source_versions[-1]["resource_type"] == "charge"
+        assert prepared.source_versions[-1]["charge_code"] == "freight"
+    else:
+        assert request["charge_lines"] == []
+        assert prepared.source_versions[-1]["resource_type"] == "product"
     calculation_input = json.loads(
         session.executions[1][1]["calculation_input_bytes"]
     )
