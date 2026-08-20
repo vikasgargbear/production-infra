@@ -296,10 +296,10 @@ DECLARE
     row_data jsonb := pg_catalog.to_jsonb(NEW);
     old_data jsonb := CASE WHEN TG_OP = 'UPDATE' THEN pg_catalog.to_jsonb(OLD) ELSE NULL END;
     row_status text := row_data ->> 'status';
-    aggregate_id uuid := (row_data ->> 'id')::uuid;
-    event_version bigint := COALESCE(NULLIF(row_data ->> 'row_version', '')::bigint, 1);
-    event_type text;
-    payload bytea;
+    outbox_aggregate_id uuid := (row_data ->> 'id')::uuid;
+    outbox_event_version bigint := COALESCE(NULLIF(row_data ->> 'row_version', '')::bigint, 1);
+    outbox_event_type text;
+    outbox_payload bytea;
 BEGIN
     IF pg_catalog.strpos(',' || TG_ARGV[1] || ',', ',' || row_status || ',') = 0 THEN
         RETURN NEW;
@@ -307,18 +307,19 @@ BEGIN
     IF TG_OP = 'UPDATE' AND old_data ->> 'status' IS NOT DISTINCT FROM row_status THEN
         RETURN NEW;
     END IF;
-    event_type := TG_ARGV[0] || '.' || row_status;
-    payload := pg_catalog.convert_to(pg_catalog.jsonb_build_object(
-        'event_type', event_type, 'aggregate_type', TG_ARGV[0],
-        'aggregate_id', aggregate_id, 'event_version', event_version,
+    outbox_event_type := TG_ARGV[0] || '.' || row_status;
+    outbox_payload := pg_catalog.convert_to(pg_catalog.jsonb_build_object(
+        'event_type', outbox_event_type, 'aggregate_type', TG_ARGV[0],
+        'aggregate_id', outbox_aggregate_id, 'event_version', outbox_event_version,
         'organization_id', row_data ->> 'org_id', 'status', row_status
     )::text, 'UTF8');
     INSERT INTO core.outbox_events (
         org_id, event_type, aggregate_type, aggregate_id, event_version,
         media_type, payload_bytes, payload_hash
     ) VALUES (
-        (row_data ->> 'org_id')::uuid, event_type, TG_ARGV[0], aggregate_id,
-        event_version, 'application/json', payload, extensions.digest(payload, 'sha256')
+        (row_data ->> 'org_id')::uuid, outbox_event_type, TG_ARGV[0], outbox_aggregate_id,
+        outbox_event_version, 'application/json', outbox_payload,
+        extensions.digest(outbox_payload, 'sha256')
     ) ON CONFLICT (org_id, aggregate_type, aggregate_id, event_type, event_version) DO NOTHING;
     RETURN NEW;
 END

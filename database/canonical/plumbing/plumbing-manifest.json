@@ -129,7 +129,7 @@
     "tax.withholding_statements"
   ],
   "manifest_version": "1.0.0",
-  "mapping_sha256": "9366347415a2a58a285b7c31c39a8b86c14bd37df6adf54d7d5887fa517b7c4e",
+  "mapping_sha256": "4004fc706c74a87c6f78be7ff68fc4db0ad4d007730924452e0ac593d061f470",
   "outbox_bindings": {
     "automation.command_requests": {
       "aggregate_type": "command",

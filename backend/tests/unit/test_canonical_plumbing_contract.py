@@ -71,6 +71,14 @@ def test_audit_and_outbox_sql_are_private_bounded_and_transactional():
     assert "'chain_sequence', next_chain_sequence" in sql
     assert "before_state_hash" in sql and "after_state_hash" in sql
     assert "ON CONFLICT (org_id, aggregate_type, aggregate_id, event_type, event_version) DO NOTHING" in sql
+    assert "outbox_aggregate_id uuid" in sql
+    assert "outbox_event_version bigint" in sql
+    assert "outbox_event_type text" in sql
+    assert "outbox_payload bytea" in sql
+    assert "\n    aggregate_id uuid" not in sql
+    assert "\n    event_version bigint" not in sql
+    assert "\n    event_type text" not in sql
+    assert "\n    payload bytea" not in sql
     assert "payload_bytes" in sql and "application/json" in sql
     assert "EXECUTE FUNCTION" in sql
     assert "EXECUTE pg_catalog.format" not in sql
