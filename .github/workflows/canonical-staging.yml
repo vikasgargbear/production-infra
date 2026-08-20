@@ -274,7 +274,7 @@ jobs:
           test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
           log_file=$(mktemp)
           baseline_applied=false
-          for attempt in $(seq 1 8); do
+          for attempt in $(seq 1 30); do
             if (
               cd backend
               alembic -c alembic.ini upgrade head
@@ -290,9 +290,9 @@ jobs:
               "$log_file"; then
               break
             fi
-            if [ "$attempt" -lt 8 ]; then
-              echo "Supabase pooler unavailable; retrying baseline connection ($attempt/8)"
-              sleep 10
+            if [ "$attempt" -lt 30 ]; then
+              echo "Supabase pooler unavailable; retrying baseline connection ($attempt/30)"
+              sleep 20
             fi
           done
           if [ "$baseline_applied" != true ]; then
