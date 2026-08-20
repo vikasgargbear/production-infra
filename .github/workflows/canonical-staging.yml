@@ -272,6 +272,44 @@ jobs:
                   raise last_error
           PY
 
+      - name: Run canonical rollback fixtures on live free staging
+        run: |
+          set -euo pipefail
+          cleanup_role_membership() {
+            psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+              -c 'REVOKE erp_migration_owner FROM postgres' >/dev/null 2>&1 || true
+          }
+          trap cleanup_role_membership EXIT
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres' >/dev/null
+
+          fixture_count=0
+          while IFS= read -r fixture; do
+            if ! grep -q '^BEGIN;' "$fixture"; then
+              test "$fixture" = \
+                database/canonical/invariants_finance/test_finance_invariants.sql
+            else
+              grep -q '^ROLLBACK;' "$fixture"
+            fi
+            echo "running live rollback fixture: $fixture"
+            psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" -f "$fixture"
+            fixture_count=$((fixture_count + 1))
+          done < <(find database/canonical -type f -name 'test_*.sql' | LC_ALL=C sort)
+          test "$fixture_count" = 14
+
+          cleanup_role_membership
+          trap - EXIT
+          mkdir -p staging-evidence
+          jq -n \
+            --argjson fixture_count "$fixture_count" \
+            --arg database_engine "Supabase PostgreSQL 17" \
+            '{
+              fixture_count: $fixture_count,
+              database_engine: $database_engine,
+              mutation_boundary: "BEGIN_ROLLBACK_or_read_only",
+              result: "all_canonical_sql_fixtures_passed"
+            }' > staging-evidence/canonical-staging-sql-fixtures.json
+
       - name: Build and mask isolated service connections
         run: |
           set -euo pipefail

@@ -203,6 +203,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "rotate_role_passwords:" in workflow
     assert "if: inputs.rotate_role_passwords == true" in workflow
+    assert "Run canonical rollback fixtures on live free staging" in workflow
+    assert "test \"$fixture_count\" = 14" in workflow
+    assert "REVOKE erp_migration_owner FROM postgres" in workflow
+    assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
 
 
 def test_frontend_builds_use_the_reviewed_node_runtime():
