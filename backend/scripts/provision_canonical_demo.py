@@ -802,12 +802,13 @@ def reconcile(connection, execution: dict[str, Any]) -> dict[str, Any]:
                    order_row.gst_taxable_total, order_row.cgst_total,
                    order_row.sgst_total, order_row.igst_total,
                    order_row.cess_total, order_row.rounding_adjustment,
-                   order_row.grand_total, count(line.id)
+                   order_row.grand_total,
+                   (SELECT count(*)
+                      FROM sales.order_lines AS line
+                     WHERE line.org_id=order_row.org_id
+                       AND line.order_id=order_row.id) AS line_count
               FROM sales.orders AS order_row
-              JOIN sales.order_lines AS line
-                ON line.org_id=order_row.org_id AND line.order_id=order_row.id
              WHERE order_row.org_id=%s AND order_row.id=%s
-             GROUP BY order_row.id
             """,
             (IDS["org"], execution["resource_id"]),
         )

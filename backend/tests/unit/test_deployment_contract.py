@@ -328,6 +328,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "order_row.gst_taxable_total" in reconciliation
     assert "order_row.gross_total" not in reconciliation
     assert "order_row.taxable_total" not in reconciliation
+    assert "AS line_count" in reconciliation
+    assert "GROUP BY order_row.id" not in reconciliation
 
     workflow = _read(".github/workflows/canonical-staging.yml")
     assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
