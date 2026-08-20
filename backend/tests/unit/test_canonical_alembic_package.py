@@ -123,3 +123,13 @@ def test_revision_is_static_and_downgrade_is_fail_closed() -> None:
         "RUN python scripts/package_canonical_baseline_migration.py --verify-package"
         in dockerfile
     )
+
+
+def test_disposable_postgres_bootstrap_matches_supabase_crypto_prerequisite() -> None:
+    bootstrap = (
+        REPO_ROOT / "database/canonical/ci/bootstrap_supabase_auth.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "CREATE SCHEMA extensions;" in bootstrap
+    assert "CREATE EXTENSION pgcrypto WITH SCHEMA extensions;" in bootstrap
+    assert "CREATE SCHEMA auth;" in bootstrap
