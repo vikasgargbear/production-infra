@@ -376,6 +376,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "balance.average_unit_cost AS moving_weighted_average" in provisioner
     assert "item.principal_amount AS original_amount" in provisioner
     assert "posted_allocation.open_item_id=item.id" in provisioner
+    assert "GROUP BY purchase_order.org_id,purchase_order.id" in provisioner
+    assert "GROUP BY payment.org_id,payment.id" in provisioner
     assert "purchase_order.order_number" not in provisioner
     assert "receipt.receipt_number" not in provisioner
     assert "balance.moving_weighted_average" not in provisioner

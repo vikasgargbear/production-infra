@@ -1518,7 +1518,7 @@ def reconcile_purchase_order(connection, resource_id: str) -> dict[str, Any]:
                 ON line.org_id=purchase_order.org_id
                AND line.purchase_order_id=purchase_order.id
              WHERE purchase_order.org_id=%s AND purchase_order.id=%s
-             GROUP BY purchase_order.id
+             GROUP BY purchase_order.org_id,purchase_order.id
             """,
             (IDS["org"], resource_id),
         )
@@ -1792,7 +1792,7 @@ def reconcile_supplier_advance(connection, resource_id: str) -> dict[str, Any]:
               LEFT JOIN finance.accounting_events AS event
                 ON event.org_id=payment.org_id AND event.payment_id=payment.id
              WHERE payment.org_id=%s AND payment.id=%s
-             GROUP BY payment.id
+             GROUP BY payment.org_id,payment.id
             """,
             (IDS["org"], resource_id),
         )
@@ -1878,7 +1878,8 @@ def reconcile_supplier_invoice(connection, resource_id: str) -> dict[str, Any]:
                 ON tax_document.org_id=invoice.org_id
                AND tax_document.supplier_invoice_id=invoice.id
              WHERE invoice.org_id=%s AND invoice.id=%s
-             GROUP BY invoice.id,line.id,allocation.id,item.id
+             GROUP BY invoice.org_id,invoice.id,line.org_id,line.id,
+                      allocation.org_id,allocation.id,item.org_id,item.id
             """,
             (IDS["org"], resource_id),
         )
@@ -1922,7 +1923,7 @@ def reconcile_payment(connection, resource_id: str, expected_direction: str) -> 
               JOIN finance.accounting_events AS event
                 ON event.org_id=payment.org_id AND event.payment_id=payment.id
              WHERE payment.org_id=%s AND payment.id=%s
-             GROUP BY payment.id
+             GROUP BY payment.org_id,payment.id
             """,
             (IDS["org"], resource_id),
         )
@@ -2200,7 +2201,8 @@ def reconcile_sales_dispatch(connection, resource_id: str) -> dict[str, Any]:
                AND event.inventory_document_id=document.id
                AND event.event_type='inventory_valuation'
              WHERE dispatch.org_id=%s AND dispatch.id=%s
-             GROUP BY dispatch.id,line.id,document.id
+             GROUP BY dispatch.org_id,dispatch.id,line.org_id,line.id,
+                      document.org_id,document.id
             """,
             (IDS["org"], resource_id),
         )
@@ -2289,7 +2291,8 @@ def reconcile_sales_invoice(connection, resource_id: str) -> dict[str, Any]:
               LEFT JOIN tax.documents AS tax_document
                 ON tax_document.org_id=invoice.org_id AND tax_document.sales_invoice_id=invoice.id
              WHERE invoice.org_id=%s AND invoice.id=%s
-             GROUP BY invoice.id,line.id,allocation.id,item.id
+             GROUP BY invoice.org_id,invoice.id,line.org_id,line.id,
+                      allocation.org_id,allocation.id,item.org_id,item.id
             """,
             (IDS["org"], resource_id),
         )
