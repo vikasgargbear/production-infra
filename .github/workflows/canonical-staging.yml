@@ -119,6 +119,7 @@ jobs:
           test "$pooler_port" = 6543
           echo "SUPABASE_POOLER_HOST=$pooler_host" >> "$GITHUB_ENV"
           echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
+          echo "SUPABASE_SESSION_POOLER_PORT=5432" >> "$GITHUB_ENV"
 
       - name: Install the reviewed migration toolchain
         run: pip install -r backend/requirements.txt
@@ -136,7 +137,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require"
           database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
           echo "::add-mask::$database_url"
           echo "::add-mask::$psycopg_database_url"
@@ -558,7 +559,7 @@ jobs:
           PY
 
           importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
-          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
+          importer_url="postgresql://erp_regulatory_importer.${CANONICAL_STAGING_PROJECT_REF}:${importer_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_SESSION_POOLER_PORT}/postgres?sslmode=require"
           echo "::add-mask::$importer_url"
           export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
 
