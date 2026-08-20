@@ -97,7 +97,9 @@ def test_after_insert_aggregate_guards_count_the_new_row_once() -> None:
 
     assert "source_allocated>payment.amount" in sql
     assert "allocated>item.principal_amount" in sql
-    assert "line_matched>statement_line.amount" in sql
+    assert "line_matched>statement_line_amount" in sql
+    assert "SELECT line.amount,bank.account_id,statement.currency_code" in sql
+    assert "SELECT line,bank.account_id" not in sql
     assert "source_allocated+NEW.amount" not in sql
     assert "line_matched+NEW.matched_amount" not in sql
 

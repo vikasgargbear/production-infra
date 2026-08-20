@@ -375,12 +375,12 @@ END
         *_function(
             "guard_reconciliation_match",
             """
-DECLARE statement_line finance.bank_statement_lines%ROWTYPE; bank_ledger_id uuid; statement_currency char(3);
+DECLARE statement_line_amount numeric(20,2); bank_ledger_id uuid; statement_currency char(3);
         journal finance.journal_entries%ROWTYPE; journal_bank_amount numeric(20,2); journal_bank_line_count bigint;
         line_matched numeric(20,2); journal_matched numeric(20,2); original finance.reconciliation_matches%ROWTYPE;
 BEGIN
     IF TG_OP<>'INSERT' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reconciliation matches are append-only'; END IF;
-    SELECT line,bank.account_id,statement.currency_code INTO statement_line,bank_ledger_id,statement_currency
+    SELECT line.amount,bank.account_id,statement.currency_code INTO statement_line_amount,bank_ledger_id,statement_currency
       FROM finance.bank_statement_lines line JOIN finance.bank_statements statement ON statement.org_id=line.org_id AND statement.id=line.bank_statement_id
       JOIN finance.bank_accounts bank ON bank.org_id=statement.org_id AND bank.id=statement.bank_account_id
      WHERE line.org_id=NEW.org_id AND line.id=NEW.bank_statement_line_id FOR UPDATE OF line,statement;
@@ -400,7 +400,7 @@ BEGIN
     ELSE
         SELECT coalesce(sum(m.matched_amount),0) INTO line_matched FROM finance.reconciliation_matches m WHERE m.org_id=NEW.org_id AND m.bank_statement_line_id=NEW.bank_statement_line_id AND m.status='matched' AND NOT EXISTS (SELECT 1 FROM finance.reconciliation_matches r WHERE r.org_id=m.org_id AND r.reversal_of_match_id=m.id);
         SELECT coalesce(sum(m.matched_amount),0) INTO journal_matched FROM finance.reconciliation_matches m WHERE m.org_id=NEW.org_id AND m.journal_entry_id=NEW.journal_entry_id AND m.status='matched' AND NOT EXISTS (SELECT 1 FROM finance.reconciliation_matches r WHERE r.org_id=m.org_id AND r.reversal_of_match_id=m.id);
-        IF line_matched>statement_line.amount OR journal_matched>journal_bank_amount THEN
+        IF line_matched>statement_line_amount OR journal_matched>journal_bank_amount THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reconciliation match exceeds an owner amount';
         END IF;
     END IF;

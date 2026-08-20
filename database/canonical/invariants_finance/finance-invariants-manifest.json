@@ -115,7 +115,7 @@
   ],
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-finance-enforcements.json",
-  "mapping_sha256": "11bd517bd7531de1e391362a9440f50d08b8a9a96e8d9708c0d8af04e7e1232d",
+  "mapping_sha256": "7efc7d83f0f78dc1f6d7314f2ef57a2e1b481186dc239d6665a68a22e46c171f",
   "postgresql": "15+",
   "resolved_count": 14,
   "resolved_invariants": [
