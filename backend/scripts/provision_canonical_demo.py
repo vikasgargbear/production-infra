@@ -911,9 +911,19 @@ def seed_end_to_end_master(connection) -> None:
                 country_code,is_primary,valid_from,status,
                 created_by_membership_id,updated_by_membership_id
             ) VALUES (
-                %s,%s,%s,'shipping','88 Synthetic Wholesale Avenue','Mumbai','27',
+                %s,%s,%s,'registered','88 Synthetic Wholesale Avenue','Mumbai','27',
                 '400003','IN',true,%s,'active',%s,%s
-            ) ON CONFLICT (org_id,id) DO NOTHING
+            ) ON CONFLICT (org_id,id) DO UPDATE SET
+                address_kind=EXCLUDED.address_kind,
+                line1=EXCLUDED.line1,
+                city=EXCLUDED.city,
+                state_code=EXCLUDED.state_code,
+                postal_code=EXCLUDED.postal_code,
+                country_code=EXCLUDED.country_code,
+                is_primary=EXCLUDED.is_primary,
+                valid_from=EXCLUDED.valid_from,
+                status=EXCLUDED.status,
+                updated_by_membership_id=EXCLUDED.updated_by_membership_id
             """,
             (
                 IDS["org"], IDS["supplier_address"], IDS["supplier_party"],
