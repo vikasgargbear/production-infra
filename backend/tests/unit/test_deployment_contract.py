@@ -224,6 +224,17 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'mutation_boundary: "BEGIN_ROLLBACK_or_read_only"' in workflow
 
 
+def test_demo_runtime_computes_activation_hash_without_extensions_access():
+    provisioner = _read("backend/scripts/provision_canonical_demo.py")
+    activation = provisioner.split("def activate_demo_product", 1)[1].split(
+        "\ndef token", 1
+    )[0]
+
+    assert "hashlib.sha256" in activation
+    assert "psycopg2.Binary" in activation
+    assert "extensions.digest" not in activation
+
+
 def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     workflow = _read(".github/workflows/canonical-staging.yml")
     production_workflow = _read(".github/workflows/production-readiness.yml")

@@ -524,8 +524,13 @@ def activate_demo_product(connection) -> None:
         if status != "draft":
             raise RuntimeError("demo product is not in an activatable state")
         cursor.execute(
-            "SELECT erp_regulatory_commands.activate_product(%s, %s, %s, NULL, extensions.digest(%s,'sha256'), transaction_timestamp() + interval '15 minutes')",
-            (IDS["org"], IDS["product"], row_version, "demo-product-activation-v1"),
+            "SELECT erp_regulatory_commands.activate_product(%s, %s, %s, NULL, %s, transaction_timestamp() + interval '15 minutes')",
+            (
+                IDS["org"],
+                IDS["product"],
+                row_version,
+                psycopg2.Binary(hashlib.sha256(b"demo-product-activation-v1").digest()),
+            ),
         )
         if cursor.fetchone() != (IDS["product"],):
             raise RuntimeError("demo product activation returned an unexpected product")
