@@ -3768,7 +3768,7 @@ BEGIN
      AND grant_row.id=grant_id AND grant_row.client_id=caller_client_id AND grant_row.status='active'
      AND grant_row.expires_at>pg_catalog.transaction_timestamp() AND (grant_row.branch_id IS NULL OR grant_row.branch_id=branch_id)
      AND capability.capability_code='inventory.adjustment.prepare' AND capability.operation_mode='write'
-     AND capability.risk_class='controlled_batched_movement' AND capability.approval_policy='separate_approver'
+     AND capability.risk_class='consequential_write' AND capability.approval_policy='separate_approver'
      AND capability.status='active';
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cycle-count delegated authority is inactive'; END IF;
   PERFORM erp_security.activate_context(auth_user_id,organization_id);

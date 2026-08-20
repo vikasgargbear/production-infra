@@ -270,7 +270,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'artifact.get("platform_enforcements")' in reconciliation
     assert "terminal_response_body" in reconciliation
     assert "outbox_aggregate_id" in reconciliation
-    assert '"t|t|t|t|t"' in reconciliation
+    assert '"t|t|t|t|t|t"' in reconciliation
+    assert "resolve_inventory_adjustment_prepare" in reconciliation
+    assert "controlled_batched_movement" in reconciliation
     assert "SET ROLE erp_migration_owner" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reconciliation
     assert "GRANT erp_migration_owner TO postgres WITH SET FALSE" in reconciliation
@@ -320,9 +322,23 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'join_transaction_mode="create_savepoint"' in preflight
     assert "outer_transaction.rollback()" in preflight
     assert "SqlAlchemyOperatorActionService" in preflight
-    assert '"2000.00", "INR"' in provisioner
+    assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner
     assert "demo-v2" in provisioner
+    for operation in (
+        "sales.dispatch.prepare",
+        "sales.invoice.prepare",
+        "sales.return.prepare",
+        "procurement.purchase_order.prepare",
+        "procurement.goods_receipt.prepare",
+        "procurement.supplier_invoice.prepare",
+        "procurement.purchase_return.prepare",
+        "finance.customer_receipt.prepare",
+        "finance.supplier_advance.prepare",
+        "finance.supplier_payment.prepare",
+        "inventory.adjustment.prepare",
+    ):
+        assert operation in provisioner
     reconciliation = provisioner.split("def reconcile", 1)[1].split("\ndef main", 1)[0]
     assert "order_row.subtotal" in reconciliation
     assert "order_row.gst_taxable_total" in reconciliation

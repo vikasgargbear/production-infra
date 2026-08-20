@@ -41,7 +41,12 @@ IDS = {
     "role": "d3000000-0000-7000-8000-000000000006",
     "access_grant": "d3000000-0000-7000-8000-000000000007",
     "safety_setting": "d3000000-0000-7000-8000-000000000008",
-    "agent_grant": "d3000000-0000-7000-8000-000000000020",
+    "agent_grant": "d3000000-0000-7000-8000-000000000021",
+    "approver_auth_user": "d3000000-0000-7000-8000-000000000022",
+    "approver_user": "d3000000-0000-7000-8000-000000000023",
+    "approver_membership": "d3000000-0000-7000-8000-000000000024",
+    "approver_access_grant": "d3000000-0000-7000-8000-000000000025",
+    "approver_agent_grant": "d3000000-0000-7000-8000-000000000026",
     "customer_party": "d3000000-0000-7000-8000-000000000010",
     "customer_account": "d3000000-0000-7000-8000-000000000011",
     "customer_address": "d3000000-0000-7000-8000-000000000012",
@@ -54,16 +59,75 @@ IDS = {
     "request": "d3000000-0000-7000-8000-000000000019",
     "tax_release": "d3100000-0000-7000-8000-000000000001",
     "tax_version": "d3100000-0000-7000-8000-000000000002",
+    "supplier_party": "d3200000-0000-7000-8000-000000000001",
+    "supplier_account": "d3200000-0000-7000-8000-000000000002",
+    "supplier_address": "d3200000-0000-7000-8000-000000000003",
+    "supplier_gstin": "d3200000-0000-7000-8000-000000000004",
+    "org_gst_registration": "d3200000-0000-7000-8000-000000000005",
+    "saleable_location": "d3200000-0000-7000-8000-000000000006",
+    "quarantine_location": "d3200000-0000-7000-8000-000000000007",
+    "bank_account": "d3200000-0000-7000-8000-000000000008",
+    "tax_profile_evidence": "d3200000-0000-7000-8000-000000000009",
+    "fiscal_fact_evidence": "d3200000-0000-7000-8000-00000000000a",
+    "fiscal_tax_fact": "d3200000-0000-7000-8000-00000000000b",
+    "cycle_count_evidence": "d3200000-0000-7000-8000-00000000000c",
+    "recipient_itc_evidence": "d3200000-0000-7000-8000-00000000000d",
+    "bank_ledger": "d3210000-0000-7000-8000-000000000001",
+    "payable_account": "d3210000-0000-7000-8000-000000000002",
+    "inventory_account": "d3210000-0000-7000-8000-000000000003",
+    "cogs_account": "d3210000-0000-7000-8000-000000000004",
+    "sales_revenue_account": "d3210000-0000-7000-8000-000000000005",
+    "supplier_prepayment_account": "d3210000-0000-7000-8000-000000000006",
+    "input_cgst_account": "d3210000-0000-7000-8000-000000000007",
+    "input_sgst_account": "d3210000-0000-7000-8000-000000000008",
+    "input_igst_account": "d3210000-0000-7000-8000-000000000009",
+    "input_cess_account": "d3210000-0000-7000-8000-00000000000a",
+    "output_cgst_account": "d3210000-0000-7000-8000-00000000000b",
+    "output_sgst_account": "d3210000-0000-7000-8000-00000000000c",
+    "output_igst_account": "d3210000-0000-7000-8000-00000000000d",
+    "output_cess_account": "d3210000-0000-7000-8000-00000000000e",
+    "grni_account": "d3210000-0000-7000-8000-00000000000f",
+    "purchase_return_variance_account": "d3210000-0000-7000-8000-000000000010",
+    "inventory_count_gain_account": "d3210000-0000-7000-8000-000000000011",
+    "rounding_gain_account": "d3210000-0000-7000-8000-000000000012",
+    "rounding_loss_account": "d3210000-0000-7000-8000-000000000013",
 }
 
 REQUIRED_PERMISSIONS = (
     "sales.order.create",
     "sales.order.manage",
+    "sales.dispatch.create",
+    "sales.invoice.create",
+    "sales.return.create",
+    "procurement.order.manage",
+    "procurement.receipt.post",
+    "procurement.supplier_invoice.create",
+    "procurement.purchase_return.create",
+    "finance.customer_receipt.create",
+    "finance.supplier_advance.create",
+    "finance.supplier_payment.create",
+    "inventory.adjustment.create",
     "catalog.product.manage",
     "automation.command.approve",
     "automation.command.execute",
     "automation.command.view",
     "internal.sequence.allocate",
+)
+
+
+PREPARE_CAPABILITIES = (
+    ("sales.order.prepare", "actor_confirmation"),
+    ("sales.dispatch.prepare", "actor_confirmation"),
+    ("sales.invoice.prepare", "actor_confirmation"),
+    ("sales.return.prepare", "separate_approver"),
+    ("procurement.purchase_order.prepare", "actor_confirmation"),
+    ("procurement.goods_receipt.prepare", "actor_confirmation"),
+    ("procurement.supplier_invoice.prepare", "actor_confirmation"),
+    ("procurement.purchase_return.prepare", "separate_approver"),
+    ("finance.customer_receipt.prepare", "actor_confirmation"),
+    ("finance.supplier_advance.prepare", "separate_approver"),
+    ("finance.supplier_payment.prepare", "actor_confirmation"),
+    ("inventory.adjustment.prepare", "separate_approver"),
 )
 
 
@@ -120,8 +184,8 @@ def fetch_official_source(evidence_dir: Path) -> bytes:
 def bootstrap_identity(connection) -> None:
     with connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO auth.users (id) VALUES (%s) ON CONFLICT (id) DO NOTHING",
-            (IDS["auth_user"],),
+            "INSERT INTO auth.users (id) VALUES (%s), (%s) ON CONFLICT (id) DO NOTHING",
+            (IDS["auth_user"], IDS["approver_auth_user"]),
         )
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
@@ -151,6 +215,14 @@ def bootstrap_identity(connection) -> None:
         )
         cursor.execute(
             """
+            INSERT INTO core.users (id, auth_user_id, display_name, status)
+            VALUES (%s, %s, 'Demo Independent Approver', 'active')
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (IDS["approver_user"], IDS["approver_auth_user"]),
+        )
+        cursor.execute(
+            """
             INSERT INTO core.memberships (
                 org_id, id, user_id, status, joined_at,
                 created_by_membership_id, updated_by_membership_id
@@ -171,6 +243,19 @@ def bootstrap_identity(connection) -> None:
         )
         cursor.execute(
             "SELECT set_config('app.auth_user_id', %s, true)", (IDS["auth_user"],)
+        )
+        cursor.execute(
+            """
+            INSERT INTO core.memberships (
+                org_id, id, user_id, status, joined_at,
+                created_by_membership_id, updated_by_membership_id
+            ) VALUES (%s, %s, %s, 'active', transaction_timestamp(), %s, %s)
+            ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["approver_membership"], IDS["approver_user"],
+                IDS["membership"], IDS["membership"],
+            ),
         )
         cursor.execute(
             """
@@ -204,6 +289,8 @@ def bootstrap_identity(connection) -> None:
         found = {row[0] for row in cursor.fetchall()}
         if found != set(REQUIRED_PERMISSIONS):
             raise RuntimeError(f"canonical permissions are missing: {set(REQUIRED_PERMISSIONS) - found}")
+        cursor.execute("SELECT code FROM core.permissions WHERE status='active' ORDER BY code")
+        demo_permissions = [row[0] for row in cursor.fetchall()]
         cursor.executemany(
             """
             INSERT INTO core.role_permissions (
@@ -213,7 +300,7 @@ def bootstrap_identity(connection) -> None:
             """,
             [
                 (IDS["org"], IDS["role"], permission, IDS["membership"])
-                for permission in REQUIRED_PERMISSIONS
+                for permission in demo_permissions
             ],
         )
         cursor.execute(
@@ -230,6 +317,22 @@ def bootstrap_identity(connection) -> None:
             (
                 IDS["org"], IDS["access_grant"], IDS["membership"],
                 IDS["role"], IDS["membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO core.access_grants (
+                org_id, id, membership_id, role_id, scope_kind, branch_id,
+                valid_from_at, expires_at, status, created_by_membership_id
+            ) VALUES (
+                %s, %s, %s, %s, 'organization', NULL,
+                transaction_timestamp(), transaction_timestamp() + interval '30 days',
+                'active', %s
+            ) ON CONFLICT (org_id, id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["approver_access_grant"],
+                IDS["approver_membership"], IDS["role"], IDS["membership"],
             ),
         )
         cursor.execute(
@@ -266,11 +369,36 @@ def bootstrap_identity(connection) -> None:
                 IDS["membership"], IDS["membership"], IDS["membership"], IDS["membership"],
             ),
         )
-        capabilities = (
+        cursor.execute(
+            """
+            INSERT INTO automation.agent_grants (
+                org_id, id, subject_membership_id, client_id, client_display_name,
+                branch_id, authorization_mode, consent_version, consent_text_hash,
+                consented_by_membership_id, consented_at, granted_by_membership_id,
+                granted_at, expires_at, status, created_by_membership_id,
+                updated_by_membership_id
+            ) VALUES (
+                %s, %s, %s, %s, 'Canonical staging independent approver', NULL,
+                'admin_approved', 'demo-v2',
+                extensions.digest('canonical staging independent approval consent','sha256'),
+                %s, transaction_timestamp(), %s, transaction_timestamp(),
+                transaction_timestamp() + interval '30 days', 'active', %s, %s
+            ) ON CONFLICT (org_id, id) DO NOTHING
+            """,
             (
-                "sales.order.prepare", "write", "consequential_write",
-                "actor_confirmation", "2000.00", "INR",
+                IDS["org"], IDS["approver_agent_grant"],
+                IDS["approver_membership"], CLIENT_ID,
+                IDS["approver_membership"], IDS["membership"],
+                IDS["membership"], IDS["membership"],
             ),
+        )
+        capabilities = tuple(
+            (
+                capability, "write", "consequential_write", approval,
+                "1000000.00", "INR",
+            )
+            for capability, approval in PREPARE_CAPABILITIES
+        ) + (
             (
                 "automation.command.approve", "write", "consequential_write",
                 "actor_confirmation", None, None,
@@ -298,6 +426,20 @@ def bootstrap_identity(connection) -> None:
                 (IDS["org"], IDS["agent_grant"], *capability, IDS["membership"])
                 for capability in capabilities
             ],
+        )
+        cursor.execute(
+            """
+            INSERT INTO automation.agent_grant_capabilities (
+                org_id, agent_grant_id, capability_code, operation_mode,
+                risk_class, approval_policy, maximum_amount, currency_code,
+                allow_sensitive_read, status, created_by_membership_id
+            ) VALUES (
+                %s, %s, 'automation.command.approve', 'write',
+                'consequential_write', 'actor_confirmation', NULL, NULL,
+                false, 'active', %s
+            ) ON CONFLICT (org_id, agent_grant_id, capability_code) DO NOTHING
+            """,
+            (IDS["org"], IDS["approver_agent_grant"], IDS["membership"]),
         )
 
 
@@ -527,6 +669,310 @@ def seed_business_master(connection) -> None:
             ) ON CONFLICT (org_id, id) DO NOTHING
             """,
             (IDS["org"], IDS["sales_order_sequence"], IDS["branch"], IDS["membership"], IDS["membership"]),
+        )
+
+
+def seed_end_to_end_master(connection) -> None:
+    """Add the synthetic supplier, tax, inventory, banking, and ledger facts."""
+
+    with connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        for setting, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.membership_id", IDS["membership"]),
+            ("app.user_id", IDS["user"]),
+            ("app.auth_user_id", IDS["auth_user"]),
+            ("app.request_id", IDS["request"]),
+        ):
+            cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
+
+        attachments = (
+            (IDS["tax_profile_evidence"], "supplier_tax_profile", "supplier-pan-verification.json"),
+            (IDS["fiscal_fact_evidence"], "organization_fiscal_tax_profile", "fy-2026-tax-facts.json"),
+            (IDS["cycle_count_evidence"], "inventory_cycle_count_sheet", "cycle-count-sheet.json"),
+            (IDS["recipient_itc_evidence"], "recipient_itc_reversal", "recipient-itc-reversal.json"),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO core.attachments (
+                org_id,id,storage_bucket,storage_object_path,original_filename,
+                media_type,byte_size,sha256,evidence_kind,document_date,
+                retention_until,status,verified_at,created_by_membership_id
+            ) VALUES (
+                %s,%s,'canonical-demo-evidence',%s,%s,'application/json',128,
+                extensions.digest(%s,'sha256'),%s,%s,%s,'retained',
+                transaction_timestamp(),%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"], attachment_id, f"demo/{filename}", filename,
+                    f"canonical-demo:{evidence_kind}", evidence_kind,
+                    SOURCE_RETRIEVED_ON, date(2034, 8, 20), IDS["membership"],
+                )
+                for attachment_id, evidence_kind, filename in attachments
+            ],
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO parties.parties (
+                org_id,id,party_kind,legal_name,trade_name,pan,
+                tax_residency_status,tax_person_type,pan_verification_status,
+                tax_profile_evidence_attachment_id,tax_profile_verified_at,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,'organization','Synthetic Medicines Distributor Private Limited',
+                'Synthetic Medicines Distributor','DEMOB1234C','resident','company',
+                'verified',%s,transaction_timestamp(),'draft',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["supplier_party"], IDS["tax_profile_evidence"],
+                IDS["membership"], IDS["membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            UPDATE parties.parties
+               SET status='active',row_version=row_version+1,
+                   updated_by_membership_id=%s
+             WHERE org_id=%s AND id=%s AND status='draft'
+            """,
+            (IDS["membership"], IDS["org"], IDS["supplier_party"]),
+        )
+        cursor.execute(
+            """
+            INSERT INTO parties.addresses (
+                org_id,id,party_id,address_kind,line1,city,state_code,postal_code,
+                country_code,is_primary,valid_from,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,'shipping','88 Synthetic Wholesale Avenue','Mumbai','27',
+                '400003','IN',true,%s,'active',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["supplier_address"], IDS["supplier_party"],
+                SOURCE_RETRIEVED_ON, IDS["membership"], IDS["membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO parties.tax_registrations (
+                org_id,id,party_id,registration_type,registration_number,
+                registered_legal_name,state_code,taxpayer_type,valid_from,
+                verified_at,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,'GSTIN','27DEMOB1234C1Z5',
+                'Synthetic Medicines Distributor Private Limited','27','regular',%s,
+                transaction_timestamp(),'active',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["supplier_gstin"], IDS["supplier_party"],
+                SOURCE_RETRIEVED_ON, IDS["membership"], IDS["membership"],
+            ),
+        )
+
+        account_rows = (
+            (IDS["bank_ledger"], "1000-DEMO-BANK", "Demo current bank", "asset", False, True),
+            (IDS["payable_account"], "2100-DEMO-AP", "Demo trade payables", "liability", True, False),
+            (IDS["inventory_account"], "1200-DEMO-INV", "Demo inventory asset", "asset", False, False),
+            (IDS["cogs_account"], "5100-DEMO-COGS", "Demo cost of goods sold", "expense", False, False),
+            (IDS["sales_revenue_account"], "4100-DEMO-REV", "Demo sales revenue", "income", False, False),
+            (IDS["supplier_prepayment_account"], "1300-DEMO-PREPAY", "Demo supplier prepayments", "asset", True, False),
+            (IDS["input_cgst_account"], "1401-DEMO-ICGST", "Demo input CGST", "asset", False, False),
+            (IDS["input_sgst_account"], "1402-DEMO-ISGST", "Demo input SGST", "asset", False, False),
+            (IDS["input_igst_account"], "1403-DEMO-IIGST", "Demo input IGST", "asset", False, False),
+            (IDS["input_cess_account"], "1404-DEMO-ICESS", "Demo input cess", "asset", False, False),
+            (IDS["output_cgst_account"], "2201-DEMO-OCGST", "Demo output CGST", "liability", False, False),
+            (IDS["output_sgst_account"], "2202-DEMO-OSGST", "Demo output SGST", "liability", False, False),
+            (IDS["output_igst_account"], "2203-DEMO-OIGST", "Demo output IGST", "liability", False, False),
+            (IDS["output_cess_account"], "2204-DEMO-OCESS", "Demo output cess", "liability", False, False),
+            (IDS["grni_account"], "2300-DEMO-GRNI", "Demo goods received not invoiced", "liability", False, False),
+            (IDS["purchase_return_variance_account"], "5200-DEMO-PRV", "Demo purchase return inventory variance", "expense", False, False),
+            (IDS["inventory_count_gain_account"], "4200-DEMO-ICG", "Demo inventory count gain", "income", False, False),
+            (IDS["rounding_gain_account"], "4900-DEMO-RG", "Demo rounding gain", "income", False, False),
+            (IDS["rounding_loss_account"], "5900-DEMO-RL", "Demo rounding loss", "expense", False, False),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO finance.accounts (
+                org_id,id,code,name,account_type,currency_code,
+                allows_party_posting,allows_bank_reconciliation,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,%s,%s,%s,'INR',%s,%s,'active',%s,%s)
+            ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            [
+                (IDS["org"], *row, IDS["membership"], IDS["membership"])
+                for row in account_rows
+            ],
+        )
+        cursor.execute(
+            """
+            INSERT INTO parties.supplier_accounts (
+                org_id,id,party_id,supplier_code,payment_days,
+                default_payable_account_id,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,%s,'SUP-DEMO-001',30,%s,'active',%s,%s)
+            ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["supplier_account"], IDS["supplier_party"],
+                IDS["payable_account"], IDS["membership"], IDS["membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO finance.bank_accounts (
+                org_id,id,account_id,bank_name,account_holder_name,
+                account_number_ciphertext,account_number_hash,ifsc,currency_code,status,
+                created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,%s,'Demo Bank','AasoPharma Disposable Demo Private Limited',
+                convert_to('encrypted-demo-bank-account','UTF8'),
+                extensions.digest('demo-bank-account','sha256'),'HDFC0000001','INR','active',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["bank_account"], IDS["bank_ledger"],
+                IDS["membership"], IDS["membership"],
+            ),
+        )
+
+        role_accounts = {
+            "accounts_receivable": IDS["receivable_account"],
+            "accounts_payable": IDS["payable_account"],
+            "sales_revenue": IDS["sales_revenue_account"],
+            "supplier_prepayment": IDS["supplier_prepayment_account"],
+            "input_cgst": IDS["input_cgst_account"],
+            "input_sgst": IDS["input_sgst_account"],
+            "input_igst": IDS["input_igst_account"],
+            "input_cess": IDS["input_cess_account"],
+            "output_cgst": IDS["output_cgst_account"],
+            "output_sgst": IDS["output_sgst_account"],
+            "output_igst": IDS["output_igst_account"],
+            "output_cess": IDS["output_cess_account"],
+            "goods_received_not_invoiced": IDS["grni_account"],
+            "purchase_return_inventory_variance": IDS["purchase_return_variance_account"],
+            "inventory_asset": IDS["inventory_account"],
+            "inventory_count_gain": IDS["inventory_count_gain_account"],
+            "cost_of_goods_sold": IDS["cogs_account"],
+            "rounding_gain": IDS["rounding_gain_account"],
+            "rounding_loss": IDS["rounding_loss_account"],
+        }
+        cursor.executemany(
+            """
+            INSERT INTO core.settings (
+                org_id,id,scope_kind,branch_id,namespace,key,value_type,value_text,
+                status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,'organization',NULL,'finance.account_roles',%s,'text',%s,
+                'active',%s,%s)
+            ON CONFLICT DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"],
+                    str(uuid5(NAMESPACE_URL, f"aasopharma-demo-account-role:{role}")),
+                    role, account_id, IDS["membership"], IDS["membership"],
+                )
+                for role, account_id in sorted(role_accounts.items())
+            ],
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO tax.registrations (
+                org_id,id,gstin,legal_name,trade_name,state_code,registration_type,
+                effective_from,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (
+                %s,%s,'27ABCDE1234F1Z5','AasoPharma Disposable Demo Private Limited',
+                'AasoPharma Demo','27','regular',%s,'active',%s,%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["org_gst_registration"], SOURCE_RETRIEVED_ON,
+                IDS["membership"], IDS["membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO tax.registration_branches (
+                org_id,registration_id,branch_id,place_of_business_kind,
+                effective_from,status,created_by_membership_id
+            ) VALUES (%s,%s,%s,'principal',%s,'active',%s)
+            ON CONFLICT (org_id,registration_id,branch_id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["org_gst_registration"], IDS["branch"],
+                SOURCE_RETRIEVED_ON, IDS["membership"],
+            ),
+        )
+        cursor.executemany(
+            """
+            INSERT INTO inventory.locations (
+                org_id,id,branch_id,code,name,location_type,status,allows_sale,
+                allows_negative_stock,created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,%s,%s,%s,%s,'active',%s,false,%s,%s)
+            ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            [
+                (IDS["org"], IDS["saleable_location"], IDS["branch"], "SALE-DEMO", "Demo saleable stock", "saleable", True, IDS["membership"], IDS["membership"]),
+                (IDS["org"], IDS["quarantine_location"], IDS["branch"], "QUAR-DEMO", "Demo returned quarantine", "quarantine", False, IDS["membership"], IDS["membership"]),
+            ],
+        )
+        cursor.execute(
+            """
+            INSERT INTO tax.organization_fiscal_tax_facts (
+                org_id,id,fiscal_year_start_year,effective_from,effective_to,
+                organization_person_type,prior_fiscal_year_turnover,
+                gst_tds_notified_deductor,einvoice_exemption_code,
+                evidence_attachment_id,verified_at,verified_by_membership_id,status,
+                created_by_membership_id
+            ) VALUES (
+                %s,%s,2026,DATE '2026-04-01',DATE '2027-03-31','company',50000000,
+                false,'NONE',%s,transaction_timestamp(),%s,'active',%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], IDS["fiscal_tax_fact"], IDS["fiscal_fact_evidence"],
+                IDS["membership"], IDS["membership"],
+            ),
+        )
+
+        sequence_types = {
+            "sales_dispatch": "DEMO-SD-",
+            "sales_invoice": "DEMO-SI-",
+            "sales_return": "DEMO-SR-",
+            "purchase_order": "DEMO-PO-",
+            "goods_receipt": "DEMO-GRN-",
+            "purchase_return": "DEMO-PR-",
+            "supplier_payment": "DEMO-SP-",
+            "supplier_advance": "DEMO-SA-",
+            "customer_receipt": "DEMO-CR-",
+            "journal_entry": "DEMO-JE-",
+            "stock_count": "DEMO-SC-",
+        }
+        cursor.executemany(
+            """
+            INSERT INTO core.document_sequences (
+                org_id,id,branch_id,document_type,fiscal_year_start,prefix,suffix,
+                padding,next_value,status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,%s,%s,DATE '2026-04-01',%s,'',6,1,'active',%s,%s)
+            ON CONFLICT DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"],
+                    str(uuid5(NAMESPACE_URL, f"aasopharma-demo-sequence:{document_type}")),
+                    IDS["branch"], document_type, prefix,
+                    IDS["membership"], IDS["membership"],
+                )
+                for document_type, prefix in sorted(sequence_types.items())
+            ],
         )
 
 
@@ -846,6 +1292,7 @@ def main() -> int:
             import_tax_release(importer, source, dataset_bytes)
     with psycopg2.connect(required("PSYCOPG_DATABASE_URL")) as bootstrap:
         seed_business_master(bootstrap)
+        seed_end_to_end_master(bootstrap)
     with psycopg2.connect(required("ERP_RUNTIME_DATABASE_URL")) as runtime:
         activate_demo_product(runtime)
 

@@ -84,6 +84,12 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
     assert "TO \"erp_app\"" not in mapping
 
 
+def test_inventory_adjustment_uses_the_catalog_risk_vocabulary() -> None:
+    sql = _sql()
+    assert "capability.risk_class='consequential_write'" in sql
+    assert "capability.risk_class='controlled_batched_movement'" not in sql
+
+
 def test_typed_consent_and_request_facts_are_checked() -> None:
     mapping = _sql()
     for fragment in (
