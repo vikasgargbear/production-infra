@@ -229,7 +229,7 @@ def test_dependency_order_handles_fk_cycles_deterministically() -> None:
 
 
 def test_invariant_owned_prerequisites_are_provisioned_before_dependents() -> None:
-    roles, extensions, remaining = generator._partition_auxiliary_prerequisites(
+    roles, extensions, schemas, remaining = generator._partition_auxiliary_prerequisites(
         (
             (
                 "automation.command_requests:guard",
@@ -250,11 +250,23 @@ def test_invariant_owned_prerequisites_are_provisioned_before_dependents() -> No
                     'ADD CONSTRAINT "period_guard" EXCLUDE USING gist ("org_id" WITH =);',
                 ),
             ),
+            (
+                "compliance.rules:release_guard",
+                (
+                    'CREATE SCHEMA "erp_regulatory_commands" '
+                    'AUTHORIZATION "erp_migration_owner";',
+                    'CREATE FUNCTION "erp_regulatory_commands"."guard"() '
+                    'RETURNS trigger LANGUAGE plpgsql AS $function$ BEGIN RETURN NEW; END $function$;',
+                ),
+            ),
         )
     )
 
     assert roles == ('CREATE ROLE "erp_calculator" LOGIN NOSUPERUSER;',)
     assert extensions == ('CREATE EXTENSION "btree_gist" WITH SCHEMA "public";',)
+    assert schemas == (
+        'CREATE SCHEMA "erp_regulatory_commands" AUTHORIZATION "erp_migration_owner";',
+    )
     assert remaining == (
         (
             "automation.command_requests:guard",
@@ -269,6 +281,13 @@ def test_invariant_owned_prerequisites_are_provisioned_before_dependents() -> No
             (
                 'ALTER TABLE "catalog"."product_ingredients" '
                 'ADD CONSTRAINT "period_guard" EXCLUDE USING gist ("org_id" WITH =);',
+            ),
+        ),
+        (
+            "compliance.rules:release_guard",
+            (
+                'CREATE FUNCTION "erp_regulatory_commands"."guard"() '
+                'RETURNS trigger LANGUAGE plpgsql AS $function$ BEGIN RETURN NEW; END $function$;',
             ),
         ),
     )
@@ -289,6 +308,9 @@ def test_btree_gist_is_provisioned_before_every_gist_exclusion(catalog) -> None:
 
     assert sql.count('CREATE EXTENSION "btree_gist"') == 1
     assert sql.index('CREATE EXTENSION "btree_gist"') < sql.index("EXCLUDE USING gist")
+    assert sql.index('CREATE SCHEMA "erp_regulatory_commands"') < sql.index(
+        'CREATE FUNCTION "erp_regulatory_commands"'
+    )
 
 
 def test_mapping_must_match_invariant_method_and_exact_requirement_text(catalog) -> None:

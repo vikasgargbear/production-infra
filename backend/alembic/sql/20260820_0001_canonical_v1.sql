@@ -208,6 +208,22 @@ CREATE SCHEMA "compliance";
 CREATE SCHEMA "automation";
 CREATE SCHEMA "calculation";
 
+-- Reviewed auxiliary schemas
+CREATE SCHEMA "erp_automation_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_stable_invariants" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_invariants_agent" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_calculation_authority" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_compliance_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_core_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_regulatory_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_finance_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_finance_invariants" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_commercial_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_trade_invariants" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_trade_commands" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_trade_commands_v2" AUTHORIZATION "erp_migration_owner";
+CREATE SCHEMA "erp_tax_provider_commands" AUTHORIZATION "erp_migration_owner";
+
 -- Tables in parent-first dependency order
 CREATE TABLE "catalog"."units_of_measure" (
     "code" varchar(16) NOT NULL,
@@ -4482,7 +4498,6 @@ CREATE INDEX "ix_stock_balances_branch_product" ON "inventory"."stock_balances" 
 
 -- Reviewed cross-row enforcement
 -- Reviewed enforcement: automation.agent_grant_capabilities:agent_grant_capabilities_revocation
-CREATE SCHEMA "erp_automation_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_automation_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_automation_commands" TO "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_automation_commands" TO "erp_calculator";
@@ -4619,7 +4634,6 @@ ALTER FUNCTION "erp_automation_commands"."guard_capability"() OWNER TO "erp_migr
 REVOKE ALL ON FUNCTION "erp_automation_commands"."guard_capability"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE TRIGGER "agent_grant_capabilities_consent_guard" BEFORE INSERT OR UPDATE OR DELETE ON "automation"."agent_grant_capabilities" FOR EACH ROW EXECUTE FUNCTION "erp_automation_commands"."guard_capability"();
 -- Reviewed enforcement: automation.agent_grants:agent_grants_state_expiry_and_revocation
-CREATE SCHEMA "erp_stable_invariants" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_stable_invariants" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_stable_invariants"."guard_agent_grant"()
 RETURNS trigger
@@ -4755,7 +4769,6 @@ ALTER FUNCTION "erp_stable_invariants"."guard_approved_command_snapshot"() OWNER
 REVOKE ALL ON FUNCTION "erp_stable_invariants"."guard_approved_command_snapshot"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "command_requests_approved_snapshot_ct" AFTER UPDATE ON "automation"."command_requests" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_stable_invariants"."guard_approved_command_snapshot"();
 -- Reviewed enforcement: automation.command_approvals:command_approval_separation_of_duties
-CREATE SCHEMA "erp_invariants_agent" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_invariants_agent" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_invariants_agent"."guard_command_approval_separation"()
 RETURNS trigger
@@ -11389,7 +11402,6 @@ BEGIN
     END IF;
 END
 $calculation_crypto_preflight$;
-CREATE SCHEMA "erp_calculation_authority" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_calculation_authority" FROM PUBLIC, "erp_app", "erp_runtime";
 REVOKE "erp_migration_owner", "erp_app" FROM "erp_calculator";
 REVOKE ALL ON TABLE "calculation"."artifacts" FROM PUBLIC, "erp_app", "erp_runtime", "erp_calculator";
@@ -12252,7 +12264,6 @@ REVOKE ALL ON FUNCTION "erp_regulatory_commands"."import_controlled_movement_rel
 GRANT EXECUTE ON FUNCTION "erp_regulatory_commands"."import_controlled_movement_release"(p_release_id uuid, p_ruleset_version varchar, p_source_authority text, p_source_uri text, p_source_storage_bucket text, p_source_storage_object_path text, p_source_media_type varchar, p_source_bytes bytea, p_source_sha256 bytea, p_dataset_storage_bucket text, p_dataset_storage_object_path text, p_dataset_bytes bytea, p_dataset_sha256 bytea, p_publication_date date, p_effective_from date, p_effective_to date, p_reviewed_by_user_id uuid, p_reviewed_at timestamptz, p_request_id uuid) TO "erp_regulatory_importer";
 COMMENT ON TABLE "compliance"."controlled_movement_rule_versions" IS 'Imported only through erp_regulatory_commands exact-set release authority';
 -- Reviewed enforcement: compliance.controlled_substance_entries:controlled_substance_entries_cross_row_guard
-CREATE SCHEMA "erp_compliance_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_compliance_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_compliance_commands" TO "erp_app", "erp_runtime";
 CREATE TABLE "erp_compliance_commands"."command_scopes" (
@@ -13235,7 +13246,6 @@ ALTER FUNCTION "erp_compliance_commands"."ingest_temperature_reading"(organizati
 REVOKE ALL ON FUNCTION "erp_compliance_commands"."ingest_temperature_reading"(organization_id uuid, reading_id uuid, location_id uuid, batch_id uuid, actor_id uuid, sensor_id varchar, measured_at timestamptz, temperature_celsius numeric, humidity_percent numeric, provider_name varchar, provider_event_id varchar, payload_media_type varchar, payload_bytes bytea, expected_payload_sha256 bytea, key_hash bytea, request_hash bytea, expires_at timestamptz) FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_compliance_commands"."ingest_temperature_reading"(organization_id uuid, reading_id uuid, location_id uuid, batch_id uuid, actor_id uuid, sensor_id varchar, measured_at timestamptz, temperature_celsius numeric, humidity_percent numeric, provider_name varchar, provider_event_id varchar, payload_media_type varchar, payload_bytes bytea, expected_payload_sha256 bytea, key_hash bytea, request_hash bytea, expires_at timestamptz) TO "erp_app", "erp_runtime";
 -- Reviewed enforcement: core.access_grants:access_grants_state_transition
-CREATE SCHEMA "erp_core_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_core_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_core_commands" TO "erp_app";
 CREATE TABLE "erp_core_commands"."command_scopes" (
@@ -13939,7 +13949,6 @@ ALTER FUNCTION "erp_stable_invariants"."guard_outbox_delivery"() OWNER TO "erp_m
 REVOKE ALL ON FUNCTION "erp_stable_invariants"."guard_outbox_delivery"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "outbox_delivery_guard_ct" AFTER INSERT OR UPDATE OR DELETE ON "core"."outbox_events" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_stable_invariants"."guard_outbox_delivery"();
 -- Reviewed enforcement: core.reference_data_releases:reference_data_release_import
-CREATE SCHEMA "erp_regulatory_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_regulatory_commands" FROM PUBLIC, "erp_app", "erp_runtime", "erp_regulatory_importer";
 GRANT USAGE ON SCHEMA "erp_regulatory_commands" TO "erp_app", "erp_regulatory_importer";
 CREATE TABLE "erp_regulatory_commands"."command_scopes" (
@@ -14862,7 +14871,6 @@ ALTER FUNCTION "erp_stable_invariants"."guard_user_transition"() OWNER TO "erp_m
 REVOKE ALL ON FUNCTION "erp_stable_invariants"."guard_user_transition"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "users_state_guard_ct" AFTER UPDATE ON "core"."users" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_stable_invariants"."guard_user_transition"();
 -- Reviewed enforcement: finance.accounting_events:accounting_events_cross_row_guard
-CREATE SCHEMA "erp_finance_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_finance_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_finance_commands" TO "erp_app";
 CREATE TABLE "erp_finance_commands"."command_scopes" (
@@ -14986,7 +14994,6 @@ CREATE CONSTRAINT TRIGGER "expense_claims_accounted_source_ct" AFTER UPDATE OR D
 CREATE CONSTRAINT TRIGGER "inventory_documents_accounted_source_ct" AFTER UPDATE OR DELETE ON "inventory"."inventory_documents" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_finance_commands"."guard_accounting_source"();
 CREATE CONSTRAINT TRIGGER "withholdings_accounted_source_ct" AFTER UPDATE OR DELETE ON "tax"."withholdings" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_finance_commands"."guard_accounting_source"();
 -- Reviewed enforcement: finance.accounts:accounts_cross_row_guard
-CREATE SCHEMA "erp_finance_invariants" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_finance_invariants" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_finance_invariants"."guard_account_tree"()
 RETURNS trigger
@@ -15023,7 +15030,6 @@ ALTER FUNCTION "erp_finance_invariants"."guard_account_tree"() OWNER TO "erp_mig
 REVOKE ALL ON FUNCTION "erp_finance_invariants"."guard_account_tree"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "accounts_tree_guard_ct" AFTER INSERT OR UPDATE ON "finance"."accounts" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_finance_invariants"."guard_account_tree"();
 -- Reviewed enforcement: finance.adjustment_note_lines:adjustment_note_lines_cross_row_guard
-CREATE SCHEMA "erp_commercial_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_commercial_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 GRANT USAGE ON SCHEMA "erp_commercial_commands" TO "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_commercial_commands"."resolve_role_account"(organization_id uuid, target_branch_id uuid, role_key varchar, expected_type text, currency char, require_party boolean)
@@ -16842,7 +16848,6 @@ ALTER FUNCTION "erp_stable_invariants"."guard_employee"() OWNER TO "erp_migratio
 REVOKE ALL ON FUNCTION "erp_stable_invariants"."guard_employee"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "employees_state_manager_guard_ct" AFTER INSERT OR UPDATE ON "hr"."employees" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_stable_invariants"."guard_employee"();
 -- Reviewed enforcement: inventory.batches:inventory_batches_invariant_1
-CREATE SCHEMA "erp_trade_invariants" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_trade_invariants" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_trade_invariants"."guard_batch"()
 RETURNS trigger
@@ -16918,7 +16923,6 @@ ALTER FUNCTION "erp_trade_invariants"."guard_batch"() OWNER TO "erp_migration_ow
 REVOKE ALL ON FUNCTION "erp_trade_invariants"."guard_batch"() FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE CONSTRAINT TRIGGER "batches_state_identity_guard_ct" AFTER INSERT OR UPDATE ON "inventory"."batches" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "erp_trade_invariants"."guard_batch"();
 -- Reviewed enforcement: inventory.inventory_document_lines:inventory_inventory_document_lines_invariant_1
-CREATE SCHEMA "erp_trade_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_trade_commands" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_trade_commands"."assert_context"(p_org_id uuid, p_actor_id uuid)
 RETURNS void
@@ -17333,7 +17337,6 @@ $function$;
 ALTER FUNCTION "erp_trade_commands"."emit_document"(uuid,uuid,uuid,timestamptz) OWNER TO "erp_migration_owner";
 REVOKE ALL ON FUNCTION "erp_trade_commands"."emit_document"(uuid,uuid,uuid,timestamptz) FROM PUBLIC, "erp_app", "erp_runtime";
 -- Reviewed enforcement: inventory.inventory_document_lines:inventory_inventory_document_lines_landed_cost_allocation
-CREATE SCHEMA "erp_trade_commands_v2" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_trade_commands_v2" FROM PUBLIC, "erp_app", "erp_runtime";
 CREATE FUNCTION "erp_trade_commands_v2"."eligible_landed_cost_pool"(p_org_id uuid, p_supplier_invoice_line_id uuid)
 RETURNS numeric
@@ -21731,7 +21734,6 @@ REVOKE ALL ON FUNCTION "erp_regulatory_commands"."import_einvoice_rule_release"(
 GRANT EXECUTE ON FUNCTION "erp_regulatory_commands"."import_einvoice_rule_release"(p_release_id uuid, p_ruleset_version varchar, p_source_authority text, p_source_uri text, p_source_storage_bucket text, p_source_storage_object_path text, p_source_media_type varchar, p_source_bytes bytea, p_source_sha256 bytea, p_dataset_storage_bucket text, p_dataset_storage_object_path text, p_dataset_bytes bytea, p_dataset_sha256 bytea, p_publication_date date, p_effective_from date, p_effective_to date, p_reviewed_by_user_id uuid, p_reviewed_at timestamptz, p_request_id uuid) TO "erp_regulatory_importer";
 COMMENT ON TABLE "tax"."einvoice_rule_versions" IS 'Imported only through erp_regulatory_commands exact-set release authority';
 -- Reviewed enforcement: tax.einvoices:einvoices_cross_row_guard
-CREATE SCHEMA "erp_tax_provider_commands" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_tax_provider_commands" FROM PUBLIC, "erp_app", "erp_runtime", "erp_tax_provider";
 GRANT USAGE ON SCHEMA "erp_tax_provider_commands" TO "erp_app", "erp_tax_provider";
 CREATE TABLE "erp_tax_provider_commands"."command_scopes" (

@@ -681,11 +681,13 @@ def _partition_auxiliary_prerequisites(
 ) -> tuple[
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],
     tuple[tuple[str, tuple[str, ...]], ...],
 ]:
-    """Provision invariant-owned roles and extensions before dependent statements."""
+    """Provision invariant-owned roles, extensions, and schemas before dependents."""
     roles: list[str] = []
     extensions: list[str] = []
+    schemas: list[str] = []
     remaining: list[tuple[str, tuple[str, ...]]] = []
     for key, statements in resolved_invariants:
         invariant_statements: list[str] = []
@@ -694,10 +696,12 @@ def _partition_auxiliary_prerequisites(
                 roles.append(statement)
             elif statement.startswith('CREATE EXTENSION "'):
                 extensions.append(statement)
+            elif statement.startswith('CREATE SCHEMA "'):
+                schemas.append(statement)
             else:
                 invariant_statements.append(statement)
         remaining.append((key, tuple(invariant_statements)))
-    return tuple(roles), tuple(extensions), tuple(remaining)
+    return tuple(roles), tuple(extensions), tuple(schemas), tuple(remaining)
 
 
 def generate_baseline(
@@ -778,6 +782,7 @@ def generate_baseline(
     (
         auxiliary_roles,
         auxiliary_extensions,
+        auxiliary_schemas,
         resolved_invariants,
     ) = _partition_auxiliary_prerequisites(resolved_invariants)
     lines.extend(
@@ -798,6 +803,7 @@ def generate_baseline(
             (f"CREATE SCHEMA {_quote_identifier(schema)};" for schema in schemas),
         )
     )
+    lines.extend(_section("Reviewed auxiliary schemas", auxiliary_schemas))
     lines.extend(
         _section(
             "Tables in parent-first dependency order",
