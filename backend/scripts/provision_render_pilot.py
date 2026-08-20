@@ -629,7 +629,14 @@ def converge(args: argparse.Namespace) -> Dict[str, object]:
     if args.deploy:
         if not args.commit_id:
             raise ProvisioningError("--deploy requires --commit-id")
-        for service in (api_service, frontend_service, mcp_service):
+        requested_services = set(getattr(args, "deploy_service", ()) or ())
+        services = (api_service, frontend_service, mcp_service)
+        selected_services = (
+            tuple(service for service in services if service.name in requested_services)
+            if requested_services
+            else services
+        )
+        for service in selected_services:
             deployed[service.name] = client.deploy(service, args.commit_id)
 
     return {
@@ -662,6 +669,12 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--commit-id",
         help="Exact reviewed Git commit to deploy (required with --deploy)",
+    )
+    parser.add_argument(
+        "--deploy-service",
+        action="append",
+        choices=(API_NAME, FRONTEND_NAME, MCP_NAME),
+        help="Deploy only this service; repeat as needed (default: all three)",
     )
     args = parser.parse_args(argv)
     if args.deploy and not args.apply:

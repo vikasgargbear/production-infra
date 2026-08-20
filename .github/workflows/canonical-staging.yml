@@ -711,6 +711,7 @@ jobs:
           python3 backend/scripts/provision_render_pilot.py \
             --apply \
             --deploy \
+            --deploy-service aasopharma-api-pilot \
             --branch "$GITHUB_REF_NAME" \
             --commit-id "$deploy_sha" \
             > staging-evidence/render-pilot.json

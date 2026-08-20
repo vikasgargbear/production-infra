@@ -375,6 +375,7 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
             branch="main",
             deploy=deploy,
             commit_id="a" * 40 if deploy else None,
+            deploy_service=None,
         )
     )
 
@@ -396,6 +397,27 @@ def test_converge_updates_three_services_and_deploys_only_when_requested(
     )
     if deploy:
         assert result["deployed"][provision.API_NAME]["id"] == "dep-srv-api"
+
+
+def test_converge_can_deploy_only_the_reviewed_api_service(monkeypatch):
+    client = ConvergeClient()
+    monkeypatch.setattr(provision, "operator_values", lambda _path: _values())
+    monkeypatch.setattr(provision, "RenderClient", lambda _key: client)
+
+    result = provision.converge(
+        SimpleNamespace(
+            env_file=None,
+            owner_id="owner",
+            repo=provision.DEFAULT_REPO,
+            branch="main",
+            deploy=True,
+            commit_id="c" * 40,
+            deploy_service=[provision.API_NAME],
+        )
+    )
+
+    assert client.deployed == [provision.API_NAME]
+    assert set(result["deployed"]) == {provision.API_NAME}
 
 
 def test_mcp_existing_environment_refuses_admin_or_unreviewed_keys():
