@@ -819,6 +819,17 @@ def generate_baseline(
             (f"CREATE SCHEMA {_quote_identifier(schema)};" for schema in schemas),
         )
     )
+    if bootstrap_membership_granted:
+        lines.extend(
+            _section(
+                "Migration-owner canonical schema authority",
+                (
+                    f'GRANT USAGE, CREATE ON SCHEMA {_quote_identifier(schema)} '
+                    'TO "erp_migration_owner";'
+                    for schema in schemas
+                ),
+            )
+        )
     lines.extend(_section("Reviewed auxiliary schemas", auxiliary_schemas))
     lines.extend(
         _section(

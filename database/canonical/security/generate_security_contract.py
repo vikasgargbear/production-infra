@@ -760,6 +760,7 @@ def generate_sql(manifest: dict[str, Any]) -> str:
     for schema in schemas:
         lines.extend(
             [
+                f"GRANT USAGE, CREATE ON SCHEMA {_quote(schema)} TO \"erp_migration_owner\";",
                 f"REVOKE ALL ON SCHEMA {_quote(schema)} FROM PUBLIC;",
                 f"GRANT USAGE ON SCHEMA {_quote(schema)} TO \"erp_app\";",
                 f"ALTER SCHEMA {_quote(schema)} OWNER TO \"erp_migration_owner\";",

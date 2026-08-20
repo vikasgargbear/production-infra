@@ -332,11 +332,18 @@ def test_bootstrap_membership_is_scoped_to_the_migration_transaction(catalog) ->
     )
     grant = 'GRANT "erp_migration_owner" TO CURRENT_USER;'
     first_owned_schema = 'CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";'
+    core_schema_authority = (
+        'GRANT USAGE, CREATE ON SCHEMA "core" TO "erp_migration_owner";'
+    )
+    first_core_function_owner = (
+        'ALTER FUNCTION "core"."claim_idempotency_key"'
+    )
     first_owner_change = 'ALTER TABLE "automation"."agent_grant_capabilities" OWNER TO'
     revoke = 'REVOKE "erp_migration_owner" FROM CURRENT_USER;'
     assert sql.count(grant) == 1
     assert sql.count(revoke) == 1
     assert sql.index(create_owner_role) < sql.index(grant) < sql.index(first_owned_schema)
+    assert sql.index(core_schema_authority) < sql.index(first_core_function_owner)
     assert sql.index(grant) < sql.index(first_owner_change) < sql.index(revoke)
     assert sql.index(revoke) < sql.rindex("COMMIT;")
 

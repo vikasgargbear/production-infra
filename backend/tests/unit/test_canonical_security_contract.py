@@ -57,6 +57,9 @@ def test_bootstrap_acl_changes_precede_managed_owner_transfer() -> None:
     sql = (SECURITY_ROOT / "canonical_rls.sql").read_text(encoding="utf-8")
 
     schema_acl = 'GRANT USAGE ON SCHEMA "core" TO "erp_app";'
+    migration_owner_schema_acl = (
+        'GRANT USAGE, CREATE ON SCHEMA "core" TO "erp_migration_owner";'
+    )
     schema_owner = 'ALTER SCHEMA "core" OWNER TO "erp_migration_owner";'
     table_acl = 'GRANT SELECT, UPDATE ON TABLE "core"."organizations" TO "erp_app";'
     table_owner = (
@@ -67,6 +70,7 @@ def test_bootstrap_acl_changes_precede_managed_owner_transfer() -> None:
         'REVOKE ALL ON TABLES FROM PUBLIC;'
     )
     assert sql.index(schema_acl) < sql.index(schema_owner)
+    assert sql.index(migration_owner_schema_acl) < sql.index(schema_owner)
     assert sql.index(table_acl) < sql.index(table_owner)
     set_owner = 'SET LOCAL ROLE "erp_migration_owner";'
     reset_owner = "RESET ROLE;"

@@ -210,6 +210,20 @@ CREATE SCHEMA "compliance";
 CREATE SCHEMA "automation";
 CREATE SCHEMA "calculation";
 
+-- Migration-owner canonical schema authority
+GRANT USAGE, CREATE ON SCHEMA "core" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "parties" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "catalog" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "hr" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "inventory" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "sales" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "procurement" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "finance" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "tax" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "compliance" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "automation" TO "erp_migration_owner";
+GRANT USAGE, CREATE ON SCHEMA "calculation" TO "erp_migration_owner";
+
 -- Reviewed auxiliary schemas
 CREATE SCHEMA "erp_automation_commands" AUTHORIZATION "erp_migration_owner";
 CREATE SCHEMA "erp_stable_invariants" AUTHORIZATION "erp_migration_owner";
