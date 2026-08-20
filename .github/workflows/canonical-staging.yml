@@ -104,7 +104,7 @@ jobs:
             {
               echo
               echo "--- rollback-safe psql statement diagnostic ---"
-              psql -X -a -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+              psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
                 -f backend/alembic/sql/20260820_0001_canonical_v1.sql
             } >> "$log_file" 2>&1 || true
             python3 - "$log_file" <<'PY'
