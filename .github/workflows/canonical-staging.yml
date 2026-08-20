@@ -393,6 +393,7 @@ jobs:
           import os
           import psycopg2
           import sys
+          import time
           from psycopg2 import sql
 
           roles = {
@@ -401,29 +402,29 @@ jobs:
               "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
               "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
           }
-          try:
-              with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
-                  with connection.cursor() as cursor:
-                      for role, password in roles.items():
-                          try:
+          last_error = None
+          for attempt in range(1, 19):
+              try:
+                  with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
+                      with connection.cursor() as cursor:
+                          for role, password in roles.items():
                               cursor.execute(
                                   sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
                                   (password,),
                               )
-                          except Exception as exc:
-                              message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                              print(
-                                  f"::error title=Canonical staging role provisioning failed::{role}: {message}",
-                                  file=sys.stderr,
-                              )
-                              raise
-          except Exception as exc:
-              message = str(exc).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  last_error = None
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  if attempt < 18:
+                      time.sleep(5)
+          if last_error is not None:
+              message = str(last_error).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(
                   f"::error title=Canonical staging role connection failed::{message}",
                   file=sys.stderr,
               )
-              raise
+              raise last_error
           PY
 
       - name: Verify baseline topology and isolated role posture
