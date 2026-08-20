@@ -76,6 +76,19 @@ jobs:
           test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
           test "$(jq -r .region <<<"$project_json")" = ap-south-1
 
+          pooler_json=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/database/pooler")
+          pooler_url=$(jq -er \
+            '.[] | select(.database_type == "PRIMARY") | .connection_string' \
+            <<<"$pooler_json")
+          pooler_host=$(sed -E 's#^postgresql://[^@]+@([^:]+):([0-9]+)/.*#\1#' <<<"$pooler_url")
+          pooler_port=$(sed -E 's#^postgresql://[^@]+@([^:]+):([0-9]+)/.*#\2#' <<<"$pooler_url")
+          test "$pooler_host" = aws-0-ap-south-1.pooler.supabase.com
+          test "$pooler_port" = 6543
+          echo "SUPABASE_POOLER_HOST=$pooler_host" >> "$GITHUB_ENV"
+          echo "SUPABASE_POOLER_PORT=$pooler_port" >> "$GITHUB_ENV"
+
       - name: Install the reviewed migration toolchain
         run: pip install -r backend/requirements.txt
 
@@ -92,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+          psycopg_database_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@${SUPABASE_POOLER_HOST}:${SUPABASE_POOLER_PORT}/postgres?sslmode=require"
           database_url="postgresql+psycopg2://${psycopg_database_url#postgresql://}"
           echo "::add-mask::$database_url"
           echo "::add-mask::$psycopg_database_url"
@@ -215,11 +228,12 @@ jobs:
                              for _, superuser, createrole, bypassrls, canlogin in rows), rows
 
           ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
-          host = "aws-0-ap-south-1.pooler.supabase.com"
+          host = os.environ["SUPABASE_POOLER_HOST"]
+          port = os.environ["SUPABASE_POOLER_PORT"]
           for role, password in expected_roles.items():
               url = (
                   f"postgresql://{role}.{ref}:{quote(password, safe='')}"
-                  f"@{host}:5432/postgres?sslmode=require"
+                  f"@{host}:{port}/postgres?sslmode=require"
               )
               last_error = None
               for attempt in range(1, 19):
@@ -250,13 +264,14 @@ jobs:
       - name: Build and mask isolated service connections
         run: |
           set -euo pipefail
-          host="aws-0-ap-south-1.pooler.supabase.com"
+          host="$SUPABASE_POOLER_HOST"
+          port="$SUPABASE_POOLER_PORT"
           runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
           provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${host}:5432/postgres?sslmode=require"
-          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:${calculator_password}@${host}:5432/postgres?sslmode=require"
-          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:${provider_password}@${host}:5432/postgres?sslmode=require"
+          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${host}:${port}/postgres?sslmode=require"
+          calculator_url="postgresql://erp_calculator.${CANONICAL_STAGING_PROJECT_REF}:${calculator_password}@${host}:${port}/postgres?sslmode=require"
+          provider_url="postgresql://erp_tax_provider.${CANONICAL_STAGING_PROJECT_REF}:${provider_password}@${host}:${port}/postgres?sslmode=require"
           echo "::add-mask::$runtime_url"
           echo "::add-mask::$calculator_url"
           echo "::add-mask::$provider_url"

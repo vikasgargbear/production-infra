@@ -192,6 +192,11 @@ def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
 def test_free_staging_retries_only_transient_pooler_baseline_failures():
     workflow = _read(".github/workflows/canonical-staging.yml")
 
+    assert "/config/database/pooler" in workflow
+    assert 'test "$pooler_port" = 6543' in workflow
+    assert "SUPABASE_POOLER_HOST" in workflow
+    assert "SUPABASE_POOLER_PORT" in workflow
+    assert "pooler.supabase.com:5432" not in workflow
     assert "for attempt in $(seq 1 8)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
