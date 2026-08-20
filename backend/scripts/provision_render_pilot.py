@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional
@@ -518,6 +519,26 @@ class RenderClient:
                 "POST",
                 f"/services/{service.id}/deploys/{deploy_id}/cancel",
             )
+        if stale_active:
+            for attempt in range(5):
+                remaining = []
+                for deploy_id in stale_active:
+                    current = self.request(
+                        "GET",
+                        f"/services/{service.id}/deploys/{deploy_id}",
+                    )
+                    if (
+                        isinstance(current, dict)
+                        and current.get("status") in active_statuses
+                    ):
+                        remaining.append(deploy_id)
+                if not remaining:
+                    break
+                if attempt == 4:
+                    raise ProvisioningError(
+                        f"Stale deploy cancellation did not settle for {service.name}"
+                    )
+                time.sleep(15)
         result = self.request(
             "POST",
             f"/services/{service.id}/deploys",

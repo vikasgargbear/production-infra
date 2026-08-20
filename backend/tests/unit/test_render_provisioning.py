@@ -321,6 +321,7 @@ def test_deploy_can_cancel_stale_non_target_queue_before_exact_commit():
                 }
             }],
             {"id": "dep-stale", "status": "canceled"},
+            {"id": "dep-stale", "status": "canceled"},
             {"id": "dep-exact", "status": "created"},
         ]
     )
@@ -338,6 +339,7 @@ def test_deploy_can_cancel_stale_non_target_queue_before_exact_commit():
     assert [call[:2] for call in client.calls] == [
         ("GET", "/services/srv-api/deploys"),
         ("POST", "/services/srv-api/deploys/dep-stale/cancel"),
+        ("GET", "/services/srv-api/deploys/dep-stale"),
         ("POST", "/services/srv-api/deploys"),
     ]
 
