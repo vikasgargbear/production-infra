@@ -210,7 +210,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert workflow.count("connect_timeout=15") == 7
     assert "application_name=canonical_staging_ci" in workflow
     assert "application_name=canonical_staging_verify" in workflow
-    assert "for attempt in $(seq 1 30)" in workflow
+    assert "for attempt in $(seq 1 3)" in workflow
     assert "Supabase pooler unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert "canceling statement due to (lock|statement) timeout" in workflow
@@ -234,16 +234,19 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "for attempt in range(1, 6)" in workflow
     assert "range(1, 61)" not in workflow
     assert "range(1, 19)" not in workflow
+    assert "seq 1 60" not in workflow
     assert 'os.environ["PSYCOPG_DATABASE_URL"], connect_timeout=5' in workflow
     assert "if attempt < 5" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
-    assert "def verify_roles(port)" in workflow
-    assert "for attempt in range(1, 3)" in workflow
-    assert "pending_roles = dict(expected_roles)" in workflow
-    assert "if not pending_roles" in workflow
+    assert "def verify_role(role, password, port)" in workflow
+    assert 'canary_role = "erp_runtime"' in workflow
+    assert "verify_role(canary_role, canary_password, session_port)" in workflow
+    assert "verify_role(canary_role, canary_password, transaction_port)" in workflow
+    assert "for role, password in expected_roles.items()" in workflow
+    assert "for attempt in range(1, 3)" not in workflow
     assert "connect_timeout=5&application_name=canonical_staging_verify" in workflow
-    assert "Transaction pooler selected after session-mode verification failed" in workflow
+    assert "Transaction pooler selected after session-mode canary failed" in workflow
     assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow
     assert "CANONICAL_ACTIVE_POOLER_MODE" in workflow
     assert 'port="$CANONICAL_ACTIVE_POOLER_PORT"' in workflow
